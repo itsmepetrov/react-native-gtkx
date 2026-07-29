@@ -8,11 +8,11 @@ import {
   type ReactNode,
 } from "react"
 import {
+  Gtk,
   GtkBox,
   GtkScrolledWindow,
   queueResize,
   useSignal,
-  type Gtk,
 } from "../gtkx-bridge/index"
 import { splitStyle, StyleSheet } from "../style/index"
 import type { StyleProp } from "../contracts"
@@ -88,6 +88,14 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
 
     const [contentNode] = useState(() => host.engine.createNode())
     useRnContainer(contentRef, contentNode)
+
+    // RN semantics: a ScrollView CLIPS its content. Branch B made containers
+    // paint-overflow by default, so without this the scrolled-away content
+    // (e.g. the original of a pinned sticky header) keeps drawing past the
+    // scroll area's edges.
+    useLayoutEffect(() => {
+      outerRef.current?.setOverflow(Gtk.Overflow.HIDDEN)
+    }, [])
 
     useLayoutEffect(() => {
       outerNode.insertChild(contentNode, 0)
