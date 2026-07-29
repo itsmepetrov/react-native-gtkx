@@ -87,9 +87,20 @@ const windowMetrics = (): ScaledSize => {
   if (!window) {
     return FALLBACK_METRICS
   }
-  const allocatedWidth = toNumber(window.getWidth())
-  const allocatedHeight = toNumber(window.getHeight())
-  // Before the first allocation getWidth/getHeight report 0 — fall back to
+  // RN's Dimensions("window") is the app viewport: the window CHILD's
+  // allocation (the content area under the headerbar), not the window widget
+  // size. Falls back to the window size before the first allocation.
+  const child = window.getChild()
+  const childAllocation = child?.getAllocation()
+  const allocatedWidth =
+    childAllocation && childAllocation.width > 0
+      ? toNumber(childAllocation.width)
+      : toNumber(window.getWidth())
+  const allocatedHeight =
+    childAllocation && childAllocation.height > 0
+      ? toNumber(childAllocation.height)
+      : toNumber(window.getHeight())
+  // Before the first allocation everything reports 0 — fall back to
   // the requested default size (which GTK4 also keeps updated on resize).
   const width =
     allocatedWidth > 0

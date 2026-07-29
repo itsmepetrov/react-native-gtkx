@@ -9,11 +9,16 @@ import {
 import { GtkBox, queueResize, type Gtk } from "../gtkx-bridge/index.js"
 import { LayoutEngine } from "../layout/index.js"
 import { HostNodeContext } from "./host-node.js"
+import { beginAllocatePass, endAllocatePass } from "./rect-store.js"
 import { useRnContainer } from "./use-layout-child.js"
 
 export type RootProps = {
   width: number
   height: number
+  // Window mode: report a zero minimum (the window may shrink freely) and
+  // adopt whatever the window actually allocates as the engine viewport —
+  // the allocation IS the layout viewport, headerbar excluded by GTK itself.
+  followAllocation?: boolean
   children?: ReactNode
 }
 
@@ -21,7 +26,12 @@ export type RootProps = {
 // reports the engine viewport as its measure (via RnGtkxLayout) and is sized
 // by its parent (window/harness); the owner keeps the engine viewport in sync
 // (AppRegistry does it from window-size changes).
-export const Root = ({ width, height, children }: RootProps) => {
+export const Root = ({
+  width,
+  height,
+  followAllocation = false,
+  children,
+}: RootProps) => {
   const widgetRef = useRef<Gtk.Box | null>(null)
 
   // useState lazy init — see the note in use-layout-child.ts (React Compiler).
@@ -30,13 +40,16 @@ export const Root = ({ width, height, children }: RootProps) => {
   )
 
   useLayoutEffect(() => {
+    if (followAllocation) {
+      return
+    }
     engine.setViewport({ width, height })
     // The viewport is this widget's measure — invalidate the cached one.
     const widget = widgetRef.current
     if (widget) {
       queueResize(widget)
     }
-  }, [engine, width, height])
+  }, [engine, followAllocation, width, height])
 
   useEffect(
     () => () => {
@@ -50,7 +63,37 @@ export const Root = ({ width, height, children }: RootProps) => {
     [engine],
   )
 
-  useRnContainer(widgetRef, engine.root)
+  useRnContainer(
+    widgetRef,
+    engine.root,
+    followAllocation
+      ? {
+          measure: () => 0,
+          beforeAllocate: (allocatedWidth, allocatedHeight) => {
+            const current = engine.root.getRect()
+            if (
+              current &&
+              current.width === allocatedWidth &&
+              current.height === allocatedHeight
+            ) {
+              return
+            }
+            // Synchronous reflow inside the allocation pass: commits fill the
+            // rect store now; their GTK queue calls are deferred past the pass.
+            beginAllocatePass()
+            try {
+              engine.setViewport({
+                width: allocatedWidth,
+                height: allocatedHeight,
+              })
+              engine.flushSync()
+            } finally {
+              endAllocatePass()
+            }
+          },
+        }
+      : undefined,
+  )
 
   return (
     <GtkBox ref={widgetRef}>

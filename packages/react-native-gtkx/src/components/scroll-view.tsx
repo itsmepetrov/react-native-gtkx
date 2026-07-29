@@ -16,6 +16,7 @@ import {
 import { splitStyle, StyleSheet } from "../style/index.js"
 import type { StyleProp } from "../contracts.js"
 import { HostNodeContext } from "./host-node.js"
+import { deferDuringAllocate } from "./rect-store.js"
 import {
   useLayoutChild,
   useRnContainer,
@@ -79,8 +80,14 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
         // The content size IS this widget's measure (scroll range) — the
         // ScrolledWindow itself allocates the content widget.
         const widget = contentRef.current
-        if (widget) {
+        if (!widget) {
+          return
+        }
+        const queue = (): void => {
           queueResize(widget)
+        }
+        if (!deferDuringAllocate(widget, queue)) {
+          queue()
         }
       })
       return () => {

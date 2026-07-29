@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState, type RefObject } from "react"
+import { useLayoutEffect, useRef, useState, type RefObject } from "react"
 import {
   allocateChild,
   attachRnLayout,
@@ -19,7 +19,12 @@ import type {
   VisualStyle,
 } from "../contracts.js"
 import { useHostNode, type HostNode } from "./host-node.js"
-import { getStoredOffset, getStoredRect, setStoredRect } from "./rect-store.js"
+import {
+  deferDuringAllocate,
+  getStoredOffset,
+  getStoredRect,
+  setStoredRect,
+} from "./rect-store.js"
 
 export type LayoutEvent = {
   nativeEvent: {
@@ -103,18 +108,23 @@ export const useLayoutChild = (
       }
       const previous = getStoredRect(widget)
       setStoredRect(widget, rect)
-      if (
+      const sizeChanged =
         !previous ||
         previous.width !== rect.width ||
         previous.height !== rect.height
-      ) {
-        // A size change invalidates this widget's cached measure (nested
-        // managers, ScrolledWindow ranges) and re-allocates the ancestors.
-        queueResize(widget)
-      } else {
-        // Pure move: the parent just needs another allocation pass. GTK
-        // dedupes queued allocates, so per-child calls batch into one.
-        queueAllocate(parentWidget)
+      const queue = (): void => {
+        if (sizeChanged) {
+          // A size change invalidates this widget's cached measure (nested
+          // managers, ScrolledWindow ranges) and re-allocates the ancestors.
+          queueResize(widget)
+        } else {
+          // Pure move: the parent just needs another allocation pass. GTK
+          // dedupes queued allocates, so per-child calls batch into one.
+          queueAllocate(parentWidget)
+        }
+      }
+      if (!deferDuringAllocate(widget, queue)) {
+        queue()
       }
     })
     return () => {
@@ -187,6 +197,15 @@ export const useLayoutChild = (
   return { host, node, flat, visual, cssClass }
 }
 
+export type RnContainerOptions = {
+  // Overrides the default engine-rect measure (the window root reports 0 so
+  // the window can shrink freely below the current content size).
+  measure?: (orientation: "horizontal" | "vertical") => number
+  // Runs before children are placed — the window root syncs the engine
+  // viewport to the actual allocation here.
+  beforeAllocate?: (width: number, height: number) => void
+}
+
 // Containers (Root, View, Animated.View, ScrollView content) drive their GTK
 // side with an RnGtkxLayout: measure() reports the engine rect of `node`
 // (minimum == natural — GTK minimums of children never leak upward), and
@@ -195,7 +214,10 @@ export const useLayoutChild = (
 export const useRnContainer = (
   widgetRef: RefObject<Gtk.Widget | null>,
   node: LayoutNode,
+  options?: RnContainerOptions,
 ): void => {
+  const optionsRef = useRef<RnContainerOptions | undefined>(options)
+  optionsRef.current = options
   useLayoutEffect(() => {
     const widget = widgetRef.current
     if (!widget) {
@@ -203,12 +225,17 @@ export const useRnContainer = (
     }
     attachRnLayout(widget, {
       measure: (orientation) => {
+        const custom = optionsRef.current?.measure
+        if (custom) {
+          return custom(orientation)
+        }
         const rect = node.getRect()
         return Math.round(
           (orientation === "horizontal" ? rect?.width : rect?.height) ?? 0,
         )
       },
-      allocate: () => {
+      allocate: (width, height) => {
+        optionsRef.current?.beforeAllocate?.(width, height)
         let child = widget.getFirstChild()
         while (child) {
           const rect = getStoredRect(child)

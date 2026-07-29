@@ -1,6 +1,11 @@
 // Integration: Dimensions against the real gtkx host, sized by the
 // @gtkx/testing harness window (800x600 by default).
 //
+// Dimensions("window") reports the CONTENT AREA (the window child's
+// allocation, headerbar excluded) — RN semantics: the app viewport, not the
+// window widget. Height assertions therefore compare against the child
+// allocation and only bound it by the requested window height.
+//
 // Resizing on Wayland: a mapped toplevel cannot reliably request its own
 // resize — setDefaultSize() on a mapped window is only a hint the compositor
 // may ignore or race (that made the first version of this test flaky). Two
@@ -53,10 +58,12 @@ it("reports the harness window size and a plausible screen size", async () => {
 
   await waitFor(() => {
     const metrics = Dimensions.get("window")
-    expect(metrics.width).toBe(toNumber(window.getWidth()))
-    expect(metrics.height).toBe(toNumber(window.getHeight()))
+    const content = window.getChild()!.getAllocation()
+    expect(metrics.width).toBe(toNumber(content.width))
+    expect(metrics.height).toBe(toNumber(content.height))
     expect(metrics.width).toBeGreaterThan(0)
     expect(metrics.height).toBeGreaterThan(0)
+    expect(metrics.height).toBeLessThanOrEqual(toNumber(window.getHeight()))
   }, RESIZE_TIMEOUT)
   expect(Dimensions.get("window").scale).toBeGreaterThanOrEqual(1)
 
@@ -84,7 +91,9 @@ it("emits change events when the compositor resizes the window", async () => {
     await waitFor(() => {
       expect(widths.length).toBeGreaterThan(0)
       expect(Dimensions.get("window").width).toBe(640)
-      expect(Dimensions.get("window").height).toBe(480)
+      const content = window.getChild()!.getAllocation()
+      expect(Dimensions.get("window").height).toBe(toNumber(content.height))
+      expect(Dimensions.get("window").height).toBeLessThanOrEqual(480)
     }, RESIZE_TIMEOUT)
   } finally {
     subscription.remove()
@@ -111,7 +120,9 @@ it("useWindowDimensions tracks window resizes", async () => {
 
   await waitFor(() => {
     expect(result.current.width).toBe(targetWidth)
-    expect(result.current.height).toBe(400)
+    const content = window.getChild()!.getAllocation()
+    expect(result.current.height).toBe(toNumber(content.height))
+    expect(result.current.height).toBeLessThanOrEqual(400)
   }, RESIZE_TIMEOUT)
   await unmount()
 })

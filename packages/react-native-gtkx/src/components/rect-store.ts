@@ -33,3 +33,38 @@ export const setStoredOffset = (
 
 export const getStoredOffset = (widget: object): StoredOffset =>
   offsets.get(widget) ?? ZERO_OFFSET
+
+// While a window-root allocate() pass runs the engine synchronously, commit
+// callbacks must not queue GTK resizes mid-pass — the pass itself is about to
+// place everything. Queue jobs are deferred (deduped per widget) and run once
+// the pass ends; commits whose rect did not change never re-defer, so the
+// follow-up converges.
+let allocatePassDepth = 0
+const deferredJobs = new Map<object, () => void>()
+
+export const beginAllocatePass = (): void => {
+  allocatePassDepth += 1
+}
+
+export const endAllocatePass = (): void => {
+  allocatePassDepth -= 1
+  if (allocatePassDepth === 0 && deferredJobs.size > 0) {
+    const jobs = [...deferredJobs.values()]
+    deferredJobs.clear()
+    for (const job of jobs) {
+      job()
+    }
+  }
+}
+
+// Returns true when the job was deferred (an allocate pass is running).
+export const deferDuringAllocate = (
+  widget: object,
+  job: () => void,
+): boolean => {
+  if (allocatePassDepth === 0) {
+    return false
+  }
+  deferredJobs.set(widget, job)
+  return true
+}

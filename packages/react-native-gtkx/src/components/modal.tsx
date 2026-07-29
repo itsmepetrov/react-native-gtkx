@@ -1,14 +1,11 @@
-import { useState, type ReactNode } from "react"
+import { type ReactNode } from "react"
 import {
   createPortal,
-  Gtk,
-  GtkScrolledWindow,
   GtkWindow,
   useApplication,
   useParentWindow,
 } from "../gtkx-bridge/index.js"
 import { Root } from "./root.js"
-import { useGtkWindowSize } from "./use-window-size.js"
 
 export type ModalProps = {
   visible?: boolean
@@ -36,8 +33,6 @@ export const Modal = ({
 }: ModalProps) => {
   const application = useApplication()
   const parentWindow = useParentWindow()
-  const [window, setWindow] = useState<Gtk.Window | null>(null)
-  const viewport = useGtkWindowSize(window, { width, height })
 
   if (!visible) {
     return null
@@ -45,7 +40,6 @@ export const Modal = ({
 
   return createPortal(
     <GtkWindow
-      ref={setWindow}
       title={title}
       modal
       transientFor={parentWindow ?? undefined}
@@ -56,17 +50,13 @@ export const Modal = ({
         return true
       }}
     >
-      <GtkScrolledWindow
-        hscrollbarPolicy={Gtk.PolicyType.EXTERNAL}
-        vscrollbarPolicy={Gtk.PolicyType.EXTERNAL}
+      <Root
+        width={width}
+        height={height}
+        followAllocation
       >
-        <Root
-          width={viewport.width}
-          height={viewport.height}
-        >
-          {children}
-        </Root>
-      </GtkScrolledWindow>
+        {children}
+      </Root>
     </GtkWindow>,
     application,
   )
