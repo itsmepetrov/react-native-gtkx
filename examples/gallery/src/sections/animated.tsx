@@ -207,11 +207,12 @@ const OpacityPulse = () => {
   )
 }
 
-// The contained variant: identical spring physics, but the interpolation
-// clamps its output — overshoot pins the square to the wall instead of
-// flying past it. This is the canonical RN recipe when a spring must stay
-// inside its container: containment is the interpolation's job, not the
-// layout's.
+// The contained variant: identical spring physics kept inside the track by
+// the interpolation. A plain extrapolate:"clamp" would pin the square to the
+// wall while the spring value oscillates out of range (a visible dead pause —
+// stock RN too, just lifeless); mirroring the overshoot instead turns it
+// into a bounce off the wall. Both are pure RN interpolate recipes:
+// containment is the interpolation's job, not the layout's.
 const SpringClamped = () => {
   const [position] = useState(() => new Animated.Value(0))
   const [trackWidth, setTrackWidth] = useState(0)
@@ -219,9 +220,10 @@ const SpringClamped = () => {
 
   const translateX = useMemo(() => {
     const width = Math.max(0, trackWidth - 40)
+    // Overshoot past 1 mirrors back (1.2 → 0.8 of the width): a bounce.
     return position.interpolate({
-      inputRange: [0, 1],
-      outputRange: [0, width],
+      inputRange: [-1, 0, 1, 2],
+      outputRange: [width, 0, width, 0],
       extrapolate: "clamp",
     })
   }, [position, trackWidth])
@@ -258,7 +260,7 @@ const SpringClamped = () => {
         ]}
         onPress={toggle}
       >
-        <Text style={styles.buttonText}>spring, clamped to the track</Text>
+        <Text style={styles.buttonText}>spring, bounces off the wall</Text>
       </Pressable>
     </>
   )
@@ -385,8 +387,8 @@ export const AnimatedSection = () => (
     </DemoCard>
 
     <DemoCard
-      title="Animated.spring + extrapolate clamp"
-      hint="the same physics, but interpolate({ extrapolate: 'clamp' }) pins the square inside the track — containment is the interpolation's job, not the layout's"
+      title="Animated.spring, contained"
+      hint="the same physics kept inside the track: the interpolation mirrors the overshoot into a bounce (a plain extrapolate clamp would pin the square to the wall while the value is out of range)"
     >
       <SpringClamped />
     </DemoCard>

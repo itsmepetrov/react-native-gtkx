@@ -48,7 +48,8 @@ Styles (which keys go where and what is unsupported) — [style system table](..
 
 1. **Desktop, not mobile**: `Modal` is a real window; `runApplication` accepts a title and dimensions; gestures are mouse-driven (hover works, no touch gestures);
 2. **Node.js runtime**: all of npm/Node is available (fs, sqlite, napi) — "native modules" are written as regular Node modules; RN libraries with iOS/Android code do not work;
-3. **Text** is always shrinkable (ellipsize) — a long word does not stretch the layout, unlike RN's strict minimum-width behavior;
-4. **transform** currently supports only translate, in `Animated.View`;
-5. **overflow children**: a child positioned outside its parent can affect the "natural" sizes of GTK containers (RN simply paints on top) — a systemic fix is in progress (PRD, branch B);
-6. Types ship as TS sources; the bundler (vite preset) builds the package together with the app.
+3. **Layout is exactly RN's**: every container runs a custom GtkLayoutManager that obeys only the Yoga engine — GTK widget minimums never leak into the layout, windows shrink freely, and `Dimensions.get("window")` reports the app viewport (the window's content area under the headerbar, like RN's app window);
+4. **Text**: the ellipsis is opt-in via `numberOfLines`, exactly like RN; plain text wraps naturally and an unbreakable word wider than its box clips to it (text leaves clip; containers keep paint-overflow);
+5. **transform** currently supports only translate, in `Animated.View` — and it is paint-only, like RN: an animated child honestly draws past its container over siblings (later siblings stay on top, RN's default z-order) without moving any ancestor;
+6. **Animations never auto-stop**: the desktop "reduce animations" hint is not applied automatically (GTK-side animations are kept on to match `Animated`, which runs on its own timers) — honoring reduced motion stays an app-level opt-in, as in RN;
+7. Types ship as TS sources; the bundler (vite preset) builds the package together with the app.

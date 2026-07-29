@@ -49,6 +49,26 @@ To view the window live from the host, run `scripts/live-app.sh <app-dir>` insid
 - 64-bit values from the gtkx FFI arrive as BigInt — convert them with `Number()` at the boundary;
 - `@gtkx/testing` tests need a headless Wayland compositor — the image ships sway.
 
+## Layout manager
+
+Every container widget (Root, View, Pressable, ScrollView content,
+Animated.View) is a `GtkBox` driven by `RnGtkxLayout` — our GObject subclass
+of `GtkLayoutManager`, registered from pure JS via `@gtkx/runtime`
+(`src/gtkx-bridge/layout-manager.ts`). The contract:
+
+- `measure()` returns the engine rect (minimum == natural) — children are
+  never queried, so GTK minimums cannot leak upward; the window root reports
+  a zero minimum and adopts its actual allocation as the engine viewport;
+- `allocate()` places every child at exactly its stored engine rect plus the
+  Animated offset (`src/components/rect-store.ts`); commits from the engine
+  write rects into the store and queue a resize/allocate — during a
+  window-root allocation pass those queue calls are deferred until the pass
+  ends (see `beginAllocatePass`).
+
+Debugging tips: `GTK_DEBUG=layout` traces measure/allocate;
+`spike/layout-manager/` contains the standalone probe of the mechanism with
+its findings (FINDINGS.md), and `run-vm.sh` there reproduces it headless.
+
 ## Upstream divergence
 
 gtkx is pinned to rc.1, while main has already moved ahead. All workarounds for missing capabilities are marked in the code with the `RC1-WORKAROUND(<name>)` tag and cataloged in [docs/gtkx-rc1-vs-main.md](docs/gtkx-rc1-vs-main.md) along with the rc.2 migration plan. If you add a workaround, add the tag and a row to the table.
