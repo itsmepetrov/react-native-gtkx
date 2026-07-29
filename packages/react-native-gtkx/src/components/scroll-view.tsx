@@ -51,7 +51,7 @@ export type ScrollViewProps = {
   testID?: string
 }
 
-type StickyRecord = { y: number; height: number }
+type StickyRecord = { x: number; y: number; width: number; height: number }
 
 // GtkScrolledWindow whose child is a content GtkBox backed by its own Yoga
 // node inside the same engine: the content's RnGtkxLayout measures the engine
@@ -158,6 +158,10 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
     const stickySet = stickyHeaderIndices ?? []
     const stickyRecords = useRef(new Map<number, StickyRecord>())
     const [activeSticky, setActiveSticky] = useState<number | null>(null)
+    const activeStickyRef = useRef<number | null>(null)
+    // Geometry changes of the recorded slots must re-render the pinned copy
+    // (it inherits the slot's x/width) — bump on onLayout.
+    const [, setStickyGeometry] = useState(0)
     const [stickyTop] = useState(() => new Animated.Value(0))
 
     const updateSticky = (scrollTop: number): void => {
@@ -182,12 +186,17 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
           next = record
         }
       }
-      if (active !== activeSticky) {
+      // Compare through a ref: the adjustment handler may hold a stale
+      // closure over the state.
+      if (active !== activeStickyRef.current) {
+        activeStickyRef.current = active
         setActiveSticky(active)
       }
       if (active !== null) {
         const record = stickyRecords.current.get(active)!
-        // Pinned at the viewport top, pushed out by the next sticky header.
+        // Pinned at the viewport top, pushed out by the next sticky header:
+        // it freezes at next.y - height and scrolls away naturally, so the
+        // hand-off is continuous.
         const pinned = next
           ? Math.min(scrollTop, next.y - record.height)
           : scrollTop
@@ -250,9 +259,12 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
                       key={`sticky-slot-${index}`}
                       onLayout={(event) => {
                         stickyRecords.current.set(index, {
+                          x: event.nativeEvent.layout.x,
                           y: event.nativeEvent.layout.y,
+                          width: event.nativeEvent.layout.width,
                           height: event.nativeEvent.layout.height,
                         })
+                        setStickyGeometry((value) => value + 1)
                         updateSticky(
                           scrolled?.getVadjustment()?.getValue() ?? 0,
                         )
@@ -266,10 +278,13 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
                 )}
             {activeSticky !== null && (
               <Animated.View
+                // The pinned copy inherits the slot's measured geometry so it
+                // matches the in-flow header exactly (container paddings,
+                // non-stretched widths).
                 style={{
                   position: "absolute",
-                  left: 0,
-                  right: 0,
+                  left: stickyRecords.current.get(activeSticky)?.x ?? 0,
+                  width: stickyRecords.current.get(activeSticky)?.width,
                   top: 0,
                   transform: [{ translateY: stickyTop }],
                 }}

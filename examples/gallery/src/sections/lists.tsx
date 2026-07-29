@@ -272,6 +272,7 @@ const GROUPS = ["Alpha", "Beta", "Gamma"] as const
 const StickyDemo = () => (
   <ScrollView
     style={styles.list}
+    contentContainerStyle={styles.listContent}
     stickyHeaderIndices={[0, 6, 12]}
   >
     {GROUPS.flatMap((group) => [
