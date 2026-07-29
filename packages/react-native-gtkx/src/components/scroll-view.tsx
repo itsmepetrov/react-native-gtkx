@@ -336,15 +336,39 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       : (scrolled?.getVadjustment() ?? null)
     const onAdjustment = (): void => {
       emitScroll()
-      // Belt for the sticky pass: if this scroll did not re-allocate the
-      // content (it normally does), queue one — beforeAllocate does the math.
-      if (!horizontal && stickySet.length > 0) {
-        const content = contentRef.current
-        if (content) {
-          queueAllocate(content)
-        }
-      }
     }
+
+    // Frame-synced sticky driver: a pure scroll TRANSLATES the content
+    // without re-allocating it (same size → GTK skips the vfunc), so signal
+    // handlers land a frame late and the pinned header jitters. A tick
+    // callback runs in the frame's UPDATE phase, before layout: when the
+    // scroll offset moved, queue an allocation for THIS frame — the
+    // translation and the pin correction then paint atomically.
+    useLayoutEffect(() => {
+      if (stickySet.length === 0 || horizontal) {
+        return
+      }
+      const widget = scrolled
+      if (!widget) {
+        return
+      }
+      let lastValue = -1
+      const id = widget.addTickCallback(() => {
+        const value = widget.getVadjustment()?.getValue() ?? 0
+        if (value !== lastValue) {
+          lastValue = value
+          const content = contentRef.current
+          if (content) {
+            queueAllocate(content)
+          }
+        }
+        return true
+      })
+      return () => {
+        widget.removeTickCallback(id)
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [scrolled, stickySet.length > 0, horizontal])
     useSignal(adjustment, "value-changed", onAdjustment)
 
     return (
