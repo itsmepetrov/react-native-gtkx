@@ -7,6 +7,7 @@
 // same commit (spike/list-window/FINDINGS.md).
 import {
   forwardRef,
+  useEffect,
   useImperativeHandle,
   useLayoutEffect,
   useMemo,
@@ -30,6 +31,26 @@ import { View } from "./view"
 export type ListRenderItemInfo<T> = { item: T; index: number }
 
 export type ItemLayout = { length: number; offset: number; index: number }
+
+// RN ViewToken: one entry per item in the viewability report.
+export type ViewToken<T = unknown> = {
+  item: T
+  key: string
+  index: number
+  isViewable: boolean
+}
+
+export type ViewabilityConfig = {
+  // Percent (0..100) of the ITEM that must be visible. A fully visible item
+  // always counts, even when it covers less than the threshold.
+  itemVisiblePercentThreshold?: number
+  // Percent (0..100) of the VIEWPORT the item must cover. Takes precedence
+  // over itemVisiblePercentThreshold when both are set (RN ViewabilityHelper).
+  viewAreaCoveragePercentThreshold?: number
+  // The item must stay continuously visible this many ms before it is
+  // reported viewable; scrolling out before that cancels the report.
+  minimumViewTime?: number
+}
 
 // RN FlatList scroll surface on top of ScrollViewHandle. The handle is not
 // generic: scrollToItem takes the item as unknown and resolves the index with
@@ -74,6 +95,11 @@ export type VirtualizedListProps<T> = Omit<ScrollViewProps, "children"> & {
   ListEmptyComponent?: ComponentType | ReactElement | null
   onEndReached?: () => void
   onEndReachedThreshold?: number
+  onViewableItemsChanged?: (info: {
+    viewableItems: ViewToken<T>[]
+    changed: ViewToken<T>[]
+  }) => void
+  viewabilityConfig?: ViewabilityConfig
   style?: StyleProp
 }
 
@@ -126,6 +152,8 @@ const VirtualizedListInner = forwardRef(
       ListEmptyComponent,
       onEndReached,
       onEndReachedThreshold = 0.1,
+      onViewableItemsChanged,
+      viewabilityConfig,
       onScroll,
       onLayout,
       horizontal = false,
@@ -152,6 +180,17 @@ const VirtualizedListInner = forwardRef(
       animated?: boolean
     } | null>(null)
     const endReachedForSize = useRef(-1)
+    // Currently reported viewable tokens keyed by item key (isViewable true).
+    const viewableTokens = useRef(new Map<string, ViewToken<T>>())
+    // Items meeting the viewability criteria but still waiting out
+    // minimumViewTime; cancelled if they leave the viewport first.
+    const viewabilityTimers = useRef(
+      new Map<string, ReturnType<typeof setTimeout>>(),
+    )
+    // Keys whose minimumViewTime elapsed while continuously visible.
+    const maturedKeys = useRef(new Set<string>())
+    // Timers must call the LATEST closure (data may change while pending).
+    const recomputeViewabilityRef = useRef<() => void>(() => {})
 
     // Prefix sums; rebuilt on any size correction (O(N) — cheap even at
     // 10k, see the spike). getItemLayout skips measuring entirely.
@@ -176,6 +215,9 @@ const VirtualizedListInner = forwardRef(
     // at scroll offset 0 an inverted list shows the end of the data.
     const cellStart = (index: number): number =>
       inverted ? offsets[count]! - offsets[index + 1]! : offsets[index]!
+
+    const keyOf = (item: T, index: number): string =>
+      keyExtractor ? keyExtractor(item, index) : String(index)
 
     const [range, setRange] = useState(() => ({
       first: 0,
@@ -318,31 +360,157 @@ const VirtualizedListInner = forwardRef(
       setVersion((value) => value + 1)
     }
 
+    // VIEWABILITY. Pure math over the prefix sums — no widget queries. All
+    // positions are visual (scroll-space): cellStart already folds in the
+    // inverted mirror and scrollY/viewportH track the main axis, so the same
+    // code serves normal, inverted, and horizontal lists.
+    const recomputeViewability = (): void => {
+      if (!onViewableItemsChanged) {
+        return
+      }
+      const viewport = viewportH.current
+      const extent = offsets[count] ?? 0
+      // Items currently meeting the visibility criteria, in index order.
+      const eligible = new Map<string, { item: T; index: number }>()
+      if (count > 0 && viewport > 0 && extent > 0) {
+        const windowStart = scrollY.current
+        const windowEnd = windowStart + viewport
+        // Visible data-index range: mirror the visual window into data-offset
+        // space when inverted (same mapping as updateRange, zero overscan).
+        let start = windowStart
+        let end = windowEnd
+        if (inverted) {
+          ;[start, end] = [extent - end, extent - start]
+        }
+        const first = indexAt(offsets, Math.max(0, start))
+        const last = Math.min(count - 1, indexAt(offsets, end))
+        const areaThreshold =
+          viewabilityConfig?.viewAreaCoveragePercentThreshold
+        const itemThreshold = viewabilityConfig?.itemVisiblePercentThreshold
+        for (let index = first; index <= last; index += 1) {
+          const length = offsets[index + 1]! - offsets[index]!
+          const startPos = cellStart(index)
+          const visible =
+            Math.min(startPos + length, windowEnd) -
+            Math.max(startPos, windowStart)
+          if (visible <= 0) {
+            continue
+          }
+          let viewable: boolean
+          if (visible >= length) {
+            // A fully visible item always counts, even when it covers less
+            // than the configured share (RN ViewabilityHelper).
+            viewable = true
+          } else if (areaThreshold !== undefined) {
+            viewable = (100 * visible) / viewport >= areaThreshold
+          } else if (itemThreshold !== undefined) {
+            viewable = (100 * visible) / length >= itemThreshold
+          } else {
+            // RN default: any visible pixel counts.
+            viewable = true
+          }
+          if (viewable) {
+            const item = data[index]!
+            eligible.set(keyOf(item, index), { item, index })
+          }
+        }
+      }
+      const minimumViewTime = viewabilityConfig?.minimumViewTime ?? 0
+      // Leaving the viewport cancels a pending timer and resets maturity —
+      // re-entering restarts the continuous-visibility clock.
+      for (const [key, timer] of viewabilityTimers.current) {
+        if (!eligible.has(key)) {
+          clearTimeout(timer)
+          viewabilityTimers.current.delete(key)
+        }
+      }
+      for (const key of maturedKeys.current) {
+        if (!eligible.has(key)) {
+          maturedKeys.current.delete(key)
+        }
+      }
+      const next = new Map<string, ViewToken<T>>()
+      for (const [key, entry] of eligible) {
+        if (
+          minimumViewTime <= 0 ||
+          viewableTokens.current.has(key) ||
+          maturedKeys.current.has(key)
+        ) {
+          next.set(key, {
+            item: entry.item,
+            key,
+            index: entry.index,
+            isViewable: true,
+          })
+        } else if (!viewabilityTimers.current.has(key)) {
+          const timer = setTimeout(() => {
+            viewabilityTimers.current.delete(key)
+            maturedKeys.current.add(key)
+            recomputeViewabilityRef.current()
+          }, minimumViewTime)
+          viewabilityTimers.current.set(key, timer)
+        }
+      }
+      // Emit only when the viewable KEY SET changed: newly-viewable tokens
+      // first, then the ones that left (isViewable false), each index-ordered.
+      const changed: ViewToken<T>[] = []
+      for (const token of next.values()) {
+        if (!viewableTokens.current.has(token.key)) {
+          changed.push(token)
+        }
+      }
+      for (const token of viewableTokens.current.values()) {
+        if (!next.has(token.key)) {
+          changed.push({ ...token, isViewable: false })
+        }
+      }
+      // Keep tokens fresh (indices may shift under stable keys) but stay
+      // silent while the key set is unchanged.
+      viewableTokens.current = next
+      if (changed.length === 0) {
+        return
+      }
+      onViewableItemsChanged({ viewableItems: [...next.values()], changed })
+    }
+    useLayoutEffect(() => {
+      recomputeViewabilityRef.current = recomputeViewability
+    })
+
+    const maybeFireEndReached = (): void => {
+      // Before the first layout the viewport extent is unknown — every
+      // trigger path below re-runs once it is.
+      if (!onEndReached || viewportH.current <= 0) {
+        return
+      }
+      const extent = offsets[count]!
+      const threshold =
+        viewportH.current * Math.max(0, onEndReachedThreshold ?? 0.1)
+      // Distance from the viewport to the DATA end (RN semantics: the end
+      // of `data`, not the visual bottom). Normal lists keep the data end
+      // at visual position `extent`; the inverted projection places it at
+      // visual position 0, so the distance is simply the scroll offset —
+      // an inverted list starts AT its data end and may fire immediately.
+      // Content shorter than the viewport has a negative distance, so short
+      // lists fire right after the first layout without any scrolling.
+      const distance = inverted
+        ? scrollY.current
+        : extent - (scrollY.current + viewportH.current)
+      if (extent > 0 && distance <= threshold) {
+        if (endReachedForSize.current !== extent) {
+          endReachedForSize.current = extent
+          onEndReached()
+        }
+      }
+    }
+
     const handleScroll = (event: ScrollEvent): void => {
       onScroll?.(event)
       scrollY.current = horizontal
         ? event.nativeEvent.contentOffset.x
         : event.nativeEvent.contentOffset.y
       updateRange()
-      if (onEndReached) {
-        const extent = offsets[count]!
-        const threshold =
-          viewportH.current * Math.max(0, onEndReachedThreshold ?? 0.1)
-        // Distance from the viewport to the DATA end (RN semantics: the end
-        // of `data`, not the visual bottom). Normal lists keep the data end
-        // at visual position `extent`; the inverted projection places it at
-        // visual position 0, so the distance is simply the scroll offset —
-        // an inverted list starts AT its data end and may fire immediately.
-        const distance = inverted
-          ? scrollY.current
-          : extent - (scrollY.current + viewportH.current)
-        if (extent > 0 && distance <= threshold) {
-          if (endReachedForSize.current !== extent) {
-            endReachedForSize.current = extent
-            onEndReached()
-          }
-        }
-      }
+      recomputeViewability()
+      maybeFireEndReached()
     }
 
     const handleLayout = (event: LayoutEvent): void => {
@@ -351,14 +519,36 @@ const VirtualizedListInner = forwardRef(
         ? event.nativeEvent.layout.width
         : event.nativeEvent.layout.height
       updateRange()
+      // First layout doubles as the initial viewability/end-reached pass.
+      recomputeViewability()
+      maybeFireEndReached()
     }
+
+    // Data or measurement changes move content under a static viewport (no
+    // scroll event fires): refresh viewability and the end-reached trigger.
+    useEffect(() => {
+      recomputeViewability()
+      maybeFireEndReached()
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [offsets])
+
+    // Unmount: cancel every pending minimumViewTime timer.
+    useEffect(() => {
+      const timers = viewabilityTimers.current
+      return () => {
+        for (const timer of timers.values()) {
+          clearTimeout(timer)
+        }
+        timers.clear()
+      }
+    }, [])
 
     const cells: ReactNode[] = []
     if (count > 0) {
       const last = Math.min(range.last, count - 1)
       for (let index = range.first; index <= last; index += 1) {
         const item = data[index]!
-        const key = keyExtractor ? keyExtractor(item, index) : String(index)
+        const key = keyOf(item, index)
         // Vertical cells stretch across the width and sit at their offset;
         // horizontal cells stretch across the height and take their own
         // width from content (so onLayout can measure it).

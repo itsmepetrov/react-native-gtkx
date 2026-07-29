@@ -5,10 +5,16 @@ import {
   VirtualizedList,
   type ItemLayout,
   type ListRenderItemInfo,
+  type ViewabilityConfig,
+  type ViewToken,
   type VirtualizedListHandle,
 } from "./virtualized-list"
 
-export type { ListRenderItemInfo } from "./virtualized-list"
+export type {
+  ListRenderItemInfo,
+  ViewabilityConfig,
+  ViewToken,
+} from "./virtualized-list"
 // The FlatList ref exposes the full scroll surface of the windowed core
 // (scrollTo, scrollToEnd, scrollToIndex, scrollToItem, scrollToOffset).
 export type { VirtualizedListHandle as FlatListHandle } from "./virtualized-list"
@@ -23,6 +29,11 @@ export type FlatListProps<T> = Omit<ScrollViewProps, "children"> & {
   ListEmptyComponent?: ComponentType | ReactElement | null
   onEndReached?: () => void
   onEndReachedThreshold?: number
+  onViewableItemsChanged?: (info: {
+    viewableItems: ViewToken<T>[]
+    changed: ViewToken<T>[]
+  }) => void
+  viewabilityConfig?: ViewabilityConfig
   estimatedItemSize?: number
   getItemLayout?: (data: readonly T[], index: number) => ItemLayout
   windowSize?: number
@@ -52,9 +63,16 @@ export const FlatList = FlatListInner as <T>(
 
 export type SectionListData<T> = { title: string; data: readonly T[] }
 
+// Viewability props are excluded: SectionList flattens sections into private
+// row records, so ViewTokens would leak that internal row type instead of T —
+// section-aware tokens are not implemented yet.
 export type SectionListProps<T> = Omit<
   FlatListProps<T>,
-  "data" | "renderItem" | "getItemLayout"
+  | "data"
+  | "renderItem"
+  | "getItemLayout"
+  | "onViewableItemsChanged"
+  | "viewabilityConfig"
 > & {
   sections: readonly SectionListData<T>[]
   renderItem: (info: ListRenderItemInfo<T>) => ReactElement | null
