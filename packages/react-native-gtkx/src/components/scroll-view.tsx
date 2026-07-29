@@ -1,4 +1,5 @@
 import {
+  Children,
   forwardRef,
   useImperativeHandle,
   useLayoutEffect,
@@ -15,6 +16,7 @@ import {
 } from "../gtkx-bridge/index"
 import { splitStyle, StyleSheet } from "../style/index"
 import type { StyleProp } from "../contracts"
+import { Animated } from "./animated"
 import { HostNodeContext } from "./host-node"
 import { deferDuringAllocate } from "./rect-store"
 import {
@@ -22,6 +24,7 @@ import {
   useRnContainer,
   type LayoutEvent,
 } from "./use-layout-child"
+import { View } from "./view"
 
 export type ScrollViewHandle = {
   scrollTo(options: { x?: number; y?: number; animated?: boolean }): void
@@ -39,11 +42,16 @@ export type ScrollViewProps = {
   style?: StyleProp
   contentContainerStyle?: StyleProp
   horizontal?: boolean
+  // RN sticky headers (vertical lists): the children at these indices pin to
+  // the top while scrolled past, each pushed out by the next one.
+  stickyHeaderIndices?: readonly number[]
   onScroll?: (event: ScrollEvent) => void
   onLayout?: (event: LayoutEvent) => void
   children?: ReactNode
   testID?: string
 }
+
+type StickyRecord = { y: number; height: number }
 
 // GtkScrolledWindow whose child is a content GtkBox backed by its own Yoga
 // node inside the same engine: the content's RnGtkxLayout measures the engine
@@ -55,6 +63,7 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       style,
       contentContainerStyle,
       horizontal = false,
+      stickyHeaderIndices,
       onScroll,
       onLayout,
       children,
@@ -67,7 +76,13 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
     const [scrolled, setScrolled] = useState<Gtk.ScrolledWindow | null>(null)
 
     const { host, node: outerNode } = useLayoutChild(outerRef, {
-      style: [style, { overflow: "scroll" }],
+      // Yoga unconstrains a scroll node's MAIN axis — align it with the
+      // scroll direction or a horizontal list's content clamps to the
+      // viewport width (hadjustment upper == page).
+      style: [
+        style,
+        { overflow: "scroll", flexDirection: horizontal ? "row" : "column" },
+      ],
       onLayout,
     })
 
@@ -135,6 +150,51 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       },
     }))
 
+    // --- sticky headers -------------------------------------------------
+    // RN model: the child stays in flow; when scrolled past, a SECOND
+    // instance of it renders as the LAST content child (sibling paint order
+    // puts it on top) pinned to the viewport top via the Animated fast path —
+    // no React work per scroll frame, only when the ACTIVE index changes.
+    const stickySet = stickyHeaderIndices ?? []
+    const stickyRecords = useRef(new Map<number, StickyRecord>())
+    const [activeSticky, setActiveSticky] = useState<number | null>(null)
+    const [stickyTop] = useState(() => new Animated.Value(0))
+
+    const updateSticky = (scrollTop: number): void => {
+      if (stickySet.length === 0) {
+        return
+      }
+      let active: number | null = null
+      let next: StickyRecord | null = null
+      for (const index of stickySet) {
+        const record = stickyRecords.current.get(index)
+        if (!record) {
+          continue
+        }
+        if (record.y <= scrollTop) {
+          if (
+            active === null ||
+            record.y >= stickyRecords.current.get(active)!.y
+          ) {
+            active = index
+          }
+        } else if (next === null || record.y < next.y) {
+          next = record
+        }
+      }
+      if (active !== activeSticky) {
+        setActiveSticky(active)
+      }
+      if (active !== null) {
+        const record = stickyRecords.current.get(active)!
+        // Pinned at the viewport top, pushed out by the next sticky header.
+        const pinned = next
+          ? Math.min(scrollTop, next.y - record.height)
+          : scrollTop
+        stickyTop.setValue(Math.max(record.y, pinned))
+      }
+    }
+
     const emitScroll = (): void => {
       if (!onScroll) {
         return
@@ -158,7 +218,13 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
     const adjustment = horizontal
       ? (scrolled?.getHadjustment() ?? null)
       : (scrolled?.getVadjustment() ?? null)
-    useSignal(adjustment, "value-changed", emitScroll)
+    const onAdjustment = (): void => {
+      emitScroll()
+      if (!horizontal) {
+        updateSticky(scrolled?.getVadjustment()?.getValue() ?? 0)
+      }
+    }
+    useSignal(adjustment, "value-changed", onAdjustment)
 
     return (
       <GtkScrolledWindow
@@ -176,7 +242,41 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
               widgetRef: contentRef,
             }}
           >
-            {children}
+            {stickySet.length === 0
+              ? children
+              : Children.toArray(children).map((child, index) =>
+                  stickySet.includes(index) ? (
+                    <View
+                      key={`sticky-slot-${index}`}
+                      onLayout={(event) => {
+                        stickyRecords.current.set(index, {
+                          y: event.nativeEvent.layout.y,
+                          height: event.nativeEvent.layout.height,
+                        })
+                        updateSticky(
+                          scrolled?.getVadjustment()?.getValue() ?? 0,
+                        )
+                      }}
+                    >
+                      {child}
+                    </View>
+                  ) : (
+                    child
+                  ),
+                )}
+            {activeSticky !== null && (
+              <Animated.View
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  transform: [{ translateY: stickyTop }],
+                }}
+              >
+                {Children.toArray(children)[activeSticky]}
+              </Animated.View>
+            )}
           </HostNodeContext.Provider>
         </GtkBox>
       </GtkScrolledWindow>

@@ -43,6 +43,10 @@ export {
   type ViewProps,
 } from "./components/index"
 
+// List scroll handle (scrollTo/scrollToEnd/scrollToIndex/scrollToItem/
+// scrollToOffset) — exported straight from the component module.
+export type { FlatListHandle } from "./components/flat-list"
+
 export {
   Alert,
   Appearance,

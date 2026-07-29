@@ -4,6 +4,7 @@ import { useRef, useState } from "react"
 import {
   FlatList,
   Pressable,
+  ScrollView,
   SectionList,
   StyleSheet,
   Text,
@@ -223,6 +224,13 @@ export const ListsSection = () => {
       >
         <TenThousand />
       </DemoCard>
+
+      <DemoCard
+        title="sticky headers"
+        hint="ScrollView.stickyHeaderIndices: group headers pin to the top while their group scrolls, and the next header pushes the previous one out"
+      >
+        <StickyDemo />
+      </DemoCard>
     </Section>
   )
 }
@@ -258,3 +266,29 @@ const TenThousand = () => {
     </>
   )
 }
+
+const GROUPS = ["Alpha", "Beta", "Gamma"] as const
+
+const StickyDemo = () => (
+  <ScrollView
+    style={styles.list}
+    stickyHeaderIndices={[0, 6, 12]}
+  >
+    {GROUPS.flatMap((group) => [
+      <View
+        key={group}
+        style={styles.sectionHeader}
+      >
+        <Text style={styles.sectionHeaderText}>{"Group " + group}</Text>
+      </View>,
+      ...Array.from({ length: 5 }, (_, i) => (
+        <View
+          key={group + String(i)}
+          style={[styles.rowItem, { marginTop: 6 }]}
+        >
+          <Text style={styles.rowText}>{group + " item " + String(i + 1)}</Text>
+        </View>
+      )),
+    ])}
+  </ScrollView>
+)

@@ -11,7 +11,7 @@ import {
   Root,
   Text,
   View,
-  type ScrollViewHandle,
+  type FlatListHandle,
 } from "../../src/index"
 
 const childCount = (widget: Gtk.Widget): number => {
@@ -26,7 +26,7 @@ const childCount = (widget: Gtk.Widget): number => {
 
 it("mounts a 1000-row FlatList as a window and reaches the tail on scroll", async () => {
   const data = Array.from({ length: 1000 }, (_, i) => `Row #${i + 1}`)
-  const listRef = createRef<ScrollViewHandle>()
+  const listRef = createRef<FlatListHandle>()
   const started = performance.now()
 
   await render(
@@ -122,4 +122,144 @@ it("keyExtractor identity survives reordering", async () => {
     expect(cellOf("gamma-row").getAllocation().y).toBe(0)
     expect(cellOf("alpha-row").getAllocation().y).toBe(80)
   })
+})
+
+it("scrollToIndex with getItemLayout jumps straight to the target row", async () => {
+  const data = Array.from({ length: 500 }, (_, i) => `Row #${i + 1}`)
+  const listRef = createRef<FlatListHandle>()
+  await render(
+    <Root
+      width={400}
+      height={600}
+    >
+      <FlatList
+        ref={listRef}
+        style={{ height: 500 }}
+        data={data}
+        keyExtractor={(item) => item}
+        getItemLayout={(_d, index) => ({
+          length: 40,
+          offset: 40 * index,
+          index,
+        })}
+        renderItem={({ item }) => (
+          <View style={{ height: 40 }}>
+            <Text>{item}</Text>
+          </View>
+        )}
+      />
+    </Root>,
+  )
+  expect(screen.getByText("Row #1")).toBeTruthy()
+  expect(screen.queryByText("Row #301")).toBeNull()
+
+  // Index 300 (0-based) is "Row #301"; viewPosition 0 puts its exact offset
+  // (300 * 40) at the viewport top.
+  listRef.current!.scrollToIndex({ index: 300 })
+  await waitFor(() => {
+    expect(screen.getByText("Row #301")).toBeTruthy()
+  })
+  // The jump left the head of the list far outside the mounted window.
+  expect(screen.queryByText("Row #1")).toBeNull()
+})
+
+it("scrollToIndex without getItemLayout converges via estimates", async () => {
+  const data = Array.from({ length: 500 }, (_, i) => `Row #${i + 1}`)
+  const listRef = createRef<FlatListHandle>()
+  await render(
+    <Root
+      width={400}
+      height={600}
+    >
+      <FlatList
+        ref={listRef}
+        style={{ height: 500 }}
+        data={data}
+        keyExtractor={(item) => item}
+        estimatedItemSize={30}
+        renderItem={({ item }) => (
+          <View style={{ height: 30 }}>
+            <Text>{item}</Text>
+          </View>
+        )}
+      />
+    </Root>,
+  )
+  expect(screen.queryByText("Row #301")).toBeNull()
+
+  listRef.current!.scrollToIndex({ index: 300 })
+  await waitFor(() => {
+    expect(screen.getByText("Row #301")).toBeTruthy()
+  })
+  expect(screen.queryByText("Row #1")).toBeNull()
+})
+
+it("inverted list shows the last data items at scroll 0", async () => {
+  const data = Array.from({ length: 100 }, (_, i) => `Row #${i + 1}`)
+  await render(
+    <Root
+      width={400}
+      height={600}
+    >
+      <FlatList
+        style={{ height: 500 }}
+        data={data}
+        inverted
+        keyExtractor={(item) => item}
+        getItemLayout={(_d, index) => ({
+          length: 40,
+          offset: 40 * index,
+          index,
+        })}
+        renderItem={({ item }) => (
+          <View style={{ height: 40 }}>
+            <Text>{item}</Text>
+          </View>
+        )}
+      />
+    </Root>,
+  )
+  // The inverted projection places the END of the data at scroll offset 0.
+  await waitFor(() => {
+    expect(screen.getByText("Row #100")).toBeTruthy()
+  })
+  expect(screen.queryByText("Row #1")).toBeNull()
+})
+
+it("horizontal list windows along x and scrollToIndex targets x", async () => {
+  const data = Array.from({ length: 200 }, (_, i) => `Col #${i + 1}`)
+  const listRef = createRef<FlatListHandle>()
+  await render(
+    <Root
+      width={400}
+      height={600}
+    >
+      <FlatList
+        ref={listRef}
+        horizontal
+        style={{ height: 80 }}
+        data={data}
+        keyExtractor={(item) => item}
+        getItemLayout={(_d, index) => ({
+          length: 60,
+          offset: 60 * index,
+          index,
+        })}
+        renderItem={({ item }) => (
+          <View style={{ width: 60 }}>
+            <Text>{item}</Text>
+          </View>
+        )}
+      />
+    </Root>,
+  )
+  expect(screen.getByText("Col #1")).toBeTruthy()
+  expect(screen.queryByText("Col #150")).toBeNull()
+
+  // Index 149 (0-based) is "Col #150".
+  listRef.current!.scrollToIndex({ index: 149 })
+  await waitFor(() => {
+    expect(screen.getByText("Col #150")).toBeTruthy()
+  })
+  expect(screen.queryByText("Col #1")).toBeNull()
 })

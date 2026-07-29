@@ -1,13 +1,17 @@
 import { forwardRef, type ComponentType, type ReactElement } from "react"
 import type { StyleProp } from "../contracts"
-import type { ScrollViewHandle, ScrollViewProps } from "./scroll-view"
+import type { ScrollViewProps } from "./scroll-view"
 import {
   VirtualizedList,
   type ItemLayout,
   type ListRenderItemInfo,
+  type VirtualizedListHandle,
 } from "./virtualized-list"
 
 export type { ListRenderItemInfo } from "./virtualized-list"
+// The FlatList ref exposes the full scroll surface of the windowed core
+// (scrollTo, scrollToEnd, scrollToIndex, scrollToItem, scrollToOffset).
+export type { VirtualizedListHandle as FlatListHandle } from "./virtualized-list"
 
 export type FlatListProps<T> = Omit<ScrollViewProps, "children"> & {
   data: readonly T[]
@@ -24,13 +28,16 @@ export type FlatListProps<T> = Omit<ScrollViewProps, "children"> & {
   windowSize?: number
   initialNumToRender?: number
   extraData?: unknown
+  inverted?: boolean
+  refreshing?: boolean
+  onRefresh?: () => void
   style?: StyleProp
 }
 
 // FlatList is a thin veneer over the windowed VirtualizedList core: only the
 // rows around the viewport are mounted (see virtualized-list.tsx).
 const FlatListInner = forwardRef(
-  <T,>(props: FlatListProps<T>, ref: React.Ref<ScrollViewHandle>) => (
+  <T,>(props: FlatListProps<T>, ref: React.Ref<VirtualizedListHandle>) => (
     <VirtualizedList
       {...props}
       ref={ref}
@@ -40,7 +47,7 @@ const FlatListInner = forwardRef(
 FlatListInner.displayName = "FlatList"
 
 export const FlatList = FlatListInner as <T>(
-  props: FlatListProps<T> & { ref?: React.Ref<ScrollViewHandle> },
+  props: FlatListProps<T> & { ref?: React.Ref<VirtualizedListHandle> },
 ) => ReactElement
 
 export type SectionListData<T> = { title: string; data: readonly T[] }
