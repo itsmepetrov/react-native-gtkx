@@ -55,27 +55,25 @@ export const ModalSection = () => {
   return (
     <Section
       title="Modal"
-      subtitle="RN Modal как настоящее модальное окно GTK; transparent и animationType приняты для совместимости, но на десктопе — no-op."
+      subtitle="RN Modal as a real modal GTK window; transparent and animationType are accepted for compatibility but are a no-op on desktop."
     >
       <DemoCard
-        title="Базовый Modal"
-        hint="visible контролируется стейтом; крестик окна вызывает onRequestClose — закрываем сами"
+        title="Basic Modal"
+        hint="visible is controlled by state; the window close button triggers onRequestClose — we close it ourselves"
       >
         <Button
-          label="открыть модалку"
+          label="open modal"
           onPress={() => setBasicVisible(true)}
         />
-        <Text style={styles.status}>
-          onRequestClose суммарно: {closeRequests}
-        </Text>
+        <Text style={styles.status}>onRequestClose total: {closeRequests}</Text>
       </DemoCard>
 
       <DemoCard
-        title="Свои размеры окна"
-        hint="width: 360, height: 260 — размеры GtkWindow по умолчанию, окно можно ресайзить"
+        title="Custom window size"
+        hint="width: 360, height: 260 — the default GtkWindow size, the window can be resized"
       >
         <Button
-          label="открыть компактную модалку"
+          label="open compact modal"
           onPress={() => setSizedVisible(true)}
         />
       </DemoCard>
@@ -91,12 +89,12 @@ export const ModalSection = () => {
       >
         <View style={styles.modalBody}>
           <Text style={styles.modalText}>
-            Это настоящее модальное окно GTK: transient for родительского окна,
-            родитель заблокирован. Внутри — обычное RN-дерево, окно можно
-            ресайзить.
+            This is a real modal GTK window: transient for the parent window,
+            which stays blocked. Inside is a regular RN tree, and the window can
+            be resized.
           </Text>
           <Button
-            label="закрыть"
+            label="close"
             onPress={() => setBasicVisible(false)}
           />
         </View>
@@ -104,7 +102,7 @@ export const ModalSection = () => {
 
       <Modal
         visible={sizedVisible}
-        title="Компактная модалка"
+        title="Compact modal"
         width={360}
         height={260}
         onRequestClose={() => setSizedVisible(false)}
@@ -112,11 +110,11 @@ export const ModalSection = () => {
         <View style={styles.modalBody}>
           <Text style={styles.modalText}>360 × 260</Text>
           <Caption>
-            animationType и transparent приняты как no-op — у десктопных окон
-            нет slide/fade.
+            animationType and transparent are accepted as a no-op — desktop
+            windows have no slide/fade.
           </Caption>
           <Button
-            label="закрыть"
+            label="close"
             onPress={() => setSizedVisible(false)}
           />
         </View>

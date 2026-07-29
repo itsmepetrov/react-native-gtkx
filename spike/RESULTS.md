@@ -1,34 +1,34 @@
-# Спайк Yoga + GtkFixed — результаты
+# Yoga + GtkFixed spike — results
 
-Дата: 2026-07-28. Среда: контейнер `rn-gtkx-dev` (Ubuntu 26.04, GTK 4.22.4, libadwaita 1.9.1, Node 24.18) на удалённом Linux-хосте (6 CPU), headless Xvfb 1280×800. Версии: @gtkx 1.0.0-rc.1, yoga-layout 3.2.1, react 19.2.8.
+Date: 2026-07-28. Environment: `rn-gtkx-dev` container (Ubuntu 26.04, GTK 4.22.4, libadwaita 1.9.1, Node 24.18) on a remote Linux host (6 CPU), headless Xvfb 1280×800. Versions: @gtkx 1.0.0-rc.1, yoga-layout 3.2.1, react 19.2.8.
 
-## Решение: **GO**
+## Decision: **GO**
 
-Архитектура «Yoga на JS-стороне + императивное позиционирование в GtkFixed» подтверждена по всем пунктам. Запас по производительности — на два порядка выше бюджета.
+The "Yoga on the JS side + imperative positioning in GtkFixed" architecture is confirmed on every count. The performance headroom is two orders of magnitude above budget.
 
-## Замеры
+## Measurements
 
-| Проверка                                                                                                  | Результат                                                                                   | Бюджет  | Вердикт                          |
-| --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------- | -------------------------------- |
-| Точность раскладки (23 виджета, вложенный flexbox: row/column, flex, gap, padding, space-between, center) | maxDelta = **0 px**                                                                         | ±1 px   | ✅                               |
-| Точность текста (12 кейсов: 3 текста × ширины 120/200/320/480, перенос строк)                             | maxDelta = **0 px**                                                                         | ±1 px   | ✅                               |
-| Reflow Yoga-дерева 500 узлов (100 проходов с изменением стиля)                                            | **0.13–0.17 мс**                                                                            | ≤ 16 мс | ✅ (запас ~100×)                 |
-| Анимация 100 виджетов, прямой путь (`fixed.move()` в tick callback)                                       | **60.0 fps**                                                                                | 60 fps  | ✅ (упор в кап Xvfb)             |
-| Анимация 100 виджетов через React-state (setState → рендер → layoutEffect → 100 move)                     | **57.4 fps**                                                                                | —       | ✅ (даже worst-case путь у цели) |
-| Визуальная проверка                                                                                       | `shots/static.png` — header/sidebar/cards/footer, переносы текста, скругления через GTK CSS | —       | ✅                               |
+| Check                                                                                                    | Result                                                                                      | Budget  | Verdict                             |
+| -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------- | ----------------------------------- |
+| Layout accuracy (23 widgets, nested flexbox: row/column, flex, gap, padding, space-between, center)      | maxDelta = **0 px**                                                                         | ±1 px   | ✅                                  |
+| Text accuracy (12 cases: 3 texts × widths 120/200/320/480, line wrapping)                                | maxDelta = **0 px**                                                                         | ±1 px   | ✅                                  |
+| Reflow of a 500-node Yoga tree (100 passes with style changes)                                           | **0.13–0.17 ms**                                                                            | ≤ 16 ms | ✅ (~100× headroom)                 |
+| Animating 100 widgets, direct path (`fixed.move()` in a tick callback)                                   | **60.0 fps**                                                                                | 60 fps  | ✅ (capped by Xvfb)                 |
+| Animating 100 widgets through React state (setState → render → layoutEffect → 100 moves)                 | **57.4 fps**                                                                                | —       | ✅ (even the worst-case path is close) |
+| Visual check                                                                                             | `shots/static.png` — header/sidebar/cards/footer, text wrapping, rounded corners via GTK CSS | —       | ✅                                  |
 
-Скриншот: ![static](shots/static.png)
+Screenshot: ![static](shots/static.png)
 
-## Подводные камни gtkx rc.1 (вход для задачи 003)
+## gtkx rc.1 pitfalls (input for task 003)
 
-1. **Декларативный `GtkFixedLayoutChild` в rc.1 не работает**: механизм ленивого резолва layout-child через `layoutManager.getLayoutChild()` появился в main уже после rc.1 (в rc.1 создаётся «оторванный» объект → Gtk-CRITICAL «layout-manager property not set», позиции не применяются). Решение: позиционировать **императивно** — `fixed.move(child, x, y)` через refs (дети добавляются реконсилером через `fixed.put(child, 0, 0)`). Это и есть целевой путь layout-движка (диффинг координат + пакетные move), так что ограничение нам не мешает. RN `transform` (scale/rotate) при необходимости — императивно через `fixed.getLayoutManager().getLayoutChild(widget).setTransform()` из gi-биндингов. При обновлении gtkx до следующего RC перепроверить.
-2. **64-битные значения из FFI приходят BigInt'ом**: `frameClock.getFrameTime()` → BigInt; арифметика с number кидает TypeError. Bridge должен нормализовать (`Number(...)`) на границе.
-3. **Измерение текста**: офскрин `new Gtk.Label()` (wrap=true) + `measure(VERTICAL, forWidth)` работает синхронно до маунта и совпадает с фактическим рендером в 0 px — идеальная measure-функция для Yoga.
-4. `widget.measure()` возвращает кортеж `[min, nat, minBaseline, natBaseline]`.
-5. A11y-warning «Unable to acquire accessibility bus» в headless — шум; в тестах ставить `GTK_A11Y=none`.
-6. Инфраструктура: осиротевший `dbus-daemon` держит stdout-пайп контейнера (вывод приложения — в файл, daemon добивать).
+1. **Declarative `GtkFixedLayoutChild` does not work in rc.1**: the lazy layout-child resolution through `layoutManager.getLayoutChild()` landed on main after rc.1 (rc.1 creates a "detached" object → Gtk-CRITICAL "layout-manager property not set", positions are not applied). Solution: position **imperatively** — `fixed.move(child, x, y)` via refs (the reconciler attaches children with `fixed.put(child, 0, 0)`). This is the layout engine's target path anyway (coordinate diffing + batched moves), so the limitation does not hurt us. RN `transform` (scale/rotate), if needed — imperatively via `fixed.getLayoutManager().getLayoutChild(widget).setTransform()` from the gi bindings. Re-check when gtkx moves to the next RC.
+2. **64-bit FFI values arrive as BigInt**: `frameClock.getFrameTime()` → BigInt; arithmetic with a number throws a TypeError. The bridge must normalize (`Number(...)`) at the boundary.
+3. **Text measurement**: an offscreen `new Gtk.Label()` (wrap=true) + `measure(VERTICAL, forWidth)` works synchronously before mount and matches the actual render to 0 px — a perfect measure function for Yoga.
+4. `widget.measure()` returns the tuple `[min, nat, minBaseline, natBaseline]`.
+5. The "Unable to acquire accessibility bus" a11y warning in headless runs is noise; set `GTK_A11Y=none` in tests.
+6. Infrastructure: an orphaned `dbus-daemon` keeps the container's stdout pipe open (write app output to a file, kill the daemon).
 
-## Что не проверено (низкий риск, отложено)
+## Not verified (low risk, deferred)
 
-- Живой ресайз окна с оценкой «дребезга» — headless-скриншоты этого не показывают. Составные операции ресайза (reflow 0.17 мс + пакет move при 60 fps) уже измерены; событие ресайза берётся из `useProperty` окна. Проверить глазами при первом live-запуске (XQuartz/Wayland).
-- React-state путь анимации деградирует до 57.4 fps на 100 виджетах — для Animated использовать прямой путь (так и планировалось в 009).
+- Live window resizing with a "jitter" assessment — headless screenshots cannot show it. The composite resize operations (0.17 ms reflow + a batch of moves at 60 fps) are already measured; the resize event comes from the window's `useProperty`. Eyeball it at the first live run (XQuartz/Wayland).
+- The React-state animation path degrades to 57.4 fps at 100 widgets — Animated should use the direct path (as planned for 009 all along).

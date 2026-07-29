@@ -95,7 +95,7 @@ const ALIGN = ["flex-start", "center", "flex-end", "stretch"] as const
 export const LayoutSection = () => (
   <Section
     title="Layout"
-    subtitle="Флексбокс Yoga: направления, распределение и выравнивание, gap, перенос, absolute-позиционирование, проценты и aspectRatio."
+    subtitle="Yoga flexbox: directions, distribution and alignment, gap, wrapping, absolute positioning, percentages and aspectRatio."
   >
     <DemoCard
       title="flexDirection"
@@ -109,7 +109,7 @@ export const LayoutSection = () => (
       <View style={[styles.track, { flexDirection: "row-reverse" }]}>
         <Boxes count={3} />
       </View>
-      <Caption>column (высота 120, элементы столбиком)</Caption>
+      <Caption>column (height 120, items stacked)</Caption>
       <View style={[styles.track, { flexDirection: "column", height: 120 }]}>
         <Boxes count={3} />
       </View>
@@ -117,7 +117,7 @@ export const LayoutSection = () => (
 
     <DemoCard
       title="justifyContent"
-      hint="распределение по главной оси ряда"
+      hint="distribution along the row's main axis"
     >
       {JUSTIFY.map((value) => (
         <View
@@ -139,7 +139,7 @@ export const LayoutSection = () => (
 
     <DemoCard
       title="alignItems"
-      hint="выравнивание по поперечной оси ряда высотой 56; для stretch у элементов нет своей высоты — они растягиваются"
+      hint="alignment along the cross axis of a 56-tall row; the stretch items have no height of their own — they stretch"
     >
       {ALIGN.map((value) => (
         <View
@@ -178,7 +178,7 @@ export const LayoutSection = () => (
 
     <DemoCard
       title="gap / rowGap / columnGap"
-      hint="слева gap: 4, справа columnGap: 16 + rowGap: 4 на переносимой сетке"
+      hint="left: gap: 4; right: columnGap: 16 + rowGap: 4 on a wrapping grid"
     >
       <View style={{ flexDirection: "row", gap: 12 }}>
         <View
@@ -208,7 +208,7 @@ export const LayoutSection = () => (
 
     <DemoCard
       title="flexWrap"
-      hint="чипы переносятся на новую строку при нехватке ширины — сузьте окно"
+      hint="chips wrap to the next line when the width runs out — make the window narrower"
     >
       <View style={[styles.track, { flexDirection: "row", flexWrap: "wrap" }]}>
         {[
@@ -235,7 +235,7 @@ export const LayoutSection = () => (
 
     <DemoCard
       title="position: absolute"
-      hint="бейджи прибиты к углам контейнера через top/right/bottom/left"
+      hint="badges pinned to the container corners via top/right/bottom/left"
     >
       <View style={styles.absoluteHost}>
         <View style={[styles.badge, { top: 8, left: 8 }]}>
@@ -259,8 +259,8 @@ export const LayoutSection = () => (
     </DemoCard>
 
     <DemoCard
-      title="Процентные размеры"
-      hint='width: "25%" | "50%" | "75%" | "100%" от карточки'
+      title="Percentage sizes"
+      hint='width: "25%" | "50%" | "75%" | "100%" of the card'
     >
       {(["25%", "50%", "75%", "100%"] as const).map((width) => (
         <View
@@ -274,7 +274,7 @@ export const LayoutSection = () => (
 
     <DemoCard
       title="aspectRatio"
-      hint="ширина задана процентом, высота выводится из aspectRatio: 1 и 16/9"
+      hint="the width is a percentage, the height is derived from aspectRatio: 1 and 16/9"
     >
       <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
         <View

@@ -219,7 +219,7 @@ const App = () => {
       <View style={styles.column}>
         <Card
           title="Pressable"
-          hint="клик и долгое нажатие; фон темнеет в pressed-состоянии"
+          hint="click and long press; the background darkens in the pressed state"
         >
           <Text style={styles.counterValue}>{count}</Text>
           <View style={styles.row}>
@@ -240,23 +240,23 @@ const App = () => {
 
         <Card
           title="TextInput"
-          hint="контролируемый ввод, echo ниже; Enter — submit"
+          hint="controlled input, echo below; Enter submits"
         >
           <TextInput
             style={styles.input}
             value={text}
             onChangeText={setText}
-            placeholder="напишите что-нибудь…"
+            placeholder="type something…"
             onSubmitEditing={({ nativeEvent }) =>
-              setItems((prev) => [`Введено: ${nativeEvent.text}`, ...prev])
+              setItems((prev) => [`Entered: ${nativeEvent.text}`, ...prev])
             }
           />
-          <Text style={styles.echo}>echo: {text || "(пусто)"}</Text>
+          <Text style={styles.echo}>echo: {text || "(empty)"}</Text>
         </Card>
 
         <Card
           title="Switch + ActivityIndicator"
-          hint="переключатель управляет спиннером"
+          hint="the switch controls the spinner"
         >
           <View style={styles.row}>
             <Switch
@@ -267,20 +267,20 @@ const App = () => {
               animating={busy}
               size="large"
             />
-            <Text style={styles.hint}>{busy ? "крутится" : "стоит"}</Text>
+            <Text style={styles.hint}>{busy ? "spinning" : "stopped"}</Text>
           </View>
         </Card>
 
         <Card
           title="Animated"
-          hint="loop-тайминг двигает и растворяет квадрат — мимо React, прямыми move/opacity"
+          hint="a looped timing moves and fades the square — bypassing React, via direct move/opacity calls"
         >
           <AnimatedDemo />
         </Card>
 
         <Card title="Modal">
           <Button
-            label="открыть модалку"
+            label="open modal"
             onPress={() => setModalVisible(true)}
           />
         </Card>
@@ -288,8 +288,8 @@ const App = () => {
 
       <View style={styles.column}>
         <Card
-          title="FlatList в ScrollView"
-          hint="колёсико мыши / перетаскивание ползунка; Enter в инпуте добавляет строку"
+          title="FlatList inside ScrollView"
+          hint="mouse wheel / scrollbar dragging; Enter in the input adds a row"
         >
           <FlatList
             ref={listRef}
@@ -306,13 +306,13 @@ const App = () => {
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
               <Button
-                label="в конец"
+                label="scroll to end"
                 onPress={() => listRef.current?.scrollToEnd()}
               />
             </View>
             <View style={{ flex: 1 }}>
               <Button
-                label="в начало"
+                label="scroll to top"
                 onPress={() => listRef.current?.scrollTo({ y: 0 })}
               />
             </View>
@@ -327,12 +327,11 @@ const App = () => {
       >
         <View style={styles.modalBody}>
           <Text style={styles.modalText}>
-            Это модальное окно — настоящий GtkWindow (modal, transient for
-            родительского окна), а внутри — обычное RN-дерево. Его тоже можно
-            ресайзить.
+            This modal is a real GtkWindow (modal, transient for the parent
+            window) with a regular RN tree inside. It can be resized too.
           </Text>
           <Button
-            label="закрыть"
+            label="close"
             onPress={() => setModalVisible(false)}
           />
         </View>

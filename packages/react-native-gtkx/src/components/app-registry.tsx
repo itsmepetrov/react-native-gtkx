@@ -1,4 +1,4 @@
-import { useState, type ComponentType } from "react"
+import { useLayoutEffect, useState, type ComponentType } from "react"
 import {
   createRoot,
   Gtk,
@@ -21,6 +21,28 @@ export type RunApplicationParams = {
   height?: number
 }
 
+// RN parity: system "reduce animations" hints never auto-stop RN animations
+// (ActivityIndicator keeps spinning; honoring reduce-motion is an explicit
+// opt-in via AccessibilityInfo). Our Animated runs on GLib timers and already
+// ignores the hint, so GTK-internal animations (GtkSpinner, switch slides)
+// must behave the same — otherwise e.g. GNOME under software rendering
+// reports enable-animations=false through the settings portal and spinners
+// freeze while Animated keeps moving.
+let animationsForced = false
+const forceEnableAnimations = (): void => {
+  if (animationsForced) {
+    return
+  }
+  const settings = Gtk.Settings.getDefault()
+  if (!settings) {
+    return
+  }
+  animationsForced = true
+  // Application-set GtkSettings values outrank the desktop backend, so a
+  // later portal update cannot flip this back.
+  settings.gtkEnableAnimations = true
+}
+
 const WindowContent = ({
   App,
   initialProps,
@@ -40,6 +62,12 @@ const WindowContent = ({
     width: initialWidth,
     height: initialHeight,
   })
+
+  // Settings need an initialized display, and writing them mid-render is
+  // unsafe — apply after the window mounts.
+  useLayoutEffect(() => {
+    forceEnableAnimations()
+  }, [])
 
   // The scrolled window ONLY decouples the window's minimum size from content
   // size requests (GtkFixed minimums otherwise ratchet the window: grows but

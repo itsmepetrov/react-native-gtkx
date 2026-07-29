@@ -1,73 +1,74 @@
-# Спайк 001 (эпик layout-manager): вердикт — B0 РАБОТАЕТ
+# Spike 001 (layout-manager epic): verdict — B0 WORKS
 
-Дата: 2026-07-29. Прогон: VM (Ubuntu 26.04 aarch64, GTK 4.20, headless sway + pixman), `bash run-vm.sh`.
+Date: 2026-07-29. Run: VM (Ubuntu 26.04 aarch64, GTK 4.20, headless sway + pixman), `bash run-vm.sh`.
 
-## Вердикт
+## Verdict
 
-**B0 подтверждён: GObject-сабкласс GtkLayoutManager регистрируется целиком из JS,
-собственный нативный модуль (B1) НЕ НУЖЕН.** gtkx rc.1 даёт всё готовым:
+**B0 confirmed: a GObject subclass of GtkLayoutManager registers entirely from JS —
+our own native addon (B1) is NOT needed.** gtkx rc.1 ships everything ready-made:
 
-- `@gtkx/native` экспортирует `registerClass(name, parentType, {vfuncs})` с
-  нативными трамплинами (NAPI-RS), а `@gtkx/runtime.registerClass(klass, opts)` —
-  высокоуровневую обёртку: наследуешь codegen-класс, переопределяешь методы.
-- Codegen уже поставляет **полный vfunc-реестр `LayoutManagerClass`**
-  (`registerWrapperClass(LayoutManager, ...)` в gi/gtk/gtk.js): byteOffset
-  136/144/152 (get_request_mode/measure/allocate), дескрипторы включая
-  `t.ref(t.int32)` для out-параметров measure. Оффсеты никто руками не считает.
-- Out-параметры vfunc'а возвращаются из JS-метода **кортежем**:
+- `@gtkx/native` exports `registerClass(name, parentType, {vfuncs})` with native
+  trampolines (NAPI-RS), and `@gtkx/runtime.registerClass(klass, opts)` is the
+  high-level wrapper: extend a codegen class, override methods.
+- The codegen already ships the **complete `LayoutManagerClass` vfunc registry**
+  (`registerWrapperClass(LayoutManager, ...)` in gi/gtk/gtk.js): byteOffset
+  136/144/152 (get_request_mode/measure/allocate), descriptors including
+  `t.ref(t.int32)` for the measure out-params. Nobody computes offsets by hand.
+- Vfunc out-params are returned from the JS method **as a tuple**:
   `measure() → [minimum, natural, minBaseline, natBaseline]`
   (runtime `splitTupleResult`/`writeOutParams`).
-- `receiver: "this"` — в vfunc `this` === JS-инстанс менеджера (созданный
-  конструктором wrapper'а через setWrapper), поэтому состояние (rect'ы) живёт
-  прямо в полях инстанса, WeakMap не нужен.
+- `receiver: "this"` — inside a vfunc `this` === the manager's JS instance
+  (created by the wrapper constructor via setWrapper), so state (rects) lives
+  directly in instance fields, no WeakMap needed.
 
-## Результаты прогона (все фазы зелёные)
+## Run results (all phases green)
 
 ```
 SUBCLASS OK type=RnGtkxLayout isA(LayoutManager)=true
 MEASURE  OK h=[300,300] v=[200,200] labelMin=507 calls=2
 ALLOCATE OK a=10,10,120,30 b=150,10,120,30 o=280,60,60,30
 OVERFLOW OK measureAfter=[300,300] childRight=340
-SHRINK   OK window=200x150 (минимум каждой метки 507px)
-PERF     207.8ms / 1000 allocations x 50 children (~0.21ms на полный проход)
-PAINT-PIXELS OK block=86 control=250 — overflow-ребёнок нарисован за границей
+SHRINK   OK window=200x150 (each label's own minimum is 507px)
+PERF     207.8ms / 1000 allocations x 50 children (~0.21ms per full pass)
+PAINT-PIXELS OK block=86 control=250 — the overflow child painted past the boundary
 ```
 
-Скриншот: shots/paint.ppm (блок ██ прорисован правее границы контейнера поверх
-фона соседнего бокса — paint-overflow как в RN).
+Screenshot: shots/paint.png (the ██ block is drawn past the container's right
+edge over the neighboring box's background — paint-overflow like RN).
 
-## Факты, влияющие на 002/003/006
+## Facts affecting 002/003/006
 
-1. **`typeName` обязателен**: `registerClass` по умолчанию берёт `klass.name`,
-   а бандлер минифицирует классы → `GLib-GObject-CRITICAL: type name 'X9' is
-too short` и G_TYPE_INVALID. Всегда передавать
-   `registerClass(K, { typeName: "..." })`.
-2. **GtkFixed несовместим с чужим менеджером**: `gtk_fixed_put` требует
-   `GtkFixedLayoutChild` от ТЕКУЩЕГО менеджера контейнера. `GtkBox.append`
-   layout-children не трогает — подмена менеджера после append безопасна.
-   → В 003 контейнеры переводим с GtkFixed на GtkBox (реконсилер gtkx
-   аппендит детей Box штатно), либо parent'им вручную.
-3. **GTK4 молчит про аллокацию ниже минимума** — 0 предупреждений за прогон
-   (единственный warning — locale, не про раскладку). Подавление не нужно.
-4. **Недо-аллоцированный GtkLabel рисует ПОЛНЫЙ текст за пределами аллокации**
-   (в спайке две метки перекрылись). RN-семантика текста требует клипа своим
-   боксом → в 006 текстовым листьям ставить `gtk_widget_set_overflow(HIDDEN)`
-   (paint-клип), контейнерам оставить VISIBLE (paint-overflow).
-5. **SHRINK без обёртки**: floating-окно приняло setDefaultSize(200,150) точно,
-   минимумы детей (507px) не мешают — «трещотка» устранена самим менеджером.
-   sway-IPC-ресайз не понадобился (floating + setDefaultSize эквивалентен для
-   проверки ратчета).
-6. **Никаких RC1-WORKAROUND**: `getHandle`/`getInstanceType`/`typeIsA`/
-   `resolveType`/`registerClass` — публичные экспорты `@gtkx/runtime`.
-   В 002 добавить `@gtkx/runtime` прямой зависимостью пакета (сейчас она
-   транзитивная через @gtkx/react).
-7. **Перф**: 0.21ms на синхронный vfunc-проход (measure+allocate 50 детей,
-   FFI-путь native→JS→50×sizeAllocate). Бюджет для сравнения в 003.
-8. Регистрация класса на module load (до activate/Gtk.init) работает — GObject
-   готов сразу после импорта @gtkx/native (init() в main.js пакета).
+1. **`typeName` is mandatory**: `registerClass` derives the GType name from
+   `klass.name` by default, and the bundler minifies class names →
+   `GLib-GObject-CRITICAL: type name 'X9' is too short` and G_TYPE_INVALID.
+   Always pass `registerClass(K, { typeName: "..." })`.
+2. **GtkFixed is incompatible with a foreign manager**: `gtk_fixed_put` demands
+   a `GtkFixedLayoutChild` from the container's CURRENT manager. `GtkBox.append`
+   does not touch layout children — swapping the manager after append is safe.
+   → In 003 the containers move from GtkFixed to GtkBox (the gtkx reconciler
+   appends Box children natively), or we parent widgets manually.
+3. **GTK4 is silent about under-minimum allocation** — 0 warnings for the whole
+   run (the only warning was about the locale, unrelated to layout). No
+   suppression needed.
+4. **An under-allocated GtkLabel draws its FULL text past the allocation**
+   (the two labels in the spike overlapped). RN text semantics require clipping
+   to the own box → in 006, text leaves get `gtk_widget_set_overflow(HIDDEN)`
+   (paint clip); containers keep VISIBLE (paint overflow).
+5. **SHRINK without the wrapper**: the floating window accepted
+   setDefaultSize(200,150) exactly; children minimums (507px) do not interfere —
+   the ratchet is eliminated by the manager itself. sway-IPC resizing was not
+   needed (floating + setDefaultSize is equivalent for testing the ratchet).
+6. **Zero RC1-WORKAROUNDs**: `getHandle`/`getInstanceType`/`typeIsA`/
+   `resolveType`/`registerClass` are public `@gtkx/runtime` exports.
+   In 002 add `@gtkx/runtime` as a direct dependency of the package (currently
+   it is transitive via @gtkx/react).
+7. **Perf**: 0.21ms per synchronous vfunc pass (measure+allocate of 50 children,
+   the FFI path native→JS→50×sizeAllocate). The budget baseline for 003.
+8. Registering the class at module load (before activate/Gtk.init) works — GObject
+   is ready right after importing @gtkx/native (init() in the package's main.js).
 
 ## B1/B2
 
-- B1 (мини-аддон C) — не нужен, ветка закрыта без реализации.
-- B2 (upstream) — остаётся желательным треком (нативные трамплины без
-  FFI-маршалинга на каждый кадр), оформляется в 008; не блокер.
+- B1 (a mini C addon) — not needed; the branch is closed without implementation.
+- B2 (upstream) — remains a desirable track (native trampolines without
+  per-frame FFI marshalling), to be drafted in 008; not a blocker.

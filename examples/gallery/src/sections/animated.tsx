@@ -154,7 +154,7 @@ const SpringToggle = () => {
         ]}
         onPress={toggle}
       >
-        <Text style={styles.buttonText}>spring к другому краю</Text>
+        <Text style={styles.buttonText}>spring to the other edge</Text>
       </Pressable>
     </>
   )
@@ -249,37 +249,37 @@ const DiagonalLoop = () => {
 export const AnimatedSection = () => (
   <Section
     title="Animated"
-    subtitle="timing, spring, loop/sequence и interpolate; прямой путь мимо React: setOpacity на виджете и move в родительском GtkFixed поверх базового rect."
+    subtitle="timing, spring, loop/sequence and interpolate; a direct path bypassing React: setOpacity on the widget and move in the parent GtkFixed on top of the base rect."
   >
     <DemoCard
       title="Animated.timing + loop"
-      hint="translateX по interpolate от ширины дорожки (onLayout) — адаптивно к ресайзу окна"
+      hint="translateX interpolated from the track width (onLayout) — adapts to window resizes"
     >
       <TimingLoop />
     </DemoCard>
 
     <DemoCard
       title="Animated.spring"
-      hint="физика stiffness/damping: квадрат прыгает между краями с перелётом"
+      hint="stiffness/damping physics: the square jumps between the edges with overshoot"
     >
       <SpringToggle />
     </DemoCard>
 
     <DemoCard
       title="opacity + interpolate"
-      hint="три квадрата слушают один Animated.Value; interpolate с тремя стопами даёт «провал» в середине цикла"
+      hint="three squares listen to one Animated.Value; interpolate with three stops dips in the middle of the cycle"
     >
       <OpacityPulse />
     </DemoCard>
 
     <DemoCard
-      title="translateX + translateY вместе"
-      hint="две интерполяции одного значения: X линейно, Y треугольной волной — зигзаг"
+      title="translateX + translateY together"
+      hint="two interpolations of one value: X is linear, Y is a triangle wave — a zigzag"
     >
       <DiagonalLoop />
       <Text style={styles.limitation}>
-        Ограничение v1: Animated.View анимирует только translateX/translateY и
-        opacity; rotate/scale к GTK-виджетам не применяются.
+        v1 limitation: Animated.View only animates translateX/translateY and
+        opacity; rotate/scale are not applied to GTK widgets.
       </Text>
     </DemoCard>
   </Section>

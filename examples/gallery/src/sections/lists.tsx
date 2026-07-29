@@ -90,8 +90,8 @@ const styles = StyleSheet.create({
   },
 })
 
-const FRUIT = ["Яблоко", "Груша", "Слива", "Вишня", "Абрикос"]
-const VEG = ["Морковь", "Свёкла", "Тыква", "Кабачок"]
+const FRUIT = ["Apple", "Pear", "Plum", "Cherry", "Apricot"]
+const VEG = ["Carrot", "Beet", "Pumpkin", "Zucchini"]
 
 const Separator = () => <View style={styles.separator} />
 
@@ -113,17 +113,17 @@ const SmallButton = ({
 export const ListsSection = () => {
   const flatRef = useRef<ScrollViewHandle>(null)
   const [rows] = useState(() =>
-    Array.from({ length: 40 }, (_, i) => `Строка #${i + 1}`),
+    Array.from({ length: 40 }, (_, i) => `Row #${i + 1}`),
   )
 
   return (
     <Section
       title="Lists"
-      subtitle="v1 рендерит все строки внутри ScrollView (виртуализация — ветка D роадмапа); сепараторы, header/footer, пустое состояние и scrollTo работают как в RN."
+      subtitle="v1 renders all rows inside a ScrollView (virtualization is roadmap branch D); separators, header/footer, empty state and scrollTo work like in RN."
     >
       <DemoCard
-        title="FlatList: 40 строк + сепараторы + header/footer"
-        hint="ItemSeparatorComponent — линия в hairlineWidth; кнопки дергают ref.scrollTo / scrollToEnd"
+        title="FlatList: 40 rows + separators + header/footer"
+        hint="ItemSeparatorComponent is a hairlineWidth line; the buttons call ref.scrollTo / scrollToEnd"
       >
         <FlatList
           ref={flatRef}
@@ -167,8 +167,8 @@ export const ListsSection = () => {
       </DemoCard>
 
       <DemoCard
-        title="FlatList: пустые данные"
-        hint="data: [] → рендерится ListEmptyComponent"
+        title="FlatList: empty data"
+        hint="data: [] → ListEmptyComponent is rendered"
       >
         <FlatList
           style={{
@@ -182,7 +182,7 @@ export const ListsSection = () => {
           ListEmptyComponent={
             <View style={styles.empty}>
               <Text style={styles.emptyText}>
-                Здесь пусто — это ListEmptyComponent
+                Nothing here — this is ListEmptyComponent
               </Text>
             </View>
           }
@@ -191,14 +191,14 @@ export const ListsSection = () => {
 
       <DemoCard
         title="SectionList"
-        hint="секции с заголовками через renderSectionHeader; под капотом — тот же FlatList по расплющенным строкам"
+        hint="sections with headers via renderSectionHeader; under the hood it is the same FlatList over flattened rows"
       >
         <SectionList
           style={styles.list}
           contentContainerStyle={styles.listContent}
           sections={[
-            { title: "Фрукты", data: FRUIT },
-            { title: "Овощи", data: VEG },
+            { title: "Fruits", data: FRUIT },
+            { title: "Vegetables", data: VEG },
           ]}
           renderSectionHeader={({ section }) => (
             <View style={styles.sectionHeader}>
@@ -212,8 +212,8 @@ export const ListsSection = () => {
           )}
         />
         <Caption>
-          Прокрутите список: заголовки секций скроллятся вместе со строками
-          (sticky-заголовков в v1 нет).
+          Scroll the list: section headers scroll together with the rows (no
+          sticky headers in v1).
         </Caption>
       </DemoCard>
     </Section>

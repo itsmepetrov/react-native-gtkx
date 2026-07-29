@@ -45,16 +45,16 @@ const styles = StyleSheet.create({
 
 export const MediaSection = () => {
   const [loaded, setLoaded] = useState(false)
-  const [error, setError] = useState("(ошибки нет)")
+  const [error, setError] = useState("(no error)")
 
   return (
     <Section
       title="Media"
-      subtitle="Image рендерит локальные файлы (SVG/PNG/…) через GtkPicture; размер задаёт стиль, contentFit — проп resizeMode. Сеть в v1 не поддерживается."
+      subtitle="Image renders local files (SVG/PNG/…) via GtkPicture; the style sets the size, the resizeMode prop sets contentFit. Network sources are not supported in v1."
     >
       <DemoCard
         title="resizeMode"
-        hint="одна и та же иконка Adwaita в рамке 110×64: cover / contain / stretch / center"
+        hint="the same Adwaita icon in a 110×64 frame: cover / contain / stretch / center"
       >
         <View style={styles.row}>
           {MODES.map((mode) => (
@@ -77,7 +77,7 @@ export const MediaSection = () => {
 
       <DemoCard
         title="onLoad"
-        hint="source строкой (без { uri }); колбэк подтверждает, что файл найден и назначен виджету"
+        hint="source as a plain string (no { uri }); the callback confirms the file was found and assigned to the widget"
       >
         <View style={styles.row}>
           <View style={styles.frame}>
@@ -89,14 +89,14 @@ export const MediaSection = () => {
             />
           </View>
           <Text style={styles.status}>
-            onLoad: {loaded ? "сработал" : "ещё нет"}
+            onLoad: {loaded ? "fired" : "not yet"}
           </Text>
         </View>
       </DemoCard>
 
       <DemoCard
         title="onError"
-        hint="путь не существует → onError с текстом ошибки, виджет остаётся пустым"
+        hint="the path does not exist → onError with the error text, the widget stays empty"
       >
         <View style={styles.row}>
           <View style={styles.frame}>

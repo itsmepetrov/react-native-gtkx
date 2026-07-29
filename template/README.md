@@ -1,33 +1,33 @@
 # hello-react-native-gtkx
 
-Минимальное приложение на чистом React Native API (`View`, `Text`, `StyleSheet`), работающее как нативное GNOME-приложение: рендер — настоящие GTK4/Adwaita-виджеты через [react-native-gtkx](https://github.com/…/react-native-gtkx).
+A minimal application built on the pure React Native API (`View`, `Text`, `StyleSheet`) that runs as a native GNOME application: rendering is done with real GTK4/Adwaita widgets via [react-native-gtkx](https://github.com/…/react-native-gtkx).
 
-## Требования
+## Requirements
 
 - Linux, GTK4 ≥ 4.20, libadwaita ≥ 1.8, Node.js ≥ 24;
-- dev-заголовки для codegen: `libgtk-4-dev libadwaita-1-dev` (Ubuntu).
+- dev headers for codegen: `libgtk-4-dev libadwaita-1-dev` (Ubuntu).
 
-## Быстрый старт
+## Quick start
 
 ```bash
 npx degit <owner>/react-native-gtkx/template my-app
 cd my-app
 npm install
-npm run dev     # окно приложения + Fast Refresh: правка src/App.tsx видна без перезапуска
+npm run dev     # application window + Fast Refresh: edits to src/App.tsx show up without a restart
 ```
 
-Прод-сборка:
+Production build:
 
 ```bash
-npm run build   # единый bundle: dist/bundle.js
+npm run build   # single bundle: dist/bundle.js
 npm start       # node dist/bundle.js
 ```
 
-> ⏱ Замер «от установки до окна» в чистом контейнере Ubuntu 26.04 (системные зависимости предустановлены): **63 секунды** (npm install + gtkx build + запуск; 2026-07-29, scripts/verify-template.sh).
+> ⏱ "Install to window" measurement in a clean Ubuntu 26.04 container (system dependencies preinstalled): **63 seconds** (npm install + gtkx build + launch; 2026-07-29, scripts/verify-template.sh).
 
-## ⚠️ Пока пакеты не опубликованы
+## ⚠️ Until the packages are published
 
-`react-native-gtkx@0.1.0` и `@react-native-gtkx/vite-preset@0.1.0` ещё не выложены в npm. До публикации подключите их из клона монорепо, заменив версии на `file:`-ссылки в `package.json`:
+`react-native-gtkx@0.1.0` and `@react-native-gtkx/vite-preset@0.1.0` are not on npm yet. Until they are published, wire them up from a monorepo clone by replacing the versions with `file:` references in `package.json`:
 
 ```json
 {
@@ -40,22 +40,22 @@ npm start       # node dist/bundle.js
 }
 ```
 
-(пути — относительно вашего проекта; после правки — `npm install`).
+(paths are relative to your project; run `npm install` after editing).
 
-## Как это устроено
+## How it works
 
-- `gtkx dev` / `gtkx build` сами запускают vite и автоматически подхватывают `vite.config.ts` из корня проекта;
-- пресет `@react-native-gtkx/vite-preset` добавляет alias `react-native` → `react-native-gtkx` и платформенные расширения Metro;
-- типы для `import … from "react-native"` даёт маппинг `paths` в `tsconfig.json`;
-- entry по умолчанию — `src/index.tsx` (регистрация приложения через `AppRegistry`).
+- `gtkx dev` / `gtkx build` launch vite themselves and automatically pick up `vite.config.ts` from the project root;
+- the `@react-native-gtkx/vite-preset` preset adds the `react-native` → `react-native-gtkx` alias and Metro platform extensions;
+- types for `import … from "react-native"` come from the `paths` mapping in `tsconfig.json`;
+- the default entry is `src/index.tsx` (application registration via `AppRegistry`).
 
-### Платформенные расширения
+### Platform extensions
 
-Для import'ов без расширения работает приоритет `.linux.tsx` → `.linux.ts` → `.native.tsx` → `.native.ts` → базовый файл (а также `.jsx`/`.js`). Например, положите рядом `Comp.tsx` и `Comp.linux.tsx` — при `import { Comp } from "./Comp"` соберётся linux-вариант. `Platform.select({ linux: …, native: …, default: … })` работает как в RN и тришейкается в прод-сборке.
+For extensionless imports the priority is `.linux.tsx` → `.linux.ts` → `.native.tsx` → `.native.ts` → the base file (plus `.jsx`/`.js`). For example, put `Comp.tsx` and `Comp.linux.tsx` side by side — `import { Comp } from "./Comp"` will build the linux variant. `Platform.select({ linux: …, native: …, default: … })` works as in RN and is tree-shaken in the production build.
 
-## Упаковка
+## Packaging
 
-`npm run build` даёт единственный файл `dist/bundle.js` — приложение запускается любым Node ≥ 24. Простейший `.desktop`-файл:
+`npm run build` produces a single file, `dist/bundle.js` — the application runs on any Node ≥ 24. The simplest `.desktop` file:
 
 ```ini
 [Desktop Entry]
@@ -65,4 +65,4 @@ Exec=node /opt/hello-gtkx/bundle.js
 Categories=Utility;
 ```
 
-Для фонового/сервисного запуска подойдёт обычный systemd user unit (`ExecStart=node /opt/hello-gtkx/bundle.js`). Упаковка во Flatpak возможна, но вне рамок этого шаблона.
+For background/service launch, a regular systemd user unit works (`ExecStart=node /opt/hello-gtkx/bundle.js`). Flatpak packaging is possible but out of scope for this template.

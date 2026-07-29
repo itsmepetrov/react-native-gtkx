@@ -76,19 +76,19 @@ const Button = ({ label, onPress }: { label: string; onPress: () => void }) => (
 export const ApisSection = () => {
   const window = useWindowDimensions()
   const scheme = useColorScheme()
-  const [alertResult, setAlertResult] = useState("(ещё не вызывали)")
-  const [canOpen, setCanOpen] = useState("(нажмите кнопку)")
+  const [alertResult, setAlertResult] = useState("(not called yet)")
+  const [canOpen, setCanOpen] = useState("(press a button)")
 
   const screen = Dimensions.get("screen")
 
   return (
     <Section
       title="APIs"
-      subtitle="Значения и живые хуки платформенных модулей + диалоги Alert и открытие ссылок через портал."
+      subtitle="Platform module values and live hooks, plus Alert dialogs and link opening through the portal."
     >
       <DemoCard
         title="Platform"
-        hint="OS всегда linux; Version — версия GTK рантайма; select предпочитает ключ linux → native → default"
+        hint="OS is always linux; Version is the GTK runtime version; select prefers the linux → native → default key"
       >
         <KV
           k="Platform.OS"
@@ -110,16 +110,16 @@ export const ApisSection = () => {
           k="Platform.select({ linux, default })"
           v={
             Platform.select({
-              linux: "ветка linux",
-              default: "ветка default",
+              linux: "linux branch",
+              default: "default branch",
             }) ?? "(undefined)"
           }
         />
       </DemoCard>
 
       <DemoCard
-        title="useWindowDimensions (live) и Dimensions"
-        hint="ресайзните окно — window-значения обновляются через useSyncExternalStore"
+        title="useWindowDimensions (live) and Dimensions"
+        hint="resize the window — the window values update via useSyncExternalStore"
       >
         <KV
           k="window.width × height"
@@ -136,8 +136,8 @@ export const ApisSection = () => {
       </DemoCard>
 
       <DemoCard
-        title="useColorScheme и AppState"
-        hint="схема приходит от AdwStyleManager и обновляется при смене темы системы"
+        title="useColorScheme and AppState"
+        hint="the scheme comes from AdwStyleManager and updates when the system theme changes"
       >
         <KV
           k="useColorScheme()"
@@ -151,13 +151,13 @@ export const ApisSection = () => {
 
       <DemoCard
         title="Alert.alert"
-        hint="варианты: одна кнопка OK; две с cancel/destructive; три с isPreferred; результат — ниже"
+        hint="variants: a single OK button; two with cancel/destructive; three with isPreferred; the result is below"
       >
         <View style={styles.buttonRow}>
           <Button
             label="OK"
             onPress={() =>
-              Alert.alert("Простой алерт", "Одна кнопка OK по умолчанию", [
+              Alert.alert("Simple alert", "A single default OK button", [
                 { text: "OK", onPress: () => setAlertResult("OK") },
               ])
             }
@@ -165,58 +165,61 @@ export const ApisSection = () => {
           <Button
             label="cancel / destructive"
             onPress={() =>
-              Alert.alert("Удалить файл?", "Действие необратимо.", [
+              Alert.alert("Delete file?", "This action cannot be undone.", [
                 {
-                  text: "Отмена",
+                  text: "Cancel",
                   style: "cancel",
-                  onPress: () => setAlertResult("Отмена"),
+                  onPress: () => setAlertResult("Cancel"),
                 },
                 {
-                  text: "Удалить",
+                  text: "Delete",
                   style: "destructive",
-                  onPress: () => setAlertResult("Удалить"),
+                  onPress: () => setAlertResult("Delete"),
                 },
               ])
             }
           />
           <Button
-            label="три кнопки + isPreferred"
+            label="three buttons + isPreferred"
             onPress={() =>
               Alert.alert(
-                "Сохранить изменения?",
+                "Save changes?",
                 undefined,
                 [
                   {
-                    text: "Не сохранять",
+                    text: "Don't save",
                     style: "destructive",
-                    onPress: () => setAlertResult("Не сохранять"),
+                    onPress: () => setAlertResult("Don't save"),
                   },
                   {
-                    text: "Отмена",
+                    text: "Cancel",
                     style: "cancel",
-                    onPress: () => setAlertResult("Отмена"),
+                    onPress: () => setAlertResult("Cancel"),
                   },
                   {
-                    text: "Сохранить",
+                    text: "Save",
                     isPreferred: true,
-                    onPress: () => setAlertResult("Сохранить"),
+                    onPress: () => setAlertResult("Save"),
                   },
                 ],
-                { onDismiss: () => setAlertResult("(закрыт без кнопки)") },
+                {
+                  onDismiss: () =>
+                    setAlertResult("(dismissed without a button)"),
+                },
               )
             }
           />
         </View>
-        <Text style={styles.result}>нажато: {alertResult}</Text>
+        <Text style={styles.result}>pressed: {alertResult}</Text>
       </DemoCard>
 
       <DemoCard
         title="Linking"
-        hint="openURL уходит в портал (браузер по умолчанию); canOpenURL — статический ответ по схеме"
+        hint="openURL goes through the portal (default browser); canOpenURL is a static answer based on the scheme"
       >
         <View style={styles.buttonRow}>
           <Button
-            label="открыть https://www.gtk.org"
+            label="open https://www.gtk.org"
             onPress={() => {
               Linking.openURL("https://www.gtk.org").catch((error: unknown) => {
                 console.error("openURL failed:", error)
@@ -228,7 +231,7 @@ export const ApisSection = () => {
             onPress={() => {
               Linking.canOpenURL("mailto:hi@example.org")
                 .then((ok) => setCanOpen(`mailto: ${ok}`))
-                .catch(() => setCanOpen("mailto: ошибка"))
+                .catch(() => setCanOpen("mailto: error"))
             }}
           />
           <Button
@@ -236,13 +239,14 @@ export const ApisSection = () => {
             onPress={() => {
               Linking.canOpenURL("tg://resolve")
                 .then((ok) => setCanOpen(`tg: ${ok}`))
-                .catch(() => setCanOpen("tg: ошибка"))
+                .catch(() => setCanOpen("tg: error"))
             }}
           />
         </View>
         <Text style={styles.result}>canOpenURL: {canOpen}</Text>
         <Caption>
-          Alert и Linking асинхронны и fire-and-forget — как в react-native.
+          Alert and Linking are async and fire-and-forget — just like in
+          react-native.
         </Caption>
       </DemoCard>
     </Section>

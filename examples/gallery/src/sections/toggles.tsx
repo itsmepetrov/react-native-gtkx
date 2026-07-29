@@ -28,11 +28,11 @@ export const TogglesSection = () => {
   return (
     <Section
       title="Toggles"
-      subtitle="Контролируемый Switch (стейт ведёт prop, дефолтный тоггл проглатывается) и ActivityIndicator в трёх размерах."
+      subtitle="Controlled Switch (state drives the prop, the default toggle is swallowed) and ActivityIndicator in three sizes."
     >
       <DemoCard
         title="Switch"
-        hint="value/onValueChange; выключенный disabled-переключатель не реагирует"
+        hint="value/onValueChange; a disabled switch does not react"
       >
         <View style={styles.row}>
           <View style={styles.item}>
@@ -60,8 +60,8 @@ export const TogglesSection = () => {
       </DemoCard>
 
       <DemoCard
-        title="ActivityIndicator: размеры"
-        hint='size: "small" (20) | "large" (36) | число (48)'
+        title="ActivityIndicator: sizes"
+        hint='size: "small" (20) | "large" (36) | number (48)'
       >
         <View style={styles.row}>
           <View style={styles.item}>
@@ -81,7 +81,7 @@ export const TogglesSection = () => {
 
       <DemoCard
         title="animating"
-        hint="Switch управляет пропом animating соседнего спиннера"
+        hint="the Switch drives the animating prop of the spinner next to it"
       >
         <View style={styles.row}>
           <Switch
@@ -94,8 +94,8 @@ export const TogglesSection = () => {
           />
           <Text style={styles.status}>
             {spinning
-              ? "animating: true — крутится"
-              : "animating: false — стоит"}
+              ? "animating: true — spinning"
+              : "animating: false — stopped"}
           </Text>
         </View>
       </DemoCard>

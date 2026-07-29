@@ -1,44 +1,44 @@
 # Getting Started
 
-react-native-gtkx позволяет писать нативные Linux (GTK4/Adwaita) приложения в API React Native. Никаких `@gtkx/*`-импортов в вашем коде — только `react-native`.
+react-native-gtkx lets you write native Linux (GTK4/Adwaita) applications with the React Native API. No `@gtkx/*` imports in your code — only `react-native`.
 
-## Требования
+## Requirements
 
 - Linux (x64/arm64, glibc), GTK4 ≥ 4.20, libadwaita ≥ 1.8 (Ubuntu 26.04+, Fedora 43+);
 - Node.js ≥ 24;
-- dev-пакеты: `sudo apt install libgtk-4-dev libadwaita-1-dev` (Ubuntu).
+- dev packages: `sudo apt install libgtk-4-dev libadwaita-1-dev` (Ubuntu).
 
-## Новый проект из шаблона
+## New project from the template
 
 ```bash
-cp -r <репозиторий>/template my-app && cd my-app
-npm install        # до публикации пакета: замените зависимость на file:-путь, см. README шаблона
-npm run dev        # окно с Fast Refresh (правки применяются без перезапуска)
-npm run build && npm start   # прод-бандл, запускается обычным node
+cp -r <repository>/template my-app && cd my-app
+npm install        # until the package is published: replace the dependency with a file: path, see the template README
+npm run dev        # window with Fast Refresh (edits apply without a restart)
+npm run build && npm start   # production bundle, runs with plain node
 ```
 
-Замер на чистом контейнере Ubuntu 26.04: от установки до окна — 63 секунды.
+Measured in a clean Ubuntu 26.04 container: 63 seconds from install to a window on screen.
 
-## Как это устроено
+## How it works
 
 ```
-ваш код (react-native API)
-  └─ vite-пресет: alias react-native → react-native-gtkx, платформенные
-     расширения .linux.tsx → .native.tsx → базовый
-      └─ react-native-gtkx: Yoga (WASM) считает flexbox; стили делятся на
-         layout (Yoga) и визуальные (GTK CSS); координаты применяются к
-         настоящим GTK-виджетам
-          └─ gtkx: React-реконсилер → GTK4 через FFI
+your code (react-native API)
+  └─ vite preset: aliases react-native → react-native-gtkx, platform
+     extensions .linux.tsx → .native.tsx → base
+      └─ react-native-gtkx: Yoga (WASM) computes flexbox; styles are split into
+         layout (Yoga) and visual (GTK CSS); coordinates are applied to
+         real GTK widgets
+          └─ gtkx: React reconciler → GTK4 via FFI
 ```
 
-Точка входа — как в RN:
+The entry point is the same as in RN:
 
 ```tsx
 import { AppRegistry, StyleSheet, Text, View } from "react-native"
 
 const App = () => (
   <View style={styles.screen}>
-    <Text style={styles.title}>Привет, GNOME!</Text>
+    <Text style={styles.title}>Hello, GNOME!</Text>
   </View>
 )
 
@@ -51,20 +51,20 @@ AppRegistry.registerComponent("app", () => App)
 AppRegistry.runApplication("app", { title: "My App", width: 800, height: 600 })
 ```
 
-`runApplication` принимает десктопные параметры (`title`, `width`, `height`) — это единственное расширение относительно RN-сигнатуры.
+`runApplication` accepts desktop parameters (`title`, `width`, `height`) — the only extension over the RN signature.
 
-## Примеры в репозитории
+## Examples in the repository
 
-- `examples/profile` — статическая раскладка + тот же исходник собирается react-native-web (`examples/profile-web`);
-- `examples/playground` — интерактив: Pressable, TextInput, Switch, FlatList, Modal, Animated, responsive через flexWrap;
-- `examples/gallery` — галерея всей поверхности v1.
+- `examples/profile` — a static layout; the same source also builds with react-native-web (`examples/profile-web`);
+- `examples/playground` — interactive: Pressable, TextInput, Switch, FlatList, Modal, Animated, responsive via flexWrap;
+- `examples/gallery` — a gallery of the entire v1 surface.
 
-## Тесты
+## Tests
 
-Unit-логика — обычный vitest. Компонентные тесты — `@gtkx/testing` (render/screen/fireEvent) под headless Wayland: см. `packages/react-native-gtkx/tests-gtk/` и `npm run test:gtk`. В тестах кликайте через `fireEvent`, роли запрашивайте enum'ами `Gtk.AccessibleRole` (см. docs/gtkx-rc1-vs-main.md).
+Unit logic is plain vitest. Component tests use `@gtkx/testing` (render/screen/fireEvent) under headless Wayland: see `packages/react-native-gtkx/tests-gtk/` and `npm run test:gtk`. In tests, click via `fireEvent` and query roles with `Gtk.AccessibleRole` enums (see docs/gtkx-rc1-vs-main.md).
 
-## Дальше
+## Next steps
 
-- [docs/api.md](api.md) — вся поверхность v1 и отличия от RN;
-- [CONTRIBUTING.md](../CONTRIBUTING.md) — разработка самой библиотеки (в т.ч. с macOS через удалённый контейнер);
-- [docs/gtkx-rc1-vs-main.md](gtkx-rc1-vs-main.md) — обходы rc.1 и план миграции.
+- [docs/api.md](api.md) — the entire v1 surface and differences from RN;
+- [CONTRIBUTING.md](../CONTRIBUTING.md) — developing the library itself (including from macOS via a remote container);
+- [docs/gtkx-rc1-vs-main.md](gtkx-rc1-vs-main.md) — rc.1 workarounds and the migration plan.

@@ -87,7 +87,7 @@ const check = (label: string, ok: boolean, detail: string): void => {
   console.log(`${label} ${ok ? "OK" : "FAIL"} ${detail}`)
 }
 
-const LONG = "антидисестаблишментарианизм-суперкалифрагилистик-экспиалидоушес"
+const LONG = "antidisestablishmentarianism-supercalifragilisticexpialidocious"
 
 const app = new Gtk.Application({ applicationId: "dev.rngtkx.spike.layout" })
 

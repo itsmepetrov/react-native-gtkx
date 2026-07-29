@@ -24,48 +24,48 @@ const styles = StyleSheet.create({
 export const InputsSection = () => {
   const [text, setText] = useState("")
   const [password, setPassword] = useState("")
-  const [submitted, setSubmitted] = useState("(ещё не было)")
+  const [submitted, setSubmitted] = useState("(none yet)")
   const [focusState, setFocusState] = useState("blur")
 
   return (
     <Section
       title="Inputs"
-      subtitle="TextInput поверх GtkEntry: контролируемое значение, плейсхолдеры, скрытый ввод, типы клавиатуры, неактивное поле."
+      subtitle="TextInput on top of GtkEntry: controlled value, placeholders, hidden input, keyboard types, disabled field."
     >
       <DemoCard
-        title="Контролируемый ввод + echo"
-        hint="value/onChangeText; onSubmitEditing по Enter; onFocus/onBlur через EventControllerFocus"
+        title="Controlled input + echo"
+        hint="value/onChangeText; onSubmitEditing on Enter; onFocus/onBlur via EventControllerFocus"
       >
         <TextInput
           value={text}
           onChangeText={setText}
-          placeholder="напишите что-нибудь…"
+          placeholder="type something…"
           onSubmitEditing={({ nativeEvent }) => setSubmitted(nativeEvent.text)}
           onFocus={() => setFocusState("focus")}
           onBlur={() => setFocusState("blur")}
         />
-        <Text style={styles.echo}>echo: {text || "(пусто)"}</Text>
+        <Text style={styles.echo}>echo: {text || "(empty)"}</Text>
         <Text style={styles.status}>
-          последний submit (Enter): {submitted} · фокус: {focusState}
+          last submit (Enter): {submitted} · focus: {focusState}
         </Text>
       </DemoCard>
 
       <DemoCard
         title="secureTextEntry"
-        hint="visibility=false у GtkEntry: символы скрыты, значение остаётся контролируемым"
+        hint="visibility=false on GtkEntry: characters are hidden, the value stays controlled"
       >
         <TextInput
           value={password}
           onChangeText={setPassword}
-          placeholder="пароль"
+          placeholder="password"
           secureTextEntry
         />
-        <Text style={styles.status}>длина: {password.length} символов</Text>
+        <Text style={styles.status}>length: {password.length} characters</Text>
       </DemoCard>
 
       <DemoCard
         title="keyboardType"
-        hint="маппится в Gtk.InputPurpose — подсказка методам ввода, а не фильтр символов"
+        hint="maps to Gtk.InputPurpose — a hint for input methods, not a character filter"
       >
         <Caption>numeric</Caption>
         <TextInput
@@ -91,26 +91,26 @@ export const InputsSection = () => {
 
       <DemoCard
         title="editable: false"
-        hint="поле неактивно (sensitive=false) и не редактируется"
+        hint="the field is inactive (sensitive=false) and cannot be edited"
       >
         <TextInput
-          defaultValue="это значение нельзя изменить"
+          defaultValue="this value cannot be changed"
           editable={false}
         />
       </DemoCard>
 
       <DemoCard
-        title="defaultValue (неконтролируемый)"
-        hint="начальное значение задаётся один раз, дальше виджет живёт своей жизнью"
+        title="defaultValue (uncontrolled)"
+        hint="the initial value is set once, after that the widget lives its own life"
       >
         <TextInput
-          defaultValue="стартовый текст"
+          defaultValue="initial text"
           placeholder="…"
         />
         <View>
           <Text style={styles.limitation}>
-            Ограничение v1: multiline не поддерживается — TextInput всегда
-            рендерится однострочным GtkEntry (GtkTextView — ветка H роадмапа).
+            v1 limitation: multiline is not supported — TextInput always renders
+            as a single-line GtkEntry (GtkTextView is roadmap branch H).
           </Text>
         </View>
       </DemoCard>

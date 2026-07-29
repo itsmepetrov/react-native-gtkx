@@ -5,8 +5,8 @@ import { PlatformColor, StyleSheet, Text, View } from "react-native"
 import { Caption, DemoCard, palette, Section } from "../ui"
 
 const LOREM =
-  "Pango измеряет этот абзац для Yoga: перенос строк происходит ровно там, " +
-  "где движок раскладки посчитал ширину, а GtkLabel лишь отрисовывает результат."
+  "Pango measures this paragraph for Yoga: line breaks land exactly where " +
+  "the layout engine computed the width, and GtkLabel merely renders the result."
 
 const styles = StyleSheet.create({
   base: {
@@ -27,7 +27,7 @@ const styles = StyleSheet.create({
 export const TextSection = () => (
   <Section
     title="Text"
-    subtitle="GtkLabel c метриками Pango: типографика через стили, выравнивание, обрезка numberOfLines. Вложенные стилизованные спаны в v1 не поддерживаются (плоская конкатенация детей)."
+    subtitle="GtkLabel with Pango metrics: typography via styles, alignment, numberOfLines truncation. Nested styled spans are not supported in v1 (children are flattened into one string)."
   >
     <DemoCard
       title="fontSize"
@@ -38,19 +38,19 @@ export const TextSection = () => (
           key={size}
           style={[styles.base, { fontSize: size }]}
         >
-          fontSize: {size} — Съешь ещё этих мягких булок
+          fontSize: {size} — The quick brown fox jumps over the lazy dog
         </Text>
       ))}
     </DemoCard>
 
     <DemoCard
-      title="fontWeight и fontStyle"
-      hint='ключевые слова и числовые строки "100"–"900"; курсив через fontStyle'
+      title="fontWeight and fontStyle"
+      hint='keywords and numeric strings "100"–"900"; italics via fontStyle'
     >
       <Text style={[styles.base, { fontWeight: "300" }]}>
         fontWeight: “300” — light
       </Text>
-      <Text style={styles.base}>fontWeight: normal (по умолчанию)</Text>
+      <Text style={styles.base}>fontWeight: normal (default)</Text>
       <Text style={[styles.base, { fontWeight: "600" }]}>
         fontWeight: “600” — semibold
       </Text>
@@ -67,7 +67,7 @@ export const TextSection = () => (
 
     <DemoCard
       title="textAlign"
-      hint="left / center / right / justify — xalign + justification на GtkLabel, не CSS"
+      hint="left / center / right / justify — xalign + justification on GtkLabel, not CSS"
     >
       <View style={styles.alignBox}>
         <Text style={[styles.base, { textAlign: "left" }]}>
@@ -86,10 +86,10 @@ export const TextSection = () => (
     </DemoCard>
 
     <DemoCard
-      title="numberOfLines и переносы"
-      hint="без ограничения текст переносится по ширине; с numberOfLines — эллипсис в конце последней строки"
+      title="numberOfLines and wrapping"
+      hint="with no limit the text wraps to the width; with numberOfLines an ellipsis ends the last line"
     >
-      <Caption>Без ограничения (перенос по ширине карточки):</Caption>
+      <Caption>No limit (wraps to the card width):</Caption>
       <Text style={styles.dim}>{LOREM}</Text>
       <Caption>numberOfLines: 1</Caption>
       <Text
@@ -108,22 +108,22 @@ export const TextSection = () => (
     </DemoCard>
 
     <DemoCard
-      title="lineHeight и letterSpacing"
-      hint="line-height в px (GTK ≥ 4.6); letter-spacing в px"
+      title="lineHeight and letterSpacing"
+      hint="line-height in px (GTK ≥ 4.6); letter-spacing in px"
     >
-      <Caption>lineHeight: 16 (плотно):</Caption>
+      <Caption>lineHeight: 16 (tight):</Caption>
       <Text style={[styles.dim, { lineHeight: 16 }]}>{LOREM}</Text>
-      <Caption>lineHeight: 26 (разреженно):</Caption>
+      <Caption>lineHeight: 26 (loose):</Caption>
       <Text style={[styles.dim, { lineHeight: 26 }]}>{LOREM}</Text>
       <Caption>letterSpacing: 3</Caption>
       <Text style={[styles.base, { letterSpacing: 3 }]}>
-        Р А З Р Я Д К А через letterSpacing
+        S P A C E D letters via letterSpacing
       </Text>
     </DemoCard>
 
     <DemoCard
       title="PlatformColor"
-      hint='PlatformColor("accent-fg-color", "@blue_3") → var(--accent-fg-color, @blue_3): цвет берётся из темы Adwaita'
+      hint='PlatformColor("accent-fg-color", "@blue_3") → var(--accent-fg-color, @blue_3): the color comes from the Adwaita theme'
     >
       <Text
         style={{
@@ -131,19 +131,19 @@ export const TextSection = () => (
           fontWeight: "700",
         }}
       >
-        Этот текст покрашен акцентным цветом текущей темы
+        This text is painted with the accent color of the current theme
       </Text>
       <Text style={{ color: PlatformColor("success-color", "@green_3") }}>
-        А этот — success-color с fallback на @green_3
+        And this one is success-color with a fallback to @green_3
       </Text>
     </DemoCard>
 
     <DemoCard
-      title="Плоская конкатенация детей"
-      hint="дети Text склеиваются в одну строку; стили вложенного спана в v1 игнорируются — честное ограничение"
+      title="Flat concatenation of children"
+      hint="Text children are joined into a single string; nested span styles are ignored in v1 — an honest limitation"
     >
       <Text style={styles.base}>
-        Число: {42}, строка: {"из выражения"}, всё это — один GtkLabel.
+        Number: {42}, string: {"from an expression"}, all of it is one GtkLabel.
       </Text>
     </DemoCard>
   </Section>

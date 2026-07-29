@@ -63,11 +63,11 @@ const Labeled = ({
 export const ViewsSection = () => (
   <Section
     title="Views"
-    subtitle="View → GtkFixed: backgroundColor во всех форматах цвета, рамки и скругления через GTK CSS, opacity, вложенные контейнеры."
+    subtitle="View → GtkFixed: backgroundColor in every color format, borders and corner radii via GTK CSS, opacity, nested containers."
   >
     <DemoCard
       title="backgroundColor"
-      hint="один и тот же цвет в разных форматах: hex, rgb(), hsl(), named, PlatformColor-совместимая строка var()"
+      hint="the same color in different formats: hex, rgb(), hsl(), named, a PlatformColor-compatible var() string"
     >
       <View style={styles.row}>
         <Labeled label='"#e66100"'>
@@ -94,7 +94,7 @@ export const ViewsSection = () => (
 
     <DemoCard
       title="opacity"
-      hint="лесенка 1 → 0.15; прозрачность применяется ко всему поддереву виджета"
+      hint="a ladder from 1 → 0.15; opacity applies to the widget's entire subtree"
     >
       <View style={styles.row}>
         {[1, 0.7, 0.4, 0.15].map((value) => (
@@ -114,8 +114,8 @@ export const ViewsSection = () => (
     </DemoCard>
 
     <DemoCard
-      title="Рамки"
-      hint="borderWidth/Color шортхендом и по сторонам; borderStyle: solid | dashed | dotted"
+      title="Borders"
+      hint="borderWidth/Color as a shorthand and per side; borderStyle: solid | dashed | dotted"
     >
       <View style={styles.row}>
         <Labeled label="borderWidth: 2">
@@ -150,7 +150,7 @@ export const ViewsSection = () => (
             ]}
           />
         </Labeled>
-        <Labeled label="по-сторонние width">
+        <Labeled label="per-side width">
           <View
             style={[
               styles.box,
@@ -164,7 +164,7 @@ export const ViewsSection = () => (
             ]}
           />
         </Labeled>
-        <Labeled label="по-сторонние color">
+        <Labeled label="per-side color">
           <View
             style={[
               styles.box,
@@ -182,8 +182,8 @@ export const ViewsSection = () => (
     </DemoCard>
 
     <DemoCard
-      title="Скругления"
-      hint="borderRadius шортхендом, по-угловые радиусы, круг из квадрата"
+      title="Corner radii"
+      hint="borderRadius shorthand, per-corner radii, a circle from a square"
     >
       <View style={styles.row}>
         <Labeled label="borderRadius: 12">
@@ -194,7 +194,7 @@ export const ViewsSection = () => (
             ]}
           />
         </Labeled>
-        <Labeled label="по-угловые">
+        <Labeled label="per-corner">
           <View
             style={[
               styles.box,
@@ -206,7 +206,7 @@ export const ViewsSection = () => (
             ]}
           />
         </Labeled>
-        <Labeled label="круг (radius = size/2)">
+        <Labeled label="circle (radius = size/2)">
           <View
             style={{
               width: 48,
@@ -220,8 +220,8 @@ export const ViewsSection = () => (
     </DemoCard>
 
     <DemoCard
-      title="Вложенность"
-      hint="три уровня контейнеров: каждый View — GtkFixed со своим CSS-классом, padding задаёт отступы через Yoga"
+      title="Nesting"
+      hint="three levels of containers: each View is a GtkFixed with its own CSS class, padding sets the insets via Yoga"
     >
       <View style={styles.nestedOuter}>
         <View style={styles.nestedMiddle}>
