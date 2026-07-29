@@ -11,20 +11,19 @@ import {
   Gtk,
   GtkBox,
   GtkScrolledWindow,
+  queueAllocate,
   queueResize,
   useSignal,
 } from "../gtkx-bridge/index"
 import { splitStyle, StyleSheet } from "../style/index"
 import type { StyleProp } from "../contracts"
-import { Animated } from "./animated"
 import { HostNodeContext } from "./host-node"
-import { deferDuringAllocate } from "./rect-store"
+import { deferDuringAllocate, setStoredOffset } from "./rect-store"
 import {
   useLayoutChild,
   useRnContainer,
   type LayoutEvent,
 } from "./use-layout-child"
-import { View } from "./view"
 
 export type ScrollViewHandle = {
   scrollTo(options: { x?: number; y?: number; animated?: boolean }): void
@@ -51,19 +50,41 @@ export type ScrollViewProps = {
   testID?: string
 }
 
-type StickyRecord = { x: number; y: number; width: number; height: number }
+type StickyRecord = { y: number; height: number }
 
-// A sticky child may carry an external marginTop — the transparent band would
-// ride along with the pinned copy and reveal the in-flow original through it.
-// Pin the VISUAL box instead: read the inset from the element's own style.
-const stickyTopInset = (child: ReactNode): number => {
-  if (typeof child !== "object" || child === null || !("props" in child)) {
-    return 0
-  }
-  const style = (child as { props?: { style?: StyleProp } }).props?.style
-  const flat = StyleSheet.flatten(style)
-  const margin = flat.marginTop ?? flat.marginVertical ?? flat.margin
-  return typeof margin === "number" ? margin : 0
+// A measuring wrapper around a sticky child: a plain container that reports
+// its layout AND its widget, so the scroll handler can translate/reorder the
+// REAL instance (RN semantics — no duplicate is ever rendered, external
+// margins travel with the header exactly as designed).
+const StickySlot = ({
+  index,
+  onRecord,
+  children,
+}: {
+  index: number
+  onRecord: (
+    index: number,
+    layout: { y: number; height: number },
+    widget: Gtk.Widget | null,
+  ) => void
+  children?: ReactNode
+}) => {
+  const widgetRef = useRef<Gtk.Box | null>(null)
+  const { host, node } = useLayoutChild(widgetRef, {
+    style: undefined,
+    onLayout: (event) =>
+      onRecord(index, event.nativeEvent.layout, widgetRef.current),
+  })
+  useRnContainer(widgetRef, node)
+  return (
+    <GtkBox ref={widgetRef}>
+      <HostNodeContext.Provider
+        value={{ engine: host.engine, node, widgetRef }}
+      >
+        {children}
+      </HostNodeContext.Provider>
+    </GtkBox>
+  )
 }
 
 // GtkScrolledWindow whose child is a content GtkBox backed by its own Yoga
@@ -172,19 +193,17 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
     }))
 
     // --- sticky headers -------------------------------------------------
-    // RN model: the child stays in flow; when scrolled past, a SECOND
-    // instance of it renders as the LAST content child (sibling paint order
-    // puts it on top) pinned to the viewport top via the Animated fast path —
-    // no React work per scroll frame, only when the ACTIVE index changes.
+    // The RN model, faithfully: the REAL child is translated (no duplicate,
+    // state preserved). RN gives the pinned cell a zIndex; GTK's z-order is
+    // sibling paint order, so the active slot is reordered to be the LAST
+    // content child while pinned and restored afterwards. Per-frame movement
+    // goes through the rect-store offset fast path — zero React work while
+    // scrolling.
     const stickySet = stickyHeaderIndices ?? []
     const stickyRecords = useRef(new Map<number, StickyRecord>())
-    const stickyInsets = useRef(new Map<number, number>())
-    const [activeSticky, setActiveSticky] = useState<number | null>(null)
+    const stickyWidgets = useRef(new Map<number, Gtk.Widget>())
+    const restoreSibling = useRef(new Map<number, Gtk.Widget | null>())
     const activeStickyRef = useRef<number | null>(null)
-    // Geometry changes of the recorded slots must re-render the pinned copy
-    // (it inherits the slot's x/width) — bump on onLayout.
-    const [, setStickyGeometry] = useState(0)
-    const [stickyTop] = useState(() => new Animated.Value(0))
 
     const updateSticky = (scrollTop: number): void => {
       if (stickySet.length === 0) {
@@ -192,14 +211,12 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       }
       let active: number | null = null
       let next: StickyRecord | null = null
-      let nextStickyInset = 0
       for (const index of stickySet) {
         const record = stickyRecords.current.get(index)
         if (!record) {
           continue
         }
-        const inset = stickyInsets.current.get(index) ?? 0
-        if (record.y + inset <= scrollTop) {
+        if (record.y <= scrollTop) {
           if (
             active === null ||
             record.y >= stickyRecords.current.get(active)!.y
@@ -208,28 +225,55 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
           }
         } else if (next === null || record.y < next.y) {
           next = record
-          nextStickyInset = inset
         }
       }
-      // Compare through a ref: the adjustment handler may hold a stale
-      // closure over the state.
-      if (active !== activeStickyRef.current) {
-        activeStickyRef.current = active
-        setActiveSticky(active)
+
+      const content = contentRef.current
+      const previous = activeStickyRef.current
+      if (previous !== active && previous !== null) {
+        const widget = stickyWidgets.current.get(previous)
+        if (widget && content) {
+          setStoredOffset(widget, 0, 0)
+          // Put the slot back where the reconciler expects it.
+          content.reorderChildAfter(
+            widget,
+            restoreSibling.current.get(previous) ?? null,
+          )
+        }
       }
+      if (previous !== active && active !== null) {
+        const widget = stickyWidgets.current.get(active)
+        if (widget && content) {
+          restoreSibling.current.set(active, widget.getPrevSibling())
+          content.reorderChildAfter(widget, content.getLastChild())
+        }
+      }
+      activeStickyRef.current = active
+
       if (active !== null) {
+        const widget = stickyWidgets.current.get(active)
         const record = stickyRecords.current.get(active)!
-        const inset = stickyInsets.current.get(active) ?? 0
-        // Pin the visual box: the copy's wrapper sits `inset` above the
-        // viewport top so the transparent margin band is clipped away.
-        // Push-out freezes it when its bottom meets the NEXT header's visual
-        // top, then it scrolls away naturally — the hand-off is continuous.
-        const nextInset = next ? nextStickyInset : 0
-        const pinned = next
-          ? Math.min(scrollTop - inset, next!.y + nextInset - record.height)
-          : scrollTop - inset
-        stickyTop.setValue(Math.max(record.y, pinned))
+        if (widget && content) {
+          // Pin at the viewport top; the next sticky header pushes it out.
+          const pinned = next
+            ? Math.min(scrollTop, next.y - record.height)
+            : scrollTop
+          setStoredOffset(widget, 0, Math.max(0, pinned - record.y))
+          queueAllocate(content)
+        }
       }
+    }
+
+    const recordSticky = (
+      index: number,
+      layout: { y: number; height: number },
+      widget: Gtk.Widget | null,
+    ): void => {
+      stickyRecords.current.set(index, { y: layout.y, height: layout.height })
+      if (widget) {
+        stickyWidgets.current.set(index, widget)
+      }
+      updateSticky(scrolled?.getVadjustment()?.getValue() ?? 0)
     }
 
     const emitScroll = (): void => {
@@ -281,48 +325,19 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
           >
             {stickySet.length === 0
               ? children
-              : Children.toArray(children).map((child, index) => {
-                  if (stickySet.includes(index)) {
-                    stickyInsets.current.set(index, stickyTopInset(child))
-                  }
-                  return stickySet.includes(index) ? (
-                    <View
+              : Children.toArray(children).map((child, index) =>
+                  stickySet.includes(index) ? (
+                    <StickySlot
                       key={`sticky-slot-${index}`}
-                      onLayout={(event) => {
-                        stickyRecords.current.set(index, {
-                          x: event.nativeEvent.layout.x,
-                          y: event.nativeEvent.layout.y,
-                          width: event.nativeEvent.layout.width,
-                          height: event.nativeEvent.layout.height,
-                        })
-                        setStickyGeometry((value) => value + 1)
-                        updateSticky(
-                          scrolled?.getVadjustment()?.getValue() ?? 0,
-                        )
-                      }}
+                      index={index}
+                      onRecord={recordSticky}
                     >
                       {child}
-                    </View>
+                    </StickySlot>
                   ) : (
                     child
-                  )
-                })}
-            {activeSticky !== null && (
-              <Animated.View
-                // The pinned copy inherits the slot's measured geometry so it
-                // matches the in-flow header exactly (container paddings,
-                // non-stretched widths).
-                style={{
-                  position: "absolute",
-                  left: stickyRecords.current.get(activeSticky)?.x ?? 0,
-                  width: stickyRecords.current.get(activeSticky)?.width,
-                  top: 0,
-                  transform: [{ translateY: stickyTop }],
-                }}
-              >
-                {Children.toArray(children)[activeSticky]}
-              </Animated.View>
-            )}
+                  ),
+                )}
           </HostNodeContext.Provider>
         </GtkBox>
       </GtkScrolledWindow>
