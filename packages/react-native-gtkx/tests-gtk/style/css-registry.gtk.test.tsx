@@ -1,11 +1,11 @@
 // GTK integration tests for the style pipeline (task 005): the real `css`
 // helper from the bridge registers generated GTK CSS, and the resulting
-// class applies to a GtkFixed via cssClasses. Linux-only (npm run test:gtk).
+// class applies to a GtkBox via cssClasses. Linux-only (npm run test:gtk).
 
 import { render, screenshot } from "@gtkx/testing"
 import { createRef } from "react"
 import { describe, expect, it } from "vitest"
-import { css, GtkFixed, type Gtk } from "../../src/gtkx-bridge/index.js"
+import { css, GtkBox, type Gtk } from "../../src/gtkx-bridge/index.js"
 import { createCssRegistry, visualStyleToCss } from "../../src/style/index.js"
 import { defaultCssRegistry } from "../../src/style/registry.gtkx.js"
 
@@ -46,7 +46,7 @@ describe("bridge css + generated GTK CSS", () => {
   })
 })
 
-describe("visual smoke on GtkFixed", () => {
+describe("visual smoke on GtkBox", () => {
   it("applies background, border, radius and opacity via cssClasses", async () => {
     const className = defaultCssRegistry.getClassName({
       backgroundColor: "#1c71d8",
@@ -57,9 +57,9 @@ describe("visual smoke on GtkFixed", () => {
     })
     expect(className).not.toBeNull()
 
-    const fixedRef = createRef<Gtk.Fixed | null>()
+    const fixedRef = createRef<Gtk.Box | null>()
     await render(
-      <GtkFixed
+      <GtkBox
         ref={fixedRef}
         widthRequest={200}
         heightRequest={120}
@@ -88,9 +88,9 @@ describe("visual smoke on GtkFixed", () => {
     })
     expect(className).not.toBeNull()
 
-    const fixedRef = createRef<Gtk.Fixed | null>()
+    const fixedRef = createRef<Gtk.Box | null>()
     await render(
-      <GtkFixed
+      <GtkBox
         ref={fixedRef}
         widthRequest={120}
         heightRequest={80}
@@ -107,9 +107,9 @@ describe("visual smoke on GtkFixed", () => {
     })
     expect(className).not.toBeNull()
 
-    const fixedRef = createRef<Gtk.Fixed | null>()
+    const fixedRef = createRef<Gtk.Box | null>()
     await render(
-      <GtkFixed
+      <GtkBox
         ref={fixedRef}
         widthRequest={64}
         heightRequest={64}

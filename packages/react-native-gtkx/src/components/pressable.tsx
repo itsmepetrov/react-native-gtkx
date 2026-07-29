@@ -1,8 +1,12 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react"
-import { Gtk, GtkFixed } from "../gtkx-bridge/index.js"
+import { Gtk, GtkBox } from "../gtkx-bridge/index.js"
 import type { StyleProp } from "../contracts.js"
 import { HostNodeContext } from "./host-node.js"
-import { useLayoutChild, type LayoutEvent } from "./use-layout-child.js"
+import {
+  useLayoutChild,
+  useRnContainer,
+  type LayoutEvent,
+} from "./use-layout-child.js"
 
 export type PressableStateCallbackType = {
   pressed: boolean
@@ -46,7 +50,7 @@ export const Pressable = ({
   onLayout,
   testID,
 }: PressableProps) => {
-  const widgetRef = useRef<Gtk.Fixed | null>(null)
+  const widgetRef = useRef<Gtk.Box | null>(null)
   const [pressed, setPressed] = useState(false)
   const [hovered, setHovered] = useState(false)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -81,6 +85,7 @@ export const Pressable = ({
     style: resolvedStyle,
     onLayout,
   })
+  useRnContainer(widgetRef, node)
 
   const clearLongPress = (): void => {
     if (longPressTimer.current !== null) {
@@ -163,7 +168,7 @@ export const Pressable = ({
   }, [])
 
   return (
-    <GtkFixed
+    <GtkBox
       ref={widgetRef}
       name={testID}
       cssClasses={cssClass ? [cssClass] : []}
@@ -173,7 +178,7 @@ export const Pressable = ({
       >
         {resolvedChildren}
       </HostNodeContext.Provider>
-    </GtkFixed>
+    </GtkBox>
   )
 }
 

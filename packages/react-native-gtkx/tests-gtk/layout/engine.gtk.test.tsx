@@ -2,20 +2,62 @@ import { render, waitFor } from "@gtkx/testing"
 import { createRef } from "react"
 import { expect, it } from "vitest"
 import {
+  getStoredRect,
+  setStoredRect,
+} from "../../src/components/rect-store.js"
+import {
+  allocateChild,
+  attachRnLayout,
   createTextProbe,
-  GtkFixed,
+  GtkBox,
   GtkLabel,
   measureWidget,
-  moveChild,
+  queueResize,
   type Gtk,
+  type RnLayoutOrientation,
 } from "../../src/gtkx-bridge/index.js"
-import { LayoutEngine } from "../../src/layout/index.js"
+import { LayoutEngine, type LayoutNode } from "../../src/layout/index.js"
 import type { Rect } from "../../src/contracts.js"
 
-it("engine rects drive real GtkFixed allocations", async () => {
+// Mirrors what useRnContainer + the commit path do in components.
+const wireContainer = (widget: Gtk.Widget, node: LayoutNode): void => {
+  attachRnLayout(widget, {
+    measure: (orientation: RnLayoutOrientation) => {
+      const rect = node.getRect()
+      return Math.round(
+        (orientation === "horizontal" ? rect?.width : rect?.height) ?? 0,
+      )
+    },
+    allocate: () => {
+      let child = widget.getFirstChild()
+      while (child) {
+        const rect = getStoredRect(child)
+        if (rect) {
+          allocateChild(child, rect.x, rect.y, rect.width, rect.height)
+        }
+        child = child.getNextSibling()
+      }
+    },
+  })
+}
+
+const wireCommit = (
+  node: LayoutNode,
+  ref: { current: Gtk.Widget | null },
+): void => {
+  node.setCommit((rect: Rect) => {
+    const widget = ref.current
+    if (widget) {
+      setStoredRect(widget, rect)
+      queueResize(widget)
+    }
+  })
+}
+
+it("engine rects drive real allocations through RnGtkxLayout", async () => {
   const engine = new LayoutEngine({ width: 400, height: 300 })
-  const rootRef = createRef<Gtk.Fixed | null>()
-  const cardRef = createRef<Gtk.Fixed | null>()
+  const rootRef = createRef<Gtk.Box | null>()
+  const cardRef = createRef<Gtk.Box | null>()
   const labelRef = createRef<Gtk.Label | null>()
 
   const card = engine.createNode()
@@ -38,35 +80,21 @@ it("engine rects drive real GtkFixed allocations", async () => {
   })
 
   await render(
-    <GtkFixed
-      ref={rootRef}
-      widthRequest={400}
-      heightRequest={300}
-    >
-      <GtkFixed ref={cardRef}>
+    <GtkBox ref={rootRef}>
+      <GtkBox ref={cardRef}>
         <GtkLabel
           ref={labelRef}
           label="layout engine text"
         />
-      </GtkFixed>
-    </GtkFixed>,
+      </GtkBox>
+    </GtkBox>,
   )
 
-  // Wire the commit path exactly like components (006) will do it.
-  card.setCommit((rect: Rect) => {
-    const widget = cardRef.current
-    if (widget && rootRef.current) {
-      widget.setSizeRequest(rect.width, rect.height)
-      moveChild(rootRef.current, widget, rect.x, rect.y)
-    }
-  })
-  label.setCommit((rect: Rect) => {
-    const widget = labelRef.current
-    if (widget && cardRef.current) {
-      widget.setSizeRequest(rect.width, rect.height)
-      moveChild(cardRef.current, widget, rect.x, rect.y)
-    }
-  })
+  // Wire the manager + commit path exactly like the components do.
+  wireContainer(rootRef.current!, engine.root)
+  wireContainer(cardRef.current!, card)
+  wireCommit(card, cardRef)
+  wireCommit(label, labelRef)
 
   engine.flushSync()
 

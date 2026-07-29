@@ -40,7 +40,7 @@ it("renders an RN tree with Yoga geometry on real widgets", async () => {
     expect(label.getAllocatedWidth()).toBeGreaterThan(0)
   })
 
-  // The card is the first child of the container View's GtkFixed and must
+  // The card is the first child of the container View's GtkBox and must
   // carry the generated visual CSS class.
   const containerFixed = label.getParent() as Gtk.Fixed
   const card = containerFixed.getFirstChild() as Gtk.Widget

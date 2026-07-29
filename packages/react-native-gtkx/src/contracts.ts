@@ -118,7 +118,7 @@ export type VisualStyle = Partial<{
   // NOT emitted to CSS (no such GTK CSS property): the Text component (006)
   // applies it via label props using the pure style/text-align helper.
   textAlign: "auto" | "left" | "right" | "center" | "justify"
-  // NOT emitted to CSS: applied by the engine/components via GtkFixed
+  // NOT emitted to CSS: applied by the engine through the layout manager
   // layout-child transforms (Animated fast path).
   transform: TransformPart[]
 }>

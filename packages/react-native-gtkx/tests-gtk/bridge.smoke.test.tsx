@@ -3,37 +3,30 @@ import { createRef } from "react"
 import { expect, it } from "vitest"
 import {
   createTextProbe,
-  GtkFixed,
+  GtkBox,
   GtkLabel,
   measureWidget,
-  moveChild,
   toNumber,
   type Gtk,
 } from "../src/gtkx-bridge/index.js"
 
-it("renders a GtkFixed with a label and positions it imperatively", async () => {
-  const fixedRef = createRef<Gtk.Fixed | null>()
+it("renders a GtkBox container with a label child", async () => {
+  const boxRef = createRef<Gtk.Box | null>()
   const labelRef = createRef<Gtk.Label | null>()
 
   await render(
-    <GtkFixed
-      ref={fixedRef}
-      widthRequest={200}
-      heightRequest={120}
-    >
+    <GtkBox ref={boxRef}>
       <GtkLabel
         ref={labelRef}
         label="bridge smoke"
       />
-    </GtkFixed>,
+    </GtkBox>,
   )
 
   const label = screen.getByText("bridge smoke")
   expect(label).toBeTruthy()
-
-  const fixed = fixedRef.current
-  expect(fixed).not.toBeNull()
-  moveChild(fixed!, labelRef.current!, 40, 25)
+  expect(boxRef.current).not.toBeNull()
+  expect(labelRef.current!.getParent()).toBe(boxRef.current)
 })
 
 it("measures text through an offscreen probe (Yoga measure contract)", () => {

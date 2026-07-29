@@ -2,8 +2,6 @@
 // gtkx is an RC dependency: when its API moves, this bridge absorbs the change.
 //
 // rc.1 caveats baked into this surface (see spike/RESULTS.md):
-// - declarative GtkFixedLayoutChild is broken in rc.1 → position children imperatively
-//   via moveChild(); the reconciler attaches GtkFixed children with put(child, 0, 0)
 // - 64-bit FFI values arrive as BigInt → normalize with toNumber() at this boundary
 
 export * as Adw from "@gtkx/gi/adw"
@@ -20,7 +18,6 @@ export {
   GtkApplicationWindow,
   GtkBox,
   GtkEntry,
-  GtkFixed,
   GtkGestureClick,
   GtkLabel,
   GtkPicture,
@@ -45,7 +42,6 @@ export {
 export { css, cx, injectGlobal } from "@gtkx/css"
 
 export { createTextProbe, measureWidget, toNumber } from "./measure.js"
-export { moveChild } from "./fixed.js"
 export {
   allocateChild,
   attachRnLayout,

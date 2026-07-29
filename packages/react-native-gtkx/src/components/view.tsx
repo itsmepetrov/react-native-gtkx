@@ -1,8 +1,12 @@
 import { useRef, type ReactNode } from "react"
-import { GtkFixed, type Gtk } from "../gtkx-bridge/index.js"
+import { GtkBox, type Gtk } from "../gtkx-bridge/index.js"
 import type { StyleProp } from "../contracts.js"
 import { HostNodeContext } from "./host-node.js"
-import { useLayoutChild, type LayoutEvent } from "./use-layout-child.js"
+import {
+  useLayoutChild,
+  useRnContainer,
+  type LayoutEvent,
+} from "./use-layout-child.js"
 
 export type ViewProps = {
   style?: StyleProp
@@ -11,18 +15,19 @@ export type ViewProps = {
   testID?: string
 }
 
-// Every View is a GtkFixed: Yoga computes the children's rects, the commit
-// hooks move the child widgets inside it. Visual styles arrive as a GTK CSS
-// class produced by the style system.
+// Every View is a GtkBox driven by RnGtkxLayout: Yoga computes the children's
+// rects, the manager's allocate() applies them. Visual styles arrive as a GTK
+// CSS class produced by the style system.
 export const View = ({ style, onLayout, children, testID }: ViewProps) => {
-  const widgetRef = useRef<Gtk.Fixed | null>(null)
+  const widgetRef = useRef<Gtk.Box | null>(null)
   const { host, node, cssClass } = useLayoutChild(widgetRef, {
     style,
     onLayout,
   })
+  useRnContainer(widgetRef, node)
 
   return (
-    <GtkFixed
+    <GtkBox
       ref={widgetRef}
       name={testID}
       cssClasses={cssClass ? [cssClass] : []}
@@ -32,7 +37,7 @@ export const View = ({ style, onLayout, children, testID }: ViewProps) => {
       >
         {children}
       </HostNodeContext.Provider>
-    </GtkFixed>
+    </GtkBox>
   )
 }
 

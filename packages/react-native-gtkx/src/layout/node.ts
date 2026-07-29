@@ -91,7 +91,7 @@ export class LayoutNode implements LayoutNodeApi {
   }
 
   // The commit hook is the write path to GTK: the component layer moves its
-  // widget inside the parent GtkFixed when the engine reports a new rect.
+  // widget's stored rect when the engine reports a new one.
   setCommit(callback: ((rect: Rect) => void) | null): void {
     this.commitCallback = callback
     // A late-registered commit hook must still receive the current rect.

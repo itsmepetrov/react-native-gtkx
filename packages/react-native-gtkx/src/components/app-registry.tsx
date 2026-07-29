@@ -70,7 +70,7 @@ const WindowContent = ({
   }, [])
 
   // The scrolled window ONLY decouples the window's minimum size from content
-  // size requests (GtkFixed minimums otherwise ratchet the window: grows but
+  // size requests (container minimums otherwise ratchet the window: grows but
   // never shrinks back). It is deliberately inert as a scroller: content is
   // always exactly viewport-sized and the EXTERNAL policy removes scrollbars
   // and wheel handling entirely — RN semantics, scrolling stays opt-in via

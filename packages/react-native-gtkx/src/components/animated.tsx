@@ -1,9 +1,14 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react"
-import { GLib, GtkFixed, moveChild, type Gtk } from "../gtkx-bridge/index.js"
+import { GLib, GtkBox, queueAllocate, type Gtk } from "../gtkx-bridge/index.js"
 import { createAnimated, type FrameScheduler } from "../animated/index.js"
 import type { FlatStyle, StyleProp, TransformPart } from "../contracts.js"
 import { HostNodeContext } from "./host-node.js"
-import { useLayoutChild, type LayoutEvent } from "./use-layout-child.js"
+import { setStoredOffset } from "./rect-store.js"
+import {
+  useLayoutChild,
+  useRnContainer,
+  type LayoutEvent,
+} from "./use-layout-child.js"
 
 // ~60fps one-shot ticks off the GLib main loop. A frame-clock driver (per
 // window) is a later optimization; timeouts keep the driver widget-free.
@@ -113,31 +118,31 @@ const splitAnimated = (
 }
 
 // Animated values bypass React entirely: listeners write straight to the
-// widget (opacity) and to the parent GtkFixed (translate via move), on top of
-// the engine-committed base rect — the fast path measured in the spike.
+// widget (opacity) and to the rect store (translate offsets applied by the
+// parent's allocate), on top of the engine-committed base rect — the fast
+// path measured in the spike. Animation frames never touch Yoga.
 const AnimatedView = ({
   style,
   children,
   onLayout,
   testID,
 }: AnimatedViewProps) => {
-  const widgetRef = useRef<Gtk.Fixed | null>(null)
+  const widgetRef = useRef<Gtk.Box | null>(null)
   const { staticStyle, opacity, translateX, translateY } = splitAnimated(style)
 
   const { host, node, cssClass } = useLayoutChild(widgetRef, {
     style: staticStyle,
     onLayout,
   })
+  useRnContainer(widgetRef, node)
 
   const offsets = useRef({ x: 0, y: 0 })
 
   useLayoutEffect(() => {
-    // Systemic guarantee: an animating element must NEVER resize its
-    // container. In RN, transforms are paint-only and layout-inert; our
-    // translate moves the widget inside the parent GtkFixed, whose natural
-    // size includes children bounds — so an out-of-bounds child would
-    // inflate ancestors. Until the custom layout manager (PRD branch B)
-    // restores true paint-overflow, translate clamps to the parent rect.
+    // Translate stays clamped to the parent rect for now: with allocate()
+    // driven by the engine the container can no longer inflate, but true RN
+    // paint-overflow (drawing past the boundary) lands in the next task of
+    // this epic — removing the clamp is its acceptance criterion.
     const applyTranslate = (): void => {
       const widget = widgetRef.current
       const parentWidget = host.widgetRef.current
@@ -155,7 +160,8 @@ const AnimatedView = ({
           Math.max(0, parentRect.height - rect.height),
         )
       }
-      moveChild(parentWidget, widget, x, y)
+      setStoredOffset(widget, x - rect.x, y - rect.y)
+      queueAllocate(parentWidget)
     }
 
     const bindings: Binding[] = []
@@ -203,7 +209,7 @@ const AnimatedView = ({
   }, [opacity, translateX, translateY, node])
 
   return (
-    <GtkFixed
+    <GtkBox
       ref={widgetRef}
       name={testID}
       cssClasses={cssClass ? [cssClass] : []}
@@ -213,7 +219,7 @@ const AnimatedView = ({
       >
         {children}
       </HostNodeContext.Provider>
-    </GtkFixed>
+    </GtkBox>
   )
 }
 

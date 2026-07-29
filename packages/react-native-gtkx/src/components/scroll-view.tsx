@@ -7,15 +7,20 @@ import {
   type ReactNode,
 } from "react"
 import {
-  GtkFixed,
+  GtkBox,
   GtkScrolledWindow,
+  queueResize,
   useSignal,
   type Gtk,
 } from "../gtkx-bridge/index.js"
 import { splitStyle, StyleSheet } from "../style/index.js"
-import type { Rect, StyleProp } from "../contracts.js"
+import type { StyleProp } from "../contracts.js"
 import { HostNodeContext } from "./host-node.js"
-import { useLayoutChild, type LayoutEvent } from "./use-layout-child.js"
+import {
+  useLayoutChild,
+  useRnContainer,
+  type LayoutEvent,
+} from "./use-layout-child.js"
 
 export type ScrollViewHandle = {
   scrollTo(options: { x?: number; y?: number; animated?: boolean }): void
@@ -39,9 +44,10 @@ export type ScrollViewProps = {
   testID?: string
 }
 
-// GtkScrolledWindow whose child is a content GtkFixed backed by its own Yoga
-// node inside the same engine: the content grows past the viewport
-// (overflow: scroll on the outer node) and the scrolled window pans it.
+// GtkScrolledWindow whose child is a content GtkBox backed by its own Yoga
+// node inside the same engine: the content's RnGtkxLayout measures the engine
+// content size (which grows past the viewport — that IS the scroll range;
+// overflow: scroll on the outer node) and the scrolled window pans it.
 export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
   (
     {
@@ -56,7 +62,7 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
     handleRef,
   ) => {
     const outerRef = useRef<Gtk.ScrolledWindow | null>(null)
-    const contentRef = useRef<Gtk.Fixed | null>(null)
+    const contentRef = useRef<Gtk.Box | null>(null)
     const [scrolled, setScrolled] = useState<Gtk.ScrolledWindow | null>(null)
 
     const { host, node: outerNode } = useLayoutChild(outerRef, {
@@ -65,14 +71,17 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
     })
 
     const [contentNode] = useState(() => host.engine.createNode())
+    useRnContainer(contentRef, contentNode)
 
     useLayoutEffect(() => {
       outerNode.insertChild(contentNode, 0)
-      contentNode.setCommit((rect: Rect) => {
-        contentRef.current?.setSizeRequest(
-          Math.round(rect.width),
-          Math.round(rect.height),
-        )
+      contentNode.setCommit(() => {
+        // The content size IS this widget's measure (scroll range) — the
+        // ScrolledWindow itself allocates the content widget.
+        const widget = contentRef.current
+        if (widget) {
+          queueResize(widget)
+        }
       })
       return () => {
         contentNode.setCommit(null)
@@ -152,7 +161,7 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
         }}
         name={testID}
       >
-        <GtkFixed ref={contentRef}>
+        <GtkBox ref={contentRef}>
           <HostNodeContext.Provider
             value={{
               engine: host.engine,
@@ -162,7 +171,7 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
           >
             {children}
           </HostNodeContext.Provider>
-        </GtkFixed>
+        </GtkBox>
       </GtkScrolledWindow>
     )
   },
