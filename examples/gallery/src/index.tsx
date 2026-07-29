@@ -65,6 +65,9 @@ const styles = StyleSheet.create({
   sidebar: {
     width: 190,
     backgroundColor: palette.sidebar,
+  },
+  sidebarContent: {
+    alignItems: "stretch",
     paddingVertical: 12,
     paddingHorizontal: 8,
     gap: 2,
@@ -141,7 +144,13 @@ const App = () => {
 
   return (
     <View style={styles.app}>
-      <View style={styles.sidebar}>
+      {/* The sidebar scrolls too: squeeze the window vertically and the
+          section list pans instead of clipping — scrolling is always an
+          explicit ScrollView, never the window. */}
+      <ScrollView
+        style={styles.sidebar}
+        contentContainerStyle={styles.sidebarContent}
+      >
         <Text style={styles.brand}>Gallery</Text>
         <Text style={styles.brandSub}>react-native-gtkx v1</Text>
         {SECTIONS.map((section) => (
@@ -152,7 +161,7 @@ const App = () => {
             onPress={() => setActiveKey(section.key)}
           />
         ))}
-      </View>
+      </ScrollView>
       {/* key resets scrolling when switching sections — visual regression
           screenshots always start from the top of the screen. */}
       <ScrollView

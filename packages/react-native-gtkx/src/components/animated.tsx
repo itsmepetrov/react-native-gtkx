@@ -139,28 +139,17 @@ const AnimatedView = ({
   const offsets = useRef({ x: 0, y: 0 })
 
   useLayoutEffect(() => {
-    // Translate stays clamped to the parent rect for now: with allocate()
-    // driven by the engine the container can no longer inflate, but true RN
-    // paint-overflow (drawing past the boundary) lands in the next task of
-    // this epic — removing the clamp is its acceptance criterion.
+    // RN transform semantics: translate is paint-only. The offset goes to
+    // the rect store unclamped — the parent's measure ignores children, so an
+    // out-of-bounds child draws past the boundary over its neighbors without
+    // moving a single ancestor.
     const applyTranslate = (): void => {
       const widget = widgetRef.current
       const parentWidget = host.widgetRef.current
-      const rect = node.getRect()
-      const parentRect = host.node.getRect()
-      if (!widget || !parentWidget || !rect) {
+      if (!widget || !parentWidget) {
         return
       }
-      let x = rect.x + offsets.current.x
-      let y = rect.y + offsets.current.y
-      if (parentRect) {
-        x = Math.min(Math.max(0, x), Math.max(0, parentRect.width - rect.width))
-        y = Math.min(
-          Math.max(0, y),
-          Math.max(0, parentRect.height - rect.height),
-        )
-      }
-      setStoredOffset(widget, x - rect.x, y - rect.y)
+      setStoredOffset(widget, offsets.current.x, offsets.current.y)
       queueAllocate(parentWidget)
     }
 
