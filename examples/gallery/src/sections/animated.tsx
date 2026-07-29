@@ -247,7 +247,7 @@ const SpringClamped = () => {
           style={[
             styles.square,
             {
-              backgroundColor: palette.purple,
+              backgroundColor: palette.yellow,
               transform: [{ translateX }],
             },
           ]}

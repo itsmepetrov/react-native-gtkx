@@ -13,6 +13,7 @@ export const palette = {
   green: "#26a269",
   orange: "#e66100",
   purple: "#613583",
+  yellow: "#f6d32d",
   red: "#c01c28",
   text: "#ffffff",
   textDim: "#c0bfbc",
