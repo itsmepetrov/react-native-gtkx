@@ -25,6 +25,24 @@ The same source built with react-native-web ([portability proof](docs/shots/prof
 
 Verified live: the interactive `examples/playground` (buttons, input, scrolling, modals, animation, responsive layout via flexWrap) — 325 tests (unit + component tests under headless Wayland).
 
+## Performance architecture
+
+There is no "bridge tax" here. React Native's historic bottleneck — JSON
+batches serialized between the JS and native threads — does not exist in this
+architecture: gtkx binds GTK through an in-process FFI (NAPI-RS), so a widget
+call is a synchronous C call on the same thread, with numbers and pointers
+marshalled directly. That is the same direction React Native itself took with
+JSI/Fabric, where Yoga and view commits run through direct synchronous calls.
+
+Layout math runs in Yoga compiled to WASM (near-native speed): a 500-node
+reflow measures at 0.13–0.17 ms. The GTK side is driven by our own
+GtkLayoutManager subclass; a full measure+allocate pass over a 50-child
+container costs ~0.21 ms including every FFI hop. Animation frames bypass
+layout entirely — an Animated value write is a WeakMap store plus one queued
+GTK allocation. Two orders of magnitude of headroom against a 60 fps frame
+budget, measured, not estimated (see spike/RESULTS.md and
+spike/layout-manager/FINDINGS.md).
+
 ## Documentation
 
 - [Getting Started](docs/getting-started.md) — a new project in a minute;
