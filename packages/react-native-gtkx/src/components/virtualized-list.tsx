@@ -81,8 +81,9 @@ export type VirtualizedListProps<T> = Omit<ScrollViewProps, "children"> & {
   windowSize?: number
   initialNumToRender?: number
   extraData?: unknown
-  // Presentation-only flip: cells keep their data indices but are laid out
-  // from the far end of the content (see the projection math below).
+  // RN inverted semantics: the list opens at the START of the data (visually
+  // at the far end — a chat's latest message sits at the bottom), and
+  // contentOffset counts from that end. See the projection math below.
   inverted?: boolean
   // RefreshControl parity. Desktop has no pull gesture: `refreshing` renders
   // a spinner row above the content; `onRefresh` is accepted for RN API
@@ -156,6 +157,7 @@ const VirtualizedListInner = forwardRef(
       onViewableItemsChanged,
       viewabilityConfig,
       onScroll,
+      onContentSizeChange,
       onLayout,
       horizontal = false,
       stickyHeaderIndices,
@@ -169,9 +171,20 @@ const VirtualizedListInner = forwardRef(
     const measured = useRef<(number | undefined)[]>([])
     const [version, setVersion] = useState(0)
     // Scroll position along the main axis (contentOffset.x when horizontal).
+    // Always in RAW adjustment space — all windowing math below is raw.
     const scrollY = useRef(0)
     // Viewport extent along the main axis (width when horizontal).
     const viewportH = useRef(0)
+    // RN-space offset for inverted lists. RN's scaleY(-1) flip puts
+    // contentOffset 0 at the far (raw) end of the content, so the exposed
+    // offset counts from there: exposed = maxRaw - raw. It is the pinned
+    // source of truth across content growth — restoring raw from it is what
+    // keeps an inverted chat glued to its latest message on prepend.
+    const exposedOffset = useRef(0)
+    // Main-axis content size as GTK last reported it (the adjustment range).
+    // The raw scroll maximum is contentMain - viewport; before the first
+    // report it falls back to the list extent (header/footer not yet known).
+    const contentMain = useRef(0)
     const pendingAnchor = useRef(0)
     // scrollToIndex issued while sizes were still estimates: re-run the
     // positioning once after the remount measures real sizes (≤2 scrollTo
@@ -209,12 +222,13 @@ const VirtualizedListInner = forwardRef(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [count, version, estimatedItemSize, getItemLayout, data])
 
-    // INVERTED PROJECTION. The flip is purely presentational: data index i
-    // normally occupies [offsets[i], offsets[i+1]) along the main axis; when
-    // inverted it is mirrored around the content extent C = offsets[count],
-    // occupying [C - offsets[i+1], C - offsets[i]). So data index 0 sits at
-    // the far end of the content and the LAST data index sits at position 0 —
-    // at scroll offset 0 an inverted list shows the end of the data.
+    // INVERTED PROJECTION. RN implements inverted as a scaleY(-1) flip of
+    // the scroller and every cell; the net layout is the data mirrored
+    // around the content extent C = offsets[count]: data index i occupies
+    // [C - offsets[i+1], C - offsets[i]) in raw scroll space, so data index
+    // 0 sits at the far end. The flip also reverses the scroll axis: RN's
+    // contentOffset counts from that far end, so the raw GTK offset and the
+    // exposed RN offset are complements (exposed = maxRaw - raw).
     const cellStart = (index: number): number =>
       inverted ? offsets[count]! - offsets[index + 1]! : offsets[index]!
 
@@ -253,14 +267,26 @@ const VirtualizedListInner = forwardRef(
       return Math.min(max, Math.max(0, target))
     }
 
-    // Visual scroll offset that places `index` in the viewport: viewPosition
-    // 0 aligns the cell start with the viewport start, 0.5 centers it, 1
-    // aligns the cell end with the viewport end.
+    // Raw scroll maximum along the main axis (adjustment upper - page).
+    const maxRawScroll = (): number =>
+      Math.max(0, (contentMain.current || offsets[count]!) - viewportH.current)
+
+    // Translate an RN-space main-axis offset into raw adjustment space (and
+    // back — the mapping is its own inverse).
+    const toRaw = (offset: number): number =>
+      Math.max(0, maxRawScroll() - offset)
+
+    // Raw scroll offset that places `index` in the viewport: viewPosition 0
+    // aligns the cell start with the viewport start, 0.5 centers it, 1
+    // aligns the cell end with the viewport end. Inverted flips which edge
+    // viewPosition 0 means: RN computes the target in data space and the
+    // scaleY(-1) flip shows it from the other end, so 0 aligns the cell
+    // with the visual BOTTOM — in mirrored raw coordinates that is the
+    // complementary alignment.
     const offsetForIndex = (index: number, viewPosition: number): number => {
       const size = offsets[index + 1]! - offsets[index]!
-      return clampOffset(
-        cellStart(index) - viewPosition * (viewportH.current - size),
-      )
+      const align = inverted ? 1 - viewPosition : viewPosition
+      return clampOffset(cellStart(index) - align * (viewportH.current - size))
     }
 
     const scrollToAxis = (offset: number, animated?: boolean): void => {
@@ -289,18 +315,33 @@ const VirtualizedListInner = forwardRef(
     }
 
     useImperativeHandle(ref, () => ({
-      // Any direct scroll cancels a pending scrollToIndex correction.
+      // Any direct scroll cancels a pending scrollToIndex correction. The
+      // caller always speaks RN-space offsets; inverted translates the main
+      // axis into raw adjustment space.
       scrollTo: (options) => {
         pendingScrollIndex.current = null
-        scrollRef.current?.scrollTo(options)
+        const main = horizontal ? options.x : options.y
+        if (!inverted || main === undefined) {
+          scrollRef.current?.scrollTo(options)
+          return
+        }
+        scrollRef.current?.scrollTo({
+          ...options,
+          ...(horizontal ? { x: toRaw(main) } : { y: toRaw(main) }),
+        })
       },
       scrollToEnd: (options) => {
         pendingScrollIndex.current = null
+        // Inverted: the END of the data sits at raw offset 0 (visual top).
+        if (inverted) {
+          scrollToAxis(0, options?.animated)
+          return
+        }
         scrollRef.current?.scrollToEnd(options)
       },
       scrollToOffset: ({ offset, animated }) => {
         pendingScrollIndex.current = null
-        scrollToAxis(offset, animated)
+        scrollToAxis(inverted ? toRaw(offset) : offset, animated)
       },
       scrollToIndex,
       scrollToItem: ({ item, viewPosition, animated }) => {
@@ -351,12 +392,13 @@ const VirtualizedListInner = forwardRef(
         return
       }
       measured.current[index] = size
-      // A size change shifts every cell AFTER the changed one in VISUAL
-      // order. Normal: visual order is data order, so cells before the
-      // window (index < first) shift the viewport content. Inverted: the
-      // projection mirrors visual order, so cells after the window
-      // (index > last) sit above the viewport and shift it instead.
-      if (inverted ? index > range.last : index < range.first) {
+      // A size change shifts every cell BEFORE the changed one in visual
+      // order — for a normal list that is cells above the window (index <
+      // first), compensated by the anchor. Inverted lists skip the anchor
+      // entirely: their correction is the exposed-offset restore on the
+      // content-size report, which re-pins the view to the far end exactly
+      // like RN's flip keeps contentOffset counting from there.
+      if (!inverted && index < range.first) {
         pendingAnchor.current += size - known
       }
       setVersion((value) => value + 1)
@@ -489,9 +531,10 @@ const VirtualizedListInner = forwardRef(
         viewportH.current * Math.max(0, onEndReachedThreshold ?? 0.1)
       // Distance from the viewport to the DATA end (RN semantics: the end
       // of `data`, not the visual bottom). Normal lists keep the data end
-      // at visual position `extent`; the inverted projection places it at
-      // visual position 0, so the distance is simply the scroll offset —
-      // an inverted list starts AT its data end and may fire immediately.
+      // at raw position `extent`; the inverted projection places it at raw
+      // position 0 (the visual top), so the distance is simply the raw
+      // scroll offset — an inverted chat fires this while scrolling up
+      // into its history, which is where "load older" belongs.
       // Content shorter than the viewport has a negative distance, so short
       // lists fire right after the first layout without any scrolling.
       const distance = inverted
@@ -506,10 +549,30 @@ const VirtualizedListInner = forwardRef(
     }
 
     const handleScroll = (event: ScrollEvent): void => {
-      onScroll?.(event)
-      scrollY.current = horizontal
+      const raw = horizontal
         ? event.nativeEvent.contentOffset.x
         : event.nativeEvent.contentOffset.y
+      scrollY.current = raw
+      if (inverted) {
+        exposedOffset.current = Math.max(0, maxRawScroll() - raw)
+        // The caller sees RN-space offsets: contentOffset 0 is the far end
+        // where the data starts (a chat's latest message).
+        onScroll?.({
+          nativeEvent: {
+            ...event.nativeEvent,
+            contentOffset: {
+              x: horizontal
+                ? exposedOffset.current
+                : event.nativeEvent.contentOffset.x,
+              y: horizontal
+                ? event.nativeEvent.contentOffset.y
+                : exposedOffset.current,
+            },
+          },
+        })
+      } else {
+        onScroll?.(event)
+      }
       updateRange()
       recomputeViewability()
       maybeFireEndReached()
@@ -520,10 +583,36 @@ const VirtualizedListInner = forwardRef(
       viewportH.current = horizontal
         ? event.nativeEvent.layout.width
         : event.nativeEvent.layout.height
+      if (inverted) {
+        // The viewport changed under a pinned exposed offset: re-derive the
+        // raw position and window against the value we are about to take.
+        // Best effort — the adjustment may still clamp against the previous
+        // page size; the next content-size report settles it.
+        scrollY.current = toRaw(exposedOffset.current)
+        scrollToAxis(scrollY.current)
+      }
       updateRange()
       // First layout doubles as the initial viewability/end-reached pass.
       recomputeViewability()
       maybeFireEndReached()
+    }
+
+    const handleContentSizeChange = (width: number, height: number): void => {
+      onContentSizeChange?.(width, height)
+      contentMain.current = horizontal ? width : height
+      if (!inverted) {
+        return
+      }
+      // The raw scroll range changed under a pinned exposed offset: restore
+      // the raw value from it (the adjustment is fresh — GTK emits "changed"
+      // only after the allocation that resized it). Content prepended to an
+      // inverted chat therefore appears WITHOUT the view moving, exactly
+      // like RN's contentOffset staying put under the flip. This also
+      // performs the initial positioning: exposed 0 = the data start.
+      const raw = toRaw(exposedOffset.current)
+      scrollY.current = raw
+      scrollToAxis(raw)
+      updateRange()
     }
 
     // Data or measurement changes move content under a static viewport (no
@@ -632,6 +721,7 @@ const VirtualizedListInner = forwardRef(
         horizontal={horizontal}
         ref={scrollRef}
         onScroll={handleScroll}
+        onContentSizeChange={handleContentSizeChange}
         onLayout={handleLayout}
       >
         {refreshing ? (
@@ -641,7 +731,9 @@ const VirtualizedListInner = forwardRef(
             <ActivityIndicator />
           </View>
         ) : null}
-        {renderAux(ListHeaderComponent)}
+        {/* RN's flip mirrors the chrome too: on an inverted list the footer
+            sits at the visual top and the header at the visual bottom. */}
+        {renderAux(inverted ? ListFooterComponent : ListHeaderComponent)}
         {count === 0 && renderAux(ListEmptyComponent)}
         {count > 0 && (
           <View
@@ -654,7 +746,7 @@ const VirtualizedListInner = forwardRef(
             {cells}
           </View>
         )}
-        {renderAux(ListFooterComponent)}
+        {renderAux(inverted ? ListHeaderComponent : ListFooterComponent)}
       </ScrollView>
     )
   },

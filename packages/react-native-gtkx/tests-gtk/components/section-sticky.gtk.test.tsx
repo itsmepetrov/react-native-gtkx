@@ -11,14 +11,14 @@ import {
   SectionList,
   Text,
   View,
-  type ScrollViewHandle,
+  type FlatListHandle,
 } from "../../src/index"
 
 const slotOf = (text: string): Gtk.Widget =>
   (screen.getByText(text) as unknown as Gtk.Widget).getParent()!.getParent()!
 
 it("pins the active section header and hands off to the next", async () => {
-  const listRef = createRef<ScrollViewHandle>()
+  const listRef = createRef<FlatListHandle>()
   await render(
     <Root
       width={300}

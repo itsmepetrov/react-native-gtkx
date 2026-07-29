@@ -82,6 +82,8 @@ export type SectionListProps<T> = Omit<
   // RN default on iOS; ours defaults to true too — section headers pin to
   // the top and get pushed out by the next section's header.
   stickySectionHeadersEnabled?: boolean
+  // React 19 ref-as-prop: the same scroll surface FlatList exposes.
+  ref?: React.Ref<VirtualizedListHandle>
 }
 
 type SectionRow<T> =
@@ -93,6 +95,7 @@ export const SectionList = <T,>({
   renderItem,
   renderSectionHeader,
   stickySectionHeadersEnabled = true,
+  ref,
   ...rest
 }: SectionListProps<T>): ReactElement => {
   const rows: SectionRow<T>[] = []
@@ -107,6 +110,7 @@ export const SectionList = <T,>({
   return (
     <FlatList
       {...rest}
+      ref={ref}
       data={rows}
       stickyHeaderIndices={
         stickySectionHeadersEnabled ? headerIndices : undefined

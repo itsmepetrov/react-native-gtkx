@@ -47,6 +47,11 @@ export type ScrollViewProps = {
   // the top while scrolled past, each pushed out by the next one.
   stickyHeaderIndices?: readonly number[]
   onScroll?: (event: ScrollEvent) => void
+  // RN onContentSizeChange(contentWidth, contentHeight): fires when the
+  // scrollable content changes size. GTK's adjustments emit "changed" right
+  // after the allocation that resized their range — exactly the moment the
+  // new scroll extent is real, which windowed lists rely on to reposition.
+  onContentSizeChange?: (width: number, height: number) => void
   onLayout?: (event: LayoutEvent) => void
   children?: ReactNode
   testID?: string
@@ -128,6 +133,7 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       horizontal = false,
       stickyHeaderIndices,
       onScroll,
+      onContentSizeChange,
       onLayout,
       children,
       testID,
@@ -372,6 +378,25 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       emitScroll()
     }
 
+    // Content-size reports dedupe on the engine rect: "changed" also fires
+    // for pure viewport (page-size) changes, which RN does not report.
+    const lastContentSize = useRef({ width: -1, height: -1 })
+    const onRangeChanged = (): void => {
+      if (!onContentSizeChange) {
+        return
+      }
+      const rect = contentNode.getRect()
+      if (!rect) {
+        return
+      }
+      const last = lastContentSize.current
+      if (rect.width === last.width && rect.height === last.height) {
+        return
+      }
+      lastContentSize.current = { width: rect.width, height: rect.height }
+      onContentSizeChange(rect.width, rect.height)
+    }
+
     // Frame-synced sticky driver: a pure scroll TRANSLATES the content
     // without re-allocating it (same size → GTK skips the vfunc), so signal
     // handlers land a frame late and the pinned header jitters. A tick
@@ -401,9 +426,12 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       return () => {
         widget.removeTickCallback(id)
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [scrolled, hasSticky, horizontal])
     useSignal(adjustment, "value-changed", onAdjustment)
+    // Both axes report into the same handler — RN's callback carries both
+    // dimensions no matter which one moved.
+    useSignal(scrolled?.getVadjustment() ?? null, "changed", onRangeChanged)
+    useSignal(scrolled?.getHadjustment() ?? null, "changed", onRangeChanged)
 
     return (
       <GtkScrolledWindow

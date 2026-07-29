@@ -1,6 +1,6 @@
-// FlatList and SectionList: separators, header/footer, empty state,
-// imperative scrollTo/scrollToEnd via a ref (ScrollViewHandle).
-import { useRef, useState } from "react"
+// FlatList and SectionList on the windowed core: virtualization, sticky
+// headers, scrollToIndex, viewability, inverted (chat) and refresh parity.
+import { useCallback, useRef, useState } from "react"
 import {
   FlatList,
   Pressable,
@@ -8,8 +8,10 @@ import {
   SectionList,
   StyleSheet,
   Text,
+  TextInput,
   View,
-  type ScrollViewHandle,
+  type FlatListHandle,
+  type ViewToken,
 } from "react-native"
 import { Caption, DemoCard, palette, Section } from "../ui"
 
@@ -89,6 +91,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 13,
   },
+  chatInput: {
+    flex: 3,
+  },
 })
 
 const FRUIT = ["Apple", "Pear", "Plum", "Cherry", "Apricot"]
@@ -112,7 +117,7 @@ const SmallButton = ({
 )
 
 export const ListsSection = () => {
-  const flatRef = useRef<ScrollViewHandle>(null)
+  const flatRef = useRef<FlatListHandle>(null)
   const [rows] = useState(() =>
     Array.from({ length: 40 }, (_, i) => `Row #${i + 1}`),
   )
@@ -120,7 +125,7 @@ export const ListsSection = () => {
   return (
     <Section
       title="Lists"
-      subtitle="v1 renders all rows inside a ScrollView (virtualization is roadmap branch D); separators, header/footer, empty state and scrollTo work like in RN."
+      subtitle="FlatList/SectionList run on a windowed (virtualized) core: sticky headers, scrollToIndex, viewability, inverted and refresh work like in RN."
     >
       <DemoCard
         title="FlatList: 40 rows + separators + header/footer"
@@ -192,7 +197,7 @@ export const ListsSection = () => {
 
       <DemoCard
         title="SectionList"
-        hint="sections with headers via renderSectionHeader; under the hood it is the same FlatList over flattened rows"
+        hint="sections with headers via renderSectionHeader; under the hood it is the same windowed FlatList over flattened rows"
       >
         <SectionList
           style={styles.list}
@@ -213,14 +218,15 @@ export const ListsSection = () => {
           )}
         />
         <Caption>
-          Scroll the list: section headers scroll together with the rows (sticky
-          headers land later in the list epic).
+          Scroll the list: section headers pin to the top by default
+          (stickySectionHeadersEnabled) and the next header pushes the previous
+          one out, like RN on iOS.
         </Caption>
       </DemoCard>
 
       <DemoCard
         title="10 000 rows, virtualized"
-        hint="only the rows around the viewport exist as widgets — scroll and drag the thumb; the counter shows the mounted window"
+        hint="only the rows around the viewport exist as widgets; the counter is driven by onViewableItemsChanged and the buttons jump with scrollToIndex"
       >
         <TenThousand />
       </DemoCard>
@@ -231,6 +237,20 @@ export const ListsSection = () => {
       >
         <StickyDemo />
       </DemoCard>
+
+      <DemoCard
+        title="inverted: chat"
+        hint="FlatList.inverted opens at data[0] (the newest message, at the bottom) and stays pinned to it when a new message is prepended — the RN chat pattern"
+      >
+        <ChatDemo />
+      </DemoCard>
+
+      <DemoCard
+        title="refreshing / onRefresh"
+        hint="RefreshControl parity: `refreshing` shows a spinner row above the content; desktop has no pull gesture, so app chrome (this button) triggers onRefresh"
+      >
+        <RefreshDemo />
+      </DemoCard>
     </Section>
   )
 }
@@ -238,31 +258,151 @@ export const ListsSection = () => {
 const BIG = Array.from({ length: 10_000 }, (_, i) => "Row #" + String(i + 1))
 
 const TenThousand = () => {
+  const bigRef = useRef<FlatListHandle>(null)
   const [firstVisible, setFirstVisible] = useState(1)
+  // RN requires a stable identity for the viewability callback — never
+  // recreated across renders.
+  const onViewable = useCallback(
+    ({ viewableItems }: { viewableItems: ViewToken<string>[] }) => {
+      const first = viewableItems[0]
+      if (first) {
+        setFirstVisible(first.index + 1)
+      }
+    },
+    [],
+  )
   return (
     <>
       <FlatList
+        ref={bigRef}
         style={styles.list}
         contentContainerStyle={styles.listContent}
         data={BIG}
         keyExtractor={(item) => item}
         estimatedItemSize={34}
-        onScroll={(event) =>
-          setFirstVisible(
-            Math.floor(event.nativeEvent.contentOffset.y / 34) + 1,
-          )
-        }
+        onViewableItemsChanged={onViewable}
         renderItem={({ item }) => (
           <View style={styles.rowItem}>
             <Text style={styles.rowText}>{item}</Text>
           </View>
         )}
       />
+      <View style={styles.controls}>
+        <SmallButton
+          label="index 0"
+          onPress={() => bigRef.current?.scrollToIndex({ index: 0 })}
+        />
+        <SmallButton
+          label="5 000 centered"
+          onPress={() =>
+            bigRef.current?.scrollToIndex({ index: 4999, viewPosition: 0.5 })
+          }
+        />
+        <SmallButton
+          label="scrollToEnd()"
+          onPress={() => bigRef.current?.scrollToEnd()}
+        />
+      </View>
       <Caption>
-        {"top row = #" +
+        {"first viewable row = #" +
           String(firstVisible) +
-          " of 10 000 - only the window around it exists as widgets"}
+          " of 10 000 (onViewableItemsChanged) - only the window around it exists as widgets"}
       </Caption>
+    </>
+  )
+}
+
+type ChatMessage = { id: number; text: string }
+
+const ChatDemo = () => {
+  // Chat convention, exactly as in RN: data[0] is the NEWEST message.
+  const [messages, setMessages] = useState<ChatMessage[]>(() =>
+    Array.from({ length: 30 }, (_, i) => ({
+      id: 30 - i,
+      text: "Message #" + String(30 - i),
+    })),
+  )
+  const [draft, setDraft] = useState("")
+  const send = () => {
+    const text = draft.trim()
+    if (!text) {
+      return
+    }
+    setDraft("")
+    setMessages((current) => [
+      { id: (current[0]?.id ?? 0) + 1, text },
+      ...current,
+    ])
+  }
+  return (
+    <>
+      <FlatList
+        style={styles.list}
+        contentContainerStyle={styles.listContent}
+        data={messages}
+        inverted
+        keyExtractor={(message) => String(message.id)}
+        estimatedItemSize={40}
+        renderItem={({ item }) => (
+          <View style={[styles.rowItem, { marginTop: 6 }]}>
+            <Text style={styles.rowText}>{item.text}</Text>
+          </View>
+        )}
+      />
+      <View style={styles.controls}>
+        <TextInput
+          style={styles.chatInput}
+          value={draft}
+          onChangeText={setDraft}
+          placeholder="Type a message…"
+          onSubmitEditing={send}
+        />
+        <SmallButton
+          label="Send"
+          onPress={send}
+        />
+      </View>
+    </>
+  )
+}
+
+const RefreshDemo = () => {
+  const [rows, setRows] = useState(() =>
+    Array.from({ length: 8 }, (_, i) => "Fetched row #" + String(i + 1)),
+  )
+  const [refreshing, setRefreshing] = useState(false)
+  const refresh = () => {
+    if (refreshing) {
+      return
+    }
+    setRefreshing(true)
+    setTimeout(() => {
+      setRows((current) => [
+        "Fetched row #" + String(current.length + 1),
+        ...current,
+      ])
+      setRefreshing(false)
+    }, 1200)
+  }
+  return (
+    <>
+      <FlatList
+        style={[styles.list, { height: 160 }]}
+        contentContainerStyle={styles.listContent}
+        data={rows}
+        keyExtractor={(item) => item}
+        refreshing={refreshing}
+        onRefresh={refresh}
+        renderItem={({ item }) => (
+          <View style={[styles.rowItem, { marginTop: 6 }]}>
+            <Text style={styles.rowText}>{item}</Text>
+          </View>
+        )}
+      />
+      <SmallButton
+        label={refreshing ? "Refreshing…" : "Refresh"}
+        onPress={refresh}
+      />
     </>
   )
 }

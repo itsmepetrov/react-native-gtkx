@@ -16,6 +16,8 @@ export {
   type ListRenderItemInfo,
   type SectionListData,
   type SectionListProps,
+  type ViewabilityConfig,
+  type ViewToken,
 } from "./flat-list"
 export { Image, type ImageProps, type ImageSource } from "./image"
 export { Modal, type ModalProps } from "./modal"

@@ -40,7 +40,9 @@ export {
   type TextInputProps,
   type TextProps,
   type TouchableOpacityProps,
+  type ViewabilityConfig,
   type ViewProps,
+  type ViewToken,
 } from "./components/index"
 
 // List scroll handle (scrollTo/scrollToEnd/scrollToIndex/scrollToItem/

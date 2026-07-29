@@ -194,14 +194,16 @@ it("scrollToIndex without getItemLayout converges via estimates", async () => {
   expect(screen.queryByText("Row #1")).toBeNull()
 })
 
-it("inverted list shows the last data items at scroll 0", async () => {
+it("inverted list opens at the data start (visual bottom), like RN", async () => {
   const data = Array.from({ length: 100 }, (_, i) => `Row #${i + 1}`)
+  const listRef = createRef<FlatListHandle>()
   await render(
     <Root
       width={400}
       height={600}
     >
       <FlatList
+        ref={listRef}
         style={{ height: 500 }}
         data={data}
         inverted
@@ -219,11 +221,64 @@ it("inverted list shows the last data items at scroll 0", async () => {
       />
     </Root>,
   )
-  // The inverted projection places the END of the data at scroll offset 0.
+  // RN contentOffset 0 is the far end where the data STARTS (the chat
+  // model: data[0] is the latest message, at the visual bottom). The
+  // mirrored projection puts that cell at the end of the raw content.
+  await waitFor(() => {
+    expect(screen.getByText("Row #1")).toBeTruthy()
+    const cell = (screen.getByText("Row #1") as unknown as Gtk.Widget)
+      .getParent()!
+      .getParent()!
+    expect(cell.getAllocation().y).toBe(100 * 40 - 40)
+  })
+  expect(screen.queryByText("Row #100")).toBeNull()
+
+  // scrollToEnd targets the END of the data — raw offset 0, the visual top.
+  listRef.current!.scrollToEnd()
   await waitFor(() => {
     expect(screen.getByText("Row #100")).toBeTruthy()
   })
   expect(screen.queryByText("Row #1")).toBeNull()
+})
+
+it("inverted chat stays pinned to the newest message on prepend", async () => {
+  // Chat convention: data[0] is the newest message.
+  const chat = (count: number) => (
+    <Root
+      width={400}
+      height={600}
+    >
+      <FlatList
+        style={{ height: 500 }}
+        data={Array.from({ length: count }, (_, i) => `msg-${count - i}`)}
+        inverted
+        keyExtractor={(item) => item}
+        getItemLayout={(_d, index) => ({
+          length: 40,
+          offset: 40 * index,
+          index,
+        })}
+        renderItem={({ item }) => (
+          <View style={{ height: 40 }}>
+            <Text>{item}</Text>
+          </View>
+        )}
+      />
+    </Root>
+  )
+  const { rerender } = await render(chat(50))
+  await waitFor(() => {
+    expect(screen.getByText("msg-50")).toBeTruthy()
+  })
+  expect(screen.queryByText("msg-1")).toBeNull()
+
+  // A new message arrives at data[0]: the pinned exposed offset (0) keeps
+  // the view at the newest message — it appears WITHOUT any scrolling.
+  await rerender(chat(51))
+  await waitFor(() => {
+    expect(screen.getByText("msg-51")).toBeTruthy()
+  })
+  expect(screen.queryByText("msg-1")).toBeNull()
 })
 
 it("horizontal list windows along x and scrollToIndex targets x", async () => {
