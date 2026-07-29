@@ -1,0 +1,9 @@
+node_modules/
+dist/
+out-tsc/
+*.log
+.DS_Store
+
+# Local planning and machine-specific infrastructure — never committed.
+.claude/
+scripts/local/

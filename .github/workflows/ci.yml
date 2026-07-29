@@ -1,0 +1,39 @@
+# CI runs in an ubuntu:26.04 container: GitHub's ubuntu-latest runner ships GTK 4.14,
+# while gtkx needs GTK >= 4.20 (26.04 has 4.22).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - uses: actions/checkout@v4
+      - name: System dependencies (GTK4 + headless X)
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            libgtk-4-dev libadwaita-1-dev xvfb dbus dbus-x11 sway xwayland \
+            build-essential pkg-config python3 curl ca-certificates git
+      - name: Node 24
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
+          apt-get install -y nodejs
+      - name: Install
+        run: npm install
+      - name: Codegen (gtkx bindings)
+        run: npm run codegen
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Tests
+        run: npm test
+      - name: GTK component tests (headless Wayland)
+        run: npm run test:gtk

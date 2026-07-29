@@ -1,0 +1,34 @@
+{
+  "name": "rn-gtkx-spike",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#data/*": "./data/*"
+  },
+  "scripts": {
+    "codegen": "gtkx codegen",
+    "build": "gtkx build",
+    "start": "node dist/bundle.js",
+    "typecheck": "gtkx codegen && tsc --noEmit"
+  },
+  "allowScripts": {
+    "esbuild": true,
+    "@swc/core": true
+  },
+  "dependencies": {
+    "@gtkx/css": "1.0.0-rc.1",
+    "@gtkx/react": "1.0.0-rc.1",
+    "@gtkx/runtime": "1.0.0-rc.1",
+    "react": "^19.2.0",
+    "yoga-layout": "^3.2.1"
+  },
+  "devDependencies": {
+    "@gtkx/cli": "1.0.0-rc.1",
+    "@gtkx/config": "1.0.0-rc.1",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "typescript": "^5.9.0",
+    "vite": "^8.1.4"
+  }
+}

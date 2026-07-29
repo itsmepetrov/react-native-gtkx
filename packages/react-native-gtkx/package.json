@@ -1,0 +1,34 @@
+{
+  "name": "react-native-gtkx",
+  "version": "0.1.0",
+  "description": "React Native components and APIs for Linux desktop, rendered as native GTK4 widgets via gtkx",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "test:gtk": "vitest run --config vitest.gtk.config.ts"
+  },
+  "peerDependencies": {
+    "react": "^19"
+  },
+  "dependencies": {
+    "@gtkx/css": "1.0.0-rc.1",
+    "@gtkx/react": "1.0.0-rc.1",
+    "@gtkx/runtime": "1.0.0-rc.1",
+    "yoga-layout": "^3.2.1"
+  },
+  "devDependencies": {
+    "@gtkx/cli": "1.0.0-rc.1",
+    "@gtkx/config": "1.0.0-rc.1",
+    "@gtkx/testing": "1.0.0-rc.1",
+    "@gtkx/vitest": "1.0.0-rc.1"
+  },
+  "files": [
+    "src"
+  ]
+}

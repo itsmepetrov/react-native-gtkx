@@ -1,0 +1,25 @@
+{
+  "name": "hello-react-native-gtkx",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "gtkx dev",
+    "build": "gtkx build",
+    "start": "node dist/bundle.js",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-native-gtkx": "0.1.0"
+  },
+  "devDependencies": {
+    "@gtkx/cli": "1.0.0-rc.1",
+    "@gtkx/config": "1.0.0-rc.1",
+    "@react-native-gtkx/vite-preset": "0.1.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "typescript": "^5.9.0",
+    "vite": "^8.1.4"
+  }
+}

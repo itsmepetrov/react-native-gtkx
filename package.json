@@ -1,0 +1,36 @@
+{
+  "name": "react-native-gtkx-monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
+  "scripts": {
+    "codegen": "gtkx codegen",
+    "typecheck": "tsc -p packages/react-native-gtkx",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:gtk": "npm run test:gtk -w react-native-gtkx",
+    "docs:check": "node scripts/check-docs-coverage.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.30.0",
+    "@ianvs/prettier-plugin-sort-imports": "^4.7.1",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "eslint": "^9.30.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.6",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.8.0",
+    "jiti": "^2.7.0",
+    "prettier": "^3.9.6",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.40.0",
+    "vitest": "^4.1.0"
+  }
+}

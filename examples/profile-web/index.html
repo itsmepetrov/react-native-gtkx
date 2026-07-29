@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+    <title>Profile — react-native-web</title>
+    <style>
+      /* react-native-web's root container uses flex: 1, so the mount point
+         must provide height and a flex context (same setup the GTK window
+         provides natively). */
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background-color: #241f31;
+      }
+      #root {
+        display: flex;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script
+      type="module"
+      src="/src/main.tsx"
+    ></script>
+  </body>
+</html>

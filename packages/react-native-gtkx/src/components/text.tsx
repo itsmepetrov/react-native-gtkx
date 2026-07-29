@@ -1,0 +1,144 @@
+import {
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react"
+import {
+  createTextProbe,
+  Gtk,
+  GtkLabel,
+  measureWidget,
+  Pango,
+} from "../gtkx-bridge/index.js"
+import { textAlignToLabelProps } from "../style/index.js"
+import type { MeasureFn, StyleProp } from "../contracts.js"
+import { useLayoutChild, type LayoutEvent } from "./use-layout-child.js"
+
+export type TextProps = {
+  style?: StyleProp
+  onLayout?: (event: LayoutEvent) => void
+  numberOfLines?: number
+  children?: ReactNode
+  testID?: string
+}
+
+const flattenToString = (children: ReactNode): string => {
+  if (children === null || children === undefined || children === false) {
+    return ""
+  }
+  if (Array.isArray(children)) {
+    return children.map(flattenToString).join("")
+  }
+  return String(children)
+}
+
+const JUSTIFICATION = {
+  left: Gtk.Justification.LEFT,
+  right: Gtk.Justification.RIGHT,
+  center: Gtk.Justification.CENTER,
+  fill: Gtk.Justification.FILL,
+} as const
+
+// Text is a measured Yoga leaf: an offscreen probe label (with the same CSS
+// class, so fonts match) feeds Pango metrics into the layout engine; the
+// visible GtkLabel is positioned by the commit hook like any other widget.
+export const Text = ({
+  style,
+  onLayout,
+  numberOfLines,
+  children,
+  testID,
+}: TextProps) => {
+  const widgetRef = useRef<Gtk.Label | null>(null)
+  const text = flattenToString(children)
+
+  // useState lazy init — see the note in use-layout-child.ts (React Compiler).
+  const [probe] = useState<Gtk.Label>(() => createTextProbe())
+
+  const lastProbeClass = useRef<string | null>(null)
+
+  // GTK collapses wrap+ellipsize labels to a single line unless `lines` is
+  // set explicitly — remember how many lines the probe wrapped into, the
+  // layout callback pushes it onto the visible label.
+  const measuredLines = useRef(1)
+
+  const measure = useMemo<MeasureFn>(() => {
+    return (width, widthMode) => {
+      const natural = measureWidget(probe, "horizontal").natural
+      const used =
+        widthMode === "undefined"
+          ? natural
+          : Math.min(natural, Math.max(1, Math.floor(width)))
+      const height = measureWidget(probe, "vertical", used).natural
+      const singleLine = measureWidget(probe, "vertical", natural).natural
+      measuredLines.current =
+        singleLine > 0 ? Math.max(1, Math.round(height / singleLine)) : 1
+      return { width: used, height }
+    }
+    // The probe is stable; re-measure is triggered via markDirty below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const layoutWithLines = useMemo(
+    () => (event: LayoutEvent) => {
+      const label = widgetRef.current
+      if (label) {
+        label.setLines(numberOfLines ?? measuredLines.current)
+      }
+      onLayout?.(event)
+    },
+    [numberOfLines, onLayout],
+  )
+
+  const { node, cssClass, flat } = useLayoutChild(widgetRef, {
+    style,
+    onLayout: layoutWithLines,
+    measure,
+  })
+
+  // Keep the probe in sync with everything that affects metrics, then
+  // invalidate the Yoga leaf so the next pass re-measures.
+  useLayoutEffect(() => {
+    probe.setText(text)
+    if (numberOfLines !== undefined) {
+      probe.setLines(numberOfLines)
+      probe.setEllipsize(Pango.EllipsizeMode.END)
+    } else {
+      probe.setLines(-1)
+      probe.setEllipsize(Pango.EllipsizeMode.NONE)
+    }
+    if (lastProbeClass.current !== cssClass) {
+      if (lastProbeClass.current) {
+        probe.removeCssClass(lastProbeClass.current)
+      }
+      if (cssClass) {
+        probe.addCssClass(cssClass)
+      }
+      lastProbeClass.current = cssClass
+    }
+    node.markDirty()
+  }, [probe, node, text, numberOfLines, cssClass])
+
+  const align = textAlignToLabelProps(flat.textAlign)
+
+  return (
+    <GtkLabel
+      ref={widgetRef}
+      name={testID}
+      label={text}
+      wrap
+      xalign={align.xalign}
+      yalign={0}
+      justify={JUSTIFICATION[align.justification]}
+      lines={numberOfLines}
+      // Always ellipsizable: a plain wrapped label's minimum width is its
+      // longest word, which overrides Yoga rects at narrow sizes and draws
+      // over siblings. Ellipsize drops the minimum to ~0; the offscreen probe
+      // still measures the natural (non-ellipsized) metrics for Yoga.
+      ellipsize={Pango.EllipsizeMode.END}
+      cssClasses={cssClass ? [cssClass] : []}
+    />
+  )
+}

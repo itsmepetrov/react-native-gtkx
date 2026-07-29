@@ -1,0 +1,15 @@
+{
+  "plugins": ["@ianvs/prettier-plugin-sort-imports"],
+  "semi": false,
+  "singleAttributePerLine": true,
+  "importOrder": [
+    "<BUILTIN_MODULES>",
+    "<THIRD_PARTY_MODULES>",
+    "apis/",
+    "components/",
+    "gtkx-bridge/",
+    "layout/",
+    "style/",
+    "^[.]"
+  ]
+}

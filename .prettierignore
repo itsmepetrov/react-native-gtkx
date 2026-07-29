@@ -1,0 +1,6 @@
+node_modules/
+dist/
+out-tsc/
+package-lock.json
+spike/shots/
+.claude/

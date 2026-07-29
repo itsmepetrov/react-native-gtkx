@@ -1,0 +1,22 @@
+{
+  "name": "profile-example",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#data/*": "./data/*"
+  },
+  "scripts": {
+    "build": "gtkx build",
+    "start": "node dist/bundle.js"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-native-gtkx": "0.1.0"
+  },
+  "devDependencies": {
+    "@gtkx/cli": "1.0.0-rc.1",
+    "@gtkx/config": "1.0.0-rc.1",
+    "@react-native-gtkx/vite-preset": "0.1.0"
+  }
+}
