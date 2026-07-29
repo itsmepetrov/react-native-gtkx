@@ -212,10 +212,49 @@ export const ListsSection = () => {
           )}
         />
         <Caption>
-          Scroll the list: section headers scroll together with the rows (no
-          sticky headers in v1).
+          Scroll the list: section headers scroll together with the rows (sticky
+          headers land later in the list epic).
         </Caption>
       </DemoCard>
+
+      <DemoCard
+        title="10 000 rows, virtualized"
+        hint="only the rows around the viewport exist as widgets — scroll and drag the thumb; the counter shows the mounted window"
+      >
+        <TenThousand />
+      </DemoCard>
     </Section>
+  )
+}
+
+const BIG = Array.from({ length: 10_000 }, (_, i) => "Row #" + String(i + 1))
+
+const TenThousand = () => {
+  const [firstVisible, setFirstVisible] = useState(1)
+  return (
+    <>
+      <FlatList
+        style={styles.list}
+        contentContainerStyle={styles.listContent}
+        data={BIG}
+        keyExtractor={(item) => item}
+        estimatedItemSize={34}
+        onScroll={(event) =>
+          setFirstVisible(
+            Math.floor(event.nativeEvent.contentOffset.y / 34) + 1,
+          )
+        }
+        renderItem={({ item }) => (
+          <View style={styles.rowItem}>
+            <Text style={styles.rowText}>{item}</Text>
+          </View>
+        )}
+      />
+      <Caption>
+        {"top row = #" +
+          String(firstVisible) +
+          " of 10 000 - only the window around it exists as widgets"}
+      </Caption>
+    </>
   )
 }
