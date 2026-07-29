@@ -121,7 +121,17 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
     })
 
     const [contentNode] = useState(() => host.engine.createNode())
-    useRnContainer(contentRef, contentNode)
+    // Sticky positions are computed INSIDE the same allocation pass that
+    // places the children (beforeAllocate): the viewport has already settled
+    // on this frame's scroll offset, so the pinned header lands exactly —
+    // reacting to the adjustment signal instead lags a frame and jitters.
+    useRnContainer(contentRef, contentNode, {
+      beforeAllocate: () => {
+        if (stickySet.length > 0) {
+          updateSticky(outerRef.current?.getVadjustment()?.getValue() ?? 0)
+        }
+      },
+    })
 
     // RN semantics: a ScrollView CLIPS its content. Branch B made containers
     // paint-overflow by default, so without this the scrolled-away content
@@ -228,12 +238,46 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
         }
       }
 
-      const content = contentRef.current
       const previous = activeStickyRef.current
-      if (previous !== active && previous !== null) {
+      if (previous !== active) {
+        activeStickyRef.current = active
+        if (previous !== null) {
+          const widget = stickyWidgets.current.get(previous)
+          if (widget) {
+            setStoredOffset(widget, 0, 0)
+          }
+        }
+        // Reordering widgets queues GTK work — not allowed mid-allocation.
+        // The z-switch lands a frame later; the POSITION is already exact.
+        setTimeout(() => {
+          applyStickyReorder(previous, active)
+        }, 0)
+      }
+
+      if (active !== null) {
+        const widget = stickyWidgets.current.get(active)
+        const record = stickyRecords.current.get(active)!
+        if (widget) {
+          // Pin at the viewport top; the next sticky header pushes it out.
+          const pinned = next
+            ? Math.min(scrollTop, next.y - record.height)
+            : scrollTop
+          setStoredOffset(widget, 0, Math.max(0, pinned - record.y))
+        }
+      }
+    }
+
+    const applyStickyReorder = (
+      previous: number | null,
+      active: number | null,
+    ): void => {
+      const content = contentRef.current
+      if (!content) {
+        return
+      }
+      if (previous !== null) {
         const widget = stickyWidgets.current.get(previous)
-        if (widget && content) {
-          setStoredOffset(widget, 0, 0)
+        if (widget) {
           // Put the slot back where the reconciler expects it.
           content.reorderChildAfter(
             widget,
@@ -241,27 +285,14 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
           )
         }
       }
-      if (previous !== active && active !== null) {
+      if (active !== null) {
         const widget = stickyWidgets.current.get(active)
-        if (widget && content) {
+        if (widget) {
           restoreSibling.current.set(active, widget.getPrevSibling())
           content.reorderChildAfter(widget, content.getLastChild())
         }
       }
-      activeStickyRef.current = active
-
-      if (active !== null) {
-        const widget = stickyWidgets.current.get(active)
-        const record = stickyRecords.current.get(active)!
-        if (widget && content) {
-          // Pin at the viewport top; the next sticky header pushes it out.
-          const pinned = next
-            ? Math.min(scrollTop, next.y - record.height)
-            : scrollTop
-          setStoredOffset(widget, 0, Math.max(0, pinned - record.y))
-          queueAllocate(content)
-        }
-      }
+      queueAllocate(content)
     }
 
     const recordSticky = (
@@ -273,7 +304,11 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       if (widget) {
         stickyWidgets.current.set(index, widget)
       }
-      updateSticky(scrolled?.getVadjustment()?.getValue() ?? 0)
+      // The next allocation pass recomputes the pin from fresh records.
+      const content = contentRef.current
+      if (content) {
+        queueAllocate(content)
+      }
     }
 
     const emitScroll = (): void => {
@@ -301,8 +336,13 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       : (scrolled?.getVadjustment() ?? null)
     const onAdjustment = (): void => {
       emitScroll()
-      if (!horizontal) {
-        updateSticky(scrolled?.getVadjustment()?.getValue() ?? 0)
+      // Belt for the sticky pass: if this scroll did not re-allocate the
+      // content (it normally does), queue one — beforeAllocate does the math.
+      if (!horizontal && stickySet.length > 0) {
+        const content = contentRef.current
+        if (content) {
+          queueAllocate(content)
+        }
       }
     }
     useSignal(adjustment, "value-changed", onAdjustment)
