@@ -53,6 +53,19 @@ export type ScrollViewProps = {
 
 type StickyRecord = { x: number; y: number; width: number; height: number }
 
+// A sticky child may carry an external marginTop — the transparent band would
+// ride along with the pinned copy and reveal the in-flow original through it.
+// Pin the VISUAL box instead: read the inset from the element's own style.
+const stickyTopInset = (child: ReactNode): number => {
+  if (typeof child !== "object" || child === null || !("props" in child)) {
+    return 0
+  }
+  const style = (child as { props?: { style?: StyleProp } }).props?.style
+  const flat = StyleSheet.flatten(style)
+  const margin = flat.marginTop ?? flat.marginVertical ?? flat.margin
+  return typeof margin === "number" ? margin : 0
+}
+
 // GtkScrolledWindow whose child is a content GtkBox backed by its own Yoga
 // node inside the same engine: the content's RnGtkxLayout measures the engine
 // content size (which grows past the viewport — that IS the scroll range;
@@ -165,6 +178,7 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
     // no React work per scroll frame, only when the ACTIVE index changes.
     const stickySet = stickyHeaderIndices ?? []
     const stickyRecords = useRef(new Map<number, StickyRecord>())
+    const stickyInsets = useRef(new Map<number, number>())
     const [activeSticky, setActiveSticky] = useState<number | null>(null)
     const activeStickyRef = useRef<number | null>(null)
     // Geometry changes of the recorded slots must re-render the pinned copy
@@ -178,12 +192,14 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       }
       let active: number | null = null
       let next: StickyRecord | null = null
+      let nextStickyInset = 0
       for (const index of stickySet) {
         const record = stickyRecords.current.get(index)
         if (!record) {
           continue
         }
-        if (record.y <= scrollTop) {
+        const inset = stickyInsets.current.get(index) ?? 0
+        if (record.y + inset <= scrollTop) {
           if (
             active === null ||
             record.y >= stickyRecords.current.get(active)!.y
@@ -192,6 +208,7 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
           }
         } else if (next === null || record.y < next.y) {
           next = record
+          nextStickyInset = inset
         }
       }
       // Compare through a ref: the adjustment handler may hold a stale
@@ -202,12 +219,15 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       }
       if (active !== null) {
         const record = stickyRecords.current.get(active)!
-        // Pinned at the viewport top, pushed out by the next sticky header:
-        // it freezes at next.y - height and scrolls away naturally, so the
-        // hand-off is continuous.
+        const inset = stickyInsets.current.get(active) ?? 0
+        // Pin the visual box: the copy's wrapper sits `inset` above the
+        // viewport top so the transparent margin band is clipped away.
+        // Push-out freezes it when its bottom meets the NEXT header's visual
+        // top, then it scrolls away naturally — the hand-off is continuous.
+        const nextInset = next ? nextStickyInset : 0
         const pinned = next
-          ? Math.min(scrollTop, next.y - record.height)
-          : scrollTop
+          ? Math.min(scrollTop - inset, next!.y + nextInset - record.height)
+          : scrollTop - inset
         stickyTop.setValue(Math.max(record.y, pinned))
       }
     }
@@ -261,8 +281,11 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
           >
             {stickySet.length === 0
               ? children
-              : Children.toArray(children).map((child, index) =>
-                  stickySet.includes(index) ? (
+              : Children.toArray(children).map((child, index) => {
+                  if (stickySet.includes(index)) {
+                    stickyInsets.current.set(index, stickyTopInset(child))
+                  }
+                  return stickySet.includes(index) ? (
                     <View
                       key={`sticky-slot-${index}`}
                       onLayout={(event) => {
@@ -282,8 +305,8 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
                     </View>
                   ) : (
                     child
-                  ),
-                )}
+                  )
+                })}
             {activeSticky !== null && (
               <Animated.View
                 // The pinned copy inherits the slot's measured geometry so it
