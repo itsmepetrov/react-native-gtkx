@@ -215,10 +215,17 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
     const restoreSibling = useRef(new Map<number, Gtk.Widget | null>())
     const activeStickyRef = useRef<number | null>(null)
 
-    const updateSticky = (scrollTop: number): void => {
+    const updateSticky = (rawScrollTop: number): void => {
       if (stickySet.length === 0) {
         return
       }
+      // The viewport translates the content by the FRACTIONAL adjustment
+      // value while widget allocations are integer — an unquantized pin
+      // disagrees with the translation by ±1px and shimmers every frame.
+      // Frame telemetry (spike/sticky-probe) proved the viewport quantizes
+      // like floor: with Math.floor the header's window-relative position is
+      // a flat 0.00 across every frame; round oscillates 0/1, ceil sits at 1.
+      const scrollTop = Math.floor(rawScrollTop)
       let active: number | null = null
       let next: StickyRecord | null = null
       for (const index of stickySet) {
@@ -352,15 +359,15 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       if (!widget) {
         return
       }
-      let lastValue = -1
       const id = widget.addTickCallback(() => {
-        const value = widget.getVadjustment()?.getValue() ?? 0
-        if (value !== lastValue) {
-          lastValue = value
-          const content = contentRef.current
-          if (content) {
-            queueAllocate(content)
-          }
+        // Unconditionally, every frame: the scrolled window's own kinetic
+        // tick may run AFTER ours, so comparing values here can miss the
+        // frame's final offset. The allocation itself reads the adjustment
+        // in the LAYOUT phase — always after every update-phase mutation —
+        // so queuing each frame guarantees a same-frame correction.
+        const content = contentRef.current
+        if (content) {
+          queueAllocate(content)
         }
         return true
       })

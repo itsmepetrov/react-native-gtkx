@@ -9,6 +9,8 @@ import {
   View,
   type ScrollViewHandle,
 } from "react-native"
+import type { Gtk as GtkNS } from "../../../packages/react-native-gtkx/src/gtkx-bridge/index"
+import { Gtk } from "../../../packages/react-native-gtkx/src/gtkx-bridge/index"
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#241f31", padding: 20 },
@@ -35,6 +37,9 @@ const App = () => {
     const timer = setTimeout(() => {
       ref.current?.scrollTo({ y })
       console.log(`SCROLLED ${y}`)
+      if (process.env.TELEMETRY === "1") {
+        startTelemetry()
+      }
     }, 1200)
     return () => clearTimeout(timer)
   }, [])
@@ -67,6 +72,67 @@ const App = () => {
       </ScrollView>
     </View>
   )
+}
+
+// Frame-by-frame truth: drive a slow fractional scroll and log, per frame,
+// the pinned header's bounds RELATIVE to the scrolled window — the exact
+// quantity the eye perceives. A perfectly pinned header keeps relY constant.
+const startTelemetry = (): void => {
+  try {
+    startTelemetryInner()
+  } catch (error) {
+    console.log("TELEMETRY-ERROR " + String(error))
+  }
+}
+
+const startTelemetryInner = (): void => {
+  const toplevels = Gtk.Window.getToplevels()
+  const window = toplevels.getItem(0) as unknown as GtkNS.Window
+  const findScrolled = (widget: GtkNS.Widget): GtkNS.ScrolledWindow | null => {
+    // Class names are minified in the bundle — detect by capability.
+    if (
+      typeof (widget as unknown as { getVadjustment?: unknown })
+        .getVadjustment === "function"
+    ) {
+      return widget as GtkNS.ScrolledWindow
+    }
+    let child = widget.getFirstChild()
+    while (child) {
+      const found = findScrolled(child)
+      if (found) {
+        return found
+      }
+      child = child.getNextSibling()
+    }
+    return null
+  }
+  const scrolled = findScrolled(window)!
+  const adjustment = scrolled.getVadjustment()!
+  const content = scrolled.getChild()!.getFirstChild()!
+
+  let frame = 0
+  window.addTickCallback(() => {
+    frame += 1
+    // Slow fractional drag: +0.7px per frame.
+    adjustment.setValue(adjustment.getValue() + 0.7)
+    const header = content.getLastChild()!
+    const [ok, bounds] = header.computeBounds(scrolled) as unknown as [
+      boolean,
+      { getY(): number },
+    ]
+    if (ok && frame <= 120) {
+      console.log(
+        `F ${frame} value=${adjustment.getValue().toFixed(2)} relY=${bounds.getY().toFixed(2)}`,
+      )
+    }
+    if (frame === 120) {
+      console.log("TELEMETRY-DONE")
+      if (process.env.SPIKE_EXIT === "1") {
+        process.exit(0)
+      }
+    }
+    return frame < 130
+  })
 }
 
 AppRegistry.registerComponent("stickyprobe", () => App)
