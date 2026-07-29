@@ -28,7 +28,7 @@ The helper is `scripts/vm.sh`. The VM address is machine-specific: export `VM_HO
 | `vm.sh app-stop`            | stop the application                                                 |
 | `vm.sh shell`               | interactive shell                                                    |
 
-After `sync`, run `npm install && npm run codegen` and `npx tsc -p packages/vite-preset/tsconfig.build.json` once in the VM (the preset's dist is not synced). GL rendering in the Apple backend is software (llvmpipe) — EGL/ZINK warnings at startup are normal.
+After `sync`, run `npm install && npm run codegen` and `npm run build -w @react-native-gtkx/vite-preset` once in the VM (the preset's dist is not synced). GL rendering in the Apple backend is software (llvmpipe) — EGL/ZINK warnings at startup are normal.
 
 ## Docker container (alternative)
 

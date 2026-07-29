@@ -10,7 +10,7 @@ import {
   resolvePlatformSpecifier,
   rewriteReactNativeImport,
   type PlatformResolutionOptions,
-} from "./resolver.js"
+} from "./resolver"
 
 export {
   DEFAULT_EXTENSIONS,
@@ -22,7 +22,7 @@ export {
   splitQuery,
   type FileExists,
   type PlatformResolutionOptions,
-} from "./resolver.js"
+} from "./resolver"
 
 export type ReactNativeGtkxOptions = PlatformResolutionOptions
 
