@@ -207,6 +207,63 @@ const OpacityPulse = () => {
   )
 }
 
+// The contained variant: identical spring physics, but the interpolation
+// clamps its output — overshoot pins the square to the wall instead of
+// flying past it. This is the canonical RN recipe when a spring must stay
+// inside its container: containment is the interpolation's job, not the
+// layout's.
+const SpringClamped = () => {
+  const [position] = useState(() => new Animated.Value(0))
+  const [trackWidth, setTrackWidth] = useState(0)
+  const atEnd = useRef(false)
+
+  const translateX = useMemo(() => {
+    const width = Math.max(0, trackWidth - 40)
+    return position.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, width],
+      extrapolate: "clamp",
+    })
+  }, [position, trackWidth])
+
+  const toggle = (): void => {
+    atEnd.current = !atEnd.current
+    Animated.spring(position, {
+      toValue: atEnd.current ? 1 : 0,
+      stiffness: 120,
+      damping: 9,
+    }).start()
+  }
+
+  return (
+    <>
+      <View
+        style={styles.track}
+        onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
+      >
+        <Animated.View
+          style={[
+            styles.square,
+            {
+              backgroundColor: palette.purple,
+              transform: [{ translateX }],
+            },
+          ]}
+        />
+      </View>
+      <Pressable
+        style={({ pressed }) => [
+          styles.button,
+          pressed && styles.buttonPressed,
+        ]}
+        onPress={toggle}
+      >
+        <Text style={styles.buttonText}>spring, clamped to the track</Text>
+      </Pressable>
+    </>
+  )
+}
+
 // The RN paint-overflow showcase: the square's home track is narrow, and the
 // animation slides it far past the track edge — it glides OVER the neighbor
 // panel and comes back. Nothing resizes, nothing shifts: transforms are
@@ -325,6 +382,13 @@ export const AnimatedSection = () => (
       hint="stiffness/damping physics: the overshoot honestly flies past the edge and springs back — transforms are paint-only, like in RN"
     >
       <SpringToggle />
+    </DemoCard>
+
+    <DemoCard
+      title="Animated.spring + extrapolate clamp"
+      hint="the same physics, but interpolate({ extrapolate: 'clamp' }) pins the square inside the track — containment is the interpolation's job, not the layout's"
+    >
+      <SpringClamped />
     </DemoCard>
 
     <DemoCard
