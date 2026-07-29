@@ -8,7 +8,7 @@ import {
   measureWidget,
   toNumber,
   type Gtk,
-} from "../src/gtkx-bridge/index.js"
+} from "../src/gtkx-bridge/index"
 
 it("renders a GtkBox container with a label child", async () => {
   const boxRef = createRef<Gtk.Box | null>()

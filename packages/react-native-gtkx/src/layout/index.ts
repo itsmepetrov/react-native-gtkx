@@ -1,3 +1,3 @@
-export { applyLayoutStyle, applyNodeDefaults } from "./apply-style.js"
-export { LayoutEngine, type ViewportSize } from "./engine.js"
-export { getLiveNodeCount, LayoutNode } from "./node.js"
+export { applyLayoutStyle, applyNodeDefaults } from "./apply-style"
+export { LayoutEngine, type ViewportSize } from "./engine"
+export { getLiveNodeCount, LayoutNode } from "./node"

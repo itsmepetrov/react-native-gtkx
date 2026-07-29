@@ -5,10 +5,10 @@
 // any OS. The production registry that talks to the gtkx `css` helper lives
 // in ./registry.gtkx.ts and is imported directly by components (006).
 
-export { parseColor, PlatformColor } from "./colors.js"
-export { resetDevWarnings } from "./dev-warning.js"
-export { createCssRegistry, type CssFn, type CssRegistry } from "./registry.js"
-export { splitStyle } from "./split-style.js"
+export { parseColor, PlatformColor } from "./colors"
+export { resetDevWarnings } from "./dev-warning"
+export { createCssRegistry, type CssFn, type CssRegistry } from "./registry"
+export { splitStyle } from "./split-style"
 export {
   absoluteFill,
   absoluteFillObject,
@@ -17,10 +17,10 @@ export {
   flatten,
   hairlineWidth,
   StyleSheet,
-} from "./style-sheet.js"
+} from "./style-sheet"
 export {
   textAlignToLabelProps,
   type LabelAlignProps,
   type TextAlign,
-} from "./text-align.js"
-export { visualStyleToCss } from "./visual-css.js"
+} from "./text-align"
+export { visualStyleToCss } from "./visual-css"

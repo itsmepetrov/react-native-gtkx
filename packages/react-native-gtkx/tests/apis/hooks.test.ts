@@ -3,19 +3,19 @@
 // (no extra testing-library dependency in this repo).
 
 import { describe, expect, it, vi } from "vitest"
-import { createAppearance } from "../../src/apis/appearance.js"
-import { createDimensions } from "../../src/apis/dimensions.js"
+import { createAppearance } from "../../src/apis/appearance"
+import { createDimensions } from "../../src/apis/dimensions"
 import {
   createColorSchemeStore,
   createUseColorScheme,
   createUseWindowDimensions,
   createWindowDimensionsStore,
-} from "../../src/apis/hooks.js"
+} from "../../src/apis/hooks"
 import {
   createAppearanceMockHost,
   createDimensionsMockHost,
   size,
-} from "./mock-host.js"
+} from "./mock-host"
 
 describe("useWindowDimensions store", () => {
   it("snapshots the window dimensions with stable identity", () => {

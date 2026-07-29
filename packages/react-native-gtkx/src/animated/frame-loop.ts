@@ -3,7 +3,7 @@
 // cancels the pending booking, so a stopped loop holds no scheduler
 // subscription (no idle ticks).
 
-import type { FrameScheduler } from "./types.js"
+import type { FrameScheduler } from "./types"
 
 export type FrameLoop = {
   start(): void

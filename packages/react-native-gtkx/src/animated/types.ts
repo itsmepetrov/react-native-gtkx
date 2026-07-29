@@ -3,7 +3,7 @@
 // injected FrameScheduler, so the GTK frame clock (production) and a manual
 // test driver are interchangeable.
 
-import type { EasingFunction } from "./easing.js"
+import type { EasingFunction } from "./easing"
 
 // Frame driver injected by the host (GTK frame clock in production, a manual
 // scheduler in tests). schedule() books a one-shot callback for the next

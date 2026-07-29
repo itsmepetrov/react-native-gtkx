@@ -3,8 +3,8 @@ import {
   createCssRegistry,
   resetDevWarnings,
   visualStyleToCss,
-} from "../../src/style/index.js"
-import type { VisualStyle } from "../../src/contracts.js"
+} from "../../src/style/index"
+import type { VisualStyle } from "../../src/contracts"
 
 beforeEach(() => {
   resetDevWarnings()

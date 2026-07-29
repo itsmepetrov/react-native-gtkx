@@ -1,4 +1,4 @@
-import type { PlatformHost } from "./host.js"
+import type { PlatformHost } from "./host"
 
 // Cross-platform code may pass ios/android/... keys too; they are ignored on
 // linux, mirroring react-native's Platform.select fallback contract.

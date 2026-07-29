@@ -1,5 +1,5 @@
 import { expect, it } from "vitest"
-import { LayoutEngine, type LayoutNode } from "../../src/layout/index.js"
+import { LayoutEngine, type LayoutNode } from "../../src/layout/index"
 
 // AC (task 004): reflow of a 500-node tree <= 16ms, no-op recompute <= 1ms.
 // Thresholds are generous vs the spike numbers (0.17ms) to stay CI-stable.

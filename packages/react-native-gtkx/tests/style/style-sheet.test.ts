@@ -7,8 +7,8 @@ import {
   flatten,
   hairlineWidth,
   StyleSheet,
-} from "../../src/style/index.js"
-import type { FlatStyle, StyleProp } from "../../src/contracts.js"
+} from "../../src/style/index"
+import type { FlatStyle, StyleProp } from "../../src/contracts"
 
 describe("StyleSheet.create", () => {
   it("returns the styles object as-is (identity)", () => {

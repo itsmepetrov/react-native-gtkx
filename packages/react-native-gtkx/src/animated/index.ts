@@ -2,10 +2,10 @@
 // contract: everything is driven by an injected FrameScheduler — the
 // orchestrator connects the GTK frame clock and the Animated.* components.
 
-export type { AnimatedApi } from "./create-animated.js"
-export { createAnimated } from "./create-animated.js"
-export type { EasingFunction } from "./easing.js"
-export { Easing } from "./easing.js"
+export type { AnimatedApi } from "./create-animated"
+export { createAnimated } from "./create-animated"
+export type { EasingFunction } from "./easing"
+export { Easing } from "./easing"
 export type {
   CompositeAnimation,
   EndCallback,
@@ -19,5 +19,5 @@ export type {
   SpringConfig,
   TimingConfig,
   ValueListener,
-} from "./types.js"
-export { AnimatedInterpolation, AnimatedValue } from "./value.js"
+} from "./types"
+export { AnimatedInterpolation, AnimatedValue } from "./value"

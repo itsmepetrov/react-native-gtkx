@@ -5,14 +5,14 @@
 import { render, screen, waitFor } from "@gtkx/testing"
 import { createRef } from "react"
 import { expect, it } from "vitest"
-import type { Gtk } from "../../src/gtkx-bridge/index.js"
+import type { Gtk } from "../../src/gtkx-bridge/index"
 import {
   FlatList,
   Root,
   Text,
   View,
   type ScrollViewHandle,
-} from "../../src/index.js"
+} from "../../src/index"
 
 const childCount = (widget: Gtk.Widget): number => {
   let count = 0

@@ -1,4 +1,4 @@
-import type { DimensionValue, LayoutStyle } from "../contracts.js"
+import type { DimensionValue, LayoutStyle } from "../contracts"
 import {
   ALIGN,
   DISPLAY,
@@ -10,7 +10,7 @@ import {
   POSITION,
   WRAP,
   type YogaNode,
-} from "./yoga.js"
+} from "./yoga"
 
 type DimensionSetters = {
   point: (value: number) => void

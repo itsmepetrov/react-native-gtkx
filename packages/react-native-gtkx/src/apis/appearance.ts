@@ -1,6 +1,6 @@
-import type { SubscriptionHandle } from "../contracts.js"
-import { createSharedEmitter } from "./emitter.js"
-import type { AppearanceHost, ColorSchemeName } from "./host.js"
+import type { SubscriptionHandle } from "../contracts"
+import { createSharedEmitter } from "./emitter"
+import type { AppearanceHost, ColorSchemeName } from "./host"
 
 export type AppearancePreferences = { colorScheme: ColorSchemeName }
 

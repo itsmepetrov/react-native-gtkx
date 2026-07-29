@@ -1,7 +1,7 @@
 // Integration: Platform against the real GTK runtime.
 
 import { expect, it } from "vitest"
-import { Linking, Platform } from "../../src/apis/index.js"
+import { Linking, Platform } from "../../src/apis/index"
 
 it("exposes the GTK runtime version", () => {
   expect(Platform.OS).toBe("linux")

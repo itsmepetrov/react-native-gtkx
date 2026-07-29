@@ -1,5 +1,5 @@
-import type { SubscriptionHandle } from "../contracts.js"
-import type { AppStateHost } from "./host.js"
+import type { SubscriptionHandle } from "../contracts"
+import type { AppStateHost } from "./host"
 
 // Desktop windows are either focused or not: the RN "inactive" transitional
 // state has no GTK equivalent, so the surface is the active/background pair.

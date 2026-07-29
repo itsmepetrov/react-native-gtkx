@@ -1,6 +1,6 @@
-import type { SubscriptionHandle } from "../contracts.js"
-import { createSharedEmitter } from "./emitter.js"
-import type { DimensionsHost, ScaledSize } from "./host.js"
+import type { SubscriptionHandle } from "../contracts"
+import { createSharedEmitter } from "./emitter"
+import type { DimensionsHost, ScaledSize } from "./host"
 
 export type DimensionKey = "window" | "screen"
 

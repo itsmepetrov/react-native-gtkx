@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
-import { createAnimated, Easing } from "../../src/animated/index.js"
-import { createManualScheduler } from "./manual-scheduler.js"
+import { createAnimated, Easing } from "../../src/animated/index"
+import { createManualScheduler } from "./manual-scheduler"
 
 const setup = () => {
   const manual = createManualScheduler()

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { Easing } from "../../src/animated/index.js"
+import { Easing } from "../../src/animated/index"
 
 describe("Easing", () => {
   it("linear is the identity", () => {

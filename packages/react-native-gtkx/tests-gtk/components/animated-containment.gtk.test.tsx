@@ -5,8 +5,8 @@
 // ancestor stays put.
 import { render, screen, waitFor } from "@gtkx/testing"
 import { expect, it } from "vitest"
-import type { Gtk } from "../../src/gtkx-bridge/index.js"
-import { Animated, Root, Text, View } from "../../src/index.js"
+import type { Gtk } from "../../src/gtkx-bridge/index"
+import { Animated, Root, Text, View } from "../../src/index"
 
 const settle = (): Promise<void> =>
   new Promise((resolve) => {

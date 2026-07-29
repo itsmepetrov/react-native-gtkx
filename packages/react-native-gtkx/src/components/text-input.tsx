@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from "react"
-import { Gtk, GtkEntry, type Gtk as GtkNs } from "../gtkx-bridge/index.js"
-import type { StyleProp } from "../contracts.js"
-import { useLayoutChild, type LayoutEvent } from "./use-layout-child.js"
+import { Gtk, GtkEntry, type Gtk as GtkNs } from "../gtkx-bridge/index"
+import type { StyleProp } from "../contracts"
+import { useLayoutChild, type LayoutEvent } from "./use-layout-child"
 
 export type TextInputProps = {
   value?: string

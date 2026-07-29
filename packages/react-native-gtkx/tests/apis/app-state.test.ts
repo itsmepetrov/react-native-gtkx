@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
-import { createAppState } from "../../src/apis/app-state.js"
-import { createAppStateMockHost } from "./mock-host.js"
+import { createAppState } from "../../src/apis/app-state"
+import { createAppStateMockHost } from "./mock-host"
 
 describe("AppState", () => {
   it("computes currentState from the host", () => {

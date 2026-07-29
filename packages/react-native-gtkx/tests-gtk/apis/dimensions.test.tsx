@@ -21,8 +21,8 @@ import { readdirSync } from "node:fs"
 import { join } from "node:path"
 import { render, renderHook, waitFor } from "@gtkx/testing"
 import { expect, it } from "vitest"
-import { Dimensions, useWindowDimensions } from "../../src/apis/index.js"
-import { Gtk, GtkLabel, toNumber } from "../../src/gtkx-bridge/index.js"
+import { Dimensions, useWindowDimensions } from "../../src/apis/index"
+import { Gtk, GtkLabel, toNumber } from "../../src/gtkx-bridge/index"
 
 const RESIZE_TIMEOUT = { timeout: 5000 }
 

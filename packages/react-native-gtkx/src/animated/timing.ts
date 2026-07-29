@@ -3,15 +3,11 @@
 // touching the value; duration 0 jumps to toValue on the first frame past
 // the delay.
 
-import { Easing } from "./easing.js"
-import { warnNativeDriverIgnored } from "./native-driver.js"
-import type {
-  CompositeAnimation,
-  FrameScheduler,
-  TimingConfig,
-} from "./types.js"
-import { createValueAnimation } from "./value-animation.js"
-import type { AnimatedValue } from "./value.js"
+import { Easing } from "./easing"
+import { warnNativeDriverIgnored } from "./native-driver"
+import type { CompositeAnimation, FrameScheduler, TimingConfig } from "./types"
+import type { AnimatedValue } from "./value"
+import { createValueAnimation } from "./value-animation"
 
 const defaultEasing = Easing.inOut(Easing.ease)
 

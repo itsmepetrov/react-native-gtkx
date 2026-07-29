@@ -7,8 +7,8 @@
 
 import { fireEvent, render, screen, waitFor } from "@gtkx/testing"
 import { expect, it, vi } from "vitest"
-import { Alert } from "../../src/apis/index.js"
-import { Gtk, GtkLabel } from "../../src/gtkx-bridge/index.js"
+import { Alert } from "../../src/apis/index"
+import { Gtk, GtkLabel } from "../../src/gtkx-bridge/index"
 
 it("shows a single OK button when called without buttons", async () => {
   await render(<GtkLabel label="alert host" />)

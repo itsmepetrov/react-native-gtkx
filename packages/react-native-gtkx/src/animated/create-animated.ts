@@ -2,9 +2,9 @@
 // passes a scheduler backed by the frame clock (orchestrator, task 009);
 // tests pass a manual scheduler and drive frames by hand.
 
-import { createDelay, loop, parallel, sequence } from "./composite.js"
-import { createSpring } from "./spring.js"
-import { createTiming } from "./timing.js"
+import { createDelay, loop, parallel, sequence } from "./composite"
+import { createSpring } from "./spring"
+import { createTiming } from "./timing"
 import type {
   CompositeAnimation,
   FrameScheduler,
@@ -12,8 +12,8 @@ import type {
   ParallelConfig,
   SpringConfig,
   TimingConfig,
-} from "./types.js"
-import { AnimatedValue } from "./value.js"
+} from "./types"
+import { AnimatedValue } from "./value"
 
 export type AnimatedApi = {
   Value: typeof AnimatedValue

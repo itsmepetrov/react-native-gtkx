@@ -1,11 +1,6 @@
-import type {
-  LayoutNodeApi,
-  LayoutStyle,
-  MeasureFn,
-  Rect,
-} from "../contracts.js"
-import { applyLayoutStyle, applyNodeDefaults } from "./apply-style.js"
-import { createYogaNode, MEASURE_MODE, type YogaNode } from "./yoga.js"
+import type { LayoutNodeApi, LayoutStyle, MeasureFn, Rect } from "../contracts"
+import { applyLayoutStyle, applyNodeDefaults } from "./apply-style"
+import { createYogaNode, MEASURE_MODE, type YogaNode } from "./yoga"
 
 type DirtyListener = () => void
 

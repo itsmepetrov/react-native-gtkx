@@ -2,8 +2,8 @@
 // production uses the bridge (registry.gtkx.ts), tests use a fake — this
 // module stays pure and unit-testable on any OS.
 
-import type { VisualStyle } from "../contracts.js"
-import { visualStyleToCss } from "./visual-css.js"
+import type { VisualStyle } from "../contracts"
+import { visualStyleToCss } from "./visual-css"
 
 export type CssFn = (cssText: string) => string
 

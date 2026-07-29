@@ -2,8 +2,8 @@
 // for Dimensions — it used to shrink the main app viewport to the modal size.
 import { render, waitFor } from "@gtkx/testing"
 import { expect, it } from "vitest"
-import { Gtk, GtkLabel } from "../../src/gtkx-bridge/index.js"
-import { Dimensions } from "../../src/index.js"
+import { Gtk, GtkLabel } from "../../src/gtkx-bridge/index"
+import { Dimensions } from "../../src/index"
 
 const firstToplevel = (): Gtk.Window => {
   const toplevels = Gtk.Window.getToplevels()

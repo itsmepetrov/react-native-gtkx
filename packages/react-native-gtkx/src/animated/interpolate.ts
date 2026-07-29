@@ -4,7 +4,7 @@
 // outputs ("45deg", "3.14rad"): the numeric part is interpolated, the shared
 // suffix is preserved.
 
-import type { InterpolationConfig } from "./types.js"
+import type { InterpolationConfig } from "./types"
 
 const NUMBER_WITH_SUFFIX = /^([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)(.*)$/
 

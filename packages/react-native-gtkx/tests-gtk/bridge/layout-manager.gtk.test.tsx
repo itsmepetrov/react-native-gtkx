@@ -10,7 +10,7 @@ import {
   measureWidget,
   queueResize,
   type Gtk,
-} from "../../src/gtkx-bridge/index.js"
+} from "../../src/gtkx-bridge/index"
 
 const LONG_WORD = "antidisestablishmentarianism-supercalifragilistic"
 

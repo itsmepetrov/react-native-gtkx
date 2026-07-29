@@ -11,10 +11,10 @@ import {
   GtkLabel,
   measureWidget,
   Pango,
-} from "../gtkx-bridge/index.js"
-import { textAlignToLabelProps } from "../style/index.js"
-import type { MeasureFn, StyleProp } from "../contracts.js"
-import { useLayoutChild, type LayoutEvent } from "./use-layout-child.js"
+} from "../gtkx-bridge/index"
+import { textAlignToLabelProps } from "../style/index"
+import type { MeasureFn, StyleProp } from "../contracts"
+import { useLayoutChild, type LayoutEvent } from "./use-layout-child"
 
 export type TextProps = {
   style?: StyleProp

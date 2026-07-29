@@ -4,8 +4,8 @@ import {
   GtkWindow,
   useApplication,
   useParentWindow,
-} from "../gtkx-bridge/index.js"
-import { Root } from "./root.js"
+} from "../gtkx-bridge/index"
+import { Root } from "./root"
 
 export type ModalProps = {
   visible?: boolean

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { createLinking } from "../../src/apis/linking.js"
+import { createLinking } from "../../src/apis/linking"
 
 const createLinkingMockHost = () => ({
   launchUri: vi.fn(() => Promise.resolve()),

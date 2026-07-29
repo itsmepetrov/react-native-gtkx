@@ -4,8 +4,8 @@
 
 import { renderHook, waitFor } from "@gtkx/testing"
 import { afterEach, expect, it } from "vitest"
-import { Appearance, useColorScheme } from "../../src/apis/index.js"
-import { styleManager } from "../../src/gtkx-bridge/index.js"
+import { Appearance, useColorScheme } from "../../src/apis/index"
+import { styleManager } from "../../src/gtkx-bridge/index"
 
 afterEach(() => {
   // Return to following the system preference.

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
-import { createDimensions } from "../../src/apis/dimensions.js"
-import { createDimensionsMockHost, size } from "./mock-host.js"
+import { createDimensions } from "../../src/apis/dimensions"
+import { createDimensionsMockHost, size } from "./mock-host"
 
 describe("Dimensions", () => {
   it("returns window and screen metrics from the host", () => {

@@ -7,24 +7,24 @@ import {
   queueAllocate,
   queueResize,
   type Gtk,
-} from "../gtkx-bridge/index.js"
-import type { LayoutNode } from "../layout/index.js"
-import { splitStyle, StyleSheet } from "../style/index.js"
-import { defaultCssRegistry } from "../style/registry.gtkx.js"
+} from "../gtkx-bridge/index"
+import type { LayoutNode } from "../layout/index"
+import { splitStyle, StyleSheet } from "../style/index"
+import { defaultCssRegistry } from "../style/registry.gtkx"
 import type {
   LayoutStyle,
   MeasureFn,
   Rect,
   StyleProp,
   VisualStyle,
-} from "../contracts.js"
-import { useHostNode, type HostNode } from "./host-node.js"
+} from "../contracts"
+import { useHostNode, type HostNode } from "./host-node"
 import {
   deferDuringAllocate,
   getStoredOffset,
   getStoredRect,
   setStoredRect,
-} from "./rect-store.js"
+} from "./rect-store"
 
 export type LayoutEvent = {
   nativeEvent: {

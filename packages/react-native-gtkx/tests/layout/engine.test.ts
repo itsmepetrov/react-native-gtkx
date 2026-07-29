@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
-import { getLiveNodeCount, LayoutEngine } from "../../src/layout/index.js"
-import type { MeasureFn, Rect } from "../../src/contracts.js"
+import { getLiveNodeCount, LayoutEngine } from "../../src/layout/index"
+import type { MeasureFn, Rect } from "../../src/contracts"
 
 const nextMicrotask = (): Promise<void> =>
   new Promise((resolve) => {

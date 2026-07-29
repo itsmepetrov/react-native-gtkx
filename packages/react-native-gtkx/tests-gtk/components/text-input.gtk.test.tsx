@@ -3,12 +3,8 @@
 import { render, waitFor } from "@gtkx/testing"
 import { createRef } from "react"
 import { expect, it, vi } from "vitest"
-import {
-  GtkEntry,
-  measureWidget,
-  type Gtk,
-} from "../../src/gtkx-bridge/index.js"
-import { Root, TextInput } from "../../src/index.js"
+import { GtkEntry, measureWidget, type Gtk } from "../../src/gtkx-bridge/index"
+import { Root, TextInput } from "../../src/index"
 
 it("reports GtkEntry natural sizes", async () => {
   const ref = createRef<Gtk.Entry | null>()

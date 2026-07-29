@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { parseColor, PlatformColor } from "../../src/style/index.js"
+import { parseColor, PlatformColor } from "../../src/style/index"
 
 describe("parseColor: named colors", () => {
   it("resolves CSS named colors to rgb()", () => {

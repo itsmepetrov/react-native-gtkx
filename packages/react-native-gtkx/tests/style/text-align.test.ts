@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { textAlignToLabelProps } from "../../src/style/index.js"
+import { textAlignToLabelProps } from "../../src/style/index"
 
 describe("textAlignToLabelProps", () => {
   it("maps auto and left onto xalign 0 / left", () => {

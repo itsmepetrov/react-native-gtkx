@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react"
-import type { AppearanceModule } from "./appearance.js"
-import type { DimensionsModule } from "./dimensions.js"
-import type { ColorSchemeName, ScaledSize } from "./host.js"
+import type { AppearanceModule } from "./appearance"
+import type { DimensionsModule } from "./dimensions"
+import type { ColorSchemeName, ScaledSize } from "./host"
 
 export type ExternalStore<T> = {
   subscribe: (onStoreChange: () => void) => () => void

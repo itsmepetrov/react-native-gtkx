@@ -12,8 +12,8 @@ import Yoga, {
   Wrap,
   type Node as RawNode,
 } from "yoga-layout"
-import { LayoutEngine, type LayoutNode } from "../../src/layout/index.js"
-import type { LayoutStyle, MeasureFn } from "../../src/contracts.js"
+import { LayoutEngine, type LayoutNode } from "../../src/layout/index"
+import type { LayoutStyle, MeasureFn } from "../../src/contracts"
 
 const VIEWPORT = { width: 800, height: 600 }
 

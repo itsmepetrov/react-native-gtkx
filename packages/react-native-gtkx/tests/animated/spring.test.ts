@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest"
-import type { EndResult } from "../../src/animated/index.js"
-import { createAnimated, Easing } from "../../src/animated/index.js"
-import type { ManualScheduler } from "./manual-scheduler.js"
-import { createManualScheduler } from "./manual-scheduler.js"
+import type { EndResult } from "../../src/animated/index"
+import { createAnimated, Easing } from "../../src/animated/index"
+import type { ManualScheduler } from "./manual-scheduler"
+import { createManualScheduler } from "./manual-scheduler"
 
 const setup = () => {
   const manual = createManualScheduler()

@@ -10,14 +10,14 @@ import {
   Gtk,
   styleManager,
   toNumber,
-} from "../gtkx-bridge/index.js"
-import type { SubscriptionHandle } from "../contracts.js"
+} from "../gtkx-bridge/index"
+import type { SubscriptionHandle } from "../contracts"
 import type {
   ColorSchemeName,
   Host,
   HostAlertRequest,
   ScaledSize,
-} from "./host.js"
+} from "./host"
 
 const FALLBACK_METRICS: ScaledSize = {
   width: 0,

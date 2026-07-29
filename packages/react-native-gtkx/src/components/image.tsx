@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs"
 import { useEffect, useRef } from "react"
-import { Gtk, GtkPicture } from "../gtkx-bridge/index.js"
-import type { StyleProp } from "../contracts.js"
-import { useLayoutChild, type LayoutEvent } from "./use-layout-child.js"
+import { Gtk, GtkPicture } from "../gtkx-bridge/index"
+import type { StyleProp } from "../contracts"
+import { useLayoutChild, type LayoutEvent } from "./use-layout-child"
 
 export type ImageSource = { uri: string } | string
 

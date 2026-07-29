@@ -41,7 +41,7 @@ export {
 
 export { css, cx, injectGlobal } from "@gtkx/css"
 
-export { createTextProbe, measureWidget, toNumber } from "./measure.js"
+export { createTextProbe, measureWidget, toNumber } from "./measure"
 export {
   allocateChild,
   attachRnLayout,
@@ -50,5 +50,5 @@ export {
   queueResize,
   type RnLayoutHooks,
   type RnLayoutOrientation,
-} from "./layout-manager.js"
-export { colorScheme, styleManager } from "./theme.js"
+} from "./layout-manager"
+export { colorScheme, styleManager } from "./theme"

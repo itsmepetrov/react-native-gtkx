@@ -1,6 +1,6 @@
 import { createContext, useContext, type RefObject } from "react"
-import type { Gtk } from "../gtkx-bridge/index.js"
-import type { LayoutEngine, LayoutNode } from "../layout/index.js"
+import type { Gtk } from "../gtkx-bridge/index"
+import type { LayoutEngine, LayoutNode } from "../layout/index"
 
 // One per mounted container (Root or View): children register their layout
 // nodes here and commit rects into the store read by the parent's

@@ -6,13 +6,9 @@
 // start() establishes t = 0 — there is no wall clock in this module, time
 // only ever comes from the scheduler.
 
-import { createFrameLoop } from "./frame-loop.js"
-import type {
-  CompositeAnimation,
-  EndCallback,
-  FrameScheduler,
-} from "./types.js"
-import type { AnimatedValue } from "./value.js"
+import { createFrameLoop } from "./frame-loop"
+import type { CompositeAnimation, EndCallback, FrameScheduler } from "./types"
+import type { AnimatedValue } from "./value"
 
 // Per-frame step: elapsed ms since the first frame of this run → the next
 // position (null while waiting out a delay: the value is not touched) and

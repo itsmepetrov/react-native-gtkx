@@ -7,8 +7,8 @@
 
 import { render, waitFor } from "@gtkx/testing"
 import { expect, it, vi } from "vitest"
-import { AppState } from "../../src/apis/index.js"
-import { Gtk, GtkLabel } from "../../src/gtkx-bridge/index.js"
+import { AppState } from "../../src/apis/index"
+import { Gtk, GtkLabel } from "../../src/gtkx-bridge/index"
 
 it("mirrors the real window's is-active state", async () => {
   const { container } = await render(<GtkLabel label="app state" />)

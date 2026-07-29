@@ -7,8 +7,8 @@ import type {
   ColorSchemeName,
   DimensionsHost,
   ScaledSize,
-} from "../../src/apis/host.js"
-import type { SubscriptionHandle } from "../../src/contracts.js"
+} from "../../src/apis/host"
+import type { SubscriptionHandle } from "../../src/contracts"
 
 export const createManualNotifier = () => {
   const listeners = new Set<() => void>()

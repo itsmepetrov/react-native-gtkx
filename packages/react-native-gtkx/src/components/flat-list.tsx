@@ -1,13 +1,13 @@
 import { forwardRef, type ComponentType, type ReactElement } from "react"
-import type { StyleProp } from "../contracts.js"
-import type { ScrollViewHandle, ScrollViewProps } from "./scroll-view.js"
+import type { StyleProp } from "../contracts"
+import type { ScrollViewHandle, ScrollViewProps } from "./scroll-view"
 import {
   VirtualizedList,
   type ItemLayout,
   type ListRenderItemInfo,
-} from "./virtualized-list.js"
+} from "./virtualized-list"
 
-export type { ListRenderItemInfo } from "./virtualized-list.js"
+export type { ListRenderItemInfo } from "./virtualized-list"
 
 export type FlatListProps<T> = Omit<ScrollViewProps, "children"> & {
   data: readonly T[]

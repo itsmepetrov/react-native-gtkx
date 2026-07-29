@@ -1,6 +1,6 @@
 // React Native's StyleSheet API. Pure module — no bridge imports.
 
-import type { FlatStyle, StyleProp } from "../contracts.js"
+import type { FlatStyle, StyleProp } from "../contracts"
 
 // GTK renders in logical pixels (scale factor is applied by the compositor),
 // so the thinnest visible line is 1.

@@ -4,7 +4,7 @@
 // NEXT advance, and a subscription cancelled mid-frame never fires — both
 // mirroring the one-shot semantics of the real GTK frame-clock scheduler.
 
-import type { FrameScheduler } from "../../src/animated/index.js"
+import type { FrameScheduler } from "../../src/animated/index"
 
 export type ManualScheduler = {
   scheduler: FrameScheduler

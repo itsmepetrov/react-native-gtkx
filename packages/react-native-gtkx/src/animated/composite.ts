@@ -6,16 +6,16 @@
 // unfinished child result. delay(ms) is RN's own trick: a zero-duration
 // timing with the given delay on a throwaway value.
 
-import { Easing } from "./easing.js"
-import { createTiming } from "./timing.js"
+import { Easing } from "./easing"
+import { createTiming } from "./timing"
 import type {
   CompositeAnimation,
   EndResult,
   FrameScheduler,
   LoopConfig,
   ParallelConfig,
-} from "./types.js"
-import { AnimatedValue } from "./value.js"
+} from "./types"
+import { AnimatedValue } from "./value"
 
 export const sequence = (
   animations: CompositeAnimation[],

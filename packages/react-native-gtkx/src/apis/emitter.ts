@@ -1,4 +1,4 @@
-import type { SubscriptionHandle } from "../contracts.js"
+import type { SubscriptionHandle } from "../contracts"
 
 type Teardown = () => void
 

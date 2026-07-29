@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { createPlatform } from "../../src/apis/platform.js"
+import { createPlatform } from "../../src/apis/platform"
 
 const createHost = (version = "4.22.4") => ({
   gtkVersion: vi.fn(() => version),

@@ -2,7 +2,7 @@
 // dynamic FlatList data (fireEvent — rc.1 ships no virtual seat, see 007).
 import { fireEvent, render, screen, waitFor } from "@gtkx/testing"
 import { expect, it, vi } from "vitest"
-import { Gtk, type Gtk as GtkNs } from "../../src/gtkx-bridge/index.js"
+import { Gtk, type Gtk as GtkNs } from "../../src/gtkx-bridge/index"
 import {
   FlatList,
   Pressable,
@@ -11,7 +11,7 @@ import {
   Text,
   TextInput,
   View,
-} from "../../src/index.js"
+} from "../../src/index"
 
 const findController = <T,>(
   widget: GtkNs.Widget,

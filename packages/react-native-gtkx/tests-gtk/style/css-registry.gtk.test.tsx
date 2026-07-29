@@ -5,9 +5,9 @@
 import { render, screenshot } from "@gtkx/testing"
 import { createRef } from "react"
 import { describe, expect, it } from "vitest"
-import { css, GtkBox, type Gtk } from "../../src/gtkx-bridge/index.js"
-import { createCssRegistry, visualStyleToCss } from "../../src/style/index.js"
-import { defaultCssRegistry } from "../../src/style/registry.gtkx.js"
+import { css, GtkBox, type Gtk } from "../../src/gtkx-bridge/index"
+import { createCssRegistry, visualStyleToCss } from "../../src/style/index"
+import { defaultCssRegistry } from "../../src/style/registry.gtkx"
 
 describe("bridge css + generated GTK CSS", () => {
   it("registers a visualStyleToCss string through the real css helper", () => {

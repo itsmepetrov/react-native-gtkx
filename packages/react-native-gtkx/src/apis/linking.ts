@@ -1,4 +1,4 @@
-import type { LinkingHost } from "./host.js"
+import type { LinkingHost } from "./host"
 
 // Schemes every Linux desktop resolves through the portal / default handlers.
 // There is no per-handler introspection API comparable to canOpenURL on

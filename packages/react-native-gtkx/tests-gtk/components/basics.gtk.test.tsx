@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@gtkx/testing"
 import { expect, it, vi } from "vitest"
-import { Gtk, Pango } from "../../src/gtkx-bridge/index.js"
-import { Root, StyleSheet, Text, View } from "../../src/index.js"
+import { Gtk, Pango } from "../../src/gtkx-bridge/index"
+import { Root, StyleSheet, Text, View } from "../../src/index"
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20 },

@@ -1,12 +1,12 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react"
-import { Gtk, GtkBox } from "../gtkx-bridge/index.js"
-import type { StyleProp } from "../contracts.js"
-import { HostNodeContext } from "./host-node.js"
+import { Gtk, GtkBox } from "../gtkx-bridge/index"
+import type { StyleProp } from "../contracts"
+import { HostNodeContext } from "./host-node"
 import {
   useLayoutChild,
   useRnContainer,
   type LayoutEvent,
-} from "./use-layout-child.js"
+} from "./use-layout-child"
 
 export type PressableStateCallbackType = {
   pressed: boolean

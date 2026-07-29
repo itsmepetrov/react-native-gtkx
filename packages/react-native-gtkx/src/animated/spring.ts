@@ -5,14 +5,10 @@
 // thresholds (or as soon as overshootClamping trips), then snaps exactly to
 // toValue.
 
-import { warnNativeDriverIgnored } from "./native-driver.js"
-import type {
-  CompositeAnimation,
-  FrameScheduler,
-  SpringConfig,
-} from "./types.js"
-import { createValueAnimation } from "./value-animation.js"
-import type { AnimatedValue } from "./value.js"
+import { warnNativeDriverIgnored } from "./native-driver"
+import type { CompositeAnimation, FrameScheduler, SpringConfig } from "./types"
+import type { AnimatedValue } from "./value"
+import { createValueAnimation } from "./value-animation"
 
 export const createSpring = (
   scheduler: FrameScheduler,

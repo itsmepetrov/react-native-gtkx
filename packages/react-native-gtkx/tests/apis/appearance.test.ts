@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
-import { createAppearance } from "../../src/apis/appearance.js"
-import { createAppearanceMockHost } from "./mock-host.js"
+import { createAppearance } from "../../src/apis/appearance"
+import { createAppearanceMockHost } from "./mock-host"
 
 describe("Appearance", () => {
   it("returns the host color scheme", () => {

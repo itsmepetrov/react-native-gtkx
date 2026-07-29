@@ -4,12 +4,12 @@
 // to their parent lazily (only while they have listeners themselves) and can
 // be interpolated again, cascading from the parent's numeric value.
 
-import { createInterpolator } from "./interpolate.js"
+import { createInterpolator } from "./interpolate"
 import type {
   InterpolationConfig,
   InterpolationListener,
   ValueListener,
-} from "./types.js"
+} from "./types"
 
 // Internal handle a running animation registers on its value; the value calls
 // stop() to preempt it when a newer animation (or setValue) takes over — the

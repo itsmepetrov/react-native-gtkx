@@ -16,7 +16,7 @@ import type {
   FlexAlignType,
   LayoutStyle,
   MeasureConstraintMode,
-} from "../contracts.js"
+} from "../contracts"
 
 export { Direction, Edge, Gutter, MeasureMode, Yoga }
 export type { YogaNode }

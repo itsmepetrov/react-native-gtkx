@@ -41,7 +41,7 @@ export {
   type TextProps,
   type TouchableOpacityProps,
   type ViewProps,
-} from "./components/index.js"
+} from "./components/index"
 
 export {
   Alert,
@@ -63,9 +63,9 @@ export {
   type DimensionsPayload,
   type PlatformSelectSpec,
   type ScaledSize,
-} from "./apis/index.js"
+} from "./apis/index"
 
-export { PlatformColor, StyleSheet } from "./style/index.js"
+export { PlatformColor, StyleSheet } from "./style/index"
 
 export type {
   DimensionValue,
@@ -74,6 +74,6 @@ export type {
   StyleProp,
   TransformPart,
   VisualStyle,
-} from "./contracts.js"
+} from "./contracts"
 
 export const version = "0.1.0"

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
-import { createAlert } from "../../src/apis/alert.js"
-import type { HostAlertRequest } from "../../src/apis/host.js"
+import { createAlert } from "../../src/apis/alert"
+import type { HostAlertRequest } from "../../src/apis/host"
 
 const createAlertMockHost = () => {
   const requests: HostAlertRequest[] = []

@@ -1,10 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { resetDevWarnings, splitStyle } from "../../src/style/index.js"
-import type {
-  FlatStyle,
-  LayoutStyle,
-  VisualStyle,
-} from "../../src/contracts.js"
+import { resetDevWarnings, splitStyle } from "../../src/style/index"
+import type { FlatStyle, LayoutStyle, VisualStyle } from "../../src/contracts"
 
 // Every key of the frozen LayoutStyle contract.
 const fullLayout: Required<LayoutStyle> = {

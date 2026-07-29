@@ -8,7 +8,7 @@ import {
   rewriteReactNativeImport,
   splitQuery,
   type FileExists,
-} from "../src/resolver.js"
+} from "../src/resolver"
 
 const existsAmong =
   (...files: string[]): FileExists =>

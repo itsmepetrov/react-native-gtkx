@@ -9,8 +9,8 @@ import { readdirSync } from "node:fs"
 import { join } from "node:path"
 import { render, waitFor } from "@gtkx/testing"
 import { expect, it, vi } from "vitest"
-import { measureWidget, type Gtk } from "../../src/gtkx-bridge/index.js"
-import { Root, View } from "../../src/index.js"
+import { measureWidget, type Gtk } from "../../src/gtkx-bridge/index"
+import { Root, View } from "../../src/index"
 
 const RESIZE_TIMEOUT = { timeout: 5000 }
 

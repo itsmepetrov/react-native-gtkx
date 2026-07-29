@@ -11,9 +11,9 @@
 // - transform is applied by the layout engine via Fixed.Child matrices,
 //   never through CSS, and is skipped here as well.
 
-import type { VisualStyle } from "../contracts.js"
-import { parseColor } from "./colors.js"
-import { warnOnce } from "./dev-warning.js"
+import type { VisualStyle } from "../contracts"
+import { parseColor } from "./colors"
+import { warnOnce } from "./dev-warning"
 
 const px = (value: number): string => `${value}px`
 

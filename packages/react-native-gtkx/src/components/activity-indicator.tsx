@@ -1,7 +1,7 @@
 import { useRef } from "react"
-import { GtkSpinner, type Gtk } from "../gtkx-bridge/index.js"
-import type { StyleProp } from "../contracts.js"
-import { useLayoutChild, type LayoutEvent } from "./use-layout-child.js"
+import { GtkSpinner, type Gtk } from "../gtkx-bridge/index"
+import type { StyleProp } from "../contracts"
+import { useLayoutChild, type LayoutEvent } from "./use-layout-child"
 
 export type ActivityIndicatorProps = {
   animating?: boolean

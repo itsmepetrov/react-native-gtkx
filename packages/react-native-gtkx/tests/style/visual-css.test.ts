@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { resetDevWarnings, visualStyleToCss } from "../../src/style/index.js"
-import type { VisualStyle } from "../../src/contracts.js"
+import { resetDevWarnings, visualStyleToCss } from "../../src/style/index"
+import type { VisualStyle } from "../../src/contracts"
 
 beforeEach(() => {
   resetDevWarnings()

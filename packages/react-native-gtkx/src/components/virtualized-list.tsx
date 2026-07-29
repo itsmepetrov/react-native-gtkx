@@ -16,15 +16,15 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react"
-import type { StyleProp } from "../contracts.js"
+import type { StyleProp } from "../contracts"
 import {
   ScrollView,
   type ScrollEvent,
   type ScrollViewHandle,
   type ScrollViewProps,
-} from "./scroll-view.js"
-import type { LayoutEvent } from "./use-layout-child.js"
-import { View } from "./view.js"
+} from "./scroll-view"
+import type { LayoutEvent } from "./use-layout-child"
+import { View } from "./view"
 
 export type ListRenderItemInfo<T> = { item: T; index: number }
 

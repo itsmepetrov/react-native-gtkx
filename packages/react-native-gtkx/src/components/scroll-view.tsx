@@ -12,16 +12,16 @@ import {
   queueResize,
   useSignal,
   type Gtk,
-} from "../gtkx-bridge/index.js"
-import { splitStyle, StyleSheet } from "../style/index.js"
-import type { StyleProp } from "../contracts.js"
-import { HostNodeContext } from "./host-node.js"
-import { deferDuringAllocate } from "./rect-store.js"
+} from "../gtkx-bridge/index"
+import { splitStyle, StyleSheet } from "../style/index"
+import type { StyleProp } from "../contracts"
+import { HostNodeContext } from "./host-node"
+import { deferDuringAllocate } from "./rect-store"
 import {
   useLayoutChild,
   useRnContainer,
   type LayoutEvent,
-} from "./use-layout-child.js"
+} from "./use-layout-child"
 
 export type ScrollViewHandle = {
   scrollTo(options: { x?: number; y?: number; animated?: boolean }): void

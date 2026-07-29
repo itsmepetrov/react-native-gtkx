@@ -6,11 +6,11 @@ import {
   useState,
   type ReactNode,
 } from "react"
-import { GtkBox, queueResize, type Gtk } from "../gtkx-bridge/index.js"
-import { LayoutEngine } from "../layout/index.js"
-import { HostNodeContext } from "./host-node.js"
-import { beginAllocatePass, endAllocatePass } from "./rect-store.js"
-import { useRnContainer } from "./use-layout-child.js"
+import { GtkBox, queueResize, type Gtk } from "../gtkx-bridge/index"
+import { LayoutEngine } from "../layout/index"
+import { HostNodeContext } from "./host-node"
+import { beginAllocatePass, endAllocatePass } from "./rect-store"
+import { useRnContainer } from "./use-layout-child"
 
 export type RootProps = {
   width: number

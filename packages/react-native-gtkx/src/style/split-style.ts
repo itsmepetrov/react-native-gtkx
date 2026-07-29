@@ -6,8 +6,8 @@ import type {
   LayoutStyle,
   SplitStyle,
   VisualStyle,
-} from "../contracts.js"
-import { warnOnce } from "./dev-warning.js"
+} from "../contracts"
+import { warnOnce } from "./dev-warning"
 
 // Exhaustive over the frozen contract: adding a key to LayoutStyle in
 // contracts.ts fails compilation here until the key is classified.

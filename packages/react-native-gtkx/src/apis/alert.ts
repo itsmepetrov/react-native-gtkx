@@ -1,4 +1,4 @@
-import type { AlertButtonStyle, AlertHost, HostAlertButton } from "./host.js"
+import type { AlertButtonStyle, AlertHost, HostAlertButton } from "./host"
 
 export type AlertButton = {
   text?: string

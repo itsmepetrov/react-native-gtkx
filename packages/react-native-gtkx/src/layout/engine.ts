@@ -1,6 +1,6 @@
-import type { Rect } from "../contracts.js"
-import { LayoutNode } from "./node.js"
-import { Direction } from "./yoga.js"
+import type { Rect } from "../contracts"
+import { LayoutNode } from "./node"
+import { Direction } from "./yoga"
 
 export type ViewportSize = { width: number; height: number }
 

@@ -1,10 +1,7 @@
 import { render, waitFor } from "@gtkx/testing"
 import { createRef } from "react"
 import { expect, it } from "vitest"
-import {
-  getStoredRect,
-  setStoredRect,
-} from "../../src/components/rect-store.js"
+import { getStoredRect, setStoredRect } from "../../src/components/rect-store"
 import {
   allocateChild,
   attachRnLayout,
@@ -15,9 +12,9 @@ import {
   queueResize,
   type Gtk,
   type RnLayoutOrientation,
-} from "../../src/gtkx-bridge/index.js"
-import { LayoutEngine, type LayoutNode } from "../../src/layout/index.js"
-import type { Rect } from "../../src/contracts.js"
+} from "../../src/gtkx-bridge/index"
+import { LayoutEngine, type LayoutNode } from "../../src/layout/index"
+import type { Rect } from "../../src/contracts"
 
 // Mirrors what useRnContainer + the commit path do in components.
 const wireContainer = (widget: Gtk.Widget, node: LayoutNode): void => {

@@ -1,12 +1,12 @@
 import { useRef, type ReactNode } from "react"
-import { GtkBox, type Gtk } from "../gtkx-bridge/index.js"
-import type { StyleProp } from "../contracts.js"
-import { HostNodeContext } from "./host-node.js"
+import { GtkBox, type Gtk } from "../gtkx-bridge/index"
+import type { StyleProp } from "../contracts"
+import { HostNodeContext } from "./host-node"
 import {
   useLayoutChild,
   useRnContainer,
   type LayoutEvent,
-} from "./use-layout-child.js"
+} from "./use-layout-child"
 
 export type ViewProps = {
   style?: StyleProp

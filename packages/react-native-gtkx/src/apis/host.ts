@@ -3,7 +3,7 @@
 // production wiring passes the gtkx adapter (host.gtkx.ts), unit tests pass
 // in-memory mocks, so all module logic runs without GTK.
 
-import type { SubscriptionHandle } from "../contracts.js"
+import type { SubscriptionHandle } from "../contracts"
 
 export type ColorSchemeName = "light" | "dark"
 

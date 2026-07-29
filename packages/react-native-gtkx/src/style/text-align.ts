@@ -6,7 +6,7 @@
 // - justification aligns wrapped lines relative to each other (values match
 //   Gtk.Justification: left/right/center/fill).
 
-import type { VisualStyle } from "../contracts.js"
+import type { VisualStyle } from "../contracts"
 
 export type TextAlign = NonNullable<VisualStyle["textAlign"]>
 

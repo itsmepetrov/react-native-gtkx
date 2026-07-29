@@ -1,14 +1,14 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react"
-import { GLib, GtkBox, queueAllocate, type Gtk } from "../gtkx-bridge/index.js"
-import { createAnimated, type FrameScheduler } from "../animated/index.js"
-import type { FlatStyle, StyleProp, TransformPart } from "../contracts.js"
-import { HostNodeContext } from "./host-node.js"
-import { setStoredOffset } from "./rect-store.js"
+import { GLib, GtkBox, queueAllocate, type Gtk } from "../gtkx-bridge/index"
+import { createAnimated, type FrameScheduler } from "../animated/index"
+import type { FlatStyle, StyleProp, TransformPart } from "../contracts"
+import { HostNodeContext } from "./host-node"
+import { setStoredOffset } from "./rect-store"
 import {
   useLayoutChild,
   useRnContainer,
   type LayoutEvent,
-} from "./use-layout-child.js"
+} from "./use-layout-child"
 
 // ~60fps one-shot ticks off the GLib main loop. A frame-clock driver (per
 // window) is a later optimization; timeouts keep the driver widget-free.
@@ -217,4 +217,4 @@ export const Animated = {
   View: AnimatedView,
 }
 
-export { Easing } from "../animated/index.js"
+export { Easing } from "../animated/index"

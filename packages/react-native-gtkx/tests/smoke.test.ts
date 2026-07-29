@@ -2,7 +2,7 @@
 // so it checks bridge-free modules only. The full public index is exercised
 // by tests-gtk/components (Linux container).
 import { expect, test } from "vitest"
-import { StyleSheet } from "../src/style/index.js"
+import { StyleSheet } from "../src/style/index"
 
 test("StyleSheet surface is sane", () => {
   const styles = StyleSheet.create({ box: { flex: 1 } })
