@@ -38,6 +38,20 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 13,
   },
+  neighbor: {
+    flex: 1,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: palette.card,
+    borderWidth: 1,
+    borderColor: palette.cardAlt,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  neighborText: {
+    color: palette.textDim,
+    fontSize: 11,
+  },
   limitation: {
     color: "#f8e45c",
     fontSize: 12,
@@ -97,28 +111,21 @@ const TimingLoop = () => {
   )
 }
 
-// An underdamped spring OVERSHOOTS its target — that is its physics (at
-// damping 9 the overshoot is ~24% of the distance; no fixed margin would
-// help). So the spring drives a NORMALIZED 0↔1 value that is projected into
-// pixels by interpolate with extrapolate:"clamp" — overshoot pins the square
-// to the edge (pressed against the wall), it mathematically cannot leave the
-// track. Escaping past the right edge would inflate the natural size of the
-// GtkFixed (PRD branch B).
+// An underdamped spring OVERSHOOTS its target — that is its physics. Since
+// the custom layout manager landed, transforms are paint-only exactly like
+// in RN: the square honestly flies PAST the track edge over whatever sits
+// there and springs back, moving nothing. This is the canonical RN code —
+// a plain 0↔1 → pixels interpolation, no defensive math.
 const SpringToggle = () => {
   const [position] = useState(() => new Animated.Value(0))
   const [trackWidth, setTrackWidth] = useState(0)
   const atEnd = useRef(false)
 
-  // Reflecting interpolation instead of a clamp: overshoot past 1 mirrors
-  // back (x=1.2 → 0.8 of the width), so the square BOUNCES off the wall
-  // instead of sticking to it while the value comes back. Leaving the track
-  // is mathematically impossible for overshoot up to 100% of the distance.
   const translateX = useMemo(() => {
     const width = Math.max(0, trackWidth - 40)
     return position.interpolate({
-      inputRange: [-1, 0, 1, 2],
-      outputRange: [width, 0, width, 0],
-      extrapolate: "clamp",
+      inputRange: [0, 1],
+      outputRange: [0, width],
     })
   }, [position, trackWidth])
 
@@ -200,6 +207,61 @@ const OpacityPulse = () => {
   )
 }
 
+// The RN paint-overflow showcase: the square's home track is narrow, and the
+// animation slides it far past the track edge — it glides OVER the neighbor
+// panel and comes back. Nothing resizes, nothing shifts: transforms are
+// paint-only, ancestors and siblings keep their layout.
+const PaintOverflow = () => {
+  const [progress] = useState(() => new Animated.Value(0))
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(progress, {
+          toValue: 1,
+          duration: 1200,
+          easing: Easing.inOut(Easing.quad),
+        }),
+        Animated.timing(progress, {
+          toValue: 0,
+          duration: 1200,
+          easing: Easing.inOut(Easing.quad),
+        }),
+      ]),
+    )
+    animation.start()
+    return () => animation.stop()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Negative X: the square flies LEFT over the neighbor. Sibling paint order
+  // is the RN default z-order (later siblings on top), so the track — the
+  // later sibling — paints its subtree over the neighbor panel.
+  const translateX = useMemo(
+    () => progress.interpolate({ inputRange: [0, 1], outputRange: [0, -200] }),
+    [progress],
+  )
+
+  return (
+    <View style={{ flexDirection: "row", gap: 12 }}>
+      <View style={styles.neighbor}>
+        <Text style={styles.neighborText}>neighbor — never moves</Text>
+      </View>
+      <View style={[styles.track, { width: 160 }]}>
+        <Animated.View
+          style={[
+            styles.square,
+            {
+              backgroundColor: palette.orange,
+              transform: [{ translateX }],
+            },
+          ]}
+        />
+      </View>
+    </View>
+  )
+}
+
 const DiagonalLoop = () => {
   const [progress] = useState(() => new Animated.Value(0))
 
@@ -249,7 +311,7 @@ const DiagonalLoop = () => {
 export const AnimatedSection = () => (
   <Section
     title="Animated"
-    subtitle="timing, spring, loop/sequence and interpolate; a direct path bypassing React: setOpacity on the widget and move in the parent GtkFixed on top of the base rect."
+    subtitle="timing, spring, loop/sequence and interpolate; a direct path bypassing React: setOpacity on the widget and layout-manager offsets on top of the base rect."
   >
     <DemoCard
       title="Animated.timing + loop"
@@ -260,9 +322,16 @@ export const AnimatedSection = () => (
 
     <DemoCard
       title="Animated.spring"
-      hint="stiffness/damping physics: the square jumps between the edges with overshoot"
+      hint="stiffness/damping physics: the overshoot honestly flies past the edge and springs back — transforms are paint-only, like in RN"
     >
       <SpringToggle />
+    </DemoCard>
+
+    <DemoCard
+      title="paint-overflow"
+      hint="the square flies out of its track and glides OVER the neighbor panel; the neighbor's layout does not move a pixel"
+    >
+      <PaintOverflow />
     </DemoCard>
 
     <DemoCard
