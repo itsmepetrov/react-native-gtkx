@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@gtkx/testing"
 import { expect, it, vi } from "vitest"
-import type { Gtk } from "../../src/gtkx-bridge/index.js"
+import { Gtk, Pango } from "../../src/gtkx-bridge/index.js"
 import { Root, StyleSheet, Text, View } from "../../src/index.js"
 
 const styles = StyleSheet.create({
@@ -106,8 +106,34 @@ it("labels never allocate wider than their Yoga rect (narrow windows)", async ()
   ) as unknown as Gtk.Label
   await waitFor(() => {
     expect(label.getAllocatedWidth()).toBeGreaterThan(0)
-    // Ellipsized labels must shrink to the rect instead of forcing their
-    // longest-word minimum onto the layout.
+    // The layout manager allocates the Yoga rect regardless of the label's
+    // longest-word minimum — nothing pushes the layout.
     expect(label.getAllocatedWidth()).toBeLessThanOrEqual(62)
   })
+  // RN semantics: no numberOfLines → no ellipsis; the unbreakable word clips
+  // to its box (paint clip) instead of drawing over siblings.
+  expect(label.getEllipsize()).toBe(Pango.EllipsizeMode.NONE)
+  expect(label.getOverflow()).toBe(Gtk.Overflow.HIDDEN)
+})
+
+it("numberOfLines keeps the ellipsis opt-in", async () => {
+  await render(
+    <Root
+      width={120}
+      height={100}
+    >
+      <View style={{ width: 100 }}>
+        <Text numberOfLines={1}>
+          a very long single line that cannot possibly fit
+        </Text>
+      </View>
+    </Root>,
+  )
+  const label = screen.getByText(
+    "a very long single line that cannot possibly fit",
+  ) as unknown as Gtk.Label
+  await waitFor(() => {
+    expect(label.getAllocatedWidth()).toBeGreaterThan(0)
+  })
+  expect(label.getEllipsize()).toBe(Pango.EllipsizeMode.END)
 })

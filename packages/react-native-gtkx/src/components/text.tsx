@@ -98,6 +98,13 @@ export const Text = ({
     measure,
   })
 
+  // RN text clips to its box: an under-allocated GtkLabel would otherwise
+  // paint its full text past the allocation (spike finding). Containers keep
+  // overflow VISIBLE (paint-overflow); the text leaf clips.
+  useLayoutEffect(() => {
+    widgetRef.current?.setOverflow(Gtk.Overflow.HIDDEN)
+  }, [])
+
   // Keep the probe in sync with everything that affects metrics, then
   // invalidate the Yoga leaf so the next pass re-measures.
   useLayoutEffect(() => {
@@ -133,11 +140,15 @@ export const Text = ({
       yalign={0}
       justify={JUSTIFICATION[align.justification]}
       lines={numberOfLines}
-      // Always ellipsizable: a plain wrapped label's minimum width is its
-      // longest word, which overrides Yoga rects at narrow sizes and draws
-      // over siblings. Ellipsize drops the minimum to ~0; the offscreen probe
-      // still measures the natural (non-ellipsized) metrics for Yoga.
-      ellipsize={Pango.EllipsizeMode.END}
+      // RN semantics: the ellipsis is opt-in via numberOfLines. Plain text
+      // wraps naturally; an unbreakable word wider than the rect just clips
+      // (overflow HIDDEN above) — the layout manager allocates the rect
+      // regardless of the label's own minimum, so nothing pushes siblings.
+      ellipsize={
+        numberOfLines !== undefined
+          ? Pango.EllipsizeMode.END
+          : Pango.EllipsizeMode.NONE
+      }
       cssClasses={cssClass ? [cssClass] : []}
     />
   )
