@@ -1,6 +1,8 @@
 import {
   Children,
+  createContext,
   forwardRef,
+  useContext,
   useImperativeHandle,
   useLayoutEffect,
   useRef,
@@ -50,32 +52,59 @@ export type ScrollViewProps = {
   testID?: string
 }
 
-type StickyRecord = { y: number; height: number }
+type StickyRecord = { y: number; height: number; widget: Gtk.Widget }
 
-// A measuring wrapper around a sticky child: a plain container that reports
-// its layout AND its widget, so the scroll handler can translate/reorder the
-// REAL instance (RN semantics — no duplicate is ever rendered, external
-// margins travel with the header exactly as designed).
-const StickySlot = ({
-  index,
-  onRecord,
+// The sticky registry lives on the nearest ScrollView: any descendant may
+// register a slot with its content-relative geometry (measured children of
+// the ScrollView itself, or windowed list cells with engine-known offsets).
+export type StickyRegistry = {
+  register(key: string, record: StickyRecord): void
+  unregister(key: string): void
+}
+
+export const StickyRegistryContext = createContext<StickyRegistry | null>(null)
+
+// A wrapper around a sticky child: a plain container that reports its layout
+// and widget into the registry, so the scroll handler can translate/reorder
+// the REAL instance (RN semantics — no duplicate is ever rendered, external
+// margins travel with the header exactly as designed). An explicit `top`
+// (windowed cells) overrides the measured position.
+export const StickySlot = ({
+  stickyKey,
+  style,
+  top,
+  onLayout,
   children,
 }: {
-  index: number
-  onRecord: (
-    index: number,
-    layout: { y: number; height: number },
-    widget: Gtk.Widget | null,
-  ) => void
+  stickyKey: string
+  style?: StyleProp
+  top?: number
+  onLayout?: (event: LayoutEvent) => void
   children?: ReactNode
 }) => {
+  const registry = useContext(StickyRegistryContext)
   const widgetRef = useRef<Gtk.Box | null>(null)
   const { host, node } = useLayoutChild(widgetRef, {
-    style: undefined,
-    onLayout: (event) =>
-      onRecord(index, event.nativeEvent.layout, widgetRef.current),
+    style,
+    onLayout: (event) => {
+      onLayout?.(event)
+      const widget = widgetRef.current
+      if (registry && widget) {
+        registry.register(stickyKey, {
+          y: top ?? event.nativeEvent.layout.y,
+          height: event.nativeEvent.layout.height,
+          widget,
+        })
+      }
+    },
   })
   useRnContainer(widgetRef, node)
+  useLayoutEffect(() => {
+    return () => {
+      registry?.unregister(stickyKey)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stickyKey])
   return (
     <GtkBox ref={widgetRef}>
       <HostNodeContext.Provider
@@ -127,7 +156,7 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
     // reacting to the adjustment signal instead lags a frame and jitters.
     useRnContainer(contentRef, contentNode, {
       beforeAllocate: () => {
-        if (stickySet.length > 0) {
+        if (stickyRecords.current.size > 0) {
           updateSticky(outerRef.current?.getVadjustment()?.getValue() ?? 0)
         }
       },
@@ -210,13 +239,34 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
     // goes through the rect-store offset fast path — zero React work while
     // scrolling.
     const stickySet = stickyHeaderIndices ?? []
-    const stickyRecords = useRef(new Map<number, StickyRecord>())
-    const stickyWidgets = useRef(new Map<number, Gtk.Widget>())
-    const restoreSibling = useRef(new Map<number, Gtk.Widget | null>())
-    const activeStickyRef = useRef<number | null>(null)
+    const stickyRecords = useRef(new Map<string, StickyRecord>())
+    const restoreSibling = useRef(new Map<string, Gtk.Widget | null>())
+    const activeStickyRef = useRef<string | null>(null)
+    const [hasSticky, setHasSticky] = useState(false)
+
+    const stickyRegistry = useRef<StickyRegistry>({
+      register: (key, record) => {
+        stickyRecords.current.set(key, record)
+        setHasSticky(true)
+        const parent = record.widget.getParent()
+        if (parent) {
+          queueAllocate(parent)
+        }
+      },
+      unregister: (key) => {
+        stickyRecords.current.delete(key)
+        restoreSibling.current.delete(key)
+        if (activeStickyRef.current === key) {
+          activeStickyRef.current = null
+        }
+        if (stickyRecords.current.size === 0) {
+          setHasSticky(false)
+        }
+      },
+    })
 
     const updateSticky = (rawScrollTop: number): void => {
-      if (stickySet.length === 0) {
+      if (stickyRecords.current.size === 0) {
         return
       }
       // The viewport translates the content by the FRACTIONAL adjustment
@@ -226,19 +276,15 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       // like floor: with Math.floor the header's window-relative position is
       // a flat 0.00 across every frame; round oscillates 0/1, ceil sits at 1.
       const scrollTop = Math.floor(rawScrollTop)
-      let active: number | null = null
+      let active: string | null = null
       let next: StickyRecord | null = null
-      for (const index of stickySet) {
-        const record = stickyRecords.current.get(index)
-        if (!record) {
-          continue
-        }
+      for (const [key, record] of stickyRecords.current) {
         if (record.y <= scrollTop) {
           if (
             active === null ||
             record.y >= stickyRecords.current.get(active)!.y
           ) {
-            active = index
+            active = key
           }
         } else if (next === null || record.y < next.y) {
           next = record
@@ -249,9 +295,9 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       if (previous !== active) {
         activeStickyRef.current = active
         if (previous !== null) {
-          const widget = stickyWidgets.current.get(previous)
-          if (widget) {
-            setStoredOffset(widget, 0, 0)
+          const record = stickyRecords.current.get(previous)
+          if (record) {
+            setStoredOffset(record.widget, 0, 0)
           }
         }
         // Reordering widgets queues GTK work — not allowed mid-allocation.
@@ -262,59 +308,40 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       }
 
       if (active !== null) {
-        const widget = stickyWidgets.current.get(active)
         const record = stickyRecords.current.get(active)!
-        if (widget) {
-          // Pin at the viewport top; the next sticky header pushes it out.
-          const pinned = next
-            ? Math.min(scrollTop, next.y - record.height)
-            : scrollTop
-          setStoredOffset(widget, 0, Math.max(0, pinned - record.y))
-        }
+        // Pin at the viewport top; the next sticky header pushes it out.
+        const pinned = next
+          ? Math.min(scrollTop, next.y - record.height)
+          : scrollTop
+        setStoredOffset(record.widget, 0, Math.max(0, pinned - record.y))
       }
     }
 
     const applyStickyReorder = (
-      previous: number | null,
-      active: number | null,
+      previous: string | null,
+      active: string | null,
     ): void => {
-      const content = contentRef.current
-      if (!content) {
-        return
-      }
       if (previous !== null) {
-        const widget = stickyWidgets.current.get(previous)
-        if (widget) {
+        const record = stickyRecords.current.get(previous)
+        // Slot parents are always our GtkBox containers.
+        const parent = record?.widget.getParent() as Gtk.Box | null
+        if (record && parent) {
           // Put the slot back where the reconciler expects it.
-          content.reorderChildAfter(
-            widget,
+          parent.reorderChildAfter(
+            record.widget,
             restoreSibling.current.get(previous) ?? null,
           )
+          queueAllocate(parent)
         }
       }
       if (active !== null) {
-        const widget = stickyWidgets.current.get(active)
-        if (widget) {
-          restoreSibling.current.set(active, widget.getPrevSibling())
-          content.reorderChildAfter(widget, content.getLastChild())
+        const record = stickyRecords.current.get(active)
+        const parent = record?.widget.getParent() as Gtk.Box | null
+        if (record && parent) {
+          restoreSibling.current.set(active, record.widget.getPrevSibling())
+          parent.reorderChildAfter(record.widget, parent.getLastChild())
+          queueAllocate(parent)
         }
-      }
-      queueAllocate(content)
-    }
-
-    const recordSticky = (
-      index: number,
-      layout: { y: number; height: number },
-      widget: Gtk.Widget | null,
-    ): void => {
-      stickyRecords.current.set(index, { y: layout.y, height: layout.height })
-      if (widget) {
-        stickyWidgets.current.set(index, widget)
-      }
-      // The next allocation pass recomputes the pin from fresh records.
-      const content = contentRef.current
-      if (content) {
-        queueAllocate(content)
       }
     }
 
@@ -352,7 +379,7 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
     // scroll offset moved, queue an allocation for THIS frame — the
     // translation and the pin correction then paint atomically.
     useLayoutEffect(() => {
-      if (stickySet.length === 0 || horizontal) {
+      if (!hasSticky || horizontal) {
         return
       }
       const widget = scrolled
@@ -375,7 +402,7 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
         widget.removeTickCallback(id)
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [scrolled, stickySet.length > 0, horizontal])
+    }, [scrolled, hasSticky, horizontal])
     useSignal(adjustment, "value-changed", onAdjustment)
 
     return (
@@ -394,21 +421,22 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
               widgetRef: contentRef,
             }}
           >
-            {stickySet.length === 0
-              ? children
-              : Children.toArray(children).map((child, index) =>
-                  stickySet.includes(index) ? (
-                    <StickySlot
-                      key={`sticky-slot-${index}`}
-                      index={index}
-                      onRecord={recordSticky}
-                    >
-                      {child}
-                    </StickySlot>
-                  ) : (
-                    child
-                  ),
-                )}
+            <StickyRegistryContext.Provider value={stickyRegistry.current}>
+              {stickySet.length === 0
+                ? children
+                : Children.toArray(children).map((child, index) =>
+                    stickySet.includes(index) ? (
+                      <StickySlot
+                        key={`sticky-slot-${index}`}
+                        stickyKey={`index-${index}`}
+                      >
+                        {child}
+                      </StickySlot>
+                    ) : (
+                      child
+                    ),
+                  )}
+            </StickyRegistryContext.Provider>
           </HostNodeContext.Provider>
         </GtkBox>
       </GtkScrolledWindow>

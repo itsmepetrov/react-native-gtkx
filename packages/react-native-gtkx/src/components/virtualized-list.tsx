@@ -21,6 +21,7 @@ import type { StyleProp } from "../contracts"
 import { ActivityIndicator } from "./activity-indicator"
 import {
   ScrollView,
+  StickySlot,
   type ScrollEvent,
   type ScrollViewHandle,
   type ScrollViewProps,
@@ -157,6 +158,7 @@ const VirtualizedListInner = forwardRef(
       onScroll,
       onLayout,
       horizontal = false,
+      stickyHeaderIndices,
       ...scrollProps
     }: VirtualizedListProps<T>,
     ref: React.Ref<VirtualizedListHandle>,
@@ -543,37 +545,79 @@ const VirtualizedListInner = forwardRef(
       }
     }, [])
 
+    // Sticky cells (vertical, non-inverted): the ACTIVE header must stay
+    // mounted even when its own offset left the window — extend the mount
+    // set with it; geometry comes from the registry offsets, pinning is the
+    // ScrollView registry's job (same mechanism as plain sticky children).
+    const stickySorted =
+      stickyHeaderIndices && !horizontal && !inverted
+        ? [...stickyHeaderIndices].sort((a, b) => a - b)
+        : []
+    let activeStickyIndex = -1
+    for (const stickyIndex of stickySorted) {
+      if (stickyIndex < count && cellStart(stickyIndex) <= scrollY.current) {
+        activeStickyIndex = stickyIndex
+      }
+    }
+
+    const renderCell = (index: number): ReactNode => {
+      const item = data[index]!
+      const key = keyOf(item, index)
+      // Vertical cells stretch across the width and sit at their offset;
+      // horizontal cells stretch across the height and take their own
+      // width from content (so onLayout can measure it).
+      const cellStyle: StyleProp = horizontal
+        ? { position: "absolute", left: cellStart(index), top: 0, bottom: 0 }
+        : { position: "absolute", left: 0, right: 0, top: cellStart(index) }
+      const measure = (event: {
+        nativeEvent: { layout: { width: number; height: number } }
+      }): void =>
+        onItemLayout(
+          index,
+          horizontal
+            ? event.nativeEvent.layout.width
+            : event.nativeEvent.layout.height,
+        )
+      const body = (
+        <>
+          {renderItem({ item, index })}
+          {index < count - 1 && ItemSeparatorComponent ? (
+            <ItemSeparatorComponent />
+          ) : null}
+        </>
+      )
+      if (stickySorted.includes(index)) {
+        return (
+          <StickySlot
+            key={key}
+            stickyKey={`cell-${key}`}
+            top={cellStart(index)}
+            style={cellStyle}
+            onLayout={measure}
+          >
+            {body}
+          </StickySlot>
+        )
+      }
+      return (
+        <View
+          key={key}
+          style={cellStyle}
+          onLayout={measure}
+        >
+          {body}
+        </View>
+      )
+    }
+
     const cells: ReactNode[] = []
     if (count > 0) {
+      if (activeStickyIndex >= 0 && activeStickyIndex < range.first) {
+        cells.push(renderCell(activeStickyIndex))
+      }
       const last = Math.min(range.last, count - 1)
       for (let index = range.first; index <= last; index += 1) {
-        const item = data[index]!
-        const key = keyOf(item, index)
-        // Vertical cells stretch across the width and sit at their offset;
-        // horizontal cells stretch across the height and take their own
-        // width from content (so onLayout can measure it).
-        const cellStyle: StyleProp = horizontal
-          ? { position: "absolute", left: cellStart(index), top: 0, bottom: 0 }
-          : { position: "absolute", left: 0, right: 0, top: cellStart(index) }
-        cells.push(
-          <View
-            key={key}
-            style={cellStyle}
-            onLayout={(event) =>
-              onItemLayout(
-                index,
-                horizontal
-                  ? event.nativeEvent.layout.width
-                  : event.nativeEvent.layout.height,
-              )
-            }
-          >
-            {renderItem({ item, index })}
-            {index < count - 1 && ItemSeparatorComponent ? (
-              <ItemSeparatorComponent />
-            ) : null}
-          </View>,
-        )
+        cells.push(renderCell(index))
       }
     }
 

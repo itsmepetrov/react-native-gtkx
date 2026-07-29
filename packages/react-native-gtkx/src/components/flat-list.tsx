@@ -79,6 +79,9 @@ export type SectionListProps<T> = Omit<
   renderSectionHeader?: (info: {
     section: SectionListData<T>
   }) => ReactElement | null
+  // RN default on iOS; ours defaults to true too — section headers pin to
+  // the top and get pushed out by the next section's header.
+  stickySectionHeadersEnabled?: boolean
 }
 
 type SectionRow<T> =
@@ -89,10 +92,13 @@ export const SectionList = <T,>({
   sections,
   renderItem,
   renderSectionHeader,
+  stickySectionHeadersEnabled = true,
   ...rest
 }: SectionListProps<T>): ReactElement => {
   const rows: SectionRow<T>[] = []
+  const headerIndices: number[] = []
   for (const section of sections) {
+    headerIndices.push(rows.length)
     rows.push({ kind: "header", section })
     section.data.forEach((item, index) => {
       rows.push({ kind: "item", item, index })
@@ -102,6 +108,9 @@ export const SectionList = <T,>({
     <FlatList
       {...rest}
       data={rows}
+      stickyHeaderIndices={
+        stickySectionHeadersEnabled ? headerIndices : undefined
+      }
       keyExtractor={(_row, index) => String(index)}
       renderItem={({ item: row }) =>
         row.kind === "header"
