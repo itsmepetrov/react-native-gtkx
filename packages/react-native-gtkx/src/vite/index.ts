@@ -182,6 +182,10 @@ export const reactNativeGtkx = (
         "@gtkx/native",
         "@gtkx/react",
         "@gtkx/runtime",
+        // react-navigation is context-based: two bundled copies of core
+        // fail with "couldn't find a navigation context".
+        "@react-navigation/core",
+        "@react-navigation/native",
         "react",
       ],
     },
