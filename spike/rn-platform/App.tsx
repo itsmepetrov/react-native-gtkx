@@ -1,9 +1,15 @@
 // Shared app: would render on ios/android/linux alike. Exercises the three
 // platform mechanisms the spike must prove end to end through Metro:
 // Platform.OS, Platform.select and the .linux.tsx file extension.
-import { useState } from "react"
+import { writeFileSync } from "node:fs"
+import { useEffect, useState } from "react"
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native"
 import { platformLabel } from "./platform-info"
+
+// The dev-mode spike edits this marker on a LIVE app (sed in
+// run-dev-headless.sh) and asserts the change applies while `ticks` keeps
+// counting — proof the hot update preserved component state.
+const HMR_MARKER = "v1"
 
 const styles = StyleSheet.create({
   root: {
@@ -36,9 +42,22 @@ const styles = StyleSheet.create({
 
 export const App = () => {
   const [count, setCount] = useState(0)
+  const [ticks, setTicks] = useState(0)
+  useEffect(() => {
+    const timer = setInterval(() => setTicks((value) => value + 1), 1000)
+    return () => clearInterval(timer)
+  }, [])
+  // Node builtins are a platform feature — and the spike's assertion channel.
+  writeFileSync(
+    "/tmp/spike-hmr-state.txt",
+    `marker=${HMR_MARKER} ticks=${ticks}\n`,
+  )
   return (
     <View style={styles.root}>
       <Text style={styles.title}>Metro bundle on {Platform.OS}</Text>
+      <Text
+        style={styles.line}
+      >{`HMR marker ${HMR_MARKER} — ticks ${ticks}`}</Text>
       <Text style={styles.line}>{platformLabel()}</Text>
       <Text style={styles.line}>
         {Platform.select({
