@@ -12,7 +12,7 @@
     "react-native-gtkx": "0.1.0-alpha.2"
   },
   "devDependencies": {
-    "@gtkx/cli": "1.0.0-rc.1",
-    "@gtkx/config": "1.0.0-rc.1"
+    "@gtkx/cli": "1.0.0-rc.2",
+    "@gtkx/config": "1.0.0-rc.2"
   }
 }

@@ -63,7 +63,7 @@
   },
   "peerDependencies": {
     "@react-navigation/native": "^7.0.0",
-    "react": "^19",
+    "react": "^19.2",
     "vite": "^7.0.0 || ^8.0.0"
   },
   "peerDependenciesMeta": {
@@ -75,16 +75,16 @@
     }
   },
   "dependencies": {
-    "@gtkx/cli": "1.0.0-rc.1",
-    "@gtkx/config": "1.0.0-rc.1",
-    "@gtkx/css": "1.0.0-rc.1",
-    "@gtkx/react": "1.0.0-rc.1",
-    "@gtkx/runtime": "1.0.0-rc.1",
+    "@gtkx/cli": "1.0.0-rc.2",
+    "@gtkx/config": "1.0.0-rc.2",
+    "@gtkx/css": "1.0.0-rc.2",
+    "@gtkx/react": "1.0.0-rc.2",
+    "@gtkx/runtime": "1.0.0-rc.2",
     "yoga-layout": "^3.2.1"
   },
   "devDependencies": {
-    "@gtkx/testing": "1.0.0-rc.1",
-    "@gtkx/vitest": "1.0.0-rc.1",
+    "@gtkx/testing": "1.0.0-rc.2",
+    "@gtkx/vitest": "1.0.0-rc.2",
     "vite": "^8.1.4"
   },
   "files": [
