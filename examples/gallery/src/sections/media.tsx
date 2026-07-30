@@ -105,7 +105,7 @@ export const MediaSection = () => {
             <View style={styles.frame}>
               <Image
                 source={{
-                  uri: "https://icons.duckduckgo.com/ip3/news.ycombinator.com.ico",
+                  uri: "https://avatars.githubusercontent.com/u/69631?s=80",
                 }}
                 resizeMode="contain"
                 style={styles.image}

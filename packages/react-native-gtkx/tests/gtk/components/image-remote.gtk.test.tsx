@@ -59,3 +59,31 @@ it("unreachable remote uri fires onError", async () => {
     expect(onError).toHaveBeenCalledOnce()
   })
 })
+
+it("an undecodable cached payload fires onError, not a blank onLoad", async () => {
+  const uri = "https://cache-hit.example/favicon.ico"
+  const target = cachePathFor(uri)
+  mkdirSync(dirname(target), { recursive: true })
+  // Bytes no image loader accepts (the ICO-favicon case, distilled).
+  writeFileSync(target, Buffer.from("not an image at all"))
+
+  const onLoad = vi.fn()
+  const onError = vi.fn()
+  await render(
+    <Root
+      width={200}
+      height={200}
+    >
+      <Image
+        source={{ uri }}
+        style={{ width: 40, height: 40 }}
+        onLoad={onLoad}
+        onError={onError}
+      />
+    </Root>,
+  )
+  await waitFor(() => {
+    expect(onError).toHaveBeenCalledOnce()
+  })
+  expect(onLoad).not.toHaveBeenCalled()
+})

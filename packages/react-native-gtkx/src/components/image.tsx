@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs"
 import { useEffect, useRef } from "react"
 import type { StyleProp } from "../contracts"
-import { Gtk, GtkPicture } from "../gtkx/bridge/index"
+import { Gdk, Gtk, GtkPicture } from "../gtkx/bridge/index"
 import { isRemoteUri, loadRemoteImage } from "./image-loader"
 import { useLayoutChild, type LayoutEvent } from "./use-layout-child"
 
@@ -30,9 +30,11 @@ const toPath = (source: ImageSource): string => {
 }
 
 // Local files load synchronously; http(s) URIs download through the
-// on-disk cache (image-loader.ts) and set the picture when ready. Sizing
-// comes from the style (width/height or flex) — like RN, which also cannot
-// infer remote image sizes synchronously.
+// on-disk cache (image-loader.ts) and set the picture when ready. The
+// texture is decoded explicitly (Gdk.Texture throws on unsupported
+// formats — e.g. ICO favicons), so onError is honest instead of showing
+// an empty picture. Sizing comes from the style (width/height or flex) —
+// like RN, which also cannot infer remote image sizes synchronously.
 export const Image = ({
   source,
   style,
@@ -52,15 +54,28 @@ export const Image = ({
     if (!widget) {
       return
     }
+    const show = (file: string): void => {
+      const target = widgetRef.current
+      if (!target) {
+        return
+      }
+      try {
+        // Decode explicitly: setFilename fails silently on formats the
+        // texture loader does not support, newFromFilename throws.
+        target.setPaintable(Gdk.Texture.newFromFilename(file))
+        onLoad?.()
+      } catch (error) {
+        onError?.({ nativeEvent: { error: String(error) } })
+      }
+    }
     if (isRemoteUri(path)) {
       let cancelled = false
       loadRemoteImage(path).then(
         (file) => {
           // Unmount (or a source change) during the download must not touch
           // the widget or fire stale callbacks.
-          if (!cancelled && widgetRef.current) {
-            widgetRef.current.setFilename(file)
-            onLoad?.()
+          if (!cancelled) {
+            show(file)
           }
         },
         (error: unknown) => {
@@ -77,8 +92,7 @@ export const Image = ({
       onError?.({ nativeEvent: { error: `Image not found: ${path}` } })
       return
     }
-    widget.setFilename(path)
-    onLoad?.()
+    show(path)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path])
 
