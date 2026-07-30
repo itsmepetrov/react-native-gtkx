@@ -1,6 +1,6 @@
 # hello-react-native-gtkx
 
-A minimal application built on the pure React Native API (`View`, `Text`, `StyleSheet`) that runs as a native GNOME application: rendering is done with real GTK4/Adwaita widgets via [react-native-gtkx](https://github.com/…/react-native-gtkx).
+A minimal application built on the pure React Native API (`View`, `Text`, `StyleSheet`) that runs as a native GNOME application: rendering is done with real GTK4/Adwaita widgets via [react-native-gtkx](https://github.com/itsmepetrov/react-native-gtkx).
 
 ## Requirements
 
@@ -10,7 +10,7 @@ A minimal application built on the pure React Native API (`View`, `Text`, `Style
 ## Quick start
 
 ```bash
-npx degit <owner>/react-native-gtkx/template my-app
+npx degit itsmepetrov/react-native-gtkx/template my-app
 cd my-app
 npm install
 npm run dev     # application window + Fast Refresh: edits to src/App.tsx show up without a restart
@@ -24,20 +24,6 @@ npm start       # node dist/bundle.js
 ```
 
 > ⏱ "Install to window" measurement in a clean Ubuntu 26.04 container (system dependencies preinstalled): **63 seconds** (npm install + gtkx build + launch; measured 2026-07-29).
-
-## ⚠️ Until the packages are published
-
-`react-native-gtkx@0.1.0` is not on npm yet. Until it is published, wire it up from a monorepo clone by replacing the version with a `file:` reference in `package.json`:
-
-```json
-{
-  "dependencies": {
-    "react-native-gtkx": "file:../react-native-gtkx/packages/react-native-gtkx"
-  }
-}
-```
-
-(the path is relative to your project; run `npm install` after editing).
 
 ## How it works
 
