@@ -38,6 +38,8 @@ export type FlatListProps<T> = Omit<ScrollViewProps, "children"> & {
   getItemLayout?: (data: readonly T[], index: number) => ItemLayout
   windowSize?: number
   initialNumToRender?: number
+  maxToRenderPerBatch?: number
+  updateCellsBatchingPeriod?: number
   extraData?: unknown
   inverted?: boolean
   refreshing?: boolean

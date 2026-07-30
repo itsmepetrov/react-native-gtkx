@@ -88,6 +88,12 @@ export type VirtualizedListProps<T> = Omit<ScrollViewProps, "children"> & {
   // default is 11 — see the note on DEFAULT_WINDOW_SIZE.
   windowSize?: number
   initialNumToRender?: number
+  // RN batching pair. Rows OUTSIDE the visible area are mounted at most
+  // `maxToRenderPerBatch` per pass, one pass every `updateCellsBatchingPeriod`
+  // ms, so a flick or a long jump spreads its mounts over frames instead of
+  // stalling one. The visible rows never wait for a batch.
+  maxToRenderPerBatch?: number
+  updateCellsBatchingPeriod?: number
   extraData?: unknown
   // RN inverted semantics: the list opens at the START of the data (visually
   // at the far end — a chat's latest message sits at the bottom), and
@@ -173,6 +179,8 @@ const VirtualizedListInner = forwardRef(
       getItemLayout,
       windowSize = DEFAULT_WINDOW_SIZE,
       initialNumToRender = 10,
+      maxToRenderPerBatch = 10,
+      updateCellsBatchingPeriod = 50,
       extraData,
       inverted = false,
       refreshing = false,
@@ -268,11 +276,17 @@ const VirtualizedListInner = forwardRef(
       first: 0,
       last: Math.min(count, initialNumToRender) - 1,
     }))
+    // Mirror of `range` for event-time math: several scroll events (and a
+    // batch timer) can run before React re-renders, and each needs the range
+    // the previous one asked for, not the one currently rendered.
+    const rangeRef = useRef(range)
+    const batchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+    // The batch timer must call the LATEST closure (offsets/data may change).
+    const updateRangeRef = useRef<() => void>(() => {})
 
-    const updateRange = (): void => {
-      perfCount("vl.updateRange")
-      const overscan = Math.max(1, (windowSize - 1) / 2) * viewportH.current
-      // Window in visual (scroll) coordinates.
+    // Index range covering the visual window grown by `overscan` px on both
+    // sides (0 → exactly the visible rows).
+    const rangeFor = (overscan: number): { first: number; last: number } => {
       let start = scrollY.current - overscan
       let end = scrollY.current + viewportH.current + overscan
       if (inverted) {
@@ -282,16 +296,85 @@ const VirtualizedListInner = forwardRef(
         const extent = offsets[count]!
         ;[start, end] = [extent - end, extent - start]
       }
-      const first = indexAt(offsets, Math.max(0, start))
-      const last = Math.min(count - 1, indexAt(offsets, end))
-      setRange((current) => {
-        if (current.first === first && current.last === last) {
-          return current
-        }
-        perfCount("vl.rangeChange")
-        return { first, last }
-      })
+      return {
+        first: indexAt(offsets, Math.max(0, start)),
+        last: Math.min(count - 1, indexAt(offsets, end)),
+      }
     }
+
+    const updateRange = (): void => {
+      perfCount("vl.updateRange")
+      const target = rangeFor(
+        Math.max(1, (windowSize - 1) / 2) * viewportH.current,
+      )
+      const current = rangeRef.current
+      // MOUNT BUDGET (RN maxToRenderPerBatch). A flick or a scrollToOffset
+      // moves the offset by whole viewports in a single frame, so the target
+      // window can be an almost entirely new set of rows — mounting it in one
+      // go is a burst of cell mounts + Yoga reflow + GTK allocate that shows
+      // up as a visible mid-flick stall (docs/research/scroll-performance.md).
+      // The VISIBLE rows are always mounted at once (a blank row is worse than
+      // a late one); the overscan beyond them fills in over the following
+      // batches.
+      const visible = rangeFor(0)
+      const reusable =
+        current.last >= target.first && current.first <= target.last
+      // Keep what is both mounted and still wanted, always covering the
+      // visible rows; after a teleport nothing is reusable and the visible
+      // rows are the whole starting window.
+      let first = reusable
+        ? Math.min(Math.max(current.first, target.first), visible.first)
+        : visible.first
+      let last = reusable
+        ? Math.max(Math.min(current.last, target.last), visible.last)
+        : visible.last
+      // Rows the visible set already costs this pass count against the batch:
+      // after a teleport they ARE the batch.
+      const kept = reusable
+        ? Math.max(
+            0,
+            Math.min(last, current.last) - Math.max(first, current.first) + 1,
+          )
+        : 0
+      let budget = Math.max(0, maxToRenderPerBatch - (last - first + 1 - kept))
+      while (budget > 0 && (first > target.first || last < target.last)) {
+        if (last < target.last) {
+          last += 1
+          budget -= 1
+        }
+        if (budget > 0 && first > target.first) {
+          first -= 1
+          budget -= 1
+        }
+      }
+      if (first !== current.first || last !== current.last) {
+        perfCount("vl.rangeChange")
+        rangeRef.current = { first, last }
+        setRange({ first, last })
+      }
+      // Still short of the full window: continue on the next batch tick.
+      if (first > target.first || last < target.last) {
+        perfCount("vl.rangePending")
+        if (batchTimer.current === null) {
+          batchTimer.current = setTimeout(() => {
+            batchTimer.current = null
+            updateRangeRef.current()
+          }, updateCellsBatchingPeriod)
+        }
+      }
+    }
+    useLayoutEffect(() => {
+      updateRangeRef.current = updateRange
+    })
+
+    useEffect(() => {
+      return () => {
+        if (batchTimer.current !== null) {
+          clearTimeout(batchTimer.current)
+          batchTimer.current = null
+        }
+      }
+    }, [])
 
     // Clamp a scroll target to the valid range of the axis.
     const clampOffset = (target: number): number => {
