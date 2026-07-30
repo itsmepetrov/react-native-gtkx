@@ -6,14 +6,27 @@
 # than a version bump. So: monthly, grouped, and scoped to what we actually
 # ship.
 #
-# SECURITY UPDATES ARE NOT AFFECTED BY ANY OF THIS. Dependabot security
-# updates are driven by Dependabot alerts, not by the schedule below, and they
-# open PRs as soon as an advisory lands — the `schedule`, `cooldown` and
-# `open-pull-requests-limit` keys here only govern version updates. `ignore`
-# rules do apply to security updates, which is why nothing below ignores a
-# package outright except @gtkx/*, and why `exclude-paths` is safe: it
-# suppresses version updates only, so an advisory affecting an example app
-# still surfaces as an alert.
+# NOTHING BELOW TURNS SECURITY UPDATES OFF, but nothing below turns them on
+# either. Security updates are driven by Dependabot alerts, which are a
+# repository setting, not a key in this file — and as of this commit they are
+# DISABLED for this repo (Settings > Advanced Security > Dependabot alerts,
+# or `gh api -X PUT repos/:owner/:repo/vulnerability-alerts` plus
+# `.../automated-security-fixes`). Until that is switched on, no advisory
+# reaches us through any channel.
+#
+# Once it is on, this file stays out of its way: `schedule`, `cooldown` and
+# `open-pull-requests-limit` govern version updates only, so an advisory still
+# opens a PR the day it lands. Two things here do reach security updates:
+#
+#   - `ignore` rules apply to security updates too. That is why the major-only
+#     ignores below are written as `update-types` rather than blanket entries —
+#     a patched minor still comes through. @gtkx/* is the one blanket ignore,
+#     and it is accepted knowingly: the rc is tracked by hand.
+#   - `exclude-paths` does NOT suppress security updates
+#     (dependabot/dependabot-core#14408). So examples/ is quiet for version
+#     churn but still audited. Worth knowing before enabling alerts: the
+#     react-native dependency tree in examples/rn-app is large, so the first
+#     run may open several PRs for code we do not ship.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -78,8 +91,7 @@ updates:
     ignore:
       # gtkx is pinned to an exact rc on purpose — upgrades are a deliberate,
       # reviewed exercise against the gtkx notes in docs/, not a version bump.
-      # This is the one blanket ignore here, and it does suppress security
-      # updates for @gtkx/* as well; the rc is tracked by hand.
+      # This is the one blanket ignore here; see the header for what that costs.
       - dependency-name: "@gtkx/*"
 
       # Majors below are ignored, not the packages themselves: patches and
