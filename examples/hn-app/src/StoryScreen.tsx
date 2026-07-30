@@ -257,6 +257,16 @@ const Comment = ({ id, depth, autoLimit }: CommentProps) => {
 }
 
 export const StoryScreen = ({ story }: { story: Story }) => {
+  // The comment tree starts fetching (and re-rendering) the moment it
+  // mounts — mid-push that competes with the slide animation for frames.
+  // Hold it until the transition is over; the story card renders instantly.
+  // (The platform-level fix is a transition-aware InteractionManager —
+  // navigation epic task.)
+  const [settled, setSettled] = useState(false)
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(true), 300)
+    return () => clearTimeout(timer)
+  }, [])
   const domain = extractDomain(story.url)
   // GTK has no ICO decoder, so real /favicon.ico files fire onError (see
   // docs/api.md) — Google's s2 endpoint serves PNG for any domain instead,
@@ -314,14 +324,20 @@ export const StoryScreen = ({ story }: { story: Story }) => {
             ? "No comments yet"
             : `Comments — ${formatComments(story.descendants)}`}
         </Text>
-        {kids.map((kid) => (
-          <Comment
-            key={kid}
-            id={kid}
-            depth={0}
-            autoLimit={AUTO_DEPTH}
-          />
-        ))}
+        {settled ? (
+          kids.map((kid) => (
+            <Comment
+              key={kid}
+              id={kid}
+              depth={0}
+              autoLimit={AUTO_DEPTH}
+            />
+          ))
+        ) : kids.length > 0 ? (
+          <View style={styles.loading}>
+            <ActivityIndicator />
+          </View>
+        ) : null}
       </ScrollView>
     </View>
   )
