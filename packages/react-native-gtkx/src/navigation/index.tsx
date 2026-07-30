@@ -23,6 +23,7 @@ import {
   type StackNavigationState,
 } from "@react-navigation/native"
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
+import { getActiveChrome } from "../components/app-registry"
 import { NestedRoot } from "../components/root"
 import {
   AdwHeaderBar,
@@ -32,7 +33,14 @@ import {
   GtkButton,
   type Adw,
 } from "../gtkx/bridge/index"
+import { warnIgnoredOptions } from "./option-warnings"
 import type { HeaderButton } from "./sidebar"
+
+const STACK_OPTION_KEYS: ReadonlySet<string> = new Set([
+  "title",
+  "headerShown",
+  "headerButtons",
+])
 
 export type StackNavigationOptions = {
   /** HeaderBar title; defaults to the route name. */
@@ -74,6 +82,30 @@ const StackNavigator = ({
     })
 
   const viewRef = useRef<Adw.NavigationView | null>(null)
+
+  useEffect(() => {
+    for (const route of state.routes) {
+      const descriptor = descriptors[route.key] as StackDescriptor | undefined
+      if (descriptor) {
+        warnIgnoredOptions(
+          "createStackNavigator",
+          descriptor.options,
+          STACK_OPTION_KEYS,
+        )
+      }
+    }
+  }, [state, descriptors])
+
+  useEffect(() => {
+    if (
+      process.env.NODE_ENV !== "production" &&
+      getActiveChrome() === "system"
+    ) {
+      console.warn(
+        '[react-native-gtkx/navigation] the app runs with the default window chrome — pages bring their own HeaderBars, so you will see a doubled titlebar. Pass chrome: "content" to AppRegistry.runApplication.',
+      )
+    }
+  }, [])
   // Mirror of the view's visible stack (route keys), maintained by the sync
   // effect and by the popped handler — the two never race: GTK signals run
   // synchronously inside the very push/pop calls the effect makes.

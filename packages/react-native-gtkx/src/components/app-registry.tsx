@@ -13,6 +13,12 @@ type ComponentProvider = () => ComponentType<Record<string, unknown>>
 
 const registry = new Map<string, ComponentProvider>()
 
+// The chrome the running app was started with — read by the navigation
+// dev-mode hint (a HeaderBar page under "system" chrome renders a doubled
+// titlebar). null until runApplication ran (test harnesses never set it).
+let activeChrome: "system" | "content" | null = null
+export const getActiveChrome = (): "system" | "content" | null => activeChrome
+
 export type RunApplicationParams = {
   initialProps?: Record<string, unknown>
   title?: string
@@ -119,6 +125,7 @@ export const AppRegistry = {
     const height = params.height ?? 600
 
     const contentChrome = params.chrome === "content"
+    activeChrome = contentChrome ? "content" : "system"
     const Window = contentChrome ? AdwApplicationWindow : GtkApplicationWindow
     const AppWindow = () => (
       <Window

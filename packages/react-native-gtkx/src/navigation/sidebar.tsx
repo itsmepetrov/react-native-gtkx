@@ -18,6 +18,7 @@ import {
   type TabNavigationState,
 } from "@react-navigation/native"
 import { useEffect, useRef, type ReactNode } from "react"
+import { getActiveChrome } from "../components/app-registry"
 import { NestedRoot } from "../components/root"
 import {
   AdwHeaderBar,
@@ -31,6 +32,9 @@ import {
   GtkListBoxRow,
   GtkScrolledWindow,
 } from "../gtkx/bridge/index"
+import { warnIgnoredOptions } from "./option-warnings"
+
+const SIDEBAR_OPTION_KEYS: ReadonlySet<string> = new Set(["title"])
 
 export type SidebarNavigationOptions = {
   /** Sidebar row and content HeaderBar title; defaults to the route name. */
@@ -83,6 +87,30 @@ const SidebarNavigator = ({
     })
 
   const listRef = useRef<Gtk.ListBox | null>(null)
+
+  useEffect(() => {
+    for (const route of state.routes) {
+      const descriptor = descriptors[route.key] as SidebarDescriptor | undefined
+      if (descriptor) {
+        warnIgnoredOptions(
+          "createSidebarNavigator",
+          descriptor.options,
+          SIDEBAR_OPTION_KEYS,
+        )
+      }
+    }
+  }, [state, descriptors])
+
+  useEffect(() => {
+    if (
+      process.env.NODE_ENV !== "production" &&
+      getActiveChrome() === "system"
+    ) {
+      console.warn(
+        '[react-native-gtkx/navigation] the app runs with the default window chrome — the split view brings its own HeaderBars, so you will see a doubled titlebar. Pass chrome: "content" to AppRegistry.runApplication.',
+      )
+    }
+  }, [])
 
   // State → native selection (initial mount and programmatic navigation).
   useEffect(() => {

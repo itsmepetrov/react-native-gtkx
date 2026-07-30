@@ -73,6 +73,10 @@ import {
   NavigationContainer,
 } from "react-native-gtkx/navigation"
 
+// Run the app with chrome: "content" — the navigator's HeaderBars ARE the
+// window chrome (the default system chrome would add a second titlebar):
+// AppRegistry.runApplication(name, { ..., chrome: "content" })
+
 const Stack = createStackNavigator()
 
 const App = () => (
