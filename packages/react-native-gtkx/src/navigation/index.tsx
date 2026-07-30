@@ -22,7 +22,7 @@ import {
   type ParamListBase,
   type StackNavigationState,
 } from "@react-navigation/native"
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { NestedRoot } from "../components/root"
 import {
   AdwHeaderBar,
@@ -94,17 +94,21 @@ const StackNavigator = ({
     // in renderedKeys within the same commit its page is pushed.
     setRenderedKeys([...renderedKeys, ...missingKeys])
   }
-  const snapshotRef = useRef(
-    new Map<
-      string,
-      { name: string; options: StackNavigationOptions; element: ReactNode }
-    >(),
+  // A state-held stable Map (not a ref): the render path reads it for
+  // closing pages, and the react-hooks/refs rule rightly bans render-time
+  // ref reads.
+  const [snapshots] = useState(
+    () =>
+      new Map<
+        string,
+        { name: string; options: StackNavigationOptions; element: ReactNode }
+      >(),
   )
   useEffect(() => {
     for (const route of state.routes) {
       const descriptor = descriptors[route.key] as StackDescriptor | undefined
       if (descriptor) {
-        snapshotRef.current.set(route.key, {
+        snapshots.set(route.key, {
           name: route.name,
           options: descriptor.options,
           element: <NestedRoot>{descriptor.render()}</NestedRoot>,
@@ -113,23 +117,29 @@ const StackNavigator = ({
     }
   })
 
-  const handleHidden = (key: string): void => {
-    // "hidden" also fires for a live page covered by a push — only pages
-    // gone from state are actually closing.
-    if (navigation.getState().routes.some((route) => route.key === key)) {
-      return
-    }
-    snapshotRef.current.delete(key)
-    setRenderedKeys((keys) => keys.filter((rendered) => rendered !== key))
-  }
+  const handleHidden = useCallback(
+    (key: string): void => {
+      // "hidden" also fires for a live page covered by a push — only pages
+      // gone from state are actually closing.
+      if (navigation.getState().routes.some((route) => route.key === key)) {
+        return
+      }
+      snapshots.delete(key)
+      setRenderedKeys((keys) => keys.filter((rendered) => rendered !== key))
+    },
+    [navigation, snapshots],
+  )
 
   // "hidden" delivery is not guaranteed in every environment (headless
   // compositors with animations disabled never emit it) — a timer slightly
   // longer than the Adwaita transition is the fallback; handleHidden is
   // idempotent, whichever fires first wins.
-  const scheduleRetainedRemoval = (key: string): void => {
-    setTimeout(() => handleHidden(key), 400)
-  }
+  const scheduleRetainedRemoval = useCallback(
+    (key: string): void => {
+      setTimeout(() => handleHidden(key), 400)
+    },
+    [handleHidden],
+  )
 
   useEffect(() => {
     const view = viewRef.current
@@ -179,7 +189,7 @@ const StackNavigator = ({
       syncedRef.current.push(key)
       view.pushByTag(key)
     }
-  }, [state])
+  }, [state, scheduleRetainedRemoval])
 
   // `navigation` is identity-stable across renders (react-navigation
   // builder contract) and getState() always reads the live state — the
@@ -209,7 +219,7 @@ const StackNavigator = ({
           const descriptor = route
             ? (descriptors[key] as StackDescriptor | undefined)
             : undefined
-          const snapshot = snapshotRef.current.get(key)
+          const snapshot = snapshots.get(key)
           const options = descriptor?.options ?? snapshot?.options ?? {}
           const headerShown = options.headerShown ?? true
           const content = descriptor ? (
