@@ -429,13 +429,30 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       if (!widget) {
         return
       }
+      const vadjustment = widget.getVadjustment()
+      let lastValue = vadjustment?.getValue() ?? 0
+      // Frames to keep requeueing after the last observed move. The scrolled
+      // window's own kinetic tick may run AFTER ours, so this tick's read can
+      // be one frame stale: without the grace window the first frame of a
+      // deceleration (its value change lands after our read) would miss its
+      // correction. Kinetic deceleration changes the value every frame, so
+      // three frames of slack cover the handoff at both ends of the motion.
+      const graceFrames = 3
+      let remaining = graceFrames
       const id = widget.addTickCallback(() => {
-        // Unconditionally, every frame: the scrolled window's own kinetic
-        // tick may run AFTER ours, so comparing values here can miss the
-        // frame's final offset. The allocation itself reads the adjustment
-        // in the LAYOUT phase — always after every update-phase mutation —
-        // so queuing each frame guarantees a same-frame correction.
         perfCount("sticky.ticks")
+        const value = vadjustment?.getValue() ?? 0
+        if (value !== lastValue) {
+          lastValue = value
+          remaining = graceFrames
+        } else if (remaining > 0) {
+          remaining -= 1
+        } else {
+          // At rest: the pin is already correct and nothing translated it,
+          // so an allocation pass per frame would be pure idle cost.
+          return true
+        }
+        perfCount("sticky.queues")
         const content = contentRef.current
         if (content) {
           queueAllocate(content)
