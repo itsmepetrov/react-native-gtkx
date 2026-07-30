@@ -82,6 +82,32 @@ it("keeps live widgets bounded by the window", async () => {
   )
   const label = screen.getByText("Item 1") as unknown as Gtk.Widget
   const content = label.getParent()!.getParent()!
+  // At the top of the list only the downward overscan applies: the desktop
+  // default windowSize 11 spans 5 viewports below (5 × 500 px) plus the
+  // visible one, ≈ 100 rows of 30 px — orders of magnitude below the 1000.
+  expect(childCount(content)).toBeLessThan(150)
+})
+
+it("a narrow windowSize keeps the mounted set correspondingly small", async () => {
+  const data = Array.from({ length: 1000 }, (_, i) => `Item ${i + 1}`)
+  await render(
+    <Root
+      width={400}
+      height={600}
+    >
+      <FlatList
+        style={{ height: 500 }}
+        data={data}
+        keyExtractor={(item) => item}
+        estimatedItemSize={30}
+        windowSize={5}
+        renderItem={({ item }) => <Text>{item}</Text>}
+      />
+    </Root>,
+  )
+  const label = screen.getByText("Item 1") as unknown as Gtk.Widget
+  const content = label.getParent()!.getParent()!
+  // windowSize 5 = two viewports below the visible one → ≈ 50 rows.
   expect(childCount(content)).toBeLessThan(60)
 })
 
@@ -252,6 +278,10 @@ it("inverted chat stays pinned to the newest message on prepend", async () => {
         style={{ height: 500 }}
         data={Array.from({ length: count }, (_, i) => `msg-${count - i}`)}
         inverted
+        // A 50-message chat is 2000 px — the default 11-viewport window would
+        // cover all of it, and the assertion below is about the OLDEST message
+        // staying unmounted while the view is pinned to the newest.
+        windowSize={5}
         keyExtractor={(item) => item}
         getItemLayout={(_d, index) => ({
           length: 40,

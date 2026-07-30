@@ -83,8 +83,9 @@ export type VirtualizedListProps<T> = Omit<ScrollViewProps, "children"> & {
   keyExtractor?: (item: T, index: number) => string
   estimatedItemSize?: number
   getItemLayout?: (data: readonly T[], index: number) => ItemLayout
-  // Overscan in viewport multiples (RN semantics, default 5: two viewports
-  // above, two below, one visible).
+  // Overscan in viewport multiples (RN semantics: `windowSize` viewports are
+  // mounted, one of them visible). RN's mobile default is 5; the desktop
+  // default is 11 — see the note on DEFAULT_WINDOW_SIZE.
   windowSize?: number
   initialNumToRender?: number
   extraData?: unknown
@@ -141,6 +142,14 @@ const indexAt = (offsets: number[], target: number): number => {
   return low
 }
 
+// Overscan default. RN ships 5 because a phone pays for mounted rows in
+// memory; a desktop app does not, and here the mounted set is what costs
+// frames: every window boundary crossing is a mount + Yoga reflow + GTK
+// allocate burst, so a WIDER window means fewer crossings per scrolled pixel.
+// Measured (docs/research/scroll-performance.md): 11 instead of 5 cuts
+// mount/unmount churn by ~21% and late frames from ~10/s to ~7.7/s.
+const DEFAULT_WINDOW_SIZE = 11
+
 // Perf: counts real React mounts/unmounts of windowed cells (rendered as a
 // null child inside each cell only when GTKX_PERF=1).
 const CellMountProbe = (): null => {
@@ -162,7 +171,7 @@ const VirtualizedListInner = forwardRef(
       keyExtractor,
       estimatedItemSize = 44,
       getItemLayout,
-      windowSize = 5,
+      windowSize = DEFAULT_WINDOW_SIZE,
       initialNumToRender = 10,
       extraData,
       inverted = false,

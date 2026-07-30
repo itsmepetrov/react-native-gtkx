@@ -365,10 +365,9 @@ const TopStoriesScreen = ({
         onRefresh={() => void refresh()}
         onEndReached={() => void loadMore()}
         onEndReachedThreshold={0.5}
-        // Desktop perf: more overscan means fewer window-boundary crossings
-        // per scrolled pixel (~20% less mount/unmount churn measured) — see
-        // docs/research/scroll-performance.md.
-        windowSize={11}
+        // windowSize is left at the platform default (11 on desktop — more
+        // overscan means fewer window-boundary crossings per scrolled pixel);
+        // see docs/research/scroll-performance.md before tuning it.
         ListEmptyComponent={
           refreshing ? null : (
             <View style={styles.footer}>
