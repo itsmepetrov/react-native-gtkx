@@ -4,9 +4,10 @@ import {
   perfBurst,
   perfCount,
   perfEnabled,
+  perfGauge,
   perfNow,
 } from "../perf"
-import { LayoutNode } from "./node"
+import { getLiveNodeCount, LayoutNode } from "./node"
 import { Direction } from "./yoga"
 
 export type ViewportSize = { width: number; height: number }
@@ -15,6 +16,21 @@ export type ViewportSize = { width: number; height: number }
 // invalidation) into a single Yoga pass per microtask, then walks the shadow
 // tree, diffs rects and fires commit (widget move) + onLayout callbacks only
 // for nodes whose rect actually changed.
+//
+// The commit walk is INCREMENTAL: it descends only where this pass can have
+// changed something, so a small mutation inside a large stable shell costs
+// O(changed) instead of O(all nodes). Two signals drive the descent, and both
+// are needed:
+//   - Yoga's per-node `hasNewLayout` flag, which Yoga sets on every node it
+//     actually laid out. It covers the nodes a dirty set cannot know about:
+//     mutating one child re-lays out its FOLLOWING SIBLINGS (they shift) and
+//     any ancestor whose size followed, while untouched subtrees keep their
+//     cached layout — and their rects are parent-relative, so an unvisited
+//     subtree of a moved container is genuinely unchanged.
+//   - the engine's own dirty set (which node each mutation came from), which
+//     covers commits Yoga's flag does not imply: a re-measured leaf whose rect
+//     is identical still has to recommit, because measuring reset its widget
+//     size request.
 export class LayoutEngine {
   readonly root: LayoutNode
 
@@ -22,6 +38,13 @@ export class LayoutEngine {
   private dirty = false
   private scheduled = false
   private disposed = false
+  // Nodes mutated since the last flush (setStyle/insertChild/removeChild/
+  // markDirty/setMeasureFn). Cleared by every flush.
+  private dirtyNodes = new Set<LayoutNode>()
+  // Set when the engine is dirtied by something that is not a single node —
+  // a viewport change or a speculative measureContent pass, both of which can
+  // move anything — and for the first flush, where nothing has a rect yet.
+  private walkAll = true
 
   constructor(viewport: ViewportSize) {
     this.viewport = viewport
@@ -40,6 +63,7 @@ export class LayoutEngine {
       return
     }
     this.viewport = viewport
+    this.walkAll = true
     this.requestFlush()
   }
 
@@ -90,6 +114,9 @@ export class LayoutEngine {
         ? this.root.yoga.getComputedWidth()
         : this.root.yoga.getComputedHeight()
     this.dirty = true
+    // Speculative constraints may have re-measured leaves anywhere in the
+    // tree; the next real flush has to re-commit all of them.
+    this.walkAll = true
     return Math.ceil(size)
   }
 
@@ -99,10 +126,16 @@ export class LayoutEngine {
     }
     this.disposed = true
     this.freeTree(this.root)
+    this.dirtyNodes.clear()
   }
 
-  private requestFlush = (): void => {
+  private requestFlush = (node?: LayoutNode): void => {
     this.dirty = true
+    if (node === undefined) {
+      this.walkAll = true
+    } else {
+      this.dirtyNodes.add(node)
+    }
     if (this.scheduled || this.disposed) {
       return
     }
@@ -118,10 +151,21 @@ export class LayoutEngine {
   private commitTree(node: LayoutNode): void {
     const entries: Array<{ node: LayoutNode; rect: Rect; changed: boolean }> =
       []
-    this.collectChanges(node, entries)
+    const walkAll = this.walkAll
+    const visited = this.collectChanges(
+      node,
+      entries,
+      walkAll,
+      walkAll ? null : this.dirtyPath(),
+    )
+    // Mutations made by the callbacks below belong to the NEXT flush.
+    this.walkAll = false
+    this.dirtyNodes.clear()
     if (perfEnabled) {
       perfCount("engine.flushes")
       perfCount("engine.commits", entries.length)
+      perfCount("engine.visited", visited)
+      perfGauge("engine.nodes", getLiveNodeCount())
     }
     for (const entry of entries) {
       entry.node.notifyCommit(entry.rect)
@@ -134,17 +178,45 @@ export class LayoutEngine {
     }
   }
 
+  // Every dirty node plus its ancestors: the paths the walk must follow even
+  // where Yoga reports no new layout. Nodes already detached from the root
+  // (freed mid-tick) simply lead nowhere — the walk never reaches them.
+  private dirtyPath(): Set<LayoutNode> {
+    const path = new Set<LayoutNode>()
+    for (const node of this.dirtyNodes) {
+      let current: LayoutNode | null = node
+      while (current !== null && !path.has(current)) {
+        path.add(current)
+        current = current.parent
+      }
+    }
+    return path
+  }
+
+  // Returns the number of visited nodes (perf: the walk size per flush).
   private collectChanges(
     node: LayoutNode,
     out: Array<{ node: LayoutNode; rect: Rect; changed: boolean }>,
-  ): void {
+    walkAll: boolean,
+    path: Set<LayoutNode> | null,
+  ): number {
     const change = node.collectChange()
     if (change !== null) {
       out.push({ node, rect: change.rect, changed: change.changed })
     }
+    // Consume the flag: only nodes Yoga lays out again will raise it anew.
+    node.yoga.markLayoutSeen()
+    let visited = 1
     for (const child of node.children) {
-      this.collectChanges(child, out)
+      if (
+        walkAll ||
+        child.yoga.hasNewLayout() ||
+        (path !== null && path.has(child))
+      ) {
+        visited += this.collectChanges(child, out, walkAll, path)
+      }
     }
+    return visited
   }
 
   private freeTree(node: LayoutNode): void {

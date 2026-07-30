@@ -3,7 +3,9 @@ import { perfCount } from "../perf"
 import { applyLayoutStyle, applyNodeDefaults } from "./apply-style"
 import { createYogaNode, MEASURE_MODE, type YogaNode } from "./yoga"
 
-type DirtyListener = () => void
+// The engine records WHICH node was mutated so a flush can walk only the
+// dirty subtrees instead of the whole live tree.
+type DirtyListener = (node: LayoutNode) => void
 
 let liveNodeCount = 0
 
@@ -39,7 +41,7 @@ export class LayoutNode implements LayoutNodeApi {
       return
     }
     applyLayoutStyle(this.yoga, style)
-    this.onDirty()
+    this.onDirty(this)
   }
 
   setMeasureFn(measure: MeasureFn | null): void {
@@ -64,7 +66,7 @@ export class LayoutNode implements LayoutNodeApi {
       )
       this.hasMeasure = true
     }
-    this.onDirty()
+    this.onDirty(this)
   }
 
   markDirty(): void {
@@ -76,7 +78,7 @@ export class LayoutNode implements LayoutNodeApi {
     // Re-measuring resets the widget size request; even an unchanged rect
     // must recommit so the request is re-applied.
     this.forceCommit = true
-    this.onDirty()
+    this.onDirty(this)
   }
 
   getRect(): Rect | null {
@@ -104,7 +106,7 @@ export class LayoutNode implements LayoutNodeApi {
     child.parent = this
     this.children.splice(index, 0, child)
     this.yoga.insertChild(child.yoga, index)
-    this.onDirty()
+    this.onDirty(this)
   }
 
   removeChild(child: LayoutNode): void {
@@ -117,7 +119,7 @@ export class LayoutNode implements LayoutNodeApi {
     // Touching the wasm node of a freed parent corrupts the emscripten heap.
     if (!this.freed && !child.freed) {
       this.yoga.removeChild(child.yoga)
-      this.onDirty()
+      this.onDirty(this)
     }
   }
 
