@@ -1,0 +1,75 @@
+# Tag push (v*) → .deb packages of the example apps for amd64 + arm64,
+# attached to a GitHub Release. Runs in the same ubuntu:26.04 container as CI
+# (codegen needs GTK dev + introspection packages).
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  debs:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    container: ubuntu:26.04
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - name: System dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            libgtk-4-dev libadwaita-1-dev gobject-introspection \
+            libgirepository1.0-dev build-essential pkg-config python3 \
+            curl ca-certificates git
+      - name: Node 24
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
+          apt-get install -y nodejs
+      - uses: actions/checkout@v4
+      - name: Install and codegen
+        run: |
+          npm install
+          npm run codegen
+      - name: Build example apps
+        run: |
+          npm run build:dist
+          (cd examples/monitor && npm run build)
+          (cd examples/gallery && npm run build)
+      - name: Build debs
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          bash scripts/build-deb.sh monitor "System Monitor" "$VERSION" debs
+          bash scripts/build-deb.sh gallery "RN Gallery" "$VERSION" debs
+          ls -la debs/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: debs-${{ matrix.arch }}
+          path: debs/*.deb
+
+  release:
+    needs: debs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: debs
+          merge-multiple: true
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            debs/*.deb

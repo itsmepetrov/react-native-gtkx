@@ -1,0 +1,14 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      # gtkx is pinned to an exact rc — upgrades are deliberate, reviewed
+      # against the workaround catalog in docs/gtkx-rc1-vs-main.md.
+      - dependency-name: "@gtkx/*"
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

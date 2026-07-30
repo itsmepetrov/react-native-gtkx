@@ -14,26 +14,38 @@ jobs:
     env:
       DEBIAN_FRONTEND: noninteractive
     steps:
-      - uses: actions/checkout@v4
-      - name: System dependencies (GTK4 + headless X)
+      - name: System dependencies (GTK4 + introspection + headless Wayland)
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
-            libgtk-4-dev libadwaita-1-dev xvfb dbus dbus-x11 sway xwayland \
+            libgtk-4-dev libadwaita-1-dev gobject-introspection \
+            libgirepository1.0-dev sway xwayland dbus \
             build-essential pkg-config python3 curl ca-certificates git
       - name: Node 24
         run: |
           curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
           apt-get install -y nodejs
+      - uses: actions/checkout@v4
       - name: Install
         run: npm install
       - name: Codegen (gtkx bindings)
+        # npm install prunes the codegen store as extraneous, so codegen runs
+        # after it — same quirk as local development.
         run: npm run codegen
       - name: Typecheck
         run: npm run typecheck
       - name: Lint
         run: npm run lint
-      - name: Tests
-        run: npm test
-      - name: GTK component tests (headless Wayland)
-        run: npm run test:gtk
+      - name: Docs coverage
+        run: npm run docs:check
+      - name: Tests (unit + GTK components under headless sway)
+        # sway refuses to start as root, so the test step runs as a dedicated
+        # non-root user with its own XDG_RUNTIME_DIR.
+        run: |
+          useradd -m ci
+          chown -R ci:ci "$GITHUB_WORKSPACE"
+          install -d -m 700 -o ci -g ci /tmp/xdg
+          runuser -u ci -- env HOME=/home/ci XDG_RUNTIME_DIR=/tmp/xdg GTK_A11Y=none \
+            npm test
+      - name: Package check (build:dist + are-the-types-wrong)
+        run: runuser -u ci -- env HOME=/home/ci npm run check:package
