@@ -19,10 +19,19 @@ import {
   StackActions,
   StackRouter,
   useNavigationBuilder,
+  type NavigationProp,
   type ParamListBase,
+  type RouteProp,
   type StackNavigationState,
 } from "@react-navigation/native"
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentType,
+  type ReactNode,
+} from "react"
 import { getActiveChrome } from "../components/app-registry"
 import { NestedRoot } from "../components/root"
 import {
@@ -294,12 +303,65 @@ const StackNavigator = ({
   )
 }
 
-export const createStackNavigator = createNavigatorFactory(StackNavigator)
+// ---- typed factory --------------------------------------------------------
+// The upstream createNavigatorFactory returns `any` — mirroring the typed
+// wrapper pattern of native-stack gives Screen configs, options and screen
+// props real types without changing runtime behavior.
+
+export type StackNavigationHelpers<
+  ParamList extends ParamListBase = ParamListBase,
+  RouteName extends keyof ParamList = keyof ParamList,
+> = NavigationProp<
+  ParamList,
+  RouteName,
+  undefined,
+  StackNavigationState<ParamList>,
+  StackNavigationOptions
+>
+
+export type StackScreenProps<
+  ParamList extends ParamListBase = ParamListBase,
+  RouteName extends keyof ParamList = keyof ParamList,
+> = {
+  route: RouteProp<ParamList, RouteName>
+  navigation: StackNavigationHelpers<ParamList, RouteName>
+}
+
+export type StackScreenConfig<
+  ParamList extends ParamListBase,
+  RouteName extends keyof ParamList,
+> = {
+  name: RouteName
+  component: ComponentType<StackScreenProps<ParamList, RouteName>>
+  options?:
+    | StackNavigationOptions
+    | ((
+        props: StackScreenProps<ParamList, RouteName>,
+      ) => StackNavigationOptions)
+  initialParams?: Partial<ParamList[RouteName]>
+}
+
+export type TypedStackNavigator<ParamList extends ParamListBase> = {
+  Navigator: ComponentType<StackNavigatorProps>
+  Screen: <RouteName extends keyof ParamList>(
+    props: StackScreenConfig<ParamList, RouteName>,
+  ) => null
+}
+
+const stackFactory = createNavigatorFactory(StackNavigator)
+
+export const createStackNavigator = <
+  ParamList extends ParamListBase = ParamListBase,
+>(): TypedStackNavigator<ParamList> =>
+  stackFactory() as TypedStackNavigator<ParamList>
 
 export {
   createSidebarNavigator,
   type HeaderButton,
   type SidebarNavigationOptions,
+  type SidebarScreenConfig,
+  type SidebarScreenProps,
+  type TypedSidebarNavigator,
 } from "./sidebar"
 
 // The rest of the react-navigation surface apps need, so a linux app can

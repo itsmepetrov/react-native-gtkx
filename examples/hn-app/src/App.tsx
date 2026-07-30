@@ -17,6 +17,7 @@ import {
 import {
   createStackNavigator,
   NavigationContainer,
+  type StackScreenProps,
 } from "react-native-gtkx/navigation"
 import { fetchTopStories, type Story } from "./api"
 import { extractDomain, formatAge, formatComments, formatScore } from "./format"
@@ -167,13 +168,14 @@ const StoryCard = ({
   )
 }
 
-type StackNavigation = {
-  navigate: (name: string, params?: StoryParams) => void
-  goBack: () => void
-  setOptions: (options: Record<string, unknown>) => void
+type RootStackParamList = {
+  "Top Stories": undefined
+  Story: StoryParams
 }
 
-const TopStoriesScreen = ({ navigation }: { navigation: StackNavigation }) => {
+const TopStoriesScreen = ({
+  navigation,
+}: StackScreenProps<RootStackParamList, "Top Stories">) => {
   const [stories, setStories] = useState<Story[]>([])
   const [refreshing, setRefreshing] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -360,7 +362,7 @@ const TopStoriesScreen = ({ navigation }: { navigation: StackNavigation }) => {
   )
 }
 
-const Stack = createStackNavigator()
+const Stack = createStackNavigator<RootStackParamList>()
 
 // Deep links resolve through react-navigation's linking layer; on desktop
 // Linking.getInitialURL is null today, so the config simply proves the

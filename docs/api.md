@@ -107,6 +107,9 @@ const App = () => (
   Navigator prop `headerButtons` packs declarative native buttons into the
   content HeaderBar end (`{id, icon, tooltip, onPress}`, `icon` is an
   Adwaita symbolic name) — the gallery's color-scheme toggle uses it.
+- The factories are typed: `createStackNavigator<ParamList>()` gives
+  typed `Screen` configs and `StackScreenProps<ParamList, Route>` for
+  screen components (`SidebarScreenProps` likewise).
 - `useNavigation`, `useRoute`, `useFocusEffect`, `useIsFocused`,
   `useNavigationContainerRef`, `CommonActions`, `StackActions` and
   `NavigationContainer` are re-exported — one import site for linux apps.

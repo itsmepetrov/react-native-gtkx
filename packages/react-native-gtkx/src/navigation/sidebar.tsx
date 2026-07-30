@@ -14,10 +14,12 @@ import {
   TabActions,
   TabRouter,
   useNavigationBuilder,
+  type NavigationProp,
   type ParamListBase,
+  type RouteProp,
   type TabNavigationState,
 } from "@react-navigation/native"
-import { useEffect, useRef, type ReactNode } from "react"
+import { useEffect, useRef, type ComponentType, type ReactNode } from "react"
 import { getActiveChrome } from "../components/app-registry"
 import { NestedRoot } from "../components/root"
 import {
@@ -212,4 +214,40 @@ const SidebarNavigator = ({
   )
 }
 
-export const createSidebarNavigator = createNavigatorFactory(SidebarNavigator)
+export type SidebarScreenProps<
+  ParamList extends ParamListBase = ParamListBase,
+  RouteName extends keyof ParamList = keyof ParamList,
+> = {
+  route: RouteProp<ParamList, RouteName>
+  navigation: NavigationProp<
+    ParamList,
+    RouteName,
+    undefined,
+    TabNavigationState<ParamList>,
+    SidebarNavigationOptions
+  >
+}
+
+export type SidebarScreenConfig<
+  ParamList extends ParamListBase,
+  RouteName extends keyof ParamList,
+> = {
+  name: RouteName
+  component: ComponentType<SidebarScreenProps<ParamList, RouteName>>
+  options?: SidebarNavigationOptions
+  initialParams?: Partial<ParamList[RouteName]>
+}
+
+export type TypedSidebarNavigator<ParamList extends ParamListBase> = {
+  Navigator: ComponentType<SidebarNavigatorProps>
+  Screen: <RouteName extends keyof ParamList>(
+    props: SidebarScreenConfig<ParamList, RouteName>,
+  ) => null
+}
+
+const sidebarFactory = createNavigatorFactory(SidebarNavigator)
+
+export const createSidebarNavigator = <
+  ParamList extends ParamListBase = ParamListBase,
+>(): TypedSidebarNavigator<ParamList> =>
+  sidebarFactory() as TypedSidebarNavigator<ParamList>
