@@ -72,6 +72,49 @@ describe("LayoutEngine", () => {
     engine.dispose()
   })
 
+  // The incremental walk must not confuse "not mutated" with "not moved":
+  // resizing one child shifts the siblings after it, and resizing a container
+  // resizes its stretched children. Neither of those nodes is ever passed to
+  // setStyle, so only Yoga knows their layout changed.
+  it("commits nodes Yoga moved without them being touched", async () => {
+    const engine = new LayoutEngine(VIEWPORT)
+    const first = engine.createNode()
+    const second = engine.createNode()
+    const inner = engine.createNode()
+    engine.root.insertChild(first, 0)
+    engine.root.insertChild(second, 1)
+    second.insertChild(inner, 0)
+    first.setStyle({ width: 100, height: 20 })
+    second.setStyle({ width: 100, height: 40 })
+    inner.setStyle({ height: 10 })
+    await nextMicrotask()
+    expect(second.getRect()).toEqual({ x: 0, y: 20, width: 100, height: 40 })
+    expect(inner.getRect()).toEqual({ x: 0, y: 0, width: 100, height: 10 })
+
+    const secondCommits = vi.fn()
+    const innerCommits = vi.fn()
+    second.setCommit(secondCommits)
+    inner.setCommit(innerCommits)
+    secondCommits.mockClear()
+    innerCommits.mockClear()
+
+    // The sibling BELOW the resized one shifts down; its own subtree keeps its
+    // parent-relative geometry and must stay untouched.
+    first.setStyle({ width: 100, height: 50 })
+    await nextMicrotask()
+    expect(second.getRect()).toEqual({ x: 0, y: 50, width: 100, height: 40 })
+    expect(secondCommits).toHaveBeenCalledTimes(1)
+    expect(innerCommits).not.toHaveBeenCalled()
+
+    // Padding on the container squeezes the stretched child: the child moved
+    // and shrank without anyone styling it.
+    second.setStyle({ width: 100, height: 40, paddingLeft: 12 })
+    await nextMicrotask()
+    expect(inner.getRect()).toEqual({ x: 12, y: 0, width: 88, height: 10 })
+    expect(innerCommits).toHaveBeenCalledTimes(1)
+    engine.dispose()
+  })
+
   it("fires onLayout after first pass with parent-relative coords, then only on change", async () => {
     const engine = new LayoutEngine(VIEWPORT)
     const parent = engine.createNode()
