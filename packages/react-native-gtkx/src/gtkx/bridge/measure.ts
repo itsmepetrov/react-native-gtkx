@@ -1,4 +1,5 @@
 import * as Gtk from "@gtkx/gi/gtk"
+import { perfAddTime, perfEnabled, perfNow } from "../../perf"
 
 export type MeasureOrientation = "horizontal" | "vertical"
 
@@ -23,7 +24,11 @@ export const measureWidget = (
       ? Gtk.Orientation.HORIZONTAL
       : Gtk.Orientation.VERTICAL
   const constraint = forSize > 0 ? Math.floor(forSize) : -1
+  const start = perfEnabled ? perfNow() : 0
   const [minimum, natural] = widget.measure(gtkOrientation, constraint)
+  if (perfEnabled) {
+    perfAddTime("gtk.measure", perfNow() - start)
+  }
   return { minimum: toNumber(minimum), natural: toNumber(natural) }
 }
 

@@ -19,6 +19,14 @@ import {
   queueResize,
   useSignal,
 } from "../gtkx/bridge/index"
+import {
+  ensurePerfReporter,
+  perfAddTime,
+  perfCount,
+  perfEnabled,
+  perfFrameTick,
+  perfNow,
+} from "../perf"
 import { HostNodeContext } from "./host-node"
 import { deferDuringAllocate, setStoredOffset } from "./rect-store"
 import {
@@ -375,7 +383,17 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       ? (scrolled?.getHadjustment() ?? null)
       : (scrolled?.getVadjustment() ?? null)
     const onAdjustment = (): void => {
+      if (!perfEnabled) {
+        emitScroll()
+        return
+      }
+      // Perf: full wall time of one scroll tick's JS work — the FFI reads in
+      // emitScroll plus the app/VirtualizedList onScroll handler (windowing,
+      // viewability, endReached) — everything that blocks the GTK frame.
+      perfCount("scroll.events")
+      const start = perfNow()
       emitScroll()
+      perfAddTime("scroll.js", perfNow() - start)
     }
 
     // Content-size reports dedupe on the engine rect: "changed" also fires
@@ -417,6 +435,7 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
         // frame's final offset. The allocation itself reads the adjustment
         // in the LAYOUT phase — always after every update-phase mutation —
         // so queuing each frame guarantees a same-frame correction.
+        perfCount("sticky.ticks")
         const content = contentRef.current
         if (content) {
           queueAllocate(content)
@@ -427,6 +446,29 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
         widget.removeTickCallback(id)
       }
     }, [scrolled, hasSticky, horizontal])
+
+    // Perf: observe the GTK frame clock through a tick callback — the delta
+    // between consecutive ticks is the real frame interval (late frames show
+    // up directly). Note: registering a tick callback keeps the frame clock
+    // running, so idle seconds show ~60 ticks too; the reporter separates
+    // load by the accompanying counters.
+    useLayoutEffect(() => {
+      if (!perfEnabled) {
+        return
+      }
+      ensurePerfReporter()
+      const widget = scrolled
+      if (!widget) {
+        return
+      }
+      const id = widget.addTickCallback(() => {
+        perfFrameTick(perfNow())
+        return true
+      })
+      return () => {
+        widget.removeTickCallback(id)
+      }
+    }, [scrolled])
     useSignal(adjustment, "value-changed", onAdjustment)
     // Both axes report into the same handler — RN's callback carries both
     // dimensions no matter which one moved.

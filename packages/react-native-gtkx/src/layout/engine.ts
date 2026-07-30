@@ -1,4 +1,5 @@
 import type { Rect } from "../contracts"
+import { perfAddTime, perfCount, perfEnabled, perfNow } from "../perf"
 import { LayoutNode } from "./node"
 import { Direction } from "./yoga"
 
@@ -47,12 +48,19 @@ export class LayoutEngine {
       return
     }
     this.dirty = false
+    const start = perfEnabled ? perfNow() : 0
     this.root.yoga.calculateLayout(
       this.viewport.width,
       this.viewport.height,
       Direction.LTR,
     )
+    if (perfEnabled) {
+      perfAddTime("engine.yoga", perfNow() - start)
+    }
     this.commitTree(this.root)
+    if (perfEnabled) {
+      perfAddTime("engine.flush", perfNow() - start)
+    }
   }
 
   // Intrinsic content size for measure vfuncs: lays the tree out WITHOUT
@@ -103,6 +111,10 @@ export class LayoutEngine {
     const entries: Array<{ node: LayoutNode; rect: Rect; changed: boolean }> =
       []
     this.collectChanges(node, entries)
+    if (perfEnabled) {
+      perfCount("engine.flushes")
+      perfCount("engine.commits", entries.length)
+    }
     for (const entry of entries) {
       entry.node.notifyCommit(entry.rect)
     }

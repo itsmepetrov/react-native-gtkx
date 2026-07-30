@@ -1,4 +1,5 @@
 import type { LayoutNodeApi, LayoutStyle, MeasureFn, Rect } from "../contracts"
+import { perfCount } from "../perf"
 import { applyLayoutStyle, applyNodeDefaults } from "./apply-style"
 import { createYogaNode, MEASURE_MODE, type YogaNode } from "./yoga"
 
@@ -30,6 +31,7 @@ export class LayoutNode implements LayoutNodeApi {
     applyNodeDefaults(this.yoga)
     this.onDirty = onDirty
     liveNodeCount += 1
+    perfCount("node.create")
   }
 
   setStyle(style: LayoutStyle): void {
@@ -173,5 +175,6 @@ export class LayoutNode implements LayoutNodeApi {
     this.freed = true
     this.yoga.free()
     liveNodeCount -= 1
+    perfCount("node.free")
   }
 }

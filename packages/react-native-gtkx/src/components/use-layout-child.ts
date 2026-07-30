@@ -18,6 +18,7 @@ import {
   queueResize,
   type Gtk,
 } from "../gtkx/bridge/index"
+import { perfAddTime, perfCount, perfEnabled, perfNow } from "../perf"
 import { useHostNode, type HostNode } from "./host-node"
 import {
   deferDuringAllocate,
@@ -31,6 +32,12 @@ export type LayoutEvent = {
     layout: { x: number; y: number; width: number; height: number }
   }
 }
+
+// Perf: sizeAllocate recurses synchronously into child containers, so a
+// naive per-pass timer double-counts nested passes. Track depth and time
+// only the outermost (top-level) allocate — that is the real wall time GTK
+// spends in OUR layout code for the frame.
+let perfAllocDepth = 0
 
 export type LayoutChildOptions = {
   style: StyleProp | undefined
@@ -237,8 +244,11 @@ export const useRnContainer = (
         )
       },
       allocate: (width, height) => {
+        const start = perfEnabled ? perfNow() : 0
+        perfAllocDepth += 1
         optionsRef.current?.beforeAllocate?.(width, height)
         let child = widget.getFirstChild()
+        let children = 0
         while (child) {
           const rect = getStoredRect(child)
           if (rect) {
@@ -250,8 +260,17 @@ export const useRnContainer = (
               rect.width,
               rect.height,
             )
+            children += 1
           }
           child = child.getNextSibling()
+        }
+        perfAllocDepth -= 1
+        if (perfEnabled) {
+          perfCount("gtk.allocPass")
+          perfCount("gtk.allocChild", children)
+          if (perfAllocDepth === 0) {
+            perfAddTime("gtk.allocTop", perfNow() - start)
+          }
         }
       },
     })

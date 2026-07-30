@@ -18,6 +18,7 @@ import {
   type ReactNode,
 } from "react"
 import type { StyleProp } from "../contracts"
+import { perfAddTime, perfCount, perfEnabled, perfNow } from "../perf"
 import { ActivityIndicator } from "./activity-indicator"
 import {
   ScrollView,
@@ -134,6 +135,18 @@ const indexAt = (offsets: number[], target: number): number => {
   return low
 }
 
+// Perf: counts real React mounts/unmounts of windowed cells (rendered as a
+// null child inside each cell only when GTKX_PERF=1).
+const CellMountProbe = (): null => {
+  useLayoutEffect(() => {
+    perfCount("vl.cellMount")
+    return () => {
+      perfCount("vl.cellUnmount")
+    }
+  }, [])
+  return null
+}
+
 const VirtualizedListInner = forwardRef(
   <T,>(
     {
@@ -241,6 +254,7 @@ const VirtualizedListInner = forwardRef(
     }))
 
     const updateRange = (): void => {
+      perfCount("vl.updateRange")
       const overscan = Math.max(1, (windowSize - 1) / 2) * viewportH.current
       // Window in visual (scroll) coordinates.
       let start = scrollY.current - overscan
@@ -254,11 +268,13 @@ const VirtualizedListInner = forwardRef(
       }
       const first = indexAt(offsets, Math.max(0, start))
       const last = Math.min(count - 1, indexAt(offsets, end))
-      setRange((current) =>
-        current.first === first && current.last === last
-          ? current
-          : { first, last },
-      )
+      setRange((current) => {
+        if (current.first === first && current.last === last) {
+          return current
+        }
+        perfCount("vl.rangeChange")
+        return { first, last }
+      })
     }
 
     // Clamp a scroll target to the valid range of the axis.
@@ -392,6 +408,7 @@ const VirtualizedListInner = forwardRef(
         return
       }
       measured.current[index] = size
+      perfCount("vl.versionBump")
       // A size change shifts every cell BEFORE the changed one in visual
       // order — for a normal list that is cells above the window (index <
       // first), compensated by the anchor. Inverted lists skip the anchor
@@ -669,6 +686,7 @@ const VirtualizedListInner = forwardRef(
         )
       const body = (
         <>
+          {perfEnabled ? <CellMountProbe /> : null}
           {renderItem({ item, index })}
           {index < count - 1 && ItemSeparatorComponent ? (
             <ItemSeparatorComponent />
@@ -700,6 +718,7 @@ const VirtualizedListInner = forwardRef(
     }
 
     const cells: ReactNode[] = []
+    const renderStart = perfEnabled ? perfNow() : 0
     if (count > 0) {
       if (activeStickyIndex >= 0 && activeStickyIndex < range.first) {
         cells.push(renderCell(activeStickyIndex))
@@ -708,6 +727,13 @@ const VirtualizedListInner = forwardRef(
       for (let index = range.first; index <= last; index += 1) {
         cells.push(renderCell(index))
       }
+    }
+    if (perfEnabled) {
+      // Element construction only — reconciliation and host mutations happen
+      // inside React afterwards; those are visible in engine.flush and the
+      // mount counters instead.
+      perfAddTime("vl.renderCells", perfNow() - renderStart)
+      perfCount("vl.render")
     }
 
     // extraData participates in identity so memoized parents re-render rows.
