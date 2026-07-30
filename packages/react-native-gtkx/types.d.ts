@@ -38,6 +38,19 @@ declare module "react-native" {
       default?: T
     }): T | undefined
   }
+
+  // Desktop has a pointer, so Pressable reports hover alongside press —
+  // `style={({ pressed, hovered }) => …}` and the children callback, the
+  // same shape react-native-web exposes. The stock type only carries
+  // `pressed` (mobile has no hover), and interfaces merge, so referencing
+  // this module adds the field without touching anything else.
+  //
+  // OPTIONAL on purpose: an app sharing one component with ios/android
+  // gets `undefined` there, and the type should say so — write
+  // `hovered && styles.hovered`, which is correct on every platform.
+  interface PressableStateCallbackType {
+    hovered?: boolean
+  }
 }
 
 export {}

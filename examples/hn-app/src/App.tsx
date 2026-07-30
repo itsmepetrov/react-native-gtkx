@@ -20,7 +20,7 @@ import {
   NavigationContainer,
   type StackScreenProps,
 } from "react-native-gtkx/navigation"
-import { fetchTopStories, type Story } from "./api"
+import { fetchTopStories, searchStories, type Story } from "./api"
 import { extractDomain, formatAge, formatComments, formatScore } from "./format"
 import { StoryRoute, type StoryParams } from "./StoryScreen"
 import { palette } from "./theme"
@@ -57,6 +57,9 @@ const styles = StyleSheet.create({
     gap: 6,
     marginHorizontal: 16,
     marginBottom: 10,
+  },
+  cardHovered: {
+    backgroundColor: palette.cardAlt,
   },
   cardTitleRow: {
     flexDirection: "row",
@@ -119,6 +122,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
   },
+  retryButtonHovered: {
+    backgroundColor: palette.accentHover,
+  },
   retryButtonText: {
     color: palette.text,
     fontSize: 13,
@@ -148,7 +154,10 @@ const StoryCard = ({
   const domain = extractDomain(story.url)
   return (
     <Pressable
-      style={styles.card}
+      style={({ hovered, pressed }) => [
+        styles.card,
+        (hovered || pressed) && styles.cardHovered,
+      ]}
       onPress={onPress}
     >
       <View style={styles.cardTitleRow}>
@@ -187,7 +196,14 @@ const TopStoriesScreen = ({
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [endReached, setEndReached] = useState(false)
-  const [filter, setFilter] = useState("")
+  // "" = the top-stories feed; anything else is a live API search.
+  const [query, setQuery] = useState("")
+  const [searching, setSearching] = useState(false)
+  // Mirrors activeQuery for rendering (a ref must not be read during render).
+  const [loadedQuery, setLoadedQuery] = useState("")
+  // The query the loaded list belongs to — a ref so load() can read it
+  // without being re-created on every keystroke.
+  const activeQuery = useRef("")
   const listRef = useRef<FlatList<Story>>(null)
   // The page the NEXT load-more call should fetch; a ref so a stale
   // onEndReached burst cannot schedule the same page twice.
@@ -197,16 +213,20 @@ const TopStoriesScreen = ({
   const generation = useRef(0)
   const busy = useRef(false)
 
-  const refresh = useCallback(async () => {
-    if (busy.current) {
-      return
-    }
+  // One loader for both sources: the top-stories feed and the search API.
+  // A generation stamp drops responses whose request was superseded (a new
+  // keystroke, a refresh) — the list never shows results for a stale query.
+  const load = useCallback(async (searchQuery: string) => {
     busy.current = true
     const current = (generation.current += 1)
+    activeQuery.current = searchQuery
+    setLoadedQuery(searchQuery)
     setRefreshing(true)
     setError(null)
     try {
-      const first = await fetchTopStories(0)
+      const first = searchQuery
+        ? (await searchStories(searchQuery, 0)).stories
+        : await fetchTopStories(0)
       if (generation.current === current) {
         setStories(first)
         nextPage.current = 1
@@ -220,10 +240,18 @@ const TopStoriesScreen = ({
     } finally {
       if (generation.current === current) {
         setRefreshing(false)
+        setSearching(false)
       }
       busy.current = false
     }
   }, [])
+
+  const refresh = useCallback(async () => {
+    if (busy.current) {
+      return
+    }
+    await load(activeQuery.current)
+  }, [load])
 
   const loadMore = useCallback(async () => {
     if (busy.current || endReached || stories.length === 0) {
@@ -234,7 +262,10 @@ const TopStoriesScreen = ({
     const page = nextPage.current
     setLoadingMore(true)
     try {
-      const next = await fetchTopStories(page)
+      const searchQuery = activeQuery.current
+      const next = searchQuery
+        ? (await searchStories(searchQuery, page)).stories
+        : await fetchTopStories(page)
       if (generation.current === current) {
         nextPage.current = page + 1
         if (next.length === 0) {
@@ -262,9 +293,20 @@ const TopStoriesScreen = ({
   useEffect(() => {
     // Deferred a tick: refresh() flips `refreshing` synchronously, which the
     // set-state-in-effect lint rule (rightly) bans straight from the body.
-    const kickoff = setTimeout(() => void refresh(), 0)
+    const kickoff = setTimeout(() => void load(""), 0)
     return () => clearTimeout(kickoff)
-  }, [refresh])
+  }, [load])
+
+  // Debounced search: typing schedules one request, not one per keystroke.
+  useEffect(() => {
+    const trimmed = query.trim()
+    if (trimmed === activeQuery.current) {
+      return
+    }
+    setSearching(trimmed.length > 0)
+    const timer = setTimeout(() => void load(trimmed), 350)
+    return () => clearTimeout(timer)
+  }, [query, load])
 
   // The HeaderBar carries a native Refresh button AND an RN search input
   // (headerRight hosts real React Native content in the chrome — the
@@ -275,8 +317,8 @@ const TopStoriesScreen = ({
         <TextInput
           style={styles.searchInput}
           placeholder="Filter stories"
-          value={filter}
-          onChangeText={setFilter}
+          value={query}
+          onChangeText={setQuery}
         />
       ),
       headerButtons: [
@@ -288,7 +330,7 @@ const TopStoriesScreen = ({
         },
       ],
     })
-  }, [navigation, refresh, filter])
+  }, [navigation, refresh, query])
 
   // Headless-proof hook for scripts/run-linux-headless-hnapp.sh — dev only.
   // With HN_APP_PROOF=1 the app drives itself through the screenshot
@@ -331,7 +373,10 @@ const TopStoriesScreen = ({
         <Text style={styles.errorTitle}>{"Couldn't load stories"}</Text>
         <Text style={styles.errorMessage}>{error}</Text>
         <Pressable
-          style={styles.retryButton}
+          style={({ hovered, pressed }) => [
+            styles.retryButton,
+            (hovered || pressed) && styles.retryButtonHovered,
+          ]}
           onPress={() => void refresh()}
         >
           <Text style={styles.retryButtonText}>Retry</Text>
@@ -346,13 +391,7 @@ const TopStoriesScreen = ({
         ref={listRef}
         style={styles.list}
         contentContainerStyle={styles.listContent}
-        data={
-          filter
-            ? stories.filter((story) =>
-                story.title.toLowerCase().includes(filter.toLowerCase()),
-              )
-            : stories
-        }
+        data={stories}
         keyExtractor={(story) => String(story.id)}
         renderItem={({ item, index }) => (
           <StoryCard
@@ -369,11 +408,22 @@ const TopStoriesScreen = ({
         // overscan means fewer window-boundary crossings per scrolled pixel);
         // see docs/research/scroll-performance.md before tuning it.
         ListEmptyComponent={
-          refreshing ? null : (
+          refreshing || searching ? null : (
             <View style={styles.footer}>
-              <Text style={styles.footerText}>No stories yet</Text>
+              <Text style={styles.footerText}>
+                {loadedQuery
+                  ? `Nothing found for “${loadedQuery}”`
+                  : "No stories yet"}
+              </Text>
             </View>
           )
+        }
+        ListHeaderComponent={
+          searching || (refreshing && stories.length > 0) ? (
+            <View style={styles.footer}>
+              <ActivityIndicator />
+            </View>
+          ) : null
         }
         ListFooterComponent={
           loadingMore ? (

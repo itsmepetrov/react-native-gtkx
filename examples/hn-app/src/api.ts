@@ -58,3 +58,59 @@ export const fetchTopStories = async (page: number): Promise<Story[]> => {
       item !== null && !item.deleted && !item.dead && item.title !== undefined,
   )
 }
+
+// Search goes through Algolia's HN API — the one the website itself uses.
+// The Firebase API has no search endpoint, and filtering the loaded page
+// would only ever search what is already on screen. Hit ids are the same
+// HN item ids, so opening a result loads its comments the usual way.
+const SEARCH_BASE = "https://hn.algolia.com/api/v1"
+
+type AlgoliaHit = {
+  objectID: string
+  title: string | null
+  url: string | null
+  author: string | null
+  points: number | null
+  num_comments: number | null
+  created_at_i: number
+  story_text?: string | null
+}
+
+type AlgoliaResponse = {
+  hits: AlgoliaHit[]
+  nbPages: number
+}
+
+export type SearchResult = {
+  stories: Story[]
+  hasMore: boolean
+}
+
+export const searchStories = async (
+  query: string,
+  page: number,
+  signal?: AbortSignal,
+): Promise<SearchResult> => {
+  const url =
+    `${SEARCH_BASE}/search?query=${encodeURIComponent(query)}` +
+    `&tags=story&page=${page}&hitsPerPage=${PAGE_SIZE}`
+  const response = await fetch(url, { signal })
+  if (!response.ok) {
+    throw new Error(`HN search responded with ${response.status}`)
+  }
+  const payload = (await response.json()) as AlgoliaResponse
+  const stories = payload.hits
+    .filter((hit) => hit.title !== null)
+    .map((hit) => ({
+      id: Number(hit.objectID),
+      type: "story" as const,
+      title: hit.title!,
+      by: hit.author ?? undefined,
+      time: hit.created_at_i,
+      score: hit.points ?? undefined,
+      descendants: hit.num_comments ?? undefined,
+      url: hit.url ?? undefined,
+      text: hit.story_text ?? undefined,
+    }))
+  return { stories, hasMore: page + 1 < payload.nbPages }
+}

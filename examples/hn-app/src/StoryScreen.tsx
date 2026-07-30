@@ -6,11 +6,11 @@
 import { useEffect, useState } from "react"
 import {
   ActivityIndicator,
+  FlatList,
   Image,
   InteractionManager,
   Linking,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -88,6 +88,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
   },
+  openButtonHovered: {
+    backgroundColor: palette.accentHover,
+  },
   openButtonText: {
     color: palette.text,
     fontSize: 13,
@@ -144,6 +147,9 @@ const styles = StyleSheet.create({
   showReplies: {
     alignSelf: "flex-start",
     paddingVertical: 2,
+  },
+  showRepliesHovered: {
+    backgroundColor: palette.cardAlt,
   },
   showRepliesText: {
     color: palette.accent,
@@ -245,7 +251,10 @@ const Comment = ({ id, depth, autoLimit }: CommentProps) => {
         </View>
       ) : kids.length > 0 ? (
         <Pressable
-          style={styles.showReplies}
+          style={({ hovered, pressed }) => [
+            styles.showReplies,
+            (hovered || pressed) && styles.showRepliesHovered,
+          ]}
           onPress={() => setExpanded(true)}
         >
           <Text style={styles.showRepliesText}>
@@ -277,70 +286,82 @@ export const StoryScreen = ({ story }: { story: Story }) => {
   const url = story.url
   const kids = story.kids ?? []
 
+  // Top-level comments render through a FlatList: each node fetches itself
+  // on mount, so virtualization means only the comments near the viewport
+  // hit the API — a 300-comment story no longer fires 300 requests at once,
+  // it fetches as you scroll. The story card rides along as the header.
+  const header = (
+    <View>
+      <View style={styles.storyCard}>
+        <Text style={styles.storyTitle}>{story.title}</Text>
+        {domain !== "" && (
+          <View style={styles.domainRow}>
+            {!faviconFailed && (
+              <Image
+                style={styles.favicon}
+                source={{
+                  uri: `https://www.google.com/s2/favicons?domain=${domain}&sz=64`,
+                }}
+                onError={() => setFaviconFailed(true)}
+              />
+            )}
+            <Text style={styles.domain}>{domain}</Text>
+          </View>
+        )}
+        <View style={styles.metaRow}>
+          {story.score !== undefined && (
+            <Text style={styles.score}>{formatScore(story.score)}</Text>
+          )}
+          {story.by !== undefined && (
+            <Text style={styles.meta}>{`by ${story.by}`}</Text>
+          )}
+          <Text style={styles.meta}>{formatAge(story.time)}</Text>
+        </View>
+        {url !== undefined ? (
+          <Pressable
+            style={({ hovered, pressed }) => [
+              styles.openButton,
+              (hovered || pressed) && styles.openButtonHovered,
+            ]}
+            onPress={() => void Linking.openURL(url)}
+          >
+            <Text style={styles.openButtonText}>Open in browser</Text>
+          </Pressable>
+        ) : story.text !== undefined ? (
+          // Ask HN and similar self posts have no url — show the post
+          // body (HTML flattened to text) where the button would be.
+          <Text style={styles.storyText}>{htmlToText(story.text)}</Text>
+        ) : null}
+      </View>
+      <Text style={styles.commentsHeading}>
+        {kids.length === 0
+          ? "No comments yet"
+          : `Comments — ${formatComments(story.descendants)}`}
+      </Text>
+      {!settled && kids.length > 0 ? (
+        <View style={styles.loading}>
+          <ActivityIndicator />
+        </View>
+      ) : null}
+    </View>
+  )
+
   return (
     <View style={styles.screen}>
-      <ScrollView
+      <FlatList
         style={styles.body}
         contentContainerStyle={styles.bodyContent}
-      >
-        <View style={styles.storyCard}>
-          <Text style={styles.storyTitle}>{story.title}</Text>
-          {domain !== "" && (
-            <View style={styles.domainRow}>
-              {!faviconFailed && (
-                <Image
-                  style={styles.favicon}
-                  source={{
-                    uri: `https://www.google.com/s2/favicons?domain=${domain}&sz=64`,
-                  }}
-                  onError={() => setFaviconFailed(true)}
-                />
-              )}
-              <Text style={styles.domain}>{domain}</Text>
-            </View>
-          )}
-          <View style={styles.metaRow}>
-            {story.score !== undefined && (
-              <Text style={styles.score}>{formatScore(story.score)}</Text>
-            )}
-            {story.by !== undefined && (
-              <Text style={styles.meta}>{`by ${story.by}`}</Text>
-            )}
-            <Text style={styles.meta}>{formatAge(story.time)}</Text>
-          </View>
-          {url !== undefined ? (
-            <Pressable
-              style={styles.openButton}
-              onPress={() => void Linking.openURL(url)}
-            >
-              <Text style={styles.openButtonText}>Open in browser</Text>
-            </Pressable>
-          ) : story.text !== undefined ? (
-            // Ask HN and similar self posts have no url — show the post
-            // body (HTML flattened to text) where the button would be.
-            <Text style={styles.storyText}>{htmlToText(story.text)}</Text>
-          ) : null}
-        </View>
-        <Text style={styles.commentsHeading}>
-          {kids.length === 0
-            ? "No comments yet"
-            : `Comments — ${formatComments(story.descendants)}`}
-        </Text>
-        {settled ? (
-          kids.map((kid) => (
-            <Comment
-              key={kid}
-              id={kid}
-              depth={0}
-              autoLimit={AUTO_DEPTH}
-            />
-          ))
-        ) : kids.length > 0 ? (
-          <View style={styles.loading}>
-            <ActivityIndicator />
-          </View>
-        ) : null}
-      </ScrollView>
+        data={settled ? kids : []}
+        keyExtractor={(kid) => String(kid)}
+        renderItem={({ item }) => (
+          <Comment
+            id={item}
+            depth={0}
+            autoLimit={AUTO_DEPTH}
+          />
+        )}
+        ListHeaderComponent={header}
+      />
     </View>
   )
 }

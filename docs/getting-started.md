@@ -127,8 +127,11 @@ app with all three platforms wired this way.
 
 Notes for typed code: add an `env.d.ts` with
 `import "react-native-gtkx/types"` — it augments the stock `react-native`
-types so `Platform.select({ linux: ... })` typechecks (future
-platform-specific props land in the same file). One thing augmentation
+types so `Platform.select({ linux: ... })` typechecks, and `Pressable`'s
+state callback accepts `hovered` (declared optional — a component shared
+with ios/android gets `undefined` there, so write
+`hovered && styles.hovered`). Future platform-specific props land in the
+same file. One thing augmentation
 cannot teach is `Platform.OS === "linux"` (property types do not merge) —
 use `Platform.select` in typed code. Deep imports
 (`react-native/Libraries/...`) are not supported — only the public

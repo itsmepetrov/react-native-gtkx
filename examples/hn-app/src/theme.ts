@@ -6,6 +6,7 @@ export const palette = {
   text: "#ffffff",
   textDim: "#c0bfbc",
   accent: "#3584e4",
+  accentHover: "#5294e8",
   orange: "#ffa348",
   red: "#f66151",
 }
