@@ -1,9 +1,9 @@
-// Style pipeline (task 005): StyleSheet → flatten → splitStyle →
+// Style pipeline: StyleSheet → flatten → splitStyle →
 // visualStyleToCss → memoized class registry.
 //
 // Everything exported here is pure (no bridge imports) and unit-testable on
 // any OS. The production registry that talks to the gtkx `css` helper lives
-// in ./registry.gtkx.ts and is imported directly by components (006).
+// in ./registry.gtkx.ts and is imported directly by the components.
 
 export { parseColor, PlatformColor } from "./colors"
 export { resetDevWarnings } from "./dev-warning"

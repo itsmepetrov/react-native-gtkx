@@ -1,5 +1,5 @@
 // GTK4 CSS has no text-align property, so textAlign never reaches the CSS
-// generator: the Text component (006) maps it onto GtkLabel properties with
+// generator: the Text component maps it onto GtkLabel properties with
 // this pure helper (no bridge imports).
 //
 // - xalign positions the whole text block inside the label allocation;

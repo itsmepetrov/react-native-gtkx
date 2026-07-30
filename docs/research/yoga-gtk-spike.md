@@ -19,7 +19,7 @@ The "Yoga on the JS side + imperative positioning in GtkFixed" architecture is c
 
 Screenshot: ![static](shots/static.png)
 
-## gtkx rc.1 pitfalls (input for task 003)
+## gtkx rc.1 pitfalls
 
 1. **Declarative `GtkFixedLayoutChild` does not work in rc.1**: the lazy layout-child resolution through `layoutManager.getLayoutChild()` landed on main after rc.1 (rc.1 creates a "detached" object → Gtk-CRITICAL "layout-manager property not set", positions are not applied). Solution: position **imperatively** — `fixed.move(child, x, y)` via refs (the reconciler attaches children with `fixed.put(child, 0, 0)`). This is the layout engine's target path anyway (coordinate diffing + batched moves), so the limitation does not hurt us. RN `transform` (scale/rotate), if needed — imperatively via `fixed.getLayoutManager().getLayoutChild(widget).setTransform()` from the gi bindings. Re-check when gtkx moves to the next RC.
 2. **64-bit FFI values arrive as BigInt**: `frameClock.getFrameTime()` → BigInt; arithmetic with a number throws a TypeError. The bridge must normalize (`Number(...)`) at the boundary.
@@ -31,4 +31,4 @@ Screenshot: ![static](shots/static.png)
 ## Not verified (low risk, deferred)
 
 - Live window resizing with a "jitter" assessment — headless screenshots cannot show it. The composite resize operations (0.17 ms reflow + a batch of moves at 60 fps) are already measured; the resize event comes from the window's `useProperty`. Eyeball it at the first live run (XQuartz/Wayland).
-- The React-state animation path degrades to 57.4 fps at 100 widgets — Animated should use the direct path (as planned for 009 all along).
+- The React-state animation path degrades to 57.4 fps at 100 widgets — Animated should use the direct path (as the Animated design assumed all along).

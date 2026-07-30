@@ -1,6 +1,6 @@
-// Animated module entry point (task 009, stream "animated"). Pure by
-// contract: everything is driven by an injected FrameScheduler — the
-// orchestrator connects the GTK frame clock and the Animated.* components.
+// Animated module entry point. Pure by contract: everything is driven by an
+// injected FrameScheduler — the GTK frame clock is connected where the
+// Animated.* components are built.
 
 export type { AnimatedApi } from "./create-animated"
 export { createAnimated } from "./create-animated"

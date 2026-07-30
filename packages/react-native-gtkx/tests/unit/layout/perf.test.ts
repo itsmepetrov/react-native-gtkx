@@ -1,7 +1,7 @@
 import { expect, it } from "vitest"
 import { LayoutEngine, type LayoutNode } from "../../../src/layout/index"
 
-// AC (task 004): reflow of a 500-node tree <= 16ms, no-op recompute <= 1ms.
+// Budget: reflow of a 500-node tree <= 16ms, no-op recompute <= 1ms.
 // Thresholds are generous vs the spike numbers (0.17ms) to stay CI-stable.
 it("reflows a 500-node tree within the frame budget", async () => {
   const engine = new LayoutEngine({ width: 1280, height: 800 })

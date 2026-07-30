@@ -1,5 +1,5 @@
 // Factory wiring the frame driver into the whole Animated API. The GTK side
-// passes a scheduler backed by the frame clock (orchestrator, task 009);
+// passes a scheduler backed by the frame clock;
 // tests pass a manual scheduler and drive frames by hand.
 
 import { createDelay, loop, parallel, sequence } from "./composite"

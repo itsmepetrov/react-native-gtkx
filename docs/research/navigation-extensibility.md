@@ -17,7 +17,7 @@ Walls, by root cause:
 - **Zero-minimum roots**: RN content cannot size a chrome slot
   (HeaderBar start/end/title-widget, sidebar rows) — one root cause for
   the whole `headerLeft`/`headerRight`/`headerTitle`-as-component class.
-  Fixed by the intrinsic-size root (task 006).
+  Fixed by the intrinsic-size root.
 - **Unexposed Adwaita levers**: `AdwNavigationPage:can-pop` (per-screen
   back blocking — also the correct mechanism for
   `usePreventRemove`/`beforeRemove`, which today desyncs: the native pop
@@ -42,7 +42,8 @@ imported from `@react-navigation/native` directly.
 Mandatory changes: swap `createNativeStackNavigator` for our
 `createStackNavigator`; remove `react-native-screens`,
 `react-native-safe-area-context`, `react-native-gesture-handler`;
-rewrite component-based header options to `headerButtons` (until 006);
+rewrite component-based header options to `headerButtons` (until
+component chrome lands);
 hand-roll screen prop types (until typed factories land).
 
 Silent traps (ranked): unsupported options are ignored WITHOUT warning
@@ -81,17 +82,17 @@ UINavigationController model, which neither desktop platform achieved.
 GTK's advantage is that the primitive exists: back button, Esc, back
 gestures, history menu and transitions ship with the widget. The trade:
 JS-stack fallbacks can render anything into their fake headers; our
-chrome is native and needs task 006 to open up.
+chrome is native and needs the intrinsic-size root to open up.
 
 Sources: react-native-screens README and discussions #1575/#2541, RNW
 discussions #14273 / issue #4152 / new-architecture docs / 0.82 release
 post, microsoft/react-native-gallery, reactnavigation.org native-stack
 docs.
 
-## Follow-ups distilled into the epic
+## Follow-ups
 
-Tasks 008 (dev warnings for ignored options + content-chrome hint), 009
-(typed navigator factories), 010 (can-pop: gestureEnabled +
-prevent-remove) — plus the epic backlog: native-stack compat alias,
-sidebar parity pass, `animation: "none"`, modal presentation on
+Dev warnings for ignored options (plus a hint to render chrome as
+content), typed navigator factories, and `can-pop` wiring for
+`gestureEnabled`/prevent-remove. Further out: a native-stack compat
+alias, a sidebar parity pass, `animation: "none"`, modal presentation on
 Adw.Dialog, search-bar options.

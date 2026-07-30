@@ -1,5 +1,5 @@
 // Classifies a flattened style into layout props (consumed by the Yoga
-// engine, task 004) and visual props (compiled into GTK CSS). Pure module.
+// engine) and visual props (compiled into GTK CSS). Pure module.
 
 import type {
   FlatStyle,

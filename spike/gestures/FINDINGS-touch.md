@@ -42,7 +42,8 @@ Injecting a tap and a drag produced:
 Both the touch-only click AND the touch-only drag fire — the events carry
 a real `GDK_SOURCE_TOUCHSCREEN` device. Note the ordering: the drag
 gesture sees the sequence before the click gestures, which is the
-arbitration surface task 004 (ScrollView vs child pan) has to reckon with.
+arbitration surface (ScrollView vs child pan) the gesture work has to
+reckon with.
 
 ## What does not work, and why
 
@@ -77,6 +78,6 @@ used; keep it as the seed for the epic's test harness.
 
 GO for the gestures epic. Touch-only paths — GtkScrolledWindow's own
 kinetic/pan/swipe gestures, and any `touchOnly` gesture we add for
-PanResponder — are now reproducibly drivable, so tasks 001–004 can be
-verified rather than assumed. The only real constraint is the seated
+PanResponder — are now reproducibly drivable, so the epic can be verified
+rather than assumed. The only real constraint is the seated
 session (documented above), not the absence of hardware.

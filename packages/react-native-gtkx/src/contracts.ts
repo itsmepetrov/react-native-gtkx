@@ -1,6 +1,5 @@
-// Shared contracts between the layout engine (task 004), the style system
-// (task 005), the API modules (task 007) and components (task 006).
-// FROZEN during parallel development: changes go through the orchestrator only.
+// Shared contracts between the layout engine, the style system, the API
+// modules and the components — the one module every layer may import.
 
 // --- style ------------------------------------------------------------------
 
@@ -9,8 +8,8 @@ export type DimensionValue = number | `${number}%` | "auto"
 export type FlexAlignType =
   "flex-start" | "flex-end" | "center" | "stretch" | "baseline"
 
-// Layout-affecting props: classified by the style system (005), consumed by
-// the layout engine (004) which maps them onto Yoga node setters.
+// Layout-affecting props: classified by the style system, consumed by the
+// layout engine, which maps them onto Yoga node setters.
 export type LayoutStyle = Partial<{
   alignContent:
     | "flex-start"
@@ -76,7 +75,7 @@ export type TransformPart =
   | { scaleY: number }
   | { rotate: `${number}deg` | `${number}rad` }
 
-// Visual props: classified by the style system (005), compiled into GTK CSS
+// Visual props: classified by the style system, compiled into GTK CSS
 // classes via the bridge `css` helper. Text-specific props apply to <Text>.
 export type VisualStyle = Partial<{
   backgroundColor: string
@@ -115,8 +114,8 @@ export type VisualStyle = Partial<{
   letterSpacing: number
   lineHeight: number
   opacity: number
-  // NOT emitted to CSS (no such GTK CSS property): the Text component (006)
-  // applies it via label props using the pure style/text-align helper.
+  // NOT emitted to CSS (no such GTK CSS property): the Text component applies
+  // it via label props using the pure style/text-align helper.
   textAlign: "auto" | "left" | "right" | "center" | "justify"
   // NOT emitted to CSS: applied by the engine through the layout manager
   // layout-child transforms (Animated fast path).
@@ -137,7 +136,7 @@ export type FlatStyle = LayoutStyle &
 export type StyleProp<T = FlatStyle> =
   T | null | undefined | false | ReadonlyArray<StyleProp<T>>
 
-// Result of classifying a flattened style (produced by 005):
+// Result of classifying a flattened style (produced by the style system):
 export type SplitStyle = {
   layout: LayoutStyle
   visual: VisualStyle
@@ -165,7 +164,7 @@ export type MeasureFn = (
   heightMode: MeasureConstraintMode,
 ) => MeasureSize
 
-// Handle the engine gives every mounted component (004 implements, 006 consumes).
+// Handle the layout engine gives every mounted component.
 export interface LayoutNodeApi {
   setStyle(style: LayoutStyle): void
   setMeasureFn(measure: MeasureFn | null): void
@@ -174,6 +173,6 @@ export interface LayoutNodeApi {
   setOnLayout(callback: ((rect: Rect) => void) | null): void
 }
 
-// --- subscriptions (007) ----------------------------------------------------
+// --- subscriptions ----------------------------------------------------------
 
 export type SubscriptionHandle = { remove(): void }

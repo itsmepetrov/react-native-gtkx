@@ -1,5 +1,5 @@
 // Public surface of react-native-gtkx, mirroring the `react-native` module.
-// Components: 006 · APIs: 007 · StyleSheet: 005 · layout engine underneath: 004.
+// Components · APIs · StyleSheet, with the Yoga layout engine underneath.
 
 export {
   ActivityIndicator,

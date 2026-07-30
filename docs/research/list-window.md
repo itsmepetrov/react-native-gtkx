@@ -1,4 +1,4 @@
-# Spike 001 (list-virtualization): windowing over the layout manager — GO
+# Spike (list virtualization): windowing over the layout manager — GO
 
 Run: VM (headless sway + pixman), 10 000 rows, window 30, `bash run-vm.sh`.
 
@@ -11,7 +11,7 @@ SHIFT  p50=22.3ms p95=30.7ms       (worst-case: 800px jumps remount ~20 of 30 ro
 ANCHOR height correction above the window, scroll compensated — no visual jump
 ```
 
-## Findings for 002
+## Findings for the implementation
 
 1. The mechanics hold with ZERO engine changes: content View with an explicit
    prefix-sum height gives the scroll range; rows are `position:absolute` at

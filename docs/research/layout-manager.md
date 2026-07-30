@@ -1,4 +1,4 @@
-# Spike 001 (layout-manager epic): verdict — B0 WORKS
+# Spike (layout manager): verdict — B0 WORKS
 
 Date: 2026-07-29. Run: VM (Ubuntu 26.04 aarch64, GTK 4.20, headless sway + pixman), `bash run-vm.sh`.
 
@@ -36,7 +36,7 @@ PAINT-PIXELS OK block=86 control=250 — the overflow child painted past the bou
 Screenshot: shots/paint.png (the ██ block is drawn past the container's right
 edge over the neighboring box's background — paint-overflow like RN).
 
-## Facts affecting 002/003/006
+## Facts affecting the implementation
 
 1. **`typeName` is mandatory**: `registerClass` derives the GType name from
    `klass.name` by default, and the bundler minifies class names →
@@ -45,25 +45,25 @@ edge over the neighboring box's background — paint-overflow like RN).
 2. **GtkFixed is incompatible with a foreign manager**: `gtk_fixed_put` demands
    a `GtkFixedLayoutChild` from the container's CURRENT manager. `GtkBox.append`
    does not touch layout children — swapping the manager after append is safe.
-   → In 003 the containers move from GtkFixed to GtkBox (the gtkx reconciler
-   appends Box children natively), or we parent widgets manually.
+   → The containers therefore move from GtkFixed to GtkBox (the gtkx
+   reconciler appends Box children natively), or we parent widgets manually.
 3. **GTK4 is silent about under-minimum allocation** — 0 warnings for the whole
    run (the only warning was about the locale, unrelated to layout). No
    suppression needed.
 4. **An under-allocated GtkLabel draws its FULL text past the allocation**
    (the two labels in the spike overlapped). RN text semantics require clipping
-   to the own box → in 006, text leaves get `gtk_widget_set_overflow(HIDDEN)`
+   to the own box → text leaves get `gtk_widget_set_overflow(HIDDEN)`
    (paint clip); containers keep VISIBLE (paint overflow).
 5. **SHRINK without the wrapper**: the floating window accepted
    setDefaultSize(200,150) exactly; children minimums (507px) do not interfere —
    the ratchet is eliminated by the manager itself. sway-IPC resizing was not
    needed (floating + setDefaultSize is equivalent for testing the ratchet).
-6. **Zero RC1-WORKAROUNDs**: `getHandle`/`getInstanceType`/`typeIsA`/
+6. **Zero workarounds needed**: `getHandle`/`getInstanceType`/`typeIsA`/
    `resolveType`/`registerClass` are public `@gtkx/runtime` exports.
-   In 002 add `@gtkx/runtime` as a direct dependency of the package (currently
-   it is transitive via @gtkx/react).
+   `@gtkx/runtime` becomes a direct dependency of the package (it was
+   transitive via @gtkx/react).
 7. **Perf**: 0.21ms per synchronous vfunc pass (measure+allocate of 50 children,
-   the FFI path native→JS→50×sizeAllocate). The budget baseline for 003.
+   the FFI path native→JS→50×sizeAllocate). The budget baseline for the engine.
 8. Registering the class at module load (before activate/Gtk.init) works — GObject
    is ready right after importing @gtkx/native (init() in the package's main.js).
 
@@ -71,4 +71,4 @@ edge over the neighboring box's background — paint-overflow like RN).
 
 - B1 (a mini C addon) — not needed; the branch is closed without implementation.
 - B2 (upstream) — remains a desirable track (native trampolines without
-  per-frame FFI marshalling), to be drafted in 008; not a blocker.
+  per-frame FFI marshalling), to be drafted later; not a blocker.

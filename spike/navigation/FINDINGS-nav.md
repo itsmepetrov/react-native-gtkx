@@ -1,6 +1,6 @@
 # Navigation spike — findings
 
-Probes for the three risks of the navigation epic (task 001). Verdict at
+Probes for the three risks of the navigation epic. Verdict at
 the end. Artifacts: `src/adw-spike.tsx` (risks 1+3, `NAV_SPIKE_MODE`
 unset), `src/rn-probe.tsx` (risk 2, `NAV_SPIKE_MODE=rn`),
 `run-headless.sh` (auto-driven push/pop shot sequence at two window
@@ -18,7 +18,7 @@ visible page and the nested Root reflows synchronously (sway retile to
 reflow on their next allocation after push — no manual invalidation
 needed.
 
-Transition caveat for task 002: during the pop crossfade both pages get
+Transition caveat: during the pop crossfade both pages get
 intermediate allocations (e.g. 496×627 while sharing the width); the
 final allocation is always correct, but layout-reactive code should not
 latch onto mid-transition values.
@@ -62,7 +62,7 @@ a platform gap. Everything else it touches (`Platform.OS`,
   headers (the window's own CSD titlebar + the page HeaderBar). With the
   Adw window the page HeaderBar IS the titlebar (drag + window controls
   live in it). AppRegistry hard-codes GtkApplicationWindow today —
-  task 002 needs either a switch to Adw windows across the board or a
+  navigation needs either a switch to Adw windows across the board or a
   navigation-aware window mode.
 
 ## Infrastructure gotchas
@@ -78,7 +78,7 @@ a platform gap. Everything else it touches (`Platform.OS`,
 ## Verdict: GO
 
 Both integration halves are proven independently. Requirements handed to
-tasks 002–003: Adw window mode, a NavigationView-backed custom navigator
+the implementation: Adw window mode, a NavigationView-backed custom navigator
 (`useNavigationBuilder` + `StackRouter`) mapping push/pop to
 `pushByTag`/`pop`, one nested Root per screen, back-button →
 `dispatchBackPress` wiring, and transition-safe layout reads.

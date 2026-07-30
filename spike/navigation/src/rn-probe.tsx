@@ -1,6 +1,6 @@
 // @react-navigation/native probe — risk 2 of the navigation epic: does the
 // library import and mount on our react-native surface, and exactly which
-// RN APIs does it reach for (the stub list for task 002)?
+// RN APIs does it reach for (the stub list for the implementation)?
 //
 // Everything here is the plain RN surface — no @gtkx imports: this is what
 // a real app using react-navigation on linux would look like.

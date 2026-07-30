@@ -14,7 +14,7 @@ host-side).
 - @react-native/metro-config 0.86.2
 - Node 24 in the VM; the host needs `module.registerHooks` → **Node ≥ 22.15**
 
-## The mechanism (what tasks 002–004 must productize)
+## The mechanism (what the platform must productize)
 
 1. **react-native → react-native-gtkx**: `resolver.resolveRequest` rewrites
    the specifier when `platform === "linux"`. The `react-native.config.js`

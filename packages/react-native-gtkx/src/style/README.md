@@ -2,12 +2,12 @@
 
 Pipeline: `StyleSheet.flatten` → `splitStyle` (layout / visual) → `visualStyleToCss` → memoized
 `CssRegistry` (`css` from the bridge) → class in the widget's `cssClasses`. The layout part goes to Yoga via
-`LayoutNodeApi.setStyle` (task 004) and never reaches CSS.
+`LayoutNodeApi.setStyle` and never reaches CSS.
 
 Statuses: **supported** — works fully; **partial** — works with the caveat from the note;
 **ignored** — the property is outside the frozen contract, `console.warn` once per key.
 
-## Layout (→ Yoga, task 004)
+## Layout (→ Yoga)
 
 All `LayoutStyle` keys from `contracts.ts` are classified into `layout` unchanged:
 `alignContent`, `alignItems`, `alignSelf`, `aspectRatio`, `bottom`, `columnGap`, `direction`,

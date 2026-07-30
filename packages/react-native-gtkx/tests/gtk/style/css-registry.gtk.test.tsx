@@ -1,4 +1,4 @@
-// GTK integration tests for the style pipeline (task 005): the real `css`
+// GTK integration tests for the style pipeline: the real `css`
 // helper from the bridge registers generated GTK CSS, and the resulting
 // class applies to a GtkBox via cssClasses. Linux-only (npm run test:gtk).
 
