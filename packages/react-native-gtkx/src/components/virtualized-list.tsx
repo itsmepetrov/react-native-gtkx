@@ -18,7 +18,13 @@ import {
   type ReactNode,
 } from "react"
 import type { StyleProp } from "../contracts"
-import { perfAddTime, perfCount, perfEnabled, perfNow } from "../perf"
+import {
+  perfAddTime,
+  perfBurst,
+  perfCount,
+  perfEnabled,
+  perfNow,
+} from "../perf"
 import { ActivityIndicator } from "./activity-indicator"
 import {
   ScrollView,
@@ -140,6 +146,7 @@ const indexAt = (offsets: number[], target: number): number => {
 const CellMountProbe = (): null => {
   useLayoutEffect(() => {
     perfCount("vl.cellMount")
+    perfBurst("vl.mountsPerFrame")
     return () => {
       perfCount("vl.cellUnmount")
     }
@@ -409,6 +416,7 @@ const VirtualizedListInner = forwardRef(
       }
       measured.current[index] = size
       perfCount("vl.versionBump")
+      perfBurst("vl.bumpsPerFrame")
       // A size change shifts every cell BEFORE the changed one in visual
       // order — for a normal list that is cells above the window (index <
       // first), compensated by the anchor. Inverted lists skip the anchor

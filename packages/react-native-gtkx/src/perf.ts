@@ -14,6 +14,12 @@ const timers = new Map<
   string,
   { totalMs: number; count: number; maxMs: number }
 >()
+// Per-frame burst accumulators: reset on every frame-clock tick, reported as
+// the WORST single frame of the second. A stall is invisible in per-second
+// sums (a 12-mount burst inside one frame and 12 mounts spread over a second
+// sum identically) — the burst maxima are what a flick actually feels like.
+const frameBurst = new Map<string, number>()
+const frameBurstMax = new Map<string, number>()
 
 // Frame-clock interval tracking: deltas between consecutive ticks.
 let lastFrameAt = -1
@@ -51,11 +57,41 @@ export const perfAddTime = (name: string, ms: number): void => {
   }
 }
 
+// Accumulates into the CURRENT frame's bucket (counts or ms); the reporter
+// keeps only the worst frame of each second, under `<name>.max`.
+export const perfBurst = (name: string, value = 1): void => {
+  if (!perfEnabled) {
+    return
+  }
+  frameBurst.set(name, (frameBurst.get(name) ?? 0) + value)
+}
+
+// A sampled level (not a rate): reported as the second's maximum, so keys
+// like the live node count read as "how big did it get".
+export const perfGauge = (name: string, value: number): void => {
+  if (!perfEnabled) {
+    return
+  }
+  if (value > (frameBurstMax.get(name) ?? 0)) {
+    frameBurstMax.set(name, value)
+  }
+}
+
+const rollFrameBurst = (): void => {
+  for (const [name, value] of frameBurst) {
+    if (value > (frameBurstMax.get(name) ?? 0)) {
+      frameBurstMax.set(name, value)
+    }
+  }
+  frameBurst.clear()
+}
+
 // Called from a GTK frame-clock tick callback; `now` in ms (performance.now).
 export const perfFrameTick = (now: number): void => {
   if (!perfEnabled) {
     return
   }
+  rollFrameBurst()
   if (lastFrameAt >= 0) {
     const delta = now - lastFrameAt
     // A gap over 250ms means the frame clock paused (idle) — not a late
@@ -101,6 +137,12 @@ const dump = (): void => {
     out[`${name}.max`] = Math.round(entry.maxMs * 100) / 100
   }
   timers.clear()
+  // The tail of the second has not been rolled by a tick yet.
+  rollFrameBurst()
+  for (const [name, value] of frameBurstMax) {
+    out[`${name}.max`] = Math.round(value * 100) / 100
+  }
+  frameBurstMax.clear()
   if (frameCount > 0) {
     out["frame.count"] = frameCount
     out["frame.late"] = frameLate

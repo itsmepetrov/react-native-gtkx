@@ -8,11 +8,16 @@
 //   PERF_ROWS      row count (default 500)
 //   PERF_STEP      px per 16ms driver tick (default 12 → ~750 px/s)
 //   PERF_MAX       scroll distance per phase in px (default 6000)
-//   PERF_WINDOWSIZE   FlatList windowSize (default 5)
+//   PERF_WINDOWSIZE   FlatList windowSize (default 5 — the RN-mobile value the
+//                     first investigation measured against; pass 11 for the
+//                     desktop default)
 //   PERF_INITIAL      FlatList initialNumToRender (default 10)
 //   PERF_ESTIMATE     FlatList estimatedItemSize (default 44 — RN default)
 //   PERF_GIL       1 → fixed-height rows + exact getItemLayout
 //   PERF_STICKY    1 → stickyHeaderIndices=[0] (sticky machinery active)
+//   PERF_FLICK_V0     px of the flick's FIRST tick (default 1000 ≈ a hard
+//                     two-finger flick: one whole viewport per frame)
+//   PERF_FLICK_DECAY  per-tick velocity decay of the flick (default 0.9)
 //   PERF_WIDTH/PERF_HEIGHT   window default size (sway tiles to output anyway)
 import { useEffect, useRef, useState } from "react"
 import {
@@ -44,6 +49,8 @@ const INITIAL = Number(env("PERF_INITIAL", "10"))
 const ESTIMATE = Number(env("PERF_ESTIMATE", "44"))
 const GIL = env("PERF_GIL", "0") === "1"
 const STICKY = env("PERF_STICKY", "0") === "1"
+const FLICK_V0 = Number(env("PERF_FLICK_V0", "1000"))
+const FLICK_DECAY = Number(env("PERF_FLICK_DECAY", "0.9"))
 const WIDTH = Number(env("PERF_WIDTH", "560"))
 const HEIGHT = Number(env("PERF_HEIGHT", "760"))
 
@@ -144,9 +151,79 @@ const Card = ({ row }: { row: Row }) => (
   </View>
 )
 
-// Drives the scroll: phase down1 walks 0→MAX in STEP px increments at ~60Hz
-// (16ms timer), reset jumps back to 0, phase down2 repeats over the (by
-// then) fully measured region. PERF_DONE ends the run.
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+
+// Steady scroll: STEP px per ~60Hz tick from 0 to MAX — a trackpad drag.
+const steady = (
+  label: string,
+  scrollTo: (offset: number) => void,
+): Promise<void> =>
+  new Promise((resolve) => {
+    mark(`${label}:start`)
+    let offset = 0
+    const timer = setInterval(() => {
+      offset += STEP
+      scrollTo(offset)
+      if (offset >= MAX) {
+        clearInterval(timer)
+        mark(`${label}:end`)
+        resolve()
+      }
+    }, 16)
+  })
+
+// Flick: the offset profile of a hard two-finger flick — a huge first jump
+// decaying kinetically, so the virtualization window skips whole viewports
+// per frame instead of sliding row by row. The settle time is INSIDE the
+// phase: a flick alone is shorter than the reporter's 1s dump interval, so
+// its seconds would land in a neighbouring phase (or nowhere).
+const flick = (
+  label: string,
+  scrollTo: (offset: number) => void,
+): Promise<void> =>
+  new Promise((resolve) => {
+    mark(`${label}:start`)
+    let offset = 0
+    let velocity = FLICK_V0
+    const timer = setInterval(() => {
+      offset += velocity
+      velocity *= FLICK_DECAY
+      scrollTo(offset)
+      if (velocity < 20) {
+        clearInterval(timer)
+        setTimeout(() => {
+          mark(`${label}:end`)
+          resolve()
+        }, 2000)
+      }
+    }, 16)
+  })
+
+// Instant teleport of the offset in a SINGLE tick — the extreme of a flick
+// (a whole new window at once), and what scrollToOffset/scrollToIndex do.
+const jump = (
+  label: string,
+  offset: number,
+  scrollTo: (offset: number) => void,
+): Promise<void> =>
+  new Promise((resolve) => {
+    mark(`${label}:start`)
+    scrollTo(offset)
+    setTimeout(() => {
+      mark(`${label}:end`)
+      resolve()
+    }, 2500)
+  })
+
+// Phase script: idle (the sticky-at-rest cost), down1 (steady scroll into
+// never-measured rows), jump1 (a single-tick teleport back to the top),
+// down2 (the same distance over measured rows), then two identical flicks —
+// flick1 lands in COLD (estimated-size) territory, flick2 repeats it warm,
+// so the cost of the mount burst separates from the cost of the measurement
+// corrections it triggers.
 const useDriver = (scrollTo: (offset: number) => void): void => {
   const started = useRef(false)
   useEffect(() => {
@@ -154,36 +231,29 @@ const useDriver = (scrollTo: (offset: number) => void): void => {
       return
     }
     started.current = true
-    const phase = (label: string, from: number, onDone: () => void): void => {
-      mark(`${label}:start`)
-      let offset = from
-      const timer = setInterval(() => {
-        offset += STEP
-        scrollTo(offset)
-        if (offset >= MAX) {
-          clearInterval(timer)
-          mark(`${label}:end`)
-          onDone()
-        }
-      }, 16)
+    const run = async (): Promise<void> => {
+      await sleep(1000)
+      mark("idle:start")
+      await sleep(3000)
+      mark("idle:end")
+      await steady("down1", scrollTo)
+      await sleep(1000)
+      await jump("jump1", 0, scrollTo)
+      await steady("down2", scrollTo)
+      await sleep(1000)
+      mark("reset")
+      scrollTo(0)
+      await sleep(1500)
+      await flick("flick1", scrollTo)
+      mark("reset")
+      scrollTo(0)
+      await sleep(1500)
+      await flick("flick2", scrollTo)
+      mark("PERF_DONE")
+      // eslint-disable-next-line no-console -- script-facing
+      console.log("PERF_DONE")
     }
-    setTimeout(() => {
-      phase("down1", 0, () => {
-        setTimeout(() => {
-          mark("reset")
-          scrollTo(0)
-          setTimeout(() => {
-            phase("down2", 0, () => {
-              setTimeout(() => {
-                mark("PERF_DONE")
-                // eslint-disable-next-line no-console -- script-facing
-                console.log("PERF_DONE")
-              }, 2000)
-            })
-          }, 3000)
-        }, 1000)
-      })
-    }, 4000)
+    void run()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 }
@@ -244,7 +314,8 @@ const App = () => {
     mark(
       `config mode=${MODE} rows=${ROWS} step=${STEP} max=${MAX} ` +
         `windowSize=${WINDOW_SIZE} initial=${INITIAL} estimate=${ESTIMATE} ` +
-        `gil=${GIL ? 1 : 0} sticky=${STICKY ? 1 : 0}`,
+        `gil=${GIL ? 1 : 0} sticky=${STICKY ? 1 : 0} ` +
+        `flickV0=${FLICK_V0} flickDecay=${FLICK_DECAY}`,
     )
     return MODE
   })

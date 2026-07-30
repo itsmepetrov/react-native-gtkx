@@ -1,5 +1,11 @@
 import type { Rect } from "../contracts"
-import { perfAddTime, perfCount, perfEnabled, perfNow } from "../perf"
+import {
+  perfAddTime,
+  perfBurst,
+  perfCount,
+  perfEnabled,
+  perfNow,
+} from "../perf"
 import { LayoutNode } from "./node"
 import { Direction } from "./yoga"
 
@@ -59,7 +65,9 @@ export class LayoutEngine {
     }
     this.commitTree(this.root)
     if (perfEnabled) {
-      perfAddTime("engine.flush", perfNow() - start)
+      const elapsed = perfNow() - start
+      perfAddTime("engine.flush", elapsed)
+      perfBurst("engine.flushMsPerFrame", elapsed)
     }
   }
 

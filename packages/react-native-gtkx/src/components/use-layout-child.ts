@@ -18,7 +18,13 @@ import {
   queueResize,
   type Gtk,
 } from "../gtkx/bridge/index"
-import { perfAddTime, perfCount, perfEnabled, perfNow } from "../perf"
+import {
+  perfAddTime,
+  perfBurst,
+  perfCount,
+  perfEnabled,
+  perfNow,
+} from "../perf"
 import { useHostNode, type HostNode } from "./host-node"
 import {
   deferDuringAllocate,
@@ -269,7 +275,9 @@ export const useRnContainer = (
           perfCount("gtk.allocPass")
           perfCount("gtk.allocChild", children)
           if (perfAllocDepth === 0) {
-            perfAddTime("gtk.allocTop", perfNow() - start)
+            const elapsed = perfNow() - start
+            perfAddTime("gtk.allocTop", elapsed)
+            perfBurst("gtk.allocMsPerFrame", elapsed)
           }
         }
       },
