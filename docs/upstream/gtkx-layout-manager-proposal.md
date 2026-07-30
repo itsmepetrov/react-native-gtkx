@@ -67,6 +67,6 @@ foundation.
 ## Reproduction / references
 
 - Layout manager in production: `react-native-gtkx`
-  `packages/react-native-gtkx/src/gtkx-bridge/layout-manager.ts`
+  `packages/react-native-gtkx/src/gtkx/bridge/layout-manager.ts`
 - Standalone spike with measurements: `spike/layout-manager/` (FINDINGS.md)
 - Our rc.1 divergence catalog: `docs/gtkx-rc1-vs-main.md`

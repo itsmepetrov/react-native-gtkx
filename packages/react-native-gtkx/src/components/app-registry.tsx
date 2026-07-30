@@ -5,7 +5,7 @@ import {
   GtkApplication,
   GtkApplicationWindow,
   quit,
-} from "../gtkx-bridge/index"
+} from "../gtkx/bridge/index"
 import { Root } from "./root"
 
 type ComponentProvider = () => ComponentType<Record<string, unknown>>

@@ -79,7 +79,7 @@ To view the window live from the host, run `scripts/live-app.sh <app-dir>` insid
 Every container widget (Root, View, Pressable, ScrollView content,
 Animated.View) is a `GtkBox` driven by `RnGtkxLayout` — our GObject subclass
 of `GtkLayoutManager`, registered from pure JS via `@gtkx/runtime`
-(`src/gtkx-bridge/layout-manager.ts`). The contract:
+(`src/gtkx/bridge/layout-manager.ts`). The contract:
 
 - `measure()` returns the engine rect (minimum == natural) — children are
   never queried, so GTK minimums cannot leak upward; the window root reports
@@ -100,6 +100,6 @@ gtkx is pinned to rc.1, while main has already moved ahead. All workarounds for 
 
 ## Code rules
 
-- All `@gtkx/*` imports live only inside `packages/react-native-gtkx/src/gtkx-bridge/` (enforced by the `no-restricted-imports` eslint rule): gtkx is at RC status, and changes to its API must stay localized to the bridge.
+- All `@gtkx/*` imports live only inside `packages/react-native-gtkx/src/gtkx/bridge/` (enforced by the `no-restricted-imports` eslint rule): gtkx is at RC status, and changes to its API must stay localized to the bridge.
 - Commits are ordinary meaningful messages in English; internal planning task numbers are not mentioned in them.
 - Local planning (`.claude/`) and machine-specific scripts (`scripts/local/`) are not committed to the repository (.gitignore).

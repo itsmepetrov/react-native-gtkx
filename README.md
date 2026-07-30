@@ -14,7 +14,7 @@ The same source built with react-native-web ([portability proof](docs/shots/prof
 
 - [x] Yoga + GtkFixed spike — **GO** (0 px accuracy, 500-node reflow in 0.17 ms, 60 fps — `spike/RESULTS.md`)
 - [x] Dev environment (Docker/VM, GTK 4.22, live VNC) and CI workflow
-- [x] gtkx-bridge (isolation from the RC API; [rc.1 workaround catalog](docs/gtkx-rc1-vs-main.md))
+- [x] gtkx bridge (isolation from the RC API; [rc.1 workaround catalog](docs/gtkx-rc1-vs-main.md))
 - [x] Layout engine (Yoga shadow tree, measure via Pango, batching, diffing, onLayout)
 - [x] StyleSheet: layout/visual split, CSS Color 4 colors, PlatformColor → Adwaita
 - [x] View / Text / Image / AppRegistry — first RN render in GTK
@@ -24,6 +24,7 @@ The same source built with react-native-web ([portability proof](docs/shots/prof
 - [x] Component gallery and documentation
 - [x] Windowed lists: virtualization (10k rows), sticky headers, SectionList, scrollToIndex, viewability, inverted (RN chat semantics), refresh parity
 - [x] Linux as an RN **out-of-tree platform**: the standard Metro/Babel toolchain, `react-native.config.js` declared by the dependency, `npx react-native run-linux`, compiled package distribution (attw-checked) — see `examples/rn-app` (a cli-init app with ios + android + linux)
+- [x] **Fast Refresh on both toolchains**: `run-linux --dev` (Metro dev server + HMR in the GTK host, state preserved) and `gtkx dev` (vite)
 
 Verified live: `examples/gallery` (the whole surface) and the interactive `examples/playground` — 352 tests (unit + component tests under headless Wayland).
 

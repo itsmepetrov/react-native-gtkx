@@ -112,7 +112,7 @@ export default typescriptEslint.config(
             {
               group: ["@gtkx/*"],
               message:
-                "Import gtkx only via src/gtkx-bridge/ — see epic architecture decision #4.",
+                "Import gtkx only via src/gtkx/bridge/ — see epic architecture decision #4.",
             },
           ],
         },
@@ -126,8 +126,9 @@ export default typescriptEslint.config(
   },
   {
     files: [
-      "packages/react-native-gtkx/src/gtkx-bridge/**",
-      "packages/react-native-gtkx/tests-gtk/**",
+      "packages/react-native-gtkx/src/gtkx/bridge/**",
+      "packages/react-native-gtkx/src/runner/**",
+      "packages/react-native-gtkx/tests/gtk/**",
       "**/gtkx.config.ts",
       "**/vitest.gtk.config.ts",
       "spike/**",

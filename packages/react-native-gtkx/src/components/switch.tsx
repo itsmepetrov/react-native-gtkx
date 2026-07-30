@@ -1,6 +1,6 @@
 import { useRef } from "react"
-import { GtkSwitch, type Gtk } from "../gtkx-bridge/index"
 import type { StyleProp } from "../contracts"
+import { GtkSwitch, type Gtk } from "../gtkx/bridge/index"
 import { useLayoutChild, type LayoutEvent } from "./use-layout-child"
 
 export type SwitchProps = {

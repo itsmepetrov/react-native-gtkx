@@ -11,5 +11,5 @@
       "react-native-gtkx/metro": ["./src/metro/index.ts"]
     }
   },
-  "include": ["src/**/*", "tests/**/*", "tests-gtk/**/*"]
+  "include": ["src/**/*", "tests/**/*"]
 }

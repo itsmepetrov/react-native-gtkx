@@ -111,14 +111,16 @@ Four steps:
 Run it:
 
 ```bash
-npx react-native run-linux
+npx react-native run-linux         # release bundle
+npx react-native run-linux --dev   # Metro dev server + Fast Refresh
 ```
 
 The command ensures the gtkx codegen store, bundles with Metro for
-`--platform linux` and opens the window (release bundle; a Metro dev
-server with Fast Refresh is on the roadmap — the vite path below already
-has it). `examples/rn-app` is a complete cli-init app with all three
-platforms wired this way.
+`--platform linux` and opens the window. With `--dev` it starts (or
+reuses) the Metro dev server and edits apply to the live window with
+component state preserved; syntax errors print readably in the terminal
+and the app recovers on the next successful build. `examples/rn-app` is
+a complete cli-init app with all three platforms wired this way.
 
 Notes for typed code: the stock `react-native` types close the
 `Platform.select` key set, so pass an out-of-tree key through a typed
@@ -129,10 +131,11 @@ public `react-native` surface.
 ## Metro or vite?
 
 - **Adding Linux to an existing RN app** (ios/android + Metro): the
-  section above — standard RN toolchain end to end.
-- **Linux-first project**: the template with the vite preset (`gtkx dev`
-  gives Fast Refresh today, builds are single-file bundles). Both paths
-  consume the same published package.
+  section above — standard RN toolchain end to end,
+  `run-linux --dev` for Fast Refresh.
+- **Linux-first project**: the template with the vite preset
+  (`react-native-gtkx/vite`; `gtkx dev` gives Fast Refresh, builds are
+  single-file bundles). Both paths consume the same published package.
 
 ## Examples in the repository
 
@@ -143,7 +146,7 @@ public `react-native` surface.
 
 ## Tests
 
-Unit logic is plain vitest. Component tests use `@gtkx/testing` (render/screen/fireEvent) under headless Wayland: see `packages/react-native-gtkx/tests-gtk/` and `npm run test:gtk`. In tests, click via `fireEvent` and query roles with `Gtk.AccessibleRole` enums (see docs/gtkx-rc1-vs-main.md).
+Unit logic is plain vitest. Component tests use `@gtkx/testing` (render/screen/fireEvent) under headless Wayland: see `packages/react-native-gtkx/tests/gtk/` and `npm run test:gtk`. In tests, click via `fireEvent` and query roles with `Gtk.AccessibleRole` enums (see docs/gtkx-rc1-vs-main.md).
 
 ## Next steps
 

@@ -6,8 +6,8 @@ import {
   useState,
   type ReactNode,
 } from "react"
-import { GtkBox, queueResize, type Gtk } from "../gtkx-bridge/index"
 import { LayoutEngine } from "../layout/index"
+import { GtkBox, queueResize, type Gtk } from "../gtkx/bridge/index"
 import { HostNodeContext } from "./host-node"
 import { beginAllocatePass, endAllocatePass } from "./rect-store"
 import { useRnContainer } from "./use-layout-child"

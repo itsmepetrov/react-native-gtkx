@@ -30,8 +30,7 @@
   },
   "scripts": {
     "build:dist": "rm -rf dist && tsc -p tsconfig.build.json",
-    "watch:dist": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
-    "test:gtk": "vitest run --config vitest.gtk.config.ts"
+    "watch:dist": "tsc -p tsconfig.build.json --watch --preserveWatchOutput"
   },
   "peerDependencies": {
     "react": "^19",

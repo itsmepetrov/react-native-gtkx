@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react"
-import { GLib, GtkBox, queueAllocate, type Gtk } from "../gtkx-bridge/index"
 import { createAnimated, type FrameScheduler } from "../animated/index"
 import type { FlatStyle, StyleProp, TransformPart } from "../contracts"
+import { GLib, GtkBox, queueAllocate, type Gtk } from "../gtkx/bridge/index"
 import { HostNodeContext } from "./host-node"
 import { setStoredOffset } from "./rect-store"
 import {

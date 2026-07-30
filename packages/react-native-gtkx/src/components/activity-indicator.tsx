@@ -1,6 +1,6 @@
 import { useRef } from "react"
-import { GtkSpinner, type Gtk } from "../gtkx-bridge/index"
 import type { StyleProp } from "../contracts"
+import { GtkSpinner, type Gtk } from "../gtkx/bridge/index"
 import { useLayoutChild, type LayoutEvent } from "./use-layout-child"
 
 export type ActivityIndicatorProps = {

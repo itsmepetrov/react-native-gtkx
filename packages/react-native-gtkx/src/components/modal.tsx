@@ -4,7 +4,7 @@ import {
   GtkWindow,
   useApplication,
   useParentWindow,
-} from "../gtkx-bridge/index"
+} from "../gtkx/bridge/index"
 import { Root } from "./root"
 
 export type ModalProps = {

@@ -5,15 +5,15 @@ import {
   useState,
   type ReactNode,
 } from "react"
+import { textAlignToLabelProps } from "../style/index"
+import type { MeasureFn, StyleProp } from "../contracts"
 import {
   createTextProbe,
   Gtk,
   GtkLabel,
   measureWidget,
   Pango,
-} from "../gtkx-bridge/index"
-import { textAlignToLabelProps } from "../style/index"
-import type { MeasureFn, StyleProp } from "../contracts"
+} from "../gtkx/bridge/index"
 import { useLayoutChild, type LayoutEvent } from "./use-layout-child"
 
 export type TextProps = {

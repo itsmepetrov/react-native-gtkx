@@ -1,6 +1,6 @@
 import { useRef, type ReactNode } from "react"
-import { GtkBox, type Gtk } from "../gtkx-bridge/index"
 import type { StyleProp } from "../contracts"
+import { GtkBox, type Gtk } from "../gtkx/bridge/index"
 import { HostNodeContext } from "./host-node"
 import {
   useLayoutChild,

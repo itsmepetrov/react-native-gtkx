@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react"
-import { Gtk, GtkBox } from "../gtkx-bridge/index"
 import type { StyleProp } from "../contracts"
+import { Gtk, GtkBox } from "../gtkx/bridge/index"
 import { HostNodeContext } from "./host-node"
 import {
   useLayoutChild,

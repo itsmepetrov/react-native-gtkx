@@ -1,13 +1,4 @@
 import { useLayoutEffect, useRef, useState, type RefObject } from "react"
-import {
-  allocateChild,
-  attachRnLayout,
-  detachRnLayout,
-  measureWidget,
-  queueAllocate,
-  queueResize,
-  type Gtk,
-} from "../gtkx-bridge/index"
 import type { LayoutNode } from "../layout/index"
 import { splitStyle, StyleSheet } from "../style/index"
 import { defaultCssRegistry } from "../style/registry.gtkx"
@@ -18,6 +9,15 @@ import type {
   StyleProp,
   VisualStyle,
 } from "../contracts"
+import {
+  allocateChild,
+  attachRnLayout,
+  detachRnLayout,
+  measureWidget,
+  queueAllocate,
+  queueResize,
+  type Gtk,
+} from "../gtkx/bridge/index"
 import { useHostNode, type HostNode } from "./host-node"
 import {
   deferDuringAllocate,

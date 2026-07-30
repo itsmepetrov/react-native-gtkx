@@ -9,6 +9,8 @@ import {
   useState,
   type ReactNode,
 } from "react"
+import { splitStyle, StyleSheet } from "../style/index"
+import type { StyleProp } from "../contracts"
 import {
   Gtk,
   GtkBox,
@@ -16,9 +18,7 @@ import {
   queueAllocate,
   queueResize,
   useSignal,
-} from "../gtkx-bridge/index"
-import { splitStyle, StyleSheet } from "../style/index"
-import type { StyleProp } from "../contracts"
+} from "../gtkx/bridge/index"
 import { HostNodeContext } from "./host-node"
 import { deferDuringAllocate, setStoredOffset } from "./rect-store"
 import {

@@ -4,7 +4,7 @@
 // deliberately not re-exported from src/style/index.ts so that unit tests
 // (and any pure consumer) never pull in @gtkx bindings transitively.
 
-import { css } from "../gtkx-bridge/index"
+import { css } from "../gtkx/bridge/index"
 import { createCssRegistry, type CssRegistry } from "./registry"
 
 export const defaultCssRegistry: CssRegistry = createCssRegistry((cssText) =>

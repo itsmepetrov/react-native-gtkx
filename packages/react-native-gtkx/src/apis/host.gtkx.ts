@@ -2,6 +2,7 @@
 // the gtkx bridge. Everything GTK-specific lives here; the API modules stay
 // pure and receive this object (or a mock in unit tests) via injection.
 
+import type { SubscriptionHandle } from "../contracts"
 import {
   Adw,
   colorScheme,
@@ -10,8 +11,7 @@ import {
   Gtk,
   styleManager,
   toNumber,
-} from "../gtkx-bridge/index"
-import type { SubscriptionHandle } from "../contracts"
+} from "../gtkx/bridge/index"
 import type {
   ColorSchemeName,
   Host,

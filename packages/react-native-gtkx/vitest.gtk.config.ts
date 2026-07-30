@@ -10,8 +10,8 @@ export default defineConfig({
   plugins: [gtkx({ compositor: "sway" })],
   test: {
     name: "gtk",
-    include: ["tests-gtk/**/*.test.{ts,tsx}"],
-    setupFiles: ["./tests-gtk/setup.ts"],
+    include: ["tests/gtk/**/*.test.{ts,tsx}"],
+    setupFiles: ["./tests/gtk/setup.ts"],
     // Window-resize signal delivery races under parallel workers (each spawns
     // its own compositor); the whole suite takes seconds — run serially.
     fileParallelism: false,

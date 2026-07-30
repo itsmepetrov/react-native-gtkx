@@ -25,7 +25,8 @@ transforms as-is.
 
 ```sh
 # Linux (needs GTK4 + libadwaita and Node >= 22.15)
-npm run linux
+npm run linux                        # release bundle
+npx react-native run-linux --dev     # Metro dev server + Fast Refresh
 
 # iOS / Android — the standard React Native flows
 # (not exercised by this repo's CI; the folders are stock CLI output)
