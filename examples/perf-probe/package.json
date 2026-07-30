@@ -8,7 +8,7 @@
     "start": "node dist/bundle.js"
   },
   "dependencies": {
-    "react": "^19.2.0",
+    "react": "^19.2.8",
     "react-native-gtkx": "0.1.0-alpha.3"
   },
   "devDependencies": {

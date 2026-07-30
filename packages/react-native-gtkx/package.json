@@ -63,7 +63,7 @@
   },
   "peerDependencies": {
     "@react-navigation/native": "^7.0.0",
-    "react": "^19.2",
+    "react": "^19.2.8",
     "vite": "^7.0.0 || ^8.0.0"
   },
   "peerDependenciesMeta": {
