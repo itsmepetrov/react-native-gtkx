@@ -146,26 +146,26 @@ const App = () => {
           />
         </View>
         <View style={styles.headerText}>
-          <Text style={styles.name}>Anton Petrov</Text>
+          <Text style={styles.name}>react-native-gtkx</Text>
           <Text style={styles.bio}>
-            Building react-native-gtkx: React Native components rendered as
-            native GTK4 widgets. Yoga computes the flexbox, Pango measures the
-            text, GtkFixed applies the coordinates.
+            React Native components rendered as native GTK4 widgets. Yoga
+            computes the flexbox, Pango measures the text, and the same source
+            file also renders this card with react-native-web.
           </Text>
         </View>
       </View>
 
       <View style={styles.statsRow}>
         <Stat
-          value="10"
-          label="tasks planned"
+          value="30"
+          label="RN exports"
         />
         <Stat
-          value="6"
-          label="tasks closed"
+          value="2"
+          label="toolchains"
         />
         <Stat
-          value="205"
+          value="372"
           label="tests green"
         />
       </View>
@@ -189,7 +189,13 @@ const App = () => {
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>rendered by react-native-gtkx</Text>
+        <Text style={styles.footerText}>
+          {Platform.select({
+            linux: "rendered by react-native-gtkx",
+            web: "rendered by react-native-web",
+            default: "rendered by react-native",
+          })}
+        </Text>
       </View>
     </View>
   )

@@ -41,9 +41,7 @@ script file, sync, and `vm.sh run 'bash path/to/script.sh'`.
   component on the live app and asserts a Fast Refresh in the log;
 - `bash spike/rn-platform/run-dev-headless.sh` /
   `run-dev-error-probe.sh` — Metro dev-mode regressions (HMR applies,
-  state survives, errors are readable and recoverable);
-- `bash scripts/gallery-shots-vm.sh` — golden screenshots of every
-  gallery section.
+  state survives, errors are readable and recoverable).
 
 Screenshots land in the VM's /tmp — `scp` them back to inspect.
 
@@ -62,3 +60,24 @@ ssh "$VM_HOST" 'export XDG_RUNTIME_DIR=/run/user/$(id -u); \
 ```
 
 EGL/ZINK warnings at startup are normal (software rendering in the VM).
+
+## Native (juicy) screenshots — full GNOME chrome
+
+Headless-sway shots are flat (pixman, sway titlebar). For README-grade
+shots capture the REAL session window: GNOME's own Alt+Print, pressed by
+a virtual keyboard (the Shell's screenshot D-Bus API is allowlisted and
+unreachable from scripts; key injection is not):
+
+```bash
+sudo ydotoold --socket-path /tmp/.ydotool.sock --socket-own "$(id -u):$(id -g)" &
+# launch the app into the session (systemd-run, it grabs focus), then:
+YDOTOOL_SOCKET=/tmp/.ydotool.sock ydotool key 56:1 99:1 99:0 56:0   # Alt+Print
+# GNOME saves the focused window (frame + shadow) into
+# "$(xdg-user-dir PICTURES)/Screenshots/"
+```
+
+Needs `ydotool` installed and passwordless sudo in the VM (a dev sandbox).
+For live CPU bars in the monitor example run `yes > /dev/null` workers
+during the shot. `bash scripts/gallery-shots-vm.sh` shoots every gallery
+section this way for docs/shots/gallery/. For a shot without the outer
+shadow, crop to the bounding box of alpha ≥ 250 pixels afterwards.

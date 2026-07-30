@@ -1,14 +1,26 @@
-# react-native-gtkx
+<p align="center">
+  <img src="docs/icon.svg" width="128" alt="react-native-gtkx" />
+</p>
 
-**React Native for the Linux desktop.** Write apps against the familiar React Native API (`View`, `Text`, `StyleSheet`, flexbox) — they run as native GNOME applications on real GTK4/Adwaita widgets, with no WebView and no canvas rendering.
+<h1 align="center">react-native-gtkx</h1>
+
+<p align="center"><b>React Native for the Linux desktop.</b><br/>
+Write apps against the familiar React Native API — they run as native GNOME<br/>
+applications on real GTK4/Adwaita widgets, with no WebView and no canvas rendering.</p>
 
 Under the hood: [gtkx](https://github.com/gtkx-org/gtkx) (a React reconciler for GTK4 on Node.js) + [Yoga](https://yogalayout.dev) (the RN flexbox engine). The model follows react-native-web: a compatibility layer on top of another renderer, with the `react-native` → `react-native-gtkx` alias provided by the Metro preset (Linux as a standard RN [out-of-tree platform](https://reactnative.dev/docs/out-of-tree-platforms) — `npx react-native run-linux` next to `run-ios`/`run-android`) or by the vite preset for Linux-first projects.
 
-![profile — GTK](docs/shots/profile.png)
+<p align="center">
+  <img src="docs/shots/monitor.png" width="610" alt="system monitor — react-native-gtkx" />
+</p>
 
-_The `examples/profile` demo: not a single `@gtkx/*` import — only `react-native`. Every rectangle is a real GTK widget; Yoga computes the flexbox layout, Pango measures the text._
+_`examples/monitor`, live in a native GTK window: the UI is the React Native API, the data is the plain Node runtime (`node:os`, `node:fs`, timers). On this platform "native modules" are just Node — no bindings, no bridge, no permissions dance._
 
-The same source built with react-native-web ([portability proof](docs/shots/profile-web.png)) — structurally identical.
+And the portability proof — `examples/profile` renders ONE source file with both renderers, not a single `@gtkx/*` import in it:
+
+| react-native-gtkx (GTK4)                                            | react-native-web (browser)                                              |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| <img src="docs/shots/profile.png" width="400" alt="profile — GTK"/> | <img src="docs/shots/profile-web.png" width="400" alt="profile — web"/> |
 
 ## Status
 
@@ -26,7 +38,7 @@ The same source built with react-native-web ([portability proof](docs/shots/prof
 - [x] Linux as an RN **out-of-tree platform**: the standard Metro/Babel toolchain, `react-native.config.js` declared by the dependency, `npx react-native run-linux`, compiled package distribution (attw-checked) — see `examples/rn-app` (a cli-init app with ios + android + linux)
 - [x] **Fast Refresh on both toolchains**: `run-linux --dev` (Metro dev server + HMR in the GTK host, state preserved) and `gtkx dev` (vite)
 
-Verified live: `examples/gallery` (the whole surface) and the interactive `examples/playground` — 352 tests (unit + component tests under headless Wayland).
+Verified live: `examples/gallery` (the whole surface) and the interactive `examples/playground` — 372 tests (unit + component tests under headless Wayland).
 
 ## Performance architecture
 
