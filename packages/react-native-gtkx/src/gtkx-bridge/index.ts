@@ -4,14 +4,19 @@
 // rc.1 caveats baked into this surface (see spike/RESULTS.md):
 // - 64-bit FFI values arrive as BigInt → normalize with toNumber() at this boundary
 
-export * as Adw from "@gtkx/gi/adw"
-export * as Gdk from "@gtkx/gi/gdk"
-export * as Gio from "@gtkx/gi/gio"
-export * as GLib from "@gtkx/gi/glib"
-export * as Graphene from "@gtkx/gi/graphene"
-export * as Gsk from "@gtkx/gi/gsk"
-export * as Gtk from "@gtkx/gi/gtk"
-export * as Pango from "@gtkx/gi/pango"
+// import-then-export (not `export * as`): the latter is the one syntax the
+// stock @react-native/babel-preset cannot transform — this form keeps
+// consumer apps on their unmodified RN Babel config.
+import * as Adw from "@gtkx/gi/adw"
+import * as Gdk from "@gtkx/gi/gdk"
+import * as Gio from "@gtkx/gi/gio"
+import * as GLib from "@gtkx/gi/glib"
+import * as Graphene from "@gtkx/gi/graphene"
+import * as Gsk from "@gtkx/gi/gsk"
+import * as Gtk from "@gtkx/gi/gtk"
+import * as Pango from "@gtkx/gi/pango"
+
+export { Adw, Gdk, Gio, GLib, Graphene, Gsk, Gtk, Pango }
 
 export {
   GtkApplication,

@@ -13,12 +13,13 @@ platforms; on Linux it becomes native GTK4/libadwaita widgets.
    to declare app-side;
 2. two lines in [`metro.config.js`](./metro.config.js) —
    `withLinuxPlatform(getDefaultConfig(__dirname))`;
-3. one Babel plugin in [`babel.config.js`](./babel.config.js) —
-   `@babel/plugin-transform-export-namespace-from`;
-4. [`gtkx.config.ts`](./gtkx.config.ts) with the GTK application id;
-5. a `Platform.OS === "linux"` branch in [`index.js`](./index.js) that
+3. [`gtkx.config.ts`](./gtkx.config.ts) with the GTK application id;
+4. a `Platform.OS === "linux"` branch in [`index.js`](./index.js) that
    calls `AppRegistry.runApplication` — on desktop the entry starts the
    app itself (the react-native-web pattern).
+
+Babel stays completely stock — the package ships output the RN preset
+transforms as-is.
 
 ## Run it
 

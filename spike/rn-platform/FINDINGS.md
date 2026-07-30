@@ -39,7 +39,10 @@ host-side).
    polyfills/globals were needed — the release bundle ran as-is under
    `vm.runInThisContext`.
 5. **Babel**: the RN preset chokes on `export * as Ns from` (used by our
-   gtkx-bridge) — add `@babel/plugin-transform-export-namespace-from`.
+   gtkx-bridge at spike time) — the spike added
+   `@babel/plugin-transform-export-namespace-from`. OBSOLETE since: the
+   bridge switched to import-then-export, consumer Babel configs stay
+   completely stock.
 6. **virtual:gtkx-config**: @gtkx/react imports it (JSX metadata re-export +
    applicationId); in the vite path the gtkx CLI plugin serves it. The host
    replicates it with `module.registerHooks` (resolve+load): source =
