@@ -143,7 +143,10 @@ Multi-screen apps use the standard react-navigation API with a native
 Adwaita stack navigator: install `@react-navigation/native` and import
 `createStackNavigator` from `react-native-gtkx/navigation` — pages render
 as `Adw.NavigationPage` with the HeaderBar back button wired to
-react-navigation state. See [docs/api.md](api.md#navigation-react-native-gtkxnavigation).
+react-navigation state. See [docs/api.md](api.md#navigation-react-native-gtkxnavigation), and
+[docs/research/navigation-extensibility.md](research/navigation-extensibility.md)
+for porting an existing react-navigation app (which options carry over,
+which are silently ignored today, and what the desktop cannot mean).
 
 ## Metro or vite?
 
