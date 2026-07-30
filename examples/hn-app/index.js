@@ -11,4 +11,6 @@ AppRegistry.runApplication(appName, {
   title: "Hacker News",
   width: 560,
   height: 760,
+  // The navigator's HeaderBars are the window chrome.
+  chrome: "content",
 })

@@ -22,10 +22,11 @@ Needs GTK4 + libadwaita and Node >= 22.15.
 - **FlatList over live data** — top stories with pull-free refresh and
   infinite scroll (`onEndReached` pagination against a snapshotted
   ranking, see [`src/api.ts`](./src/api.ts));
-- **state-based navigation** — tapping a card opens the story screen;
-  it paints over the list (`position: "absolute"`), so the list stays
-  mounted and its scroll offset and loaded pages survive going back —
-  no navigation library;
+- **a native navigation stack** — tapping a card pushes the story screen
+  through `react-native-gtkx/navigation` (react-navigation on
+  Adw.NavigationView): the HeaderBar back button, the slide animation and
+  the list surviving the round trip (scroll offset, loaded pages) all
+  come from the navigator; Refresh is a declarative HeaderBar button;
 - **a lazily loaded comment tree** — every comment fetches itself from
   `/item/<id>` when its node mounts, indents by depth and caps at three
   levels with a "Show replies" button ([`src/StoryScreen.tsx`](./src/StoryScreen.tsx));

@@ -29,14 +29,19 @@ import {
   AdwNavigationPage,
   AdwNavigationView,
   AdwToolbarView,
+  GtkButton,
   type Adw,
 } from "../gtkx/bridge/index"
+import type { HeaderButton } from "./sidebar"
 
 export type StackNavigationOptions = {
   /** HeaderBar title; defaults to the route name. */
   title?: string
   /** Render the Adwaita HeaderBar for this screen (default true). */
   headerShown?: boolean
+  /** Buttons packed at the end of this screen's HeaderBar (see
+   *  HeaderButton); screens usually set them via navigation.setOptions. */
+  headerButtons?: HeaderButton[]
 }
 
 type StackDescriptor = {
@@ -151,7 +156,20 @@ const StackNavigator = ({
               title={options.title ?? route.name}
             >
               {headerShown ? (
-                <AdwToolbarView topBar={<AdwHeaderBar />}>
+                <AdwToolbarView
+                  topBar={
+                    <AdwHeaderBar
+                      end={options.headerButtons?.map((button) => (
+                        <GtkButton
+                          key={button.id}
+                          iconName={button.icon}
+                          tooltipText={button.tooltip}
+                          onClicked={button.onPress}
+                        />
+                      ))}
+                    />
+                  }
+                >
                   {content}
                 </AdwToolbarView>
               ) : (

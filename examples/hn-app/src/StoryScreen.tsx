@@ -1,6 +1,8 @@
-// Story screen: back header, the story card (favicon, meta, "Open in
-// browser" or the Ask HN text) and a lazily loaded comment tree — every
-// comment is a separate /item/<id> request fired when its node mounts.
+// Story screen: the story card (favicon, meta, "Open in browser" or the
+// Ask HN text) and a lazily loaded comment tree — every comment is a
+// separate /item/<id> request fired when its node mounts. Back lives in
+// the navigator's HeaderBar; StoryRoute adapts the react-navigation route
+// (a story object from the list, or a bare id from a deep link).
 import { useEffect, useState } from "react"
 import {
   ActivityIndicator,
@@ -26,28 +28,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: palette.window,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-  },
-  backButton: {
-    backgroundColor: palette.card,
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-  },
-  backButtonText: {
-    color: palette.text,
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  headerTitle: {
+  loading: {
     flex: 1,
-    color: palette.textDim,
-    fontSize: 13,
+    alignItems: "center",
+    justifyContent: "center",
   },
   body: {
     flex: 1,
@@ -271,13 +255,7 @@ const Comment = ({ id, depth, autoLimit }: CommentProps) => {
   )
 }
 
-export const StoryScreen = ({
-  story,
-  onBack,
-}: {
-  story: Story
-  onBack: () => void
-}) => {
+export const StoryScreen = ({ story }: { story: Story }) => {
   const domain = extractDomain(story.url)
   // GTK has no ICO decoder, so real /favicon.ico files fire onError (see
   // docs/api.md) — Google's s2 endpoint serves PNG for any domain instead,
@@ -288,17 +266,6 @@ export const StoryScreen = ({
 
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
-        <Pressable
-          style={styles.backButton}
-          onPress={onBack}
-        >
-          <Text style={styles.backButtonText}>← Back</Text>
-        </Pressable>
-        <Text style={styles.headerTitle}>
-          {formatComments(story.descendants)}
-        </Text>
-      </View>
       <ScrollView
         style={styles.body}
         contentContainerStyle={styles.bodyContent}
@@ -342,7 +309,9 @@ export const StoryScreen = ({
           ) : null}
         </View>
         <Text style={styles.commentsHeading}>
-          {kids.length === 0 ? "No comments yet" : "Comments"}
+          {kids.length === 0
+            ? "No comments yet"
+            : `Comments — ${formatComments(story.descendants)}`}
         </Text>
         {kids.map((kid) => (
           <Comment
@@ -355,4 +324,41 @@ export const StoryScreen = ({
       </ScrollView>
     </View>
   )
+}
+
+export type StoryParams = { story: Story } | { id: number }
+
+// The route component: a pushed card carries the full story object; a deep
+// link (hn-gtkx://story/<id>) carries only the id and the story is fetched.
+export const StoryRoute = ({ route }: { route: { params?: StoryParams } }) => {
+  const params = route.params
+  const paramStory =
+    params !== undefined && "story" in params ? params.story : null
+  const paramId = params !== undefined && "id" in params ? params.id : null
+  const [fetched, setFetched] = useState<Story | null>(null)
+
+  useEffect(() => {
+    if (paramStory !== null || paramId === null) {
+      return
+    }
+    let stale = false
+    void fetchItem(paramId).then((item) => {
+      if (!stale && item !== null && item.title !== undefined) {
+        setFetched(item as Story)
+      }
+    })
+    return () => {
+      stale = true
+    }
+  }, [paramStory, paramId])
+
+  const story = paramStory ?? fetched
+  if (story === null) {
+    return (
+      <View style={[styles.screen, styles.loading]}>
+        <ActivityIndicator />
+      </View>
+    )
+  }
+  return <StoryScreen story={story} />
 }

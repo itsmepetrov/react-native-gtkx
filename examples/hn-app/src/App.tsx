@@ -1,7 +1,9 @@
 // Hacker News reader — top stories as a FlatList of cards; tapping a card
-// opens the story screen. Everything here is plain React Native; on linux it
-// renders as native GTK4/Adwaita widgets and the data layer (src/api.ts) is
-// just Node fetch.
+// pushes the story screen on a real Adwaita navigation stack
+// (react-native-gtkx/navigation): the HeaderBar back button and the list
+// state surviving the round trip come from the navigator — pages below the
+// stack top stay mounted. Everything else is plain React Native; the data
+// layer (src/api.ts) is just Node fetch.
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
   ActivityIndicator,
@@ -12,9 +14,13 @@ import {
   Text,
   View,
 } from "react-native"
+import {
+  createStackNavigator,
+  NavigationContainer,
+} from "react-native-gtkx/navigation"
 import { fetchTopStories, type Story } from "./api"
 import { extractDomain, formatAge, formatComments, formatScore } from "./format"
-import { StoryScreen } from "./StoryScreen"
+import { StoryRoute, type StoryParams } from "./StoryScreen"
 import { palette } from "./theme"
 
 // Force the dark Adwaita look.
@@ -32,34 +38,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: palette.window,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-  },
-  headerTitle: {
-    color: palette.text,
-    fontSize: 20,
-    fontWeight: "700",
-  },
-  headerSubtitle: {
-    flex: 1,
-    color: palette.textDim,
-    fontSize: 12,
-  },
-  refreshButton: {
-    backgroundColor: palette.accent,
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-  },
-  refreshButtonText: {
-    color: palette.text,
-    fontSize: 13,
-    fontWeight: "700",
-  },
   list: {
     flex: 1,
   },
@@ -67,6 +45,7 @@ const styles = StyleSheet.create({
     // ScrollView content defaults to flex-start on this platform — stretch
     // makes the cards fill the full width of the list (see examples/gallery).
     alignItems: "stretch",
+    paddingTop: 10,
     paddingBottom: 6,
   },
   card: {
@@ -127,16 +106,16 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 24,
   },
-  // The story screen paints over the list instead of replacing it: the
-  // FlatList stays mounted underneath, so its scroll offset and loaded
-  // pages survive the round trip (unmounting would reset both).
-  storyOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: palette.window,
+  retryButton: {
+    backgroundColor: palette.accent,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  retryButtonText: {
+    color: palette.text,
+    fontSize: 13,
+    fontWeight: "700",
   },
   errorTitle: {
     color: palette.red,
@@ -188,15 +167,18 @@ const StoryCard = ({
   )
 }
 
-export const App = () => {
+type StackNavigation = {
+  navigate: (name: string, params?: StoryParams) => void
+  goBack: () => void
+  setOptions: (options: Record<string, unknown>) => void
+}
+
+const TopStoriesScreen = ({ navigation }: { navigation: StackNavigation }) => {
   const [stories, setStories] = useState<Story[]>([])
   const [refreshing, setRefreshing] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [endReached, setEndReached] = useState(false)
-  // State-based navigation: null = the list, a story = the story screen
-  // painted over it. Deliberately no navigation library.
-  const [openStory, setOpenStory] = useState<Story | null>(null)
   const listRef = useRef<FlatList<Story>>(null)
   // The page the NEXT load-more call should fetch; a ref so a stale
   // onEndReached burst cannot schedule the same page twice.
@@ -275,9 +257,23 @@ export const App = () => {
     return () => clearTimeout(kickoff)
   }, [refresh])
 
+  // Refresh lives in the HeaderBar — a declarative native button.
+  useEffect(() => {
+    navigation.setOptions({
+      headerButtons: [
+        {
+          id: "refresh",
+          icon: "view-refresh-symbolic",
+          tooltip: "Refresh the top stories",
+          onPress: () => void refresh(),
+        },
+      ],
+    })
+  }, [navigation, refresh])
+
   // Headless-proof hook for scripts/run-linux-headless-hnapp.sh — dev only.
   // With HN_APP_PROOF=1 the app drives itself through the screenshot
-  // sequence (no input devices under headless sway): scroll the list, open
+  // sequence (no input devices under headless sway): scroll the list, push
   // a story with comments, go back. The console markers pace the script's
   // shots; the last shot proves the scroll offset survived the round trip.
   const proofStarted = useRef(false)
@@ -291,23 +287,24 @@ export const App = () => {
     proofStarted.current = true
     const story =
       stories.find((candidate) => (candidate.descendants ?? 0) >= 10) ??
-      stories[0]
+      stories[0]!
     // Deliberately no cleanup: pagination (onEndReached fires on load and on
     // the scripted scroll) changes `stories` seconds into the sequence, and
-    // a cleanup would cancel the pending timers. The app never unmounts.
+    // a cleanup would cancel the pending timers. The screen never unmounts —
+    // it stays at the bottom of the navigation stack.
     setTimeout(() => {
       listRef.current?.scrollToOffset({ offset: 800, animated: false })
       proofMark("scrolled")
     }, 2000)
     setTimeout(() => {
-      setOpenStory(story)
+      navigation.navigate("Story", { story })
       proofMark("story-open")
     }, 10000)
     setTimeout(() => {
-      setOpenStory(null)
+      navigation.goBack()
       proofMark("back")
     }, 45000)
-  }, [stories])
+  }, [stories, navigation])
 
   if (error !== null) {
     return (
@@ -315,10 +312,10 @@ export const App = () => {
         <Text style={styles.errorTitle}>{"Couldn't load stories"}</Text>
         <Text style={styles.errorMessage}>{error}</Text>
         <Pressable
-          style={styles.refreshButton}
+          style={styles.retryButton}
           onPress={() => void refresh()}
         >
-          <Text style={styles.refreshButtonText}>Retry</Text>
+          <Text style={styles.retryButtonText}>Retry</Text>
         </Pressable>
       </View>
     )
@@ -326,16 +323,6 @@ export const App = () => {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Hacker News</Text>
-        <Text style={styles.headerSubtitle}>top stories</Text>
-        <Pressable
-          style={styles.refreshButton}
-          onPress={() => void refresh()}
-        >
-          <Text style={styles.refreshButtonText}>Refresh</Text>
-        </Pressable>
-      </View>
       <FlatList
         ref={listRef}
         style={styles.list}
@@ -346,7 +333,7 @@ export const App = () => {
           <StoryCard
             story={item}
             rank={index + 1}
-            onPress={() => setOpenStory(item)}
+            onPress={() => navigation.navigate("Story", { story: item })}
           />
         )}
         refreshing={refreshing}
@@ -369,14 +356,38 @@ export const App = () => {
           ) : null
         }
       />
-      {openStory !== null && (
-        <View style={styles.storyOverlay}>
-          <StoryScreen
-            story={openStory}
-            onBack={() => setOpenStory(null)}
-          />
-        </View>
-      )}
     </View>
   )
 }
+
+const Stack = createStackNavigator()
+
+// Deep links resolve through react-navigation's linking layer; on desktop
+// Linking.getInitialURL is null today, so the config simply proves the
+// wiring and picks the default route (see docs/api.md — no "url" events
+// fire yet).
+const linking = {
+  prefixes: ["hn-gtkx://"],
+  config: {
+    screens: {
+      "Top Stories": "",
+      Story: "story/:id",
+    },
+  },
+}
+
+export const App = () => (
+  <NavigationContainer linking={linking}>
+    <Stack.Navigator>
+      <Stack.Screen
+        name="Top Stories"
+        component={TopStoriesScreen}
+        options={{ title: "Hacker News" }}
+      />
+      <Stack.Screen
+        name="Story"
+        component={StoryRoute}
+      />
+    </Stack.Navigator>
+  </NavigationContainer>
+)
