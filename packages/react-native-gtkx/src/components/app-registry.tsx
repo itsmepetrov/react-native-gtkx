@@ -1,5 +1,6 @@
 import { useLayoutEffect, type ComponentType } from "react"
 import {
+  AdwApplicationWindow,
   createRoot,
   Gtk,
   GtkApplication,
@@ -17,6 +18,11 @@ export type RunApplicationParams = {
   title?: string
   width?: number
   height?: number
+  // Window chrome. "system" (default): a GtkApplicationWindow with its own
+  // titlebar. "content": an AdwApplicationWindow with NO window titlebar —
+  // the app's content provides HeaderBars (navigation apps: the page
+  // HeaderBar becomes the titlebar, with the window controls in it).
+  chrome?: "system" | "content"
 }
 
 // RN parity: system "reduce animations" hints never auto-stop RN animations
@@ -39,6 +45,22 @@ const forceEnableAnimations = (): void => {
   // Application-set GtkSettings values outrank the desktop backend, so a
   // later portal update cannot flip this back.
   settings.gtkEnableAnimations = true
+}
+
+// chrome "content": the app component IS the window content (a navigation
+// container whose pages host their own NestedRoots) — no window-level Yoga
+// root in between: the layout root would not allocate foreign GTK children.
+const ContentChrome = ({
+  App,
+  initialProps,
+}: {
+  App: ComponentType<Record<string, unknown>>
+  initialProps: Record<string, unknown>
+}) => {
+  useLayoutEffect(() => {
+    forceEnableAnimations()
+  }, [])
+  return <App {...initialProps} />
 }
 
 const WindowContent = ({
@@ -96,20 +118,29 @@ export const AppRegistry = {
     const width = params.width ?? 800
     const height = params.height ?? 600
 
+    const contentChrome = params.chrome === "content"
+    const Window = contentChrome ? AdwApplicationWindow : GtkApplicationWindow
     const AppWindow = () => (
-      <GtkApplicationWindow
+      <Window
         title={params.title ?? appKey}
         defaultWidth={width}
         defaultHeight={height}
         onCloseRequest={quit}
       >
-        <WindowContent
-          App={App}
-          initialProps={params.initialProps ?? {}}
-          initialWidth={width}
-          initialHeight={height}
-        />
-      </GtkApplicationWindow>
+        {contentChrome ? (
+          <ContentChrome
+            App={App}
+            initialProps={params.initialProps ?? {}}
+          />
+        ) : (
+          <WindowContent
+            App={App}
+            initialProps={params.initialProps ?? {}}
+            initialWidth={width}
+            initialHeight={height}
+          />
+        )}
+      </Window>
     )
 
     createRoot().render(

@@ -1,16 +1,13 @@
 // Component gallery — 100% of the react-native-gtkx v1 surface and the basis
 // for visual regression: every screen is self-documenting, section screenshots
-// are compared against golden images. Imports come from "react-native" only.
-import { useState } from "react"
+// are compared against golden images. Components come from "react-native";
+// the chrome is the package's own sidebar navigator: a native Adwaita
+// NavigationSplitView with the sections in a real GtkListBox sidebar.
+import { Appearance, AppRegistry, ScrollView, StyleSheet } from "react-native"
 import {
-  Appearance,
-  AppRegistry,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native"
+  createSidebarNavigator,
+  NavigationContainer,
+} from "react-native-gtkx/navigation"
 import { AnimatedSection } from "./sections/animated"
 import { ApisSection } from "./sections/apis"
 import { ButtonsSection } from "./sections/buttons"
@@ -46,9 +43,6 @@ const SECTION_DEFS: Record<SectionId, SectionDef> = {
   apis: { title: "APIs", Component: ApisSection },
 }
 
-// The SECTION_IDS order drives the sidebar and the visual regression script.
-const SECTIONS = SECTION_IDS.map((key) => ({ key, ...SECTION_DEFS[key] }))
-
 // The headless regression script opens the desired section without clicks:
 // GALLERY_SECTION=<id> node dist/bundle.js
 const envSection = process.env.GALLERY_SECTION
@@ -57,55 +51,9 @@ const INITIAL_SECTION: SectionId = SECTION_IDS.includes(envSection as SectionId)
   : SECTION_IDS[0]
 
 const styles = StyleSheet.create({
-  app: {
-    flex: 1,
-    flexDirection: "row",
-    backgroundColor: palette.window,
-  },
-  sidebar: {
-    width: 190,
-    backgroundColor: palette.sidebar,
-  },
-  sidebarContent: {
-    alignItems: "stretch",
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    gap: 2,
-  },
-  brand: {
-    color: palette.text,
-    fontSize: 15,
-    fontWeight: "700",
-    paddingHorizontal: 10,
-    paddingBottom: 2,
-  },
-  brandSub: {
-    color: palette.textFaint,
-    fontSize: 11,
-    paddingHorizontal: 10,
-    paddingBottom: 10,
-  },
-  navItem: {
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-  },
-  navItemHovered: {
-    backgroundColor: palette.card,
-  },
-  navItemActive: {
-    backgroundColor: palette.accent,
-  },
-  navLabel: {
-    color: palette.textDim,
-    fontSize: 13,
-  },
-  navLabelActive: {
-    color: palette.text,
-    fontWeight: "700",
-  },
   content: {
     flex: 1,
+    backgroundColor: palette.window,
   },
   // ScrollView defaults its content to alignItems: flex-start — restore
   // stretch so sections fill the width of the content area.
@@ -114,66 +62,40 @@ const styles = StyleSheet.create({
   },
 })
 
-const NavItem = ({
-  title,
-  active,
-  onPress,
-}: {
-  title: string
-  active: boolean
-  onPress: () => void
-}) => (
-  <Pressable
-    style={({ hovered, pressed }) => [
-      styles.navItem,
-      (hovered || pressed) && !active && styles.navItemHovered,
-      active && styles.navItemActive,
-    ]}
-    onPress={onPress}
-  >
-    <Text style={[styles.navLabel, active && styles.navLabelActive]}>
-      {title}
-    </Text>
-  </Pressable>
-)
-
-const App = () => {
-  const [activeKey, setActiveKey] = useState<SectionId>(INITIAL_SECTION)
-  const active = SECTIONS.find((s) => s.key === activeKey) ?? SECTIONS[0]
-  const ActiveSection = active.Component
-
-  return (
-    <View style={styles.app}>
-      {/* The sidebar scrolls too: squeeze the window vertically and the
-          section list pans instead of clipping — scrolling is always an
-          explicit ScrollView, never the window. */}
-      <ScrollView
-        style={styles.sidebar}
-        contentContainerStyle={styles.sidebarContent}
-      >
-        <Text style={styles.brand}>Gallery</Text>
-        <Text style={styles.brandSub}>react-native-gtkx v1</Text>
-        {SECTIONS.map((section) => (
-          <NavItem
-            key={section.key}
-            title={section.title}
-            active={section.key === activeKey}
-            onPress={() => setActiveKey(section.key)}
-          />
-        ))}
-      </ScrollView>
-      {/* key resets scrolling when switching sections — visual regression
-          screenshots always start from the top of the screen. */}
-      <ScrollView
-        key={active.key}
-        style={styles.content}
-        contentContainerStyle={styles.contentContainer}
-      >
-        <ActiveSection />
-      </ScrollView>
-    </View>
+// Every section scrolls inside its screen — scrolling is always an explicit
+// ScrollView, never the window. A fresh screen per section switch means the
+// visual regression screenshots always start from the top.
+const sectionScreen = (Component: () => React.ReactElement) => {
+  const SectionScreen = () => (
+    <ScrollView
+      style={styles.content}
+      contentContainerStyle={styles.contentContainer}
+    >
+      <Component />
+    </ScrollView>
   )
+  return SectionScreen
 }
+
+const Sidebar = createSidebarNavigator()
+
+const App = () => (
+  <NavigationContainer>
+    <Sidebar.Navigator
+      initialRouteName={INITIAL_SECTION}
+      sidebarTitle="Gallery"
+    >
+      {SECTION_IDS.map((id) => (
+        <Sidebar.Screen
+          key={id}
+          name={id}
+          component={sectionScreen(SECTION_DEFS[id].Component)}
+          options={{ title: SECTION_DEFS[id].title }}
+        />
+      ))}
+    </Sidebar.Navigator>
+  </NavigationContainer>
+)
 
 // The gallery is drawn in a dark palette — switch the app's GTK theme to dark
 // so native widgets (Entry, Switch) match it.
@@ -184,4 +106,6 @@ AppRegistry.runApplication("gallery", {
   title: "Gallery — react-native-gtkx",
   width: 1000,
   height: 700,
+  // The sidebar and section HeaderBars ARE the window chrome.
+  chrome: "content",
 })

@@ -167,6 +167,11 @@ const StackNavigator = ({
 
 export const createStackNavigator = createNavigatorFactory(StackNavigator)
 
+export {
+  createSidebarNavigator,
+  type SidebarNavigationOptions,
+} from "./sidebar"
+
 // The rest of the react-navigation surface apps need, so a linux app can
 // import everything from one place.
 export {

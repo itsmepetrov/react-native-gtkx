@@ -3,6 +3,7 @@
 // button — simulated here by calling pop() on the widget, exactly what the
 // button does) flow back into react-navigation state.
 import { render, screen, waitFor } from "@gtkx/testing"
+import { useEffect } from "react"
 import { expect, it } from "vitest"
 import type { Adw, Gtk } from "../../../src/gtkx/bridge/index"
 import { Text, View } from "../../../src/index"
@@ -86,7 +87,9 @@ const Harness = ({
   onRef: (ref: ReturnType<typeof useNavigationContainerRef>) => void
 }) => {
   const navRef = useNavigationContainerRef()
-  onRef(navRef)
+  useEffect(() => {
+    onRef(navRef)
+  }, [navRef, onRef])
   return <App navRef={navRef} />
 }
 

@@ -22,6 +22,7 @@ export {
   AdwApplicationWindow,
   AdwHeaderBar,
   AdwNavigationPage,
+  AdwNavigationSplitView,
   AdwNavigationView,
   AdwToolbarView,
 } from "@gtkx/jsx/adw"
@@ -33,6 +34,8 @@ export {
   GtkEntry,
   GtkGestureClick,
   GtkLabel,
+  GtkListBox,
+  GtkListBoxRow,
   GtkPicture,
   GtkScrolledWindow,
   GtkSpinner,
