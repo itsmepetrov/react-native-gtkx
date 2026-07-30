@@ -42,7 +42,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   nestedLabel: {
-    color: palette.text,
+    color: palette.onColor,
     fontSize: 12,
     fontWeight: "700",
   },
@@ -262,7 +262,12 @@ const PointerEventsDemo = () => {
                 candidate === mode ? palette.accent : palette.cardAlt,
             }}
           >
-            <Text style={{ color: palette.text, fontSize: 12 }}>
+            <Text
+              style={{
+                color: candidate === mode ? palette.onColor : palette.text,
+                fontSize: 12,
+              }}
+            >
               {candidate}
             </Text>
           </Pressable>
@@ -283,7 +288,7 @@ const PointerEventsDemo = () => {
             justifyContent: "center",
           }}
         >
-          <Text style={{ color: palette.text, fontWeight: "700" }}>
+          <Text style={{ color: palette.onColor, fontWeight: "700" }}>
             {`press me (${presses})`}
           </Text>
         </Pressable>

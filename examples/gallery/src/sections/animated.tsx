@@ -34,7 +34,7 @@ const styles = StyleSheet.create({
     backgroundColor: palette.accentPressed,
   },
   buttonText: {
-    color: palette.text,
+    color: palette.onColor,
     fontWeight: "700",
     fontSize: 13,
   },

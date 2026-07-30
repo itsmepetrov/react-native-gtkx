@@ -3,7 +3,14 @@
 // are compared against golden images. Components come from "react-native";
 // the chrome is the package's own sidebar navigator: a native Adwaita
 // NavigationSplitView with the sections in a real GtkListBox sidebar.
-import { Appearance, AppRegistry, ScrollView, StyleSheet } from "react-native"
+import {
+  Appearance,
+  AppRegistry,
+  ScrollView,
+  StyleSheet,
+  useColorScheme,
+  View,
+} from "react-native"
 import {
   createSidebarNavigator,
   NavigationContainer,
@@ -51,9 +58,15 @@ const INITIAL_SECTION: SectionId = SECTION_IDS.includes(envSection as SectionId)
   : SECTION_IDS[0]
 
 const styles = StyleSheet.create({
-  content: {
+  // The section canvas paints the themed window color — the ScrollView
+  // needs an owning View for it, the scroll surface itself does not take
+  // a background.
+  canvas: {
     flex: 1,
     backgroundColor: palette.window,
+  },
+  content: {
+    flex: 1,
   },
   // ScrollView defaults its content to alignItems: flex-start — restore
   // stretch so sections fill the width of the content area.
@@ -67,39 +80,61 @@ const styles = StyleSheet.create({
 // visual regression screenshots always start from the top.
 const sectionScreen = (Component: () => React.ReactElement) => {
   const SectionScreen = () => (
-    <ScrollView
-      style={styles.content}
-      contentContainerStyle={styles.contentContainer}
-    >
-      <Component />
-    </ScrollView>
+    <View style={styles.canvas}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+      >
+        <Component />
+      </ScrollView>
+    </View>
   )
   return SectionScreen
 }
 
 const Sidebar = createSidebarNavigator()
 
-const App = () => (
-  <NavigationContainer>
-    <Sidebar.Navigator
-      initialRouteName={INITIAL_SECTION}
-      sidebarTitle="Gallery"
-    >
-      {SECTION_IDS.map((id) => (
-        <Sidebar.Screen
-          key={id}
-          name={id}
-          component={sectionScreen(SECTION_DEFS[id].Component)}
-          options={{ title: SECTION_DEFS[id].title }}
-        />
-      ))}
-    </Sidebar.Navigator>
-  </NavigationContainer>
-)
+const App = () => {
+  // The HeaderBar theme toggle doubles as the Appearance demo: native
+  // widgets AND the PlatformColor palette follow the scheme instantly.
+  const scheme = useColorScheme()
+  return (
+    <NavigationContainer>
+      <Sidebar.Navigator
+        initialRouteName={INITIAL_SECTION}
+        sidebarTitle="Gallery"
+        headerButtons={[
+          {
+            id: "color-scheme",
+            icon:
+              scheme === "dark"
+                ? "weather-clear-symbolic"
+                : "weather-clear-night-symbolic",
+            tooltip: "Toggle the color scheme",
+            onPress: () =>
+              Appearance.setColorScheme(scheme === "dark" ? "light" : "dark"),
+          },
+        ]}
+      >
+        {SECTION_IDS.map((id) => (
+          <Sidebar.Screen
+            key={id}
+            name={id}
+            component={sectionScreen(SECTION_DEFS[id].Component)}
+            options={{ title: SECTION_DEFS[id].title }}
+          />
+        ))}
+      </Sidebar.Navigator>
+    </NavigationContainer>
+  )
+}
 
-// The gallery is drawn in a dark palette — switch the app's GTK theme to dark
-// so native widgets (Entry, Switch) match it.
-Appearance.setColorScheme("dark")
+// The gallery follows the system scheme via PlatformColor; dark is the
+// default look. GALLERY_SCHEME=light serves the visual-regression script —
+// the HeaderBar toggle switches live either way.
+Appearance.setColorScheme(
+  process.env.GALLERY_SCHEME === "light" ? "light" : "dark",
+)
 
 AppRegistry.registerComponent("gallery", () => App)
 AppRegistry.runApplication("gallery", {

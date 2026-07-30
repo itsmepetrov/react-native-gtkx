@@ -24,15 +24,27 @@ import {
   AdwNavigationPage,
   AdwNavigationSplitView,
   AdwToolbarView,
+  Gtk,
+  GtkButton,
   GtkLabel,
   GtkListBox,
   GtkListBoxRow,
-  type Gtk,
+  GtkScrolledWindow,
 } from "../gtkx/bridge/index"
 
 export type SidebarNavigationOptions = {
   /** Sidebar row and content HeaderBar title; defaults to the route name. */
   title?: string
+}
+
+// A declarative HeaderBar button: the RN-facing API stays GTK-free — the
+// navigator renders the native button itself. `icon` is an Adwaita symbolic
+// icon name (e.g. "weather-clear-night-symbolic").
+export type HeaderButton = {
+  id: string
+  icon: string
+  tooltip?: string
+  onPress: () => void
 }
 
 type SidebarDescriptor = {
@@ -45,6 +57,8 @@ type SidebarNavigatorProps = {
   screenOptions?: SidebarNavigationOptions
   /** Title of the sidebar pane's HeaderBar. */
   sidebarTitle?: string
+  /** Buttons packed at the end of the content HeaderBar. */
+  headerButtons?: HeaderButton[]
   children: ReactNode
 }
 
@@ -52,6 +66,7 @@ const SidebarNavigator = ({
   initialRouteName,
   screenOptions,
   sidebarTitle = "Sidebar",
+  headerButtons,
   children,
 }: SidebarNavigatorProps) => {
   const { state, descriptors, navigation, NavigationContent } =
@@ -97,35 +112,44 @@ const SidebarNavigator = ({
             tag="sidebar"
           >
             <AdwToolbarView topBar={<AdwHeaderBar />}>
-              <GtkListBox
-                ref={listRef}
-                cssClasses={["navigation-sidebar"]}
-                onRowSelected={(row) => {
-                  if (!row) {
-                    return
-                  }
-                  const route = state.routes[row.getIndex()]
-                  if (route && route.key !== active.key) {
-                    navigation.dispatch({
-                      ...TabActions.jumpTo(route.name),
-                      target: state.key,
-                    })
-                  }
-                }}
+              {/* The list must not dictate the window minimum: the sidebar
+                  scrolls when the window is shorter than its rows — the
+                  Adwaita sidebar pattern (and RN semantics: scrolling is
+                  explicit, never the window's). */}
+              <GtkScrolledWindow
+                hscrollbarPolicy={Gtk.PolicyType.NEVER}
+                propagateNaturalWidth
               >
-                {state.routes.map((route) => (
-                  <GtkListBoxRow key={route.key}>
-                    <GtkLabel
-                      label={titleOf(route.key, route.name)}
-                      xalign={0}
-                      marginTop={8}
-                      marginBottom={8}
-                      marginStart={6}
-                      marginEnd={6}
-                    />
-                  </GtkListBoxRow>
-                ))}
-              </GtkListBox>
+                <GtkListBox
+                  ref={listRef}
+                  cssClasses={["navigation-sidebar"]}
+                  onRowSelected={(row) => {
+                    if (!row) {
+                      return
+                    }
+                    const route = state.routes[row.getIndex()]
+                    if (route && route.key !== active.key) {
+                      navigation.dispatch({
+                        ...TabActions.jumpTo(route.name),
+                        target: state.key,
+                      })
+                    }
+                  }}
+                >
+                  {state.routes.map((route) => (
+                    <GtkListBoxRow key={route.key}>
+                      <GtkLabel
+                        label={titleOf(route.key, route.name)}
+                        xalign={0}
+                        marginTop={8}
+                        marginBottom={8}
+                        marginStart={6}
+                        marginEnd={6}
+                      />
+                    </GtkListBoxRow>
+                  ))}
+                </GtkListBox>
+              </GtkScrolledWindow>
             </AdwToolbarView>
           </AdwNavigationPage>
         }
@@ -134,7 +158,20 @@ const SidebarNavigator = ({
           title={titleOf(active.key, active.name)}
           tag="content"
         >
-          <AdwToolbarView topBar={<AdwHeaderBar />}>
+          <AdwToolbarView
+            topBar={
+              <AdwHeaderBar
+                end={headerButtons?.map((button) => (
+                  <GtkButton
+                    key={button.id}
+                    iconName={button.icon}
+                    tooltipText={button.tooltip}
+                    onClicked={button.onPress}
+                  />
+                ))}
+              />
+            }
+          >
             {/* Keyed by route: switching sections swaps the whole screen —
                 a fresh NestedRoot per section, the previous one disposes. */}
             <NestedRoot key={active.key}>

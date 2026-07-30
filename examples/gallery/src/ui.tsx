@@ -1,13 +1,17 @@
 // Shared gallery building blocks: the palette and self-documenting wrappers.
 // react-native API only — like everything under examples/.
 import type { ReactNode } from "react"
-import { StyleSheet, Text, View } from "react-native"
+import { PlatformColor, StyleSheet, Text, View } from "react-native"
 
+// Surfaces and text resolve through Adwaita CSS variables (PlatformColor):
+// GTK recomputes them when the color scheme flips, so the whole gallery
+// follows the HeaderBar theme toggle live — no re-render involved. The
+// saturated demo colors are content and stay fixed.
 export const palette = {
-  window: "#241f31",
-  sidebar: "#1d1928",
-  card: "#3d3846",
-  cardAlt: "#4a4458",
+  window: PlatformColor("window-bg-color"),
+  sidebar: PlatformColor("sidebar-bg-color"),
+  card: PlatformColor("card-bg-color"),
+  cardAlt: PlatformColor("card-shade-color"),
   accent: "#1c71d8",
   accentPressed: "#1a5fb4",
   green: "#26a269",
@@ -15,9 +19,14 @@ export const palette = {
   purple: "#613583",
   yellow: "#f6d32d",
   red: "#c01c28",
-  text: "#ffffff",
-  textDim: "#c0bfbc",
-  textFaint: "#9a9996",
+  text: PlatformColor("window-fg-color"),
+  // No dim/faint Adwaita variables exist — neutral grays picked to stay
+  // readable on both card surfaces.
+  textDim: "#8f929c",
+  textFaint: "#82858f",
+  // Text sitting ON a saturated fill (accent buttons, colored chips): always
+  // white, whatever the scheme — the fill itself does not change.
+  onColor: "#ffffff",
 } as const
 
 const styles = StyleSheet.create({

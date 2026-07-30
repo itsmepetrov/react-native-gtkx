@@ -30,7 +30,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   buttonText: {
-    color: palette.text,
+    color: palette.onColor,
     fontWeight: "700",
   },
   status: {

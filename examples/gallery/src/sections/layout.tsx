@@ -19,7 +19,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   boxLabel: {
-    color: palette.text,
+    color: palette.onColor,
     fontSize: 11,
     fontWeight: "700",
   },
@@ -34,7 +34,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   chipLabel: {
-    color: palette.text,
+    color: palette.onColor,
     fontSize: 11,
   },
   absoluteHost: {
@@ -50,7 +50,7 @@ const styles = StyleSheet.create({
     backgroundColor: palette.orange,
   },
   badgeLabel: {
-    color: palette.text,
+    color: palette.onColor,
     fontSize: 11,
     fontWeight: "700",
   },
@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
     paddingLeft: 6,
   },
   percentLabel: {
-    color: palette.text,
+    color: palette.onColor,
     fontSize: 10,
     fontWeight: "700",
   },

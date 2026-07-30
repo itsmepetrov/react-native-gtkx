@@ -169,6 +169,7 @@ export const createStackNavigator = createNavigatorFactory(StackNavigator)
 
 export {
   createSidebarNavigator,
+  type HeaderButton,
   type SidebarNavigationOptions,
 } from "./sidebar"
 

@@ -31,6 +31,7 @@ export {
   GtkApplication,
   GtkApplicationWindow,
   GtkBox,
+  GtkButton,
   GtkEntry,
   GtkGestureClick,
   GtkLabel,

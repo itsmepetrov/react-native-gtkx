@@ -33,7 +33,7 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   rowText: {
-    color: palette.text,
+    color: palette.onColor,
     fontSize: 13,
   },
   separator: {
@@ -68,7 +68,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   sectionHeaderText: {
-    color: palette.text,
+    color: palette.onColor,
     fontSize: 12,
     fontWeight: "700",
   },
@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
     backgroundColor: palette.accentPressed,
   },
   buttonText: {
-    color: palette.text,
+    color: palette.onColor,
     fontWeight: "700",
     fontSize: 13,
   },

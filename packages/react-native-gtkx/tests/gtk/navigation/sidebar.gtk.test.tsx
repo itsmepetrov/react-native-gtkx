@@ -2,10 +2,10 @@
 // parallel screens (TabRouter). Both sync directions are covered: selecting
 // a row natively switches the screen, and programmatic navigation moves the
 // native selection.
-import { render, screen, waitFor } from "@gtkx/testing"
+import { fireEvent, render, screen, waitFor } from "@gtkx/testing"
 import { useEffect } from "react"
-import { expect, it } from "vitest"
-import type { Gtk } from "../../../src/gtkx/bridge/index"
+import { expect, it, vi } from "vitest"
+import { Gtk, type Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
 import { Text, View } from "../../../src/index"
 import {
   createSidebarNavigator,
@@ -15,12 +15,12 @@ import {
 
 const Sidebar = createSidebarNavigator()
 
-const findListBox = (widget: Gtk.Widget | null): Gtk.ListBox | null => {
+const findListBox = (widget: GtkNs.Widget | null): GtkNs.ListBox | null => {
   if (!widget) {
     return null
   }
-  if (typeof (widget as Partial<Gtk.ListBox>).getRowAtIndex === "function") {
-    return widget as Gtk.ListBox
+  if (typeof (widget as Partial<GtkNs.ListBox>).getRowAtIndex === "function") {
+    return widget as GtkNs.ListBox
   }
   for (
     let child = widget.getFirstChild();
@@ -47,6 +47,8 @@ const SecondScreen = () => (
   </View>
 )
 
+const headerPress = vi.fn()
+
 const Harness = ({
   onRef,
 }: {
@@ -58,7 +60,17 @@ const Harness = ({
   }, [navRef, onRef])
   return (
     <NavigationContainer ref={navRef}>
-      <Sidebar.Navigator sidebarTitle="Test sections">
+      <Sidebar.Navigator
+        sidebarTitle="Test sections"
+        headerButtons={[
+          {
+            id: "probe",
+            icon: "weather-clear-symbolic",
+            tooltip: "header probe",
+            onPress: headerPress,
+          },
+        ]}
+      >
         <Sidebar.Screen
           name="first"
           component={FirstScreen}
@@ -83,7 +95,7 @@ it("native row selection and programmatic navigation stay in sync", async () => 
       }}
     />,
   )
-  const window = container as Gtk.Window
+  const window = container as GtkNs.Window
 
   // Initial: the first screen is focused, its row is selected, the sidebar
   // rows carry the option titles.
@@ -113,5 +125,14 @@ it("native row selection and programmatic navigation stay in sync", async () => 
   await waitFor(() => {
     expect(screen.getByText("first section body")).toBeTruthy()
     expect(list!.getSelectedRow()?.getIndex()).toBe(0)
+  })
+
+  // The declarative HeaderBar button rendered natively and fires.
+  const button = (await screen.findByRole(Gtk.AccessibleRole.BUTTON, {
+    name: "header probe",
+  })) as GtkNs.Button
+  fireEvent(button, "clicked")
+  await waitFor(() => {
+    expect(headerPress).toHaveBeenCalled()
   })
 })
