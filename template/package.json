@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "react": "^19.0.0",
-    "react-native-gtkx": "0.1.0"
+    "react-native-gtkx": "0.1.0-alpha.1"
   },
   "devDependencies": {
     "@gtkx/cli": "1.0.0-rc.1",

@@ -1,8 +1,28 @@
 {
   "name": "react-native-gtkx",
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.1",
   "description": "React Native components and APIs for Linux desktop, rendered as native GTK4 widgets via gtkx",
   "license": "MIT",
+  "author": "Anton Petrov <anton@itsmepetrov.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/itsmepetrov/react-native-gtkx.git",
+    "directory": "packages/react-native-gtkx"
+  },
+  "homepage": "https://github.com/itsmepetrov/react-native-gtkx#readme",
+  "bugs": "https://github.com/itsmepetrov/react-native-gtkx/issues",
+  "keywords": [
+    "react-native",
+    "react",
+    "gtk",
+    "gtk4",
+    "libadwaita",
+    "linux",
+    "desktop",
+    "gnome",
+    "yoga",
+    "out-of-tree-platform"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -33,6 +53,7 @@
     }
   },
   "scripts": {
+    "prepack": "bash ../../scripts/sync-package-readme.sh",
     "build:dist": "rm -rf dist && tsc -p tsconfig.build.json",
     "watch:dist": "tsc -p tsconfig.build.json --watch --preserveWatchOutput"
   },
