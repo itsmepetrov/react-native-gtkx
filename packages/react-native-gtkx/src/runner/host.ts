@@ -50,23 +50,43 @@ const load = async (name: string): Promise<HostModule> => {
   return merged
 }
 
-// @gtkx/react imports `virtual:gtkx-config` (JSX metadata + the resolved
-// applicationId); in the vite path the gtkx CLI plugin serves it. Replicate
-// it with a loader hook. The fake module URL is anchored inside this
-// package so the re-exported bare specifier resolves through node_modules.
-const { loadConfig } = await import("@gtkx/config")
-const { config: gtkxConfig } = await loadConfig(process.cwd())
+// @gtkx/react imports `virtual:gtkx-config` — JSX metadata plus the values
+// resolved from gtkx.config.ts (applicationId for the GApplication, the
+// userEventSignals suppressed during commits and the elements config the
+// reconciler registry is primed with). In the vite path the gtkx CLI plugin
+// serves it; replicate it with a loader hook, mirroring @gtkx/config's own
+// renderConfigModule. The fake module URL is anchored inside this package so
+// the re-exported bare specifier resolves through node_modules.
+const CONFIG_REQUIRED =
+  "gtkx.config.ts with an applicationId is required in the app root " +
+  '(export default defineConfig({ applicationId: "...", libraries: [...] })).'
+const { createConfigLoader } = await import("@gtkx/config/internal")
+// The loader validates the config, so a missing or malformed one throws.
+const gtkxConfig = await createConfigLoader()(process.cwd()).catch(
+  (error: unknown) => fail(`${CONFIG_REQUIRED}\n${String(error)}`),
+)
 if (!gtkxConfig.applicationId) {
+  fail(CONFIG_REQUIRED)
+}
+// A behaviors module would have to be bundled and merged through
+// @gtkx/react/config; the react-native surface owns element behaviors, so no
+// app declares one — refuse rather than silently drop it.
+if (gtkxConfig.elements !== null) {
   fail(
-    "gtkx.config.ts with an applicationId is required in the app root " +
-      '(export default defineConfig({ applicationId: "...", libraries: [...] })).',
+    "gtkx.config.ts `elements.behaviors` is not supported on the linux " +
+      "platform — react-native-gtkx owns element behaviors.",
   )
 }
 const configModuleUrl = new URL("./__virtual-gtkx-config.mjs", import.meta.url)
   .href
+const lazyElements = Object.fromEntries(
+  gtkxConfig.lazyElements.map((type) => [type, { lazy: true }]),
+)
 const configModuleSource = [
   `export * from "@gtkx/jsx/metadata";`,
   `export const applicationId = ${JSON.stringify(gtkxConfig.applicationId)};`,
+  `export const userEventSignals = ${JSON.stringify(gtkxConfig.userEventSignals)};`,
+  `export const elements = ${JSON.stringify(lazyElements)};`,
 ].join("\n")
 registerHooks({
   resolve(specifier, context, nextResolve) {

@@ -65,22 +65,36 @@ globalThis.__ReactRefresh = {
   },
 }
 
-// --- virtual:gtkx-config (same mechanism as the release host).
-const { loadConfig } = await import(
-  pathToFileURL(fromPackage.resolve("@gtkx/config")).href
+// --- virtual:gtkx-config (same mechanism and same module shape as the
+// release host — see host.ts for why each export is needed).
+const CONFIG_REQUIRED =
+  "gtkx.config.ts with an applicationId is required in the app root " +
+  '(export default defineConfig({ applicationId: "...", libraries: [...] })).'
+const { createConfigLoader } = await import(
+  pathToFileURL(fromPackage.resolve("@gtkx/config/internal")).href
 )
-const { config: gtkxConfig } = await loadConfig(process.cwd())
+const gtkxConfig = await createConfigLoader()(process.cwd()).catch(
+  (error: unknown) => fail(`${CONFIG_REQUIRED}\n${String(error)}`),
+)
 if (!gtkxConfig.applicationId) {
+  fail(CONFIG_REQUIRED)
+}
+if (gtkxConfig.elements !== null) {
   fail(
-    "gtkx.config.ts with an applicationId is required in the app root " +
-      '(export default defineConfig({ applicationId: "...", libraries: [...] })).',
+    "gtkx.config.ts `elements.behaviors` is not supported on the linux " +
+      "platform — react-native-gtkx owns element behaviors.",
   )
 }
 const configModuleUrl = new URL("./__virtual-gtkx-config.mjs", import.meta.url)
   .href
+const lazyElements = Object.fromEntries(
+  gtkxConfig.lazyElements.map((type: string) => [type, { lazy: true }]),
+)
 const configModuleSource = [
   `export * from "@gtkx/jsx/metadata";`,
   `export const applicationId = ${JSON.stringify(gtkxConfig.applicationId)};`,
+  `export const userEventSignals = ${JSON.stringify(gtkxConfig.userEventSignals)};`,
+  `export const elements = ${JSON.stringify(lazyElements)};`,
 ].join("\n")
 registerHooks({
   resolve(specifier, context, nextResolve) {
