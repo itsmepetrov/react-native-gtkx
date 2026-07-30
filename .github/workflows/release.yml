@@ -51,7 +51,7 @@ jobs:
           bash scripts/build-deb.sh monitor "System Monitor" "$VERSION" debs
           bash scripts/build-deb.sh gallery "RN Gallery" "$VERSION" debs
           ls -la debs/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: debs-${{ matrix.arch }}
           path: debs/*.deb
