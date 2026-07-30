@@ -1,0 +1,122 @@
+// The Node+GTK host: executes a Metro jsbundle built for the linux
+// platform. Spawned by the run-linux command as
+// `node dist/runner/host.js <bundle>`; the bundle's externalized proxies
+// (see ../metro) read the modules injected here.
+//
+// This file must stay runnable under BARE Node: no extensionless relative
+// imports — only builtins, bare dependency specifiers and the package
+// self-reference (resolved through the exports map).
+import { readFileSync } from "node:fs"
+import { createRequire, registerHooks } from "node:module"
+import { pathToFileURL } from "node:url"
+import vm from "node:vm"
+import { HOST_MODULE_EXTERNALS } from "react-native-gtkx/metro"
+
+type HostModule = Record<string, unknown>
+
+const fail = (message: string): never => {
+  console.error(`[react-native-gtkx] ${message}`)
+  process.exit(1)
+}
+
+if (typeof registerHooks !== "function") {
+  fail(
+    `Node ${process.version} lacks module.registerHooks — the linux host needs Node >= 22.15.`,
+  )
+}
+
+// Resolution anchors. @gtkx/* and @gtkx/config resolve as THIS package's
+// dependencies; react resolves FROM @gtkx/react's real location — the
+// reconciler and the app must share one React instance, and anchoring at
+// the app could pick up a second copy installed by npm peer auto-install.
+const fromPackage = createRequire(import.meta.url)
+const fromGtkxReact = createRequire(fromPackage.resolve("@gtkx/react"))
+
+const resolveExternal = (name: string): string =>
+  name === "react" || name.startsWith("react/")
+    ? fromGtkxReact.resolve(name)
+    : fromPackage.resolve(name)
+
+// import() handles both ESM and CJS; merge a `default` for Babel's
+// default-import interop when the module has none of its own.
+const load = async (name: string): Promise<HostModule> => {
+  const namespace: HostModule = await import(
+    pathToFileURL(resolveExternal(name)).href
+  )
+  const merged: HostModule = { __esModule: true, ...namespace }
+  if (!("default" in namespace)) {
+    merged.default = namespace
+  }
+  return merged
+}
+
+// @gtkx/react imports `virtual:gtkx-config` (JSX metadata + the resolved
+// applicationId); in the vite path the gtkx CLI plugin serves it. Replicate
+// it with a loader hook. The fake module URL is anchored inside this
+// package so the re-exported bare specifier resolves through node_modules.
+const { loadConfig } = await import("@gtkx/config")
+const { config: gtkxConfig } = await loadConfig(process.cwd())
+if (!gtkxConfig.applicationId) {
+  fail(
+    "gtkx.config.ts with an applicationId is required in the app root " +
+      '(export default defineConfig({ applicationId: "...", libraries: [...] })).',
+  )
+}
+const configModuleUrl = new URL("./__virtual-gtkx-config.mjs", import.meta.url)
+  .href
+const configModuleSource = [
+  `export * from "@gtkx/jsx/metadata";`,
+  `export const applicationId = ${JSON.stringify(gtkxConfig.applicationId)};`,
+].join("\n")
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "virtual:gtkx-config") {
+      return { url: configModuleUrl, shortCircuit: true }
+    }
+    return nextResolve(specifier, context)
+  },
+  load(url, context, nextLoad) {
+    if (url === configModuleUrl) {
+      return {
+        format: "module",
+        source: configModuleSource,
+        shortCircuit: true,
+      }
+    }
+    return nextLoad(url, context)
+  },
+})
+
+declare global {
+  var __hostModules: Record<string, HostModule>
+  var __hostRequire: NodeJS.Require
+}
+
+globalThis.__hostModules = {}
+for (const name of HOST_MODULE_EXTERNALS) {
+  try {
+    globalThis.__hostModules[name] = await load(name)
+  } catch (error) {
+    fail(
+      `failed to load host module "${name}" — is the codegen store in ` +
+        `place (npx gtkx codegen) and GTK4/libadwaita installed?\n${String(error)}`,
+    )
+  }
+}
+// Node builtin proxies resolve lazily through the host's own require.
+globalThis.__hostRequire = createRequire(import.meta.url)
+
+const bundlePath = process.argv[2]
+if (!bundlePath) {
+  fail("usage: node host.js <path/to/main.jsbundle>")
+}
+let source: string
+try {
+  source = readFileSync(bundlePath!, "utf8")
+} catch {
+  fail(`bundle not found at ${bundlePath} — run react-native run-linux.`)
+  throw new Error("unreachable")
+}
+// The entry calls AppRegistry.runApplication itself (the react-native-web
+// pattern); the GLib main loop keeps the process alive afterwards.
+vm.runInThisContext(source, { filename: bundlePath })

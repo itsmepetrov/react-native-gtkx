@@ -65,9 +65,13 @@ host-side).
 
 ```
 npm install
-npm run bundle        # Metro, --platform linux
-npm run host          # opens the window (in the VM: bash run-headless.sh)
+npx react-native run-linux   # codegen ensure -> Metro bundle -> GTK window
+# in the VM: bash run-headless.sh (same product path under headless sway)
 ```
+
+The spike's original hand-rolled host.mjs has been productized into the
+package (dist/runner: host + the run-linux command) — this app now runs
+through the real thing.
 
 ## Implications for the epic
 

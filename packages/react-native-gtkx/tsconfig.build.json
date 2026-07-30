@@ -7,7 +7,12 @@
     "declaration": true,
     "sourceMap": true,
     // Sources are not shipped — maps embed them instead.
-    "inlineSources": true
+    "inlineSources": true,
+    // See tsconfig.json: the runner's package self-reference typechecks
+    // against the source while the emitted specifier stays bare.
+    "paths": {
+      "react-native-gtkx/metro": ["./src/metro/index.ts"]
+    }
   },
   "include": ["src/**/*"]
 }

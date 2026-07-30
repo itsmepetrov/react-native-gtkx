@@ -4,7 +4,8 @@
   "version": "0.0.0",
   "scripts": {
     "bundle": "react-native bundle --platform linux --dev false --entry-file index.js --bundle-output dist/main.jsbundle --reset-cache",
-    "host": "node host.mjs dist/main.jsbundle"
+    "start": "react-native run-linux --bundle-output dist/main.jsbundle",
+    "host": "react-native run-linux --skip-bundling --bundle-output dist/main.jsbundle"
   },
   "dependencies": {
     "react": "^19.2.3",

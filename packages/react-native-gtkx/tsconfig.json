@@ -2,7 +2,14 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
-    "rootDir": "."
+    "rootDir": ".",
+    // The runner imports the externals list through the package
+    // self-reference (it must survive in the emitted JS as a bare
+    // specifier); map it to the source so typechecking a clean checkout
+    // does not require a built dist.
+    "paths": {
+      "react-native-gtkx/metro": ["./src/metro/index.ts"]
+    }
   },
   "include": ["src/**/*", "tests/**/*", "tests-gtk/**/*"]
 }

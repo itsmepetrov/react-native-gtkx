@@ -18,6 +18,10 @@
     "./metro": {
       "types": "./dist/metro/index.d.ts",
       "default": "./dist/metro/index.js"
+    },
+    "./runner": {
+      "types": "./dist/runner/index.d.ts",
+      "default": "./dist/runner/index.js"
     }
   },
   "scripts": {
@@ -28,14 +32,14 @@
     "react": "^19"
   },
   "dependencies": {
+    "@gtkx/cli": "1.0.0-rc.1",
+    "@gtkx/config": "1.0.0-rc.1",
     "@gtkx/css": "1.0.0-rc.1",
     "@gtkx/react": "1.0.0-rc.1",
     "@gtkx/runtime": "1.0.0-rc.1",
     "yoga-layout": "^3.2.1"
   },
   "devDependencies": {
-    "@gtkx/cli": "1.0.0-rc.1",
-    "@gtkx/config": "1.0.0-rc.1",
     "@gtkx/testing": "1.0.0-rc.1",
     "@gtkx/vitest": "1.0.0-rc.1"
   },
