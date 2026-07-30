@@ -79,6 +79,8 @@ export type StackNavigationOptions = {
 type StackDescriptor = {
   options: StackNavigationOptions
   render: () => ReactNode
+  // react-navigation hands every descriptor its own route.
+  route: { key: string; name: string }
 }
 
 type StackNavigatorProps = {
@@ -348,7 +350,11 @@ const StackView = ({
           <AdwNavigationPage
             key={key}
             tag={key}
-            title={options.title ?? snapshot?.name ?? key}
+            // Never the route key — that is an internal identifier, and
+            // it would end up in the window title under content chrome.
+            title={
+              options.title ?? descriptor?.route.name ?? snapshot?.name ?? key
+            }
             canPop={canPop}
             onHidden={() => onHidden(key)}
           >

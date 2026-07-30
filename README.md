@@ -16,11 +16,10 @@ applications on real GTK4/Adwaita widgets, with no WebView and no canvas renderi
 
 Under the hood: [gtkx](https://github.com/gtkx-org/gtkx) (a React reconciler for GTK4 on Node.js) + [Yoga](https://yogalayout.dev) (the RN flexbox engine). The model follows react-native-web: a compatibility layer on top of another renderer, with the `react-native` → `react-native-gtkx` alias provided by the Metro preset (Linux as a standard RN [out-of-tree platform](https://reactnative.dev/docs/out-of-tree-platforms) — `npx react-native run-linux` next to `run-ios`/`run-android`) or by the vite preset for Linux-first projects.
 
-<p align="center">
-  <img src="docs/shots/monitor.png" width="610" alt="system monitor — react-native-gtkx" />
-</p>
+| ![Hacker News list — react-native-gtkx](docs/shots/hn-list.png) | ![story screen with comments](docs/shots/hn-story.png) |
+| :-------------------------------------------------------------: | :----------------------------------------------------: |
 
-_`examples/monitor`, live in a native GTK window: the UI is the React Native API, the data is the plain Node runtime (`node:os`, `node:fs`, timers). On this platform "native modules" are just Node — no bindings, no bridge, no permissions dance._
+_`examples/hn-app`, live in native GTK windows: a Hacker News reader on the standard React Native Metro toolchain. Tapping a card pushes a real `Adw.NavigationView` page — the back button, the slide and the preserved list position come from the platform, not from JS. The search field sits **inside** the HeaderBar (real RN content in native chrome) and queries the HN API; comments load as you scroll. The data layer is plain Node `fetch` — on this platform "native modules" are just Node._
 
 And the portability proof — `examples/profile` renders ONE source file with both renderers, not a single `@gtkx/*` import in it:
 

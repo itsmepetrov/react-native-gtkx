@@ -461,6 +461,7 @@ export const App = () => (
       <Stack.Screen
         name="Story"
         component={StoryRoute}
+        options={{ title: "Story" }}
       />
     </Stack.Navigator>
   </NavigationContainer>
