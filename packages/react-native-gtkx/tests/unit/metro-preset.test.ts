@@ -1,7 +1,8 @@
 // The Metro preset is a pure function over a Metro-like config: platform
 // registration, react-native aliasing, host-side externalization and the
 // InitializeCore drop are all testable without Metro itself.
-import { mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
+import { isBuiltin } from "node:module"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterAll, expect, test } from "vitest"
@@ -121,4 +122,39 @@ test("extra externals extend the host-provided set", () => {
   const resolution = wrappedResolve(context, "better-sqlite3", "linux")
   const source = readFileSync(resolution.filePath!, "utf8")
   expect(source).toContain('global.__hostModules["better-sqlite3"]')
+})
+
+test("every bundle-side bare import in src is host-provided", () => {
+  // A bare specifier missing from HOST_MODULE_EXTERNALS gets bundled by
+  // Metro, reaches host-only virtual modules (virtual:gtkx-config) and
+  // breaks standalone apps — the @gtkx/react/internal regression. runner/,
+  // metro/ and vite/ are host-side and never enter the bundle.
+  const srcRoot = join(import.meta.dirname, "../../src")
+  const hostSide = new Set(["runner", "metro", "vite"])
+  const specifiers = new Set<string>()
+  const visit = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        if (dir !== srcRoot || !hostSide.has(entry.name)) {
+          visit(join(dir, entry.name))
+        }
+        continue
+      }
+      if (!/\.tsx?$/.test(entry.name)) {
+        continue
+      }
+      const source = readFileSync(join(dir, entry.name), "utf8")
+      for (const match of source.matchAll(
+        /(?:from|import)\s*\(?\s*["']([^"'.][^"']*)["']/g,
+      )) {
+        specifiers.add(match[1]!)
+      }
+    }
+  }
+  visit(srcRoot)
+  expect(specifiers.size).toBeGreaterThan(0)
+  const missing = [...specifiers].filter(
+    (name) => !isBuiltin(name) && !HOST_MODULE_EXTERNALS.includes(name),
+  )
+  expect(missing).toEqual([])
 })

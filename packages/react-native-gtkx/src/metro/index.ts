@@ -38,6 +38,7 @@ export const HOST_MODULE_EXTERNALS = [
   "@gtkx/gi/pango",
   "@gtkx/jsx/gtk",
   "@gtkx/react",
+  "@gtkx/react/internal",
   "@gtkx/runtime",
   "react",
   "react/jsx-runtime",

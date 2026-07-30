@@ -52,12 +52,14 @@ const binOf = (
 }
 
 // The codegen store lives in the node_modules that hosts the @gtkx
-// packages — run the gtkx CLI from that tree's root so the store lands
-// next to the bindings that read it.
+// packages — run the gtkx CLI from the project that OWNS that node_modules:
+// with cwd inside node_modules itself the CLI reports "up to date" without
+// ever creating the store.
 const ensureCodegenStore = (): void => {
-  const gtkxRoot = dirname(
+  const hostingNodeModules = dirname(
     dirname(dirname(fromPackage.resolve("@gtkx/react/package.json"))),
   )
+  const gtkxRoot = dirname(hostingNodeModules)
   console.warn("[react-native-gtkx] ensuring gtkx codegen store…")
   const status = run(
     process.execPath,
