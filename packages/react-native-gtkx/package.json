@@ -4,13 +4,19 @@
   "description": "React Native components and APIs for Linux desktop, rendered as native GTK4 widgets via gtkx",
   "license": "MIT",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "react-native": "./src/index.ts",
   "exports": {
+    "./package.json": "./package.json",
     ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
+      "types": "./dist/index.d.ts",
+      "react-native": "./src/index.ts",
+      "default": "./dist/index.js"
     }
   },
   "scripts": {
+    "build:dist": "rm -rf dist && tsc -p tsconfig.build.json",
     "test:gtk": "vitest run --config vitest.gtk.config.ts"
   },
   "peerDependencies": {
@@ -29,6 +35,7 @@
     "@gtkx/vitest": "1.0.0-rc.1"
   },
   "files": [
+    "dist",
     "src"
   ]
 }

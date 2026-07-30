@@ -11,6 +11,8 @@
 //    instance. Each external resolves to a generated proxy module that
 //    reads the real thing from global.__hostModules (injected by host.mjs
 //    before the bundle runs).
+/* eslint-disable @typescript-eslint/no-require-imports -- Metro loads this
+   config as CommonJS; the productized preset will be TS bundled to CJS. */
 const { getDefaultConfig } = require("@react-native/metro-config")
 const fs = require("node:fs")
 const { isBuiltin } = require("node:module")
@@ -36,14 +38,15 @@ const EXTERNALS = [
 ]
 
 const proxyDir = path.join(__dirname, "externals")
-const proxyFile = (name) => path.join(proxyDir, name.replace(/[@/]/g, "_") + ".js")
+const proxyFile = (name) =>
+  path.join(proxyDir, name.replace(/[@/]/g, "_") + ".js")
 
 fs.mkdirSync(proxyDir, { recursive: true })
 for (const name of EXTERNALS) {
   fs.writeFileSync(
     proxyFile(name),
     // The host guarantees __hostModules before executing the bundle.
-    `module.exports = global.__hostModules[${JSON.stringify(name)}];\n`,
+    `module.exports = global.__hostModules[${JSON.stringify(name)}]\n`,
   )
 }
 
@@ -70,7 +73,7 @@ const builtinProxy = (name) => {
   if (!fs.existsSync(file)) {
     fs.writeFileSync(
       file,
-      `module.exports = global.__hostRequire(${JSON.stringify(name)});\n`,
+      `module.exports = global.__hostRequire(${JSON.stringify(name)})\n`,
     )
   }
   return { type: "sourceFile", filePath: file }
@@ -85,12 +88,19 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     if (isBuiltin(moduleName)) {
       return builtinProxy(moduleName)
     }
-    if (moduleName === "react-native" || moduleName.startsWith("react-native/")) {
-      return context.resolveRequest(
+    if (
+      moduleName === "react-native" ||
+      moduleName.startsWith("react-native/")
+    ) {
+      const resolved = context.resolveRequest(
         context,
         moduleName.replace(/^react-native/, "react-native-gtkx"),
         platform,
       )
+      if (process.env.DEBUG_RESOLVE && resolved.type === "sourceFile") {
+        console.warn("[spike] react-native ->", resolved.filePath)
+      }
+      return resolved
     }
   }
   return context.resolveRequest(context, moduleName, platform)

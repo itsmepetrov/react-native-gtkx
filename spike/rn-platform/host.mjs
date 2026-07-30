@@ -47,7 +47,11 @@ registerHooks({
   },
   load(url, context, nextLoad) {
     if (url === configModuleUrl) {
-      return { format: "module", source: configModuleSource, shortCircuit: true }
+      return {
+        format: "module",
+        source: configModuleSource,
+        shortCircuit: true,
+      }
     }
     return nextLoad(url, context)
   },

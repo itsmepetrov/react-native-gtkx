@@ -40,7 +40,17 @@ export const reactNativeGtkx = (
   enforce: "pre",
 
   config: () => ({
+    // The package's exports map serves compiled dist by default (for Metro
+    // and generic consumers of the published package); the extra
+    // "react-native" condition keeps the vite path on the TS sources, so
+    // workspace development needs no rebuild step.
+    resolve: {
+      conditions: ["react-native"],
+    },
     ssr: {
+      resolve: {
+        conditions: ["react-native"],
+      },
       // `gtkx dev` runs vite with ssr.external: true, which would hand the
       // TypeScript sources of react-native-gtkx straight to node. Keep the
       // package inside the vite pipeline; noExternal wins over external: true.
