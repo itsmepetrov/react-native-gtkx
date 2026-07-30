@@ -106,8 +106,27 @@ const styles = StyleSheet.create({
   },
   // Lives in the HeaderBar via headerRight — an intrinsic-size RN root:
   // the input's Yoga size IS the chrome slot size.
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
   searchInput: {
     width: 190,
+  },
+  clearButton: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  clearButtonHovered: {
+    backgroundColor: palette.cardAlt,
+  },
+  clearButtonText: {
+    color: palette.textDim,
+    fontSize: 12,
   },
   center: {
     flex: 1,
@@ -314,12 +333,25 @@ const TopStoriesScreen = ({
   useEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Filter stories"
-          value={query}
-          onChangeText={setQuery}
-        />
+        <View style={styles.searchRow}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search stories"
+            value={query}
+            onChangeText={setQuery}
+          />
+          {query.length > 0 && (
+            <Pressable
+              style={({ hovered, pressed }) => [
+                styles.clearButton,
+                (hovered || pressed) && styles.clearButtonHovered,
+              ]}
+              onPress={() => setQuery("")}
+            >
+              <Text style={styles.clearButtonText}>✕</Text>
+            </Pressable>
+          )}
+        </View>
       ),
       headerButtons: [
         {
@@ -417,13 +449,6 @@ const TopStoriesScreen = ({
               </Text>
             </View>
           )
-        }
-        ListHeaderComponent={
-          searching || (refreshing && stories.length > 0) ? (
-            <View style={styles.footer}>
-              <ActivityIndicator />
-            </View>
-          ) : null
         }
         ListFooterComponent={
           loadingMore ? (
