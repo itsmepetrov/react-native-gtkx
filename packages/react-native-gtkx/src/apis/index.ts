@@ -17,6 +17,7 @@ export const Appearance = createAppearance(gtkxHost)
 export const AppState = createAppState(gtkxHost)
 export const Alert = createAlert(gtkxHost)
 export const Linking = createLinking(gtkxHost)
+export { DevSettings } from "./dev-settings"
 
 export const useWindowDimensions = createUseWindowDimensions(Dimensions)
 export const useColorScheme = createUseColorScheme(Appearance)

@@ -53,6 +53,7 @@ export {
   Alert,
   Appearance,
   AppState,
+  DevSettings,
   Dimensions,
   Linking,
   Platform,

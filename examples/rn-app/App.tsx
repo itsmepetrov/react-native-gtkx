@@ -5,6 +5,8 @@
 // (./platform-info resolves to platform-info.linux.ts on linux).
 import { useState } from "react"
 import {
+  Alert,
+  DevSettings,
   Platform,
   Pressable,
   StyleSheet,
@@ -15,6 +17,12 @@ import {
   View,
 } from "react-native"
 import { platformDescription } from "./platform-info"
+
+// Shows up in the Dev Menu (Ctrl+Shift+D under `run-linux --dev`); a
+// silent no-op in release builds — plain RN DevSettings semantics.
+DevSettings.addMenuItem("Show greeting", () => {
+  Alert.alert("Dev Menu", "The custom DevSettings item works!")
+})
 
 // react-native's own types close the Platform.select key set (ios, android,
 // windows, macos, web, native) — an out-of-tree key can't appear in an

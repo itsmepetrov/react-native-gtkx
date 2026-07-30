@@ -119,8 +119,11 @@ The command ensures the gtkx codegen store, bundles with Metro for
 `--platform linux` and opens the window. With `--dev` it starts (or
 reuses) the Metro dev server and edits apply to the live window with
 component state preserved; syntax errors print readably in the terminal
-and the app recovers on the next successful build. `examples/rn-app` is
-a complete cli-init app with all three platforms wired this way.
+and the app recovers on the next successful build. **Ctrl+Shift+D** (the
+react-native-windows shortcut — the desktop stand-in for the shake
+gesture) opens the Dev Menu: Reload plus any entries the app registers
+via `DevSettings.addMenuItem`. `examples/rn-app` is a complete cli-init
+app with all three platforms wired this way.
 
 Notes for typed code: the stock `react-native` types close the
 `Platform.select` key set, so pass an out-of-tree key through a typed
