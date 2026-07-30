@@ -52,9 +52,12 @@ export {
   useApplication,
   useParentWindow,
   useProperty,
-  useSignal,
   type Root,
 } from "@gtkx/react"
+
+// useSignal comes from ./use-signal, not @gtkx/react — see the workaround note
+// there (rc.2 delivers a stale handler).
+export { useSignal } from "./use-signal"
 
 export { css, cx, injectGlobal } from "@gtkx/css"
 
