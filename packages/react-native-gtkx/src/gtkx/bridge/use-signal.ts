@@ -1,14 +1,14 @@
 // RC2-WORKAROUND(use-signal-stale-handler): see docs/gtkx-rc2-notes.md
-// @gtkx/react's useSignal documents
-// that "each emission runs the handler from the latest render", and rc.1
-// delivered that by pinning the handler in a ref. rc.2 routes it through
-// React's useEffectEvent instead, and under the gtkx reconciler that event ref
-// stops refreshing for components deep in the tree: a ScrollView measured at
-// its 8th render still ran the closure captured at mount (a plain ref in the
-// same component reported 8, the useEffectEvent one reported 1). The
-// consequence is not subtle — the mount-time scroll handler windows a
-// VirtualizedList against the data it saw at mount, so a list whose rows
-// arrive from a fetch renders EMPTY as soon as it is scrolled.
+// @gtkx/react's useSignal documents that "each emission runs the handler from
+// the latest render", and rc.1 delivered that by pinning the handler in a ref
+// of its own. rc.2 routes it through React's useEffectEvent instead, and under
+// the gtkx reconciler that event ref stops refreshing for components deep in
+// the tree: a ScrollView measured at its 8th render still ran the closure
+// captured at mount (a plain ref in the same component reported 8, the
+// useEffectEvent one reported 1). The consequence is not subtle — the
+// mount-time scroll handler windows a VirtualizedList against the data it saw
+// at mount, so a list whose rows arrive from a fetch renders EMPTY as soon as
+// it is scrolled.
 //
 // Restore the documented contract at the bridge: keep the latest handler in a
 // ref of our own and hand gtkx a stable wrapper (stable so the connection is
