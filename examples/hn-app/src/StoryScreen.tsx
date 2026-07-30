@@ -7,6 +7,7 @@ import { useEffect, useState } from "react"
 import {
   ActivityIndicator,
   Image,
+  InteractionManager,
   Linking,
   Pressable,
   ScrollView,
@@ -259,13 +260,14 @@ const Comment = ({ id, depth, autoLimit }: CommentProps) => {
 export const StoryScreen = ({ story }: { story: Story }) => {
   // The comment tree starts fetching (and re-rendering) the moment it
   // mounts — mid-push that competes with the slide animation for frames.
-  // Hold it until the transition is over; the story card renders instantly.
-  // (The platform-level fix is a transition-aware InteractionManager —
-  // navigation epic task.)
+  // runAfterInteractions holds it until the navigator's push transition
+  // finishes; the story card renders instantly regardless.
   const [settled, setSettled] = useState(false)
   useEffect(() => {
-    const timer = setTimeout(() => setSettled(true), 300)
-    return () => clearTimeout(timer)
+    const interaction = InteractionManager.runAfterInteractions(() => {
+      setSettled(true)
+    })
+    return () => interaction.cancel()
   }, [])
   const domain = extractDomain(story.url)
   // GTK has no ICO decoder, so real /favicon.ico files fire onError (see

@@ -61,6 +61,7 @@ export {
   DevSettings,
   Dimensions,
   I18nManager,
+  InteractionManager,
   Linking,
   Platform,
   useColorScheme,
@@ -74,6 +75,7 @@ export {
   type ColorSchemeName,
   type DimensionKey,
   type DimensionsPayload,
+  type InteractionPromise,
   type PlatformSelectSpec,
   type ScaledSize,
 } from "./apis/index"

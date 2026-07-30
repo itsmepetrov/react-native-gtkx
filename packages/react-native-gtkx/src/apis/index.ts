@@ -22,6 +22,10 @@ export const Linking = createLinking(gtkxHost)
 export const I18nManager = createI18nManager(gtkxHost)
 export const BackHandler = createBackHandler(gtkxHost)
 export { DevSettings } from "./dev-settings"
+export {
+  InteractionManager,
+  type InteractionPromise,
+} from "./interaction-manager"
 
 export const useWindowDimensions = createUseWindowDimensions(Dimensions)
 export const useColorScheme = createUseColorScheme(Appearance)

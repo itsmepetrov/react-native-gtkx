@@ -32,6 +32,7 @@ import {
   type ComponentType,
   type ReactNode,
 } from "react"
+import { InteractionManager } from "../apis/interaction-manager"
 import { getActiveChrome } from "../components/app-registry"
 import { IntrinsicRoot, NestedRoot } from "../components/root"
 import {
@@ -189,6 +190,16 @@ const StackNavigator = ({
     [handleHidden],
   )
 
+  // Bracket every view transition with an InteractionManager handle so
+  // runAfterInteractions-scheduled work (a screen's own data load / heavy
+  // render) waits for the slide to finish instead of stealing its frames.
+  // The handle is opened when the sync effect mutates the view and cleared
+  // one transition-length later; overlapping transitions reference-count.
+  const beginTransition = useCallback((): void => {
+    const handle = InteractionManager.createInteractionHandle()
+    setTimeout(() => InteractionManager.clearInteractionHandle(handle), 400)
+  }, [])
+
   useEffect(() => {
     const view = viewRef.current
     if (!view) {
@@ -211,6 +222,7 @@ const StackNavigator = ({
       // The stack root changed (reset): swap the whole visible stack.
       const leaving = syncedRef.current.filter((key) => !target.includes(key))
       syncedRef.current = [...target]
+      beginTransition()
       view.replaceWithTags(target)
       for (const key of leaving) {
         scheduleRetainedRemoval(key)
@@ -222,6 +234,7 @@ const StackNavigator = ({
       const leaving = syncedRef.current.slice(common)
       syncedRef.current = syncedRef.current.slice(0, common)
       if (anchor !== undefined) {
+        beginTransition()
         view.popToTag(anchor)
       }
       for (const key of leaving) {
@@ -235,9 +248,10 @@ const StackNavigator = ({
     ) {
       const key = target[index]!
       syncedRef.current.push(key)
+      beginTransition()
       view.pushByTag(key)
     }
-  }, [state, scheduleRetainedRemoval])
+  }, [state, scheduleRetainedRemoval, beginTransition])
 
   // `navigation` is identity-stable across renders (react-navigation
   // builder contract) and getState() always reads the live state — the
