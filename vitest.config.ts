@@ -13,9 +13,13 @@ export default defineConfig(async () => ({
       {
         test: {
           name: "unit",
+          // Unit tests live anywhere: packages and examples share the
+          // tests/unit layout and the same cross-platform project.
           include: [
             "packages/*/tests/unit/**/*.test.ts",
             "packages/*/tests/unit/**/*.test.tsx",
+            "examples/*/tests/unit/**/*.test.ts",
+            "examples/*/tests/unit/**/*.test.tsx",
           ],
         },
       },
