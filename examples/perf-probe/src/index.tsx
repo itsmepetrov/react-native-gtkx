@@ -16,8 +16,8 @@
 //   PERF_WIDTH/PERF_HEIGHT   window default size (sway tiles to output anyway)
 import { useEffect, useRef, useState } from "react"
 import {
-  AppRegistry,
   Appearance,
+  AppRegistry,
   FlatList,
   ScrollView,
   StyleSheet,
@@ -68,9 +68,26 @@ const mulberry32 = (seed: number) => (): number => {
 }
 
 const WORDS = [
-  "yoga", "gtk", "wayland", "scroll", "frame", "widget", "layout", "signal",
-  "adjustment", "viewport", "kinetic", "allocation", "pixman", "render",
-  "virtualized", "window", "measure", "commit", "reconciler", "bridge",
+  "yoga",
+  "gtk",
+  "wayland",
+  "scroll",
+  "frame",
+  "widget",
+  "layout",
+  "signal",
+  "adjustment",
+  "viewport",
+  "kinetic",
+  "allocation",
+  "pixman",
+  "render",
+  "virtualized",
+  "window",
+  "measure",
+  "commit",
+  "reconciler",
+  "bridge",
 ]
 
 type Row = { id: number; title: string; meta: string }

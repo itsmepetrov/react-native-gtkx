@@ -10,7 +10,10 @@ export const perfEnabled =
 
 const counters = new Map<string, number>()
 // Duration accumulators (ms) with call counts and max, keyed by name.
-const timers = new Map<string, { totalMs: number; count: number; maxMs: number }>()
+const timers = new Map<
+  string,
+  { totalMs: number; count: number; maxMs: number }
+>()
 
 // Frame-clock interval tracking: deltas between consecutive ticks.
 let lastFrameAt = -1
