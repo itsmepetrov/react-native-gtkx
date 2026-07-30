@@ -24,13 +24,16 @@ const styles = StyleSheet.create({
 export const InputsSection = () => {
   const [text, setText] = useState("")
   const [password, setPassword] = useState("")
+  const [note, setNote] = useState(
+    "Multiline text input.\nEnter adds a new line.",
+  )
   const [submitted, setSubmitted] = useState("(none yet)")
   const [focusState, setFocusState] = useState("blur")
 
   return (
     <Section
       title="Inputs"
-      subtitle="TextInput on top of GtkEntry: controlled value, placeholders, hidden input, keyboard types, disabled field."
+      subtitle="TextInput on top of GtkEntry (single line) and GtkTextView (multiline): controlled value, placeholders, hidden input, keyboard types, disabled field."
     >
       <DemoCard
         title="Controlled input + echo"
@@ -107,12 +110,22 @@ export const InputsSection = () => {
           defaultValue="initial text"
           placeholder="…"
         />
-        <View>
-          <Text style={styles.limitation}>
-            v1 limitation: multiline is not supported — TextInput always renders
-            as a single-line GtkEntry (GtkTextView is roadmap branch H).
-          </Text>
-        </View>
+      </DemoCard>
+
+      <DemoCard
+        title="multiline"
+        hint="a real GtkTextView with word wrap: the style sets the box, longer text scrolls inside; Enter inserts a newline (RN semantics — no onSubmitEditing)"
+      >
+        <TextInput
+          multiline
+          defaultValue={"Multiline text input.\nEnter adds a new line."}
+          onChangeText={setNote}
+          placeholder="Write a note…"
+          style={{ height: 110 }}
+        />
+        <Text
+          style={styles.status}
+        >{`note length: ${note.length} characters`}</Text>
       </DemoCard>
     </Section>
   )

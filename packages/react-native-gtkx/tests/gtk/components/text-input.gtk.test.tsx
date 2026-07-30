@@ -1,6 +1,7 @@
 // Intrinsic-size leaves: GtkEntry must measure through the theme and the
 // engine must reserve that height (regression for the flex-collapse hunt).
-import { render, waitFor } from "@gtkx/testing"
+// Plus the multiline branch: GtkTextView with RN semantics.
+import { render, screen, waitFor } from "@gtkx/testing"
 import { createRef } from "react"
 import { expect, it, vi } from "vitest"
 import {
@@ -34,4 +35,80 @@ it("TextInput gets a measured height in the engine", async () => {
   await waitFor(() => expect(onLayout).toHaveBeenCalled())
   const layout = onLayout.mock.calls.at(-1)![0].nativeEvent.layout
   expect(layout.height).toBeGreaterThan(0)
+})
+
+it("multiline renders a TextView sized by the style", async () => {
+  const onLayout = vi.fn()
+  await render(
+    <Root
+      width={400}
+      height={300}
+    >
+      <TextInput
+        multiline
+        style={{ height: 120, width: 300 }}
+        onLayout={onLayout}
+        testID="ml-box"
+      />
+    </Root>,
+  )
+  await waitFor(() => expect(onLayout).toHaveBeenCalled())
+  const layout = onLayout.mock.calls.at(-1)![0].nativeEvent.layout
+  expect(layout.height).toBe(120)
+  expect(layout.width).toBe(300)
+})
+
+it("multiline placeholder shows while empty and hides under a value", async () => {
+  const ui = (value: string) => (
+    <Root
+      width={400}
+      height={300}
+    >
+      <TextInput
+        multiline
+        value={value}
+        placeholder="Write something…"
+        style={{ height: 100 }}
+      />
+    </Root>
+  )
+  const { rerender } = await render(ui(""))
+  await waitFor(() => {
+    expect(screen.getByText("Write something…")).toBeTruthy()
+  })
+  // A controlled value reaches the buffer; the placeholder label unmounts.
+  await rerender(ui("hello"))
+  await waitFor(() => {
+    expect(screen.queryByText("Write something…")).toBeNull()
+  })
+  // Back to empty: the placeholder returns (buffer cleared).
+  await rerender(ui(""))
+  await waitFor(() => {
+    expect(screen.getByText("Write something…")).toBeTruthy()
+  })
+})
+
+it("multiline fires onChangeText from buffer edits, without echo", async () => {
+  const onChangeText = vi.fn()
+  await render(
+    <Root
+      width={400}
+      height={300}
+    >
+      <TextInput
+        multiline
+        defaultValue="start"
+        onChangeText={onChangeText}
+        style={{ height: 100 }}
+        testID="ml-view"
+      />
+    </Root>,
+  )
+  // The initial defaultValue set must NOT fire onChangeText (no echo).
+  expect(onChangeText).not.toHaveBeenCalled()
+  const view = screen.getByName("ml-view") as unknown as Gtk.TextView
+  view.getBuffer().setText("typed by hand", -1)
+  await waitFor(() => {
+    expect(onChangeText).toHaveBeenCalledWith("typed by hand")
+  })
 })
