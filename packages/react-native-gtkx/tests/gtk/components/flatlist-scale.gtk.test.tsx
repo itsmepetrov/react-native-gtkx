@@ -111,6 +111,45 @@ it("a narrow windowSize keeps the mounted set correspondingly small", async () =
   expect(childCount(content)).toBeLessThan(60)
 })
 
+it("fills the window in batches after a long jump", async () => {
+  const data = Array.from({ length: 1000 }, (_, i) => `Row #${i + 1}`)
+  const listRef = createRef<FlatListHandle>()
+  await render(
+    <Root
+      width={400}
+      height={600}
+    >
+      <FlatList
+        ref={listRef}
+        style={{ height: 500 }}
+        data={data}
+        keyExtractor={(item) => item}
+        getItemLayout={(_d, index) => ({
+          length: 40,
+          offset: 40 * index,
+          index,
+        })}
+        renderItem={({ item }) => <Text>{item}</Text>}
+      />
+    </Root>,
+  )
+  // label → cell → the content box that holds every mounted cell.
+  const content = (screen.getByText("Row #1") as unknown as Gtk.Widget)
+    .getParent()!
+    .getParent()!
+
+  // A teleport mounts the rows it lands on right away, then keeps filling the
+  // overscan batch by batch — well past the ~13 visible rows that are all the
+  // first pass can afford (the full window is 11 × 500 px of 40 px rows).
+  listRef.current!.scrollToOffset({ offset: 20000 })
+  await waitFor(() => {
+    expect(screen.getByText("Row #501")).toBeTruthy()
+  })
+  await waitFor(() => {
+    expect(childCount(content)).toBeGreaterThan(60)
+  })
+})
+
 it("keyExtractor identity survives reordering", async () => {
   const dataAsc = ["alpha-row", "beta-row", "gamma-row"]
   const ui = (items: string[]) => (

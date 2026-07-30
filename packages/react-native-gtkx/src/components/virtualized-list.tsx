@@ -281,6 +281,14 @@ const VirtualizedListInner = forwardRef(
     // the previous one asked for, not the one currently rendered.
     const rangeRef = useRef(range)
     const batchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+    // Mount allowance as a token bucket: maxToRenderPerBatch rows per
+    // updateCellsBatchingPeriod, NOT per pass. One frame can run several passes
+    // (scroll event, content-size report, measurement version bump) and a
+    // per-pass cap would let them stack back into the burst we are avoiding.
+    // A steady scroll needs about one row per frame, far under the refill, so
+    // its window still follows the offset exactly.
+    const batchTokens = useRef(0)
+    const batchFilledAt = useRef(0)
     // The batch timer must call the LATEST closure (offsets/data may change).
     const updateRangeRef = useRef<() => void>(() => {})
 
@@ -317,8 +325,14 @@ const VirtualizedListInner = forwardRef(
       // a late one); the overscan beyond them fills in over the following
       // batches.
       const visible = rangeFor(0)
+      // Reuse the mounted set only when it still covers what is on screen.
+      // The mounted set is ONE contiguous range, so keeping a window that no
+      // longer reaches the visible rows would mean mounting the whole gap
+      // between them in this pass — the burst, by another route. Overlapping
+      // the target window is not enough: with a wide windowSize a jump of
+      // several viewports still overlaps it.
       const reusable =
-        current.last >= target.first && current.first <= target.last
+        current.last >= visible.first && current.first <= visible.last
       // Keep what is both mounted and still wanted, always covering the
       // visible rows; after a teleport nothing is reusable and the visible
       // rows are the whole starting window.
@@ -336,7 +350,12 @@ const VirtualizedListInner = forwardRef(
             Math.min(last, current.last) - Math.max(first, current.first) + 1,
           )
         : 0
-      let budget = Math.max(0, maxToRenderPerBatch - (last - first + 1 - kept))
+      const now = Date.now()
+      if (now - batchFilledAt.current >= updateCellsBatchingPeriod) {
+        batchTokens.current = maxToRenderPerBatch
+        batchFilledAt.current = now
+      }
+      let budget = Math.max(0, batchTokens.current - (last - first + 1 - kept))
       while (budget > 0 && (first > target.first || last < target.last)) {
         if (last < target.last) {
           last += 1
@@ -347,6 +366,7 @@ const VirtualizedListInner = forwardRef(
           budget -= 1
         }
       }
+      batchTokens.current = budget
       if (first !== current.first || last !== current.last) {
         perfCount("vl.rangeChange")
         rangeRef.current = { first, last }
