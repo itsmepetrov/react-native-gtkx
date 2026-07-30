@@ -1,6 +1,7 @@
 // Interactive components: signal-level behavior of Switch, TextInput and
 // dynamic FlatList data (fireEvent — rc.1 ships no virtual seat, see 007).
 import { fireEvent, render, screen, waitFor } from "@gtkx/testing"
+import { useState } from "react"
 import { expect, it, vi } from "vitest"
 import { Gtk, type Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
 import {
@@ -135,5 +136,46 @@ it("Pressable fires onPress through its click gesture", async () => {
 
   await waitFor(() => {
     expect(onPress).toHaveBeenCalledTimes(1)
+  })
+})
+
+it("clearButtonMode shows GtkEntry's own clear icon and empties the field", async () => {
+  const onChangeText = vi.fn()
+  const Controlled = () => {
+    const [value, setValue] = useState("hello")
+    return (
+      <TextInput
+        value={value}
+        clearButtonMode="always"
+        onChangeText={(text) => {
+          setValue(text)
+          onChangeText(text)
+        }}
+      />
+    )
+  }
+  await render(
+    <Root
+      width={300}
+      height={200}
+    >
+      <Controlled />
+    </Root>,
+  )
+
+  const entry = (await screen.findByRole(
+    Gtk.AccessibleRole.TEXT_BOX,
+  )) as GtkNs.Entry
+  // The affordance is the entry's own secondary icon — nothing beside it.
+  await waitFor(() => {
+    expect(entry.secondaryIconName).toBe("edit-clear-symbolic")
+  })
+
+  fireEvent(entry, "icon-release", Gtk.EntryIconPosition.SECONDARY)
+  await waitFor(() => {
+    expect(onChangeText).toHaveBeenCalledWith("")
+    expect(entry.getText()).toBe("")
+    // Empty field: nothing left to clear, so the icon goes away.
+    expect(entry.secondaryIconName).toBeNull()
   })
 })

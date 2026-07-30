@@ -25,6 +25,10 @@ export type TextInputProps = {
   // RN: a multiline input needs a height in the style; Enter inserts a
   // newline and never fires onSubmitEditing.
   multiline?: boolean
+  // RN's iOS-only clear affordance, native here: GtkEntry's built-in
+  // secondary icon (inside the field, so nothing shifts around it).
+  // Single-line only, like RN.
+  clearButtonMode?: "never" | "while-editing" | "unless-editing" | "always"
   style?: StyleProp
   onLayout?: (event: LayoutEvent) => void
   testID?: string
@@ -82,11 +86,13 @@ const SingleLineTextInput = ({
   secureTextEntry = false,
   editable = true,
   keyboardType = "default",
+  clearButtonMode = "never",
   style,
   onLayout,
   testID,
 }: TextInputProps) => {
   const widgetRef = useRef<GtkNs.Entry | null>(null)
+  const [focused, setFocused] = useState(false)
 
   useLayoutChild(widgetRef, {
     style,
@@ -99,12 +105,50 @@ const SingleLineTextInput = ({
 
   const controlled = value !== undefined
 
-  useFocusController(widgetRef, onFocus, onBlur)
+  useFocusController(
+    widgetRef,
+    () => {
+      setFocused(true)
+      onFocus?.()
+    },
+    () => {
+      setFocused(false)
+      onBlur?.()
+    },
+  )
+
+  // RN semantics: the affordance only shows when there is something to
+  // clear, and while-editing / unless-editing follow focus.
+  const text = controlled ? value : undefined
+  const hasText =
+    text !== undefined
+      ? text.length > 0
+      : (widgetRef.current?.getText().length ?? 0) > 0
+  const showClear =
+    hasText &&
+    (clearButtonMode === "always" ||
+      (clearButtonMode === "while-editing" && focused) ||
+      (clearButtonMode === "unless-editing" && !focused))
 
   return (
     <GtkEntry
       ref={widgetRef}
       name={testID}
+      secondaryIconName={showClear ? "edit-clear-symbolic" : null}
+      secondaryIconActivatable={showClear}
+      secondaryIconTooltipText={showClear ? "Clear" : null}
+      onIconRelease={() => {
+        const widget = widgetRef.current
+        if (!widget) {
+          return
+        }
+        // Uncontrolled inputs clear themselves; controlled ones report an
+        // empty string and let the owner drive the value (RN contract).
+        if (!controlled) {
+          widget.setText("")
+        }
+        onChangeText?.("")
+      }}
       text={controlled ? value : (defaultValue ?? "")}
       placeholderText={placeholder ?? ""}
       visibility={!secureTextEntry}
