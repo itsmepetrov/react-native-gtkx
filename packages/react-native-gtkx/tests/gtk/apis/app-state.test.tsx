@@ -1,9 +1,9 @@
 // Integration: AppState against the real host (window is-active tracking).
-// The rc.1 sway harness has no input seat, so no window ever receives focus
-// (is-active stays false) and there is no reliable way to drive focus
-// transitions headless. The integration signal here is consistency: the
-// module must mirror the toplevel's real is-active state. Transition
-// semantics (change/focus/blur) are covered by unit tests with a mock host.
+// The headless harness runs a single toplevel per test file, so there is
+// nothing to hand focus over to and no transition to drive (the seat keeps
+// that window active). The integration signal here is consistency: the module
+// must mirror the toplevel's real is-active state. Transition semantics
+// (change/focus/blur) are covered by unit tests with a mock host.
 
 import { render, waitFor } from "@gtkx/testing"
 import { expect, it, vi } from "vitest"

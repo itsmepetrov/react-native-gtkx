@@ -51,10 +51,11 @@ const binOf = (
   return join(dirname(packageJsonPath), bin)
 }
 
+// RC2-WORKAROUND(codegen-cwd): see docs/gtkx-rc2-notes.md
 // The codegen store lives in the node_modules that hosts the @gtkx
 // packages — run the gtkx CLI from the project that OWNS that node_modules:
-// with cwd inside node_modules itself the CLI reports "up to date" without
-// ever creating the store.
+// with cwd inside node_modules itself the CLI reports "bindings up to date"
+// without ever creating the store.
 const ensureCodegenStore = (): void => {
   const hostingNodeModules = dirname(
     dirname(dirname(fromPackage.resolve("@gtkx/react/package.json"))),

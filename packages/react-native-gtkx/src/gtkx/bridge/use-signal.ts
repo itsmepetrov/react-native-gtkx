@@ -1,4 +1,5 @@
-// RC2-WORKAROUND(use-signal-stale-handler): @gtkx/react's useSignal documents
+// RC2-WORKAROUND(use-signal-stale-handler): see docs/gtkx-rc2-notes.md
+// @gtkx/react's useSignal documents
 // that "each emission runs the handler from the latest render", and rc.1
 // delivered that by pinning the handler in a ref. rc.2 routes it through
 // React's useEffectEvent instead, and under the gtkx reconciler that event ref

@@ -1,5 +1,6 @@
 // Interactive components: signal-level behavior of Switch, TextInput and
-// dynamic FlatList data (fireEvent — rc.1 ships no virtual seat, see 007).
+// dynamic FlatList data, driven through fireEvent — the widget contract
+// itself, independent of pointer geometry.
 import { fireEvent, render, screen, waitFor } from "@gtkx/testing"
 import { useState } from "react"
 import { expect, it, vi } from "vitest"

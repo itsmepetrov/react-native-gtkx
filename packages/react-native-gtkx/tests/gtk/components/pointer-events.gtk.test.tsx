@@ -1,6 +1,6 @@
 // pointerEvents over GTK picking, asserted through gtk_widget_pick — the
-// exact routine real input goes through (rc.1 ships no virtual seat, so
-// events cannot be synthesized at coordinates; pick() IS the semantics).
+// exact routine real input goes through, so pick() IS the semantics under
+// test (a synthesized click would only assert the same lookup one layer up).
 // Stage: a full-size "under" layer, an "overlay" View on top with a child;
 // picks at (150,150) hit the overlay's empty area, (40,40) the child.
 import { render, screen, waitFor } from "@gtkx/testing"

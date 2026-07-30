@@ -1,7 +1,7 @@
 // The ONLY module allowed to import @gtkx/* (enforced by eslint no-restricted-imports).
 // gtkx is an RC dependency: when its API moves, this bridge absorbs the change.
 //
-// rc.1 caveats baked into this surface (see docs/research/yoga-gtk-spike.md):
+// Caveats baked into this surface (catalogued in docs/gtkx-rc2-notes.md):
 // - 64-bit FFI values arrive as BigInt → normalize with toNumber() at this boundary
 
 // import-then-export (not `export * as`): the latter is the one syntax the

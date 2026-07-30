@@ -58,10 +58,10 @@ export const Pressable = ({
 
   const state: PressableStateCallbackType = { pressed, hovered }
 
-  // RC1-WORKAROUND(controllers-as-children): see docs/gtkx-rc1-vs-main.md
-  // rc.1 has no controller-as-JSX-children support (main-only feature):
-  // gestures are attached imperatively; handlers read the latest props via a
-  // ref so the controllers are wired exactly once.
+  // Gestures are attached imperatively even though rc.2 has a declarative
+  // `controllers` slot: the controllers are wired exactly once per widget and
+  // the handlers read the latest props through a ref, so a re-render never
+  // detaches and re-adds a gesture mid-press.
   const handlersRef = useRef({
     handlePressed: (n: number, x: number, y: number): void => {
       void n

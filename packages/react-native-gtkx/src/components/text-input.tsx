@@ -45,8 +45,9 @@ const INPUT_PURPOSE: Record<
   url: Gtk.InputPurpose.URL,
 }
 
-// RC1-WORKAROUND(controllers-as-children): see docs/gtkx-rc1-vs-main.md
-// rc.1: controllers attach imperatively (JSX children work on main only).
+// The focus controller is attached imperatively (rc.2 also offers a
+// declarative `controllers` slot): one wiring per widget, handlers read from a
+// ref, so changing onFocus/onBlur never re-creates the controller.
 const useFocusController = (
   widgetRef: React.RefObject<GtkNs.Widget | null>,
   onFocus?: () => void,

@@ -1,9 +1,8 @@
 // Integration: Alert.alert mapped onto Adw.AlertDialog. The dialog's response
-// buttons are queried by role and activated via fireEvent("clicked"): the
-// rc.1 sway harness has no input seat, so windows never gain focus and
-// pointer-level userEvent dispatch cannot pass its actionability check —
-// direct signal emission still exercises the real Adw response wiring
-// (button -> response -> choose() -> RN callback).
+// buttons are queried by role and activated via fireEvent("clicked") — direct
+// signal emission exercises the real Adw response wiring (button -> response
+// -> choose() -> RN callback) without depending on where the dialog lands on
+// screen.
 
 import { fireEvent, render, screen, waitFor } from "@gtkx/testing"
 import { expect, it, vi } from "vitest"
