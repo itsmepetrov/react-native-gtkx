@@ -167,7 +167,12 @@ export const reactNativeGtkx = (
       // codebase Node cannot parse) exists in RN monorepos. noExternal
       // forces the full plugin resolution, where the alias rewrites the
       // import to react-native-gtkx.
-      noExternal: ["react-native-gtkx", "react-native"],
+      // @react-navigation must go through the pipeline too: it imports
+      // "react-native", and an externalized copy resolves that to the real
+      // Flow package (SyntaxError: Unexpected token 'typeof') instead of
+      // our alias. Only bites on the dev path — a production build inlines
+      // everything anyway.
+      noExternal: ["react-native-gtkx", "react-native", /^@react-navigation\//],
     },
     resolve: {
       // The gtkx runtime and react are single-instance hosts: when the app
