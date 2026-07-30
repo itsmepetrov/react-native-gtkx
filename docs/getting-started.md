@@ -156,7 +156,8 @@ react-navigation state. See [docs/api.md](api.md#navigation-react-native-gtkxnav
 - `examples/profile` — a static layout; the same source also builds with react-native-web (`examples/profile-web`);
 - `examples/playground` — interactive: Pressable, TextInput, Switch, FlatList, Modal, Animated, responsive via flexWrap;
 - `examples/gallery` — a gallery of the entire v1 surface;
-- `examples/rn-app` — a cli-init React Native app with ios + android + linux.
+- `examples/rn-app` — a cli-init React Native app with ios + android + linux;
+- `examples/hn-app` — a Hacker News reader on the Metro path: live API data over Node fetch, state-based two-screen navigation, a lazily loaded comment tree.
 
 ## Tests
 

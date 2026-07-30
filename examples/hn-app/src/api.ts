@@ -6,22 +6,27 @@ const API_BASE = "https://hacker-news.firebaseio.com/v0"
 
 export const PAGE_SIZE = 20
 
-// The subset of HN item fields the app renders. `topstories` mixes stories
-// and the occasional job posting; comments/polls never appear in that list.
-export type Story = {
+// The subset of HN item fields the app renders. /item/<id> serves stories,
+// jobs, polls and comments from the same endpoint with the same shape.
+export type Item = {
   id: number
-  type: "story" | "job" | "poll"
-  title: string
+  type: "story" | "job" | "poll" | "comment"
+  title?: string
   by?: string
   time: number
   score?: number
   descendants?: number
   url?: string
   text?: string
+  parent?: number
   kids?: number[]
   deleted?: boolean
   dead?: boolean
 }
+
+// `topstories` mixes stories and the occasional job posting; everything in
+// that list carries a title (comments never do).
+export type Story = Item & { title: string }
 
 const fetchJson = async <T>(url: string): Promise<T> => {
   const response = await fetch(url)
@@ -32,8 +37,8 @@ const fetchJson = async <T>(url: string): Promise<T> => {
 }
 
 // The API returns null for unknown ids and tombstones for deleted items.
-export const fetchItem = (id: number): Promise<Story | null> =>
-  fetchJson<Story | null>(`${API_BASE}/item/${id}.json`)
+export const fetchItem = (id: number): Promise<Item | null> =>
+  fetchJson<Item | null>(`${API_BASE}/item/${id}.json`)
 
 // /v0/topstories.json is a live-ranked list: between two requests stories
 // shift ranks, so slicing a fresh list per page would duplicate (or skip)

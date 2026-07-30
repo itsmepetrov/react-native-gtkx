@@ -1,6 +1,7 @@
-// Hacker News reader — top stories as a FlatList of cards. Everything here
-// is plain React Native; on linux it renders as native GTK4/Adwaita widgets
-// and the data layer (src/api.ts) is just Node fetch.
+// Hacker News reader — top stories as a FlatList of cards; tapping a card
+// opens the story screen. Everything here is plain React Native; on linux it
+// renders as native GTK4/Adwaita widgets and the data layer (src/api.ts) is
+// just Node fetch.
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
   ActivityIndicator,
@@ -13,19 +14,17 @@ import {
 } from "react-native"
 import { fetchTopStories, type Story } from "./api"
 import { extractDomain, formatAge, formatComments, formatScore } from "./format"
+import { StoryScreen } from "./StoryScreen"
+import { palette } from "./theme"
 
-// Force the dark Adwaita look; palette values mirror examples/monitor.
+// Force the dark Adwaita look.
 Appearance.setColorScheme("dark")
 
-const palette = {
-  window: "#241f31",
-  card: "#3d3846",
-  cardAlt: "#4a4458",
-  text: "#ffffff",
-  textDim: "#c0bfbc",
-  accent: "#3584e4",
-  orange: "#ffa348",
-  red: "#f66151",
+// Stage markers for the headless-proof hook below; the headless script greps
+// them out of the host log to pace its screenshots.
+const proofMark = (stage: string) => {
+  // eslint-disable-next-line no-console -- deliberate script-facing output
+  console.log(`HN_APP_PROOF ${stage}`)
 }
 
 const styles = StyleSheet.create({
@@ -128,6 +127,17 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 24,
   },
+  // The story screen paints over the list instead of replacing it: the
+  // FlatList stays mounted underneath, so its scroll offset and loaded
+  // pages survive the round trip (unmounting would reset both).
+  storyOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: palette.window,
+  },
   errorTitle: {
     color: palette.red,
     fontSize: 16,
@@ -140,10 +150,21 @@ const styles = StyleSheet.create({
   },
 })
 
-const StoryCard = ({ story, rank }: { story: Story; rank: number }) => {
+const StoryCard = ({
+  story,
+  rank,
+  onPress,
+}: {
+  story: Story
+  rank: number
+  onPress: () => void
+}) => {
   const domain = extractDomain(story.url)
   return (
-    <View style={styles.card}>
+    <Pressable
+      style={styles.card}
+      onPress={onPress}
+    >
       <View style={styles.cardTitleRow}>
         <Text style={styles.cardRank}>{`${rank}.`}</Text>
         <Text style={styles.cardTitle}>{story.title}</Text>
@@ -163,7 +184,7 @@ const StoryCard = ({ story, rank }: { story: Story; rank: number }) => {
         <Text style={styles.cardMeta}>{formatAge(story.time)}</Text>
         <Text style={styles.cardMeta}>{formatComments(story.descendants)}</Text>
       </View>
-    </View>
+    </Pressable>
   )
 }
 
@@ -173,6 +194,10 @@ export const App = () => {
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [endReached, setEndReached] = useState(false)
+  // State-based navigation: null = the list, a story = the story screen
+  // painted over it. Deliberately no navigation library.
+  const [openStory, setOpenStory] = useState<Story | null>(null)
+  const listRef = useRef<FlatList<Story>>(null)
   // The page the NEXT load-more call should fetch; a ref so a stale
   // onEndReached burst cannot schedule the same page twice.
   const nextPage = useRef(1)
@@ -250,6 +275,40 @@ export const App = () => {
     return () => clearTimeout(kickoff)
   }, [refresh])
 
+  // Headless-proof hook for scripts/run-linux-headless-hnapp.sh — dev only.
+  // With HN_APP_PROOF=1 the app drives itself through the screenshot
+  // sequence (no input devices under headless sway): scroll the list, open
+  // a story with comments, go back. The console markers pace the script's
+  // shots; the last shot proves the scroll offset survived the round trip.
+  const proofStarted = useRef(false)
+  useEffect(() => {
+    if (process.env.HN_APP_PROOF !== "1") {
+      return
+    }
+    if (proofStarted.current || stories.length === 0) {
+      return
+    }
+    proofStarted.current = true
+    const story =
+      stories.find((candidate) => (candidate.descendants ?? 0) >= 10) ??
+      stories[0]
+    // Deliberately no cleanup: pagination (onEndReached fires on load and on
+    // the scripted scroll) changes `stories` seconds into the sequence, and
+    // a cleanup would cancel the pending timers. The app never unmounts.
+    setTimeout(() => {
+      listRef.current?.scrollToOffset({ offset: 800, animated: false })
+      proofMark("scrolled")
+    }, 2000)
+    setTimeout(() => {
+      setOpenStory(story)
+      proofMark("story-open")
+    }, 10000)
+    setTimeout(() => {
+      setOpenStory(null)
+      proofMark("back")
+    }, 45000)
+  }, [stories])
+
   if (error !== null) {
     return (
       <View style={[styles.screen, styles.center]}>
@@ -278,6 +337,7 @@ export const App = () => {
         </Pressable>
       </View>
       <FlatList
+        ref={listRef}
         style={styles.list}
         contentContainerStyle={styles.listContent}
         data={stories}
@@ -286,6 +346,7 @@ export const App = () => {
           <StoryCard
             story={item}
             rank={index + 1}
+            onPress={() => setOpenStory(item)}
           />
         )}
         refreshing={refreshing}
@@ -308,6 +369,14 @@ export const App = () => {
           ) : null
         }
       />
+      {openStory !== null && (
+        <View style={styles.storyOverlay}>
+          <StoryScreen
+            story={openStory}
+            onBack={() => setOpenStory(null)}
+          />
+        </View>
+      )}
     </View>
   )
 }
