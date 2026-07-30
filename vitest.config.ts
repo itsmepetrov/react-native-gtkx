@@ -27,10 +27,10 @@ export default defineConfig(async () => ({
       ...(process.platform === "linux"
         ? [
             {
-              // RC1-WORKAROUND(vitest-compositor): rc.1 defaults to weston;
-              // the dev image and the VM ship sway.
               plugins: [
-                (await import("@gtkx/vitest")).default({ compositor: "sway" }),
+                // @gtkx/vitest defaults to headless sway with a virtual seat —
+                // what the dev image, the VM and CI ship.
+                (await import("@gtkx/vitest")).default(),
                 // Metro-style platform resolution for inlined RN libraries
                 // (@react-navigation resolves .native variants through it,
                 // exactly like the app build does).
