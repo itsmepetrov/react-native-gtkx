@@ -1,4 +1,4 @@
-import { reactNativeGtkx } from "@react-native-gtkx/vite-preset"
+import { reactNativeGtkx } from "react-native-gtkx/vite"
 import { defineConfig } from "vite"
 
 // The example dogfoods the preset: sources import "react-native" and the

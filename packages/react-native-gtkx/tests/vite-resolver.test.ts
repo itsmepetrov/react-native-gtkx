@@ -8,7 +8,7 @@ import {
   rewriteReactNativeImport,
   splitQuery,
   type FileExists,
-} from "../src/resolver"
+} from "../src/vite/index"
 
 const existsAmong =
   (...files: string[]): FileExists =>

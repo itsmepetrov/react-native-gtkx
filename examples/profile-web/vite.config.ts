@@ -4,7 +4,7 @@ import { defineConfig } from "vite"
 // examples/profile/src/App.tsx that the GTK build renders. The alias below is
 // the entire "platform switch" — App's `import ... from "react-native"`
 // resolves to react-native-web here and to react-native-gtkx in the native
-// build (via @react-native-gtkx/vite-preset). The cross-package source import
+// build (via react-native-gtkx/vite). The cross-package source import
 // works out of the box: vite's dev-server fs allowlist defaults to the
 // monorepo workspace root.
 export default defineConfig({

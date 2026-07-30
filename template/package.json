@@ -16,7 +16,6 @@
   "devDependencies": {
     "@gtkx/cli": "1.0.0-rc.1",
     "@gtkx/config": "1.0.0-rc.1",
-    "@react-native-gtkx/vite-preset": "0.1.0",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "typescript": "^5.9.0",

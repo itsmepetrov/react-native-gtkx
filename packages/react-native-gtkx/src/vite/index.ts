@@ -1,8 +1,18 @@
-// Pure resolution logic behind the vite plugin: alias matching for the
-// react-native specifier and Metro-style platform extension candidates.
-// Kept free of vite imports and side effects so it can be unit-tested directly.
-
+// react-native-gtkx/vite — makes a gtkx project React Native compatible.
+// The gtkx CLI (dev and build) starts vite with an inline config that never
+// sets `configFile: false`, so vite picks up the project's vite.config.ts
+// from the root and merges it beneath the CLI config; this preset plugs in
+// there as a single plugin.
+//
+// Single self-contained file on purpose: vite loads the config's imported
+// packages with BARE Node, so this subpath (like ./metro and ./runner) must
+// not contain extensionless relative imports — the pure resolution helpers
+// live here rather than in a sibling module.
+import { existsSync } from "node:fs"
 import { dirname, extname, isAbsolute, resolve } from "node:path"
+import type { Plugin } from "vite"
+
+// --- pure resolution logic (unit-tested directly) -----------------------
 
 /** Options shared by the preset factory and the pure resolver helpers. */
 export type PlatformResolutionOptions = {
@@ -116,3 +126,48 @@ export const resolvePlatformSpecifier = (
   }
   return null
 }
+
+// --- the vite plugin ----------------------------------------------------
+
+export type ReactNativeGtkxOptions = PlatformResolutionOptions
+
+/**
+ * Vite plugin: aliases `react-native` (and subpaths) to `react-native-gtkx`
+ * and resolves Metro-style platform extensions
+ * (`.linux.tsx` → `.native.tsx` → base) for extensionless imports.
+ */
+export const reactNativeGtkx = (
+  options: ReactNativeGtkxOptions = {},
+): Plugin => ({
+  name: "react-native-gtkx:preset",
+  // Before vite's own resolver and the gtkx CLI plugins: the alias must win
+  // over node resolution and platform files must win over the base file.
+  enforce: "pre",
+
+  config: () => ({
+    ssr: {
+      // `gtkx dev` runs vite with ssr.external: true, which would hand
+      // react-native-gtkx straight to node. Keep the package inside the
+      // vite pipeline; noExternal wins over external: true.
+      //
+      // "react-native" must be listed too: with ssr.external: true vite
+      // externalizes a bare import BEFORE the plugin pipeline whenever the
+      // package resolves natively — and the real react-native (a Flow
+      // codebase Node cannot parse) exists in RN monorepos. noExternal
+      // forces the full plugin resolution, where the alias rewrites the
+      // import to react-native-gtkx.
+      noExternal: ["react-native-gtkx", "react-native"],
+    },
+  }),
+
+  async resolveId(source, importer) {
+    const aliased = rewriteReactNativeImport(source)
+    if (aliased !== null) {
+      const resolved = await this.resolve(aliased, importer, { skipSelf: true })
+      return resolved ?? aliased
+    }
+    return resolvePlatformSpecifier(source, importer, existsSync, options)
+  },
+})
+
+export default reactNativeGtkx

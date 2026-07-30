@@ -4,7 +4,7 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { createServer, type Plugin, type ViteDevServer } from "vite"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
-import { reactNativeGtkx } from "../src/index"
+import { reactNativeGtkx } from "../src/vite/index"
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), "fixtures")
 const importer = join(fixtures, "importer.ts")

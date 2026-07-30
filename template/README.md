@@ -27,25 +27,22 @@ npm start       # node dist/bundle.js
 
 ## ⚠️ Until the packages are published
 
-`react-native-gtkx@0.1.0` and `@react-native-gtkx/vite-preset@0.1.0` are not on npm yet. Until they are published, wire them up from a monorepo clone by replacing the versions with `file:` references in `package.json`:
+`react-native-gtkx@0.1.0` is not on npm yet. Until it is published, wire it up from a monorepo clone by replacing the version with a `file:` reference in `package.json`:
 
 ```json
 {
   "dependencies": {
     "react-native-gtkx": "file:../react-native-gtkx/packages/react-native-gtkx"
-  },
-  "devDependencies": {
-    "@react-native-gtkx/vite-preset": "file:../react-native-gtkx/packages/vite-preset"
   }
 }
 ```
 
-(paths are relative to your project; run `npm install` after editing).
+(the path is relative to your project; run `npm install` after editing).
 
 ## How it works
 
 - `gtkx dev` / `gtkx build` launch vite themselves and automatically pick up `vite.config.ts` from the project root;
-- the `@react-native-gtkx/vite-preset` preset adds the `react-native` → `react-native-gtkx` alias and Metro platform extensions;
+- the `react-native-gtkx/vite` preset adds the `react-native` → `react-native-gtkx` alias and Metro platform extensions;
 - types for `import … from "react-native"` come from the `paths` mapping in `tsconfig.json`;
 - the default entry is `src/index.tsx` (application registration via `AppRegistry`).
 

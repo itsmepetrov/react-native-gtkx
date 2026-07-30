@@ -27,7 +27,15 @@ macOS), same as `typecheck`.
 
 The Metro toolchain can be exercised end to end without a desktop session:
 `bash scripts/run-linux-headless.sh examples/rn-app /tmp/shot.png` runs
-`react-native run-linux` under headless sway and screenshots the window.
+`react-native run-linux` under headless sway and screenshots the window;
+`bash scripts/gtkx-dev-headless.sh` does the same for the vite dev path
+(edits a gallery component live and asserts a Fast Refresh).
+
+Live development of the package itself: keep `npm run watch:dist` running
+(tsc --watch over the whole src) next to an example under `gtkx dev` — the
+dev server watches the workspace dist through the symlink and hot-applies
+package changes; the Metro path picks up dist changes on the next
+`run-linux`.
 
 System packages (Ubuntu 26.04+): `libgtk-4-dev libadwaita-1-dev xvfb dbus-x11 sway xwayland` (sway is a headless Wayland compositor for `test:gtk`; in rc.1 the @gtkx/vitest plugin expects weston by default, so `vitest.gtk.config.ts` explicitly sets `compositor: "sway"`).
 
@@ -45,7 +53,7 @@ The helper is `scripts/vm.sh`. The VM address is machine-specific: export `VM_HO
 | `vm.sh app-stop`            | stop the application                                                 |
 | `vm.sh shell`               | interactive shell                                                    |
 
-After `sync`, run `npm install && npm run codegen` and `npm run build -w @react-native-gtkx/vite-preset` once in the VM (the preset's dist is not synced). GL rendering in the Apple backend is software (llvmpipe) — EGL/ZINK warnings at startup are normal.
+After `sync`, run `npm install && npm run codegen && npm run build:dist` once in the VM (dist folders are not synced; build:dist emits the whole package including the metro/runner/vite subpaths). GL rendering in the Apple backend is software (llvmpipe) — EGL/ZINK warnings at startup are normal.
 
 ## Docker container (alternative)
 

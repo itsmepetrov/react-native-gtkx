@@ -22,14 +22,25 @@
     "./runner": {
       "types": "./dist/runner/index.d.ts",
       "default": "./dist/runner/index.js"
+    },
+    "./vite": {
+      "types": "./dist/vite/index.d.ts",
+      "default": "./dist/vite/index.js"
     }
   },
   "scripts": {
     "build:dist": "rm -rf dist && tsc -p tsconfig.build.json",
+    "watch:dist": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
     "test:gtk": "vitest run --config vitest.gtk.config.ts"
   },
   "peerDependencies": {
-    "react": "^19"
+    "react": "^19",
+    "vite": "^7.0.0 || ^8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@gtkx/cli": "1.0.0-rc.1",
@@ -41,7 +52,8 @@
   },
   "devDependencies": {
     "@gtkx/testing": "1.0.0-rc.1",
-    "@gtkx/vitest": "1.0.0-rc.1"
+    "@gtkx/vitest": "1.0.0-rc.1",
+    "vite": "^8.1.4"
   },
   "files": [
     "dist",

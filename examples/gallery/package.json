@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "gtkx dev",
     "build": "gtkx build",
     "start": "node dist/bundle.js"
   },
@@ -13,7 +14,6 @@
   },
   "devDependencies": {
     "@gtkx/cli": "1.0.0-rc.1",
-    "@gtkx/config": "1.0.0-rc.1",
-    "@react-native-gtkx/vite-preset": "0.1.0"
+    "@gtkx/config": "1.0.0-rc.1"
   }
 }

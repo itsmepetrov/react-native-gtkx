@@ -1,4 +1,4 @@
-import { reactNativeGtkx } from "@react-native-gtkx/vite-preset"
+import { reactNativeGtkx } from "react-native-gtkx/vite"
 import { defineConfig } from "vite"
 
 // `gtkx dev` and `gtkx build` run vite themselves and pick this file up
