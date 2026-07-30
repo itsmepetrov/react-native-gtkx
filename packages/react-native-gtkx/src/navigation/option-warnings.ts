@@ -5,13 +5,9 @@
 // verdict (see docs/research/navigation-extensibility.md).
 const VERDICTS: Record<string, string> = {
   header: "full header replacement is not supported yet",
-  headerRight:
-    "component header items land with the intrinsic-size header work; " +
-    "declarative icon buttons exist today as `headerButtons`",
-  headerLeft: "component header items land with the intrinsic-size header work",
   headerTitle:
-    "string titles map to `title`; component titles land with the " +
-    "intrinsic-size header work",
+    "string titles map to `title`; a component title-widget is not " +
+    "exposed yet",
   headerStyle: "Adwaita's theme owns the chrome styling on this platform",
   headerTintColor: "Adwaita's theme owns the chrome styling on this platform",
   headerTitleStyle: "Adwaita's theme owns the chrome styling on this platform",

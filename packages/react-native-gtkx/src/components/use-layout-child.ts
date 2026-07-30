@@ -199,8 +199,10 @@ export const useLayoutChild = (
 
 export type RnContainerOptions = {
   // Overrides the default engine-rect measure (the window root reports 0 so
-  // the window can shrink freely below the current content size).
-  measure?: (orientation: "horizontal" | "vertical") => number
+  // the window can shrink freely below the current content size; the
+  // intrinsic root measures its content through Yoga, honoring forSize for
+  // height-for-width).
+  measure?: (orientation: "horizontal" | "vertical", forSize: number) => number
   // Runs before children are placed — the window root syncs the engine
   // viewport to the actual allocation here.
   beforeAllocate?: (width: number, height: number) => void
@@ -224,10 +226,10 @@ export const useRnContainer = (
       return
     }
     attachRnLayout(widget, {
-      measure: (orientation) => {
+      measure: (orientation, forSize) => {
         const custom = optionsRef.current?.measure
         if (custom) {
-          return custom(orientation)
+          return custom(orientation, forSize)
         }
         const rect = node.getRect()
         return Math.round(

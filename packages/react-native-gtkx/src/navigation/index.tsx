@@ -33,7 +33,7 @@ import {
   type ReactNode,
 } from "react"
 import { getActiveChrome } from "../components/app-registry"
-import { NestedRoot } from "../components/root"
+import { IntrinsicRoot, NestedRoot } from "../components/root"
 import {
   AdwHeaderBar,
   AdwNavigationPage,
@@ -49,6 +49,8 @@ const STACK_OPTION_KEYS: ReadonlySet<string> = new Set([
   "title",
   "headerShown",
   "headerButtons",
+  "headerLeft",
+  "headerRight",
 ])
 
 export type StackNavigationOptions = {
@@ -59,6 +61,11 @@ export type StackNavigationOptions = {
   /** Buttons packed at the end of this screen's HeaderBar (see
    *  HeaderButton); screens usually set them via navigation.setOptions. */
   headerButtons?: HeaderButton[]
+  /** RN content packed at the start of the HeaderBar (an intrinsic-size
+   *  layout root: the content's Yoga size IS the slot size). */
+  headerLeft?: () => ReactNode
+  /** RN content packed at the end of the HeaderBar, before headerButtons. */
+  headerRight?: () => ReactNode
 }
 
 type StackDescriptor = {
@@ -279,14 +286,28 @@ const StackNavigator = ({
                 <AdwToolbarView
                   topBar={
                     <AdwHeaderBar
-                      end={options.headerButtons?.map((button) => (
-                        <GtkButton
-                          key={button.id}
-                          iconName={button.icon}
-                          tooltipText={button.tooltip}
-                          onClicked={button.onPress}
-                        />
-                      ))}
+                      start={
+                        options.headerLeft ? (
+                          <IntrinsicRoot>{options.headerLeft()}</IntrinsicRoot>
+                        ) : undefined
+                      }
+                      end={[
+                        ...(options.headerRight
+                          ? [
+                              <IntrinsicRoot key="header-right">
+                                {options.headerRight()}
+                              </IntrinsicRoot>,
+                            ]
+                          : []),
+                        ...(options.headerButtons?.map((button) => (
+                          <GtkButton
+                            key={button.id}
+                            iconName={button.icon}
+                            tooltipText={button.tooltip}
+                            onClicked={button.onPress}
+                          />
+                        )) ?? []),
+                      ]}
                     />
                   }
                 >

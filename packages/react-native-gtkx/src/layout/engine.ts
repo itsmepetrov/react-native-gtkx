@@ -55,6 +55,28 @@ export class LayoutEngine {
     this.commitTree(this.root)
   }
 
+  // Intrinsic content size for measure vfuncs: lays the tree out WITHOUT
+  // committing widget rects (GTK forbids allocation during measure) and
+  // leaves the engine dirty so the next allocate-time flush recomputes
+  // against the real viewport instead of these speculative constraints.
+  measureContent(
+    orientation: "horizontal" | "vertical",
+    forSize: number,
+  ): number {
+    if (this.disposed) {
+      return 0
+    }
+    const width =
+      orientation === "vertical" && forSize > 0 ? forSize : undefined
+    this.root.yoga.calculateLayout(width, undefined, Direction.LTR)
+    const size =
+      orientation === "horizontal"
+        ? this.root.yoga.getComputedWidth()
+        : this.root.yoga.getComputedHeight()
+    this.dirty = true
+    return Math.ceil(size)
+  }
+
   dispose(): void {
     if (this.disposed) {
       return

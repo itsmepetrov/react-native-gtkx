@@ -29,7 +29,14 @@ export {
   type PressEvent,
   type TouchableOpacityProps,
 } from "./pressable"
-export { NestedRoot, Root, type NestedRootProps, type RootProps } from "./root"
+export {
+  IntrinsicRoot,
+  NestedRoot,
+  Root,
+  type IntrinsicRootProps,
+  type NestedRootProps,
+  type RootProps,
+} from "./root"
 export {
   ScrollView,
   type ScrollEvent,

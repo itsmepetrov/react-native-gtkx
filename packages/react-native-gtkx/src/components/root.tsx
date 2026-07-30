@@ -136,3 +136,50 @@ export const NestedRoot = ({ children }: NestedRootProps) => (
     {children}
   </Root>
 )
+
+export type IntrinsicRootProps = {
+  children?: ReactNode
+}
+
+// Content-sized layout root: unlike NestedRoot (which fills a slot), the
+// intrinsic root REPORTS its Yoga-computed content size to GTK — this is
+// what lets RN content live in size-to-content chrome slots (HeaderBar
+// start/end, sidebar rows). Measure runs a speculative uncommitted Yoga
+// pass (height honors the width constraint); the allocation pass then
+// recomputes at the real size and commits.
+export const IntrinsicRoot = ({ children }: IntrinsicRootProps) => {
+  const widgetRef = useRef<Gtk.Box | null>(null)
+  const [engine] = useState<LayoutEngine>(
+    () => new LayoutEngine({ width: 0, height: 0 }),
+  )
+  useEffect(
+    () => () => {
+      engine.dispose()
+    },
+    [engine],
+  )
+  const host = useMemo(
+    () => ({ engine, node: engine.root, widgetRef }),
+    [engine],
+  )
+  useRnContainer(widgetRef, engine.root, {
+    measure: (orientation, forSize) =>
+      engine.measureContent(orientation, forSize),
+    beforeAllocate: (allocatedWidth, allocatedHeight) => {
+      beginAllocatePass()
+      try {
+        engine.setViewport({ width: allocatedWidth, height: allocatedHeight })
+        engine.flushSync()
+      } finally {
+        endAllocatePass()
+      }
+    },
+  })
+  return (
+    <GtkBox ref={widgetRef}>
+      <HostNodeContext.Provider value={host}>
+        {children}
+      </HostNodeContext.Provider>
+    </GtkBox>
+  )
+}

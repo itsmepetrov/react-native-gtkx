@@ -12,6 +12,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native"
 import {
@@ -100,6 +101,11 @@ const styles = StyleSheet.create({
     color: palette.textDim,
     fontSize: 12,
   },
+  // Lives in the HeaderBar via headerRight — an intrinsic-size RN root:
+  // the input's Yoga size IS the chrome slot size.
+  searchInput: {
+    width: 190,
+  },
   center: {
     flex: 1,
     alignItems: "center",
@@ -181,6 +187,7 @@ const TopStoriesScreen = ({
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [endReached, setEndReached] = useState(false)
+  const [filter, setFilter] = useState("")
   const listRef = useRef<FlatList<Story>>(null)
   // The page the NEXT load-more call should fetch; a ref so a stale
   // onEndReached burst cannot schedule the same page twice.
@@ -259,9 +266,19 @@ const TopStoriesScreen = ({
     return () => clearTimeout(kickoff)
   }, [refresh])
 
-  // Refresh lives in the HeaderBar — a declarative native button.
+  // The HeaderBar carries a native Refresh button AND an RN search input
+  // (headerRight hosts real React Native content in the chrome — the
+  // Nautilus pattern).
   useEffect(() => {
     navigation.setOptions({
+      headerRight: () => (
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Filter stories"
+          value={filter}
+          onChangeText={setFilter}
+        />
+      ),
       headerButtons: [
         {
           id: "refresh",
@@ -271,7 +288,7 @@ const TopStoriesScreen = ({
         },
       ],
     })
-  }, [navigation, refresh])
+  }, [navigation, refresh, filter])
 
   // Headless-proof hook for scripts/run-linux-headless-hnapp.sh — dev only.
   // With HN_APP_PROOF=1 the app drives itself through the screenshot
@@ -329,7 +346,13 @@ const TopStoriesScreen = ({
         ref={listRef}
         style={styles.list}
         contentContainerStyle={styles.listContent}
-        data={stories}
+        data={
+          filter
+            ? stories.filter((story) =>
+                story.title.toLowerCase().includes(filter.toLowerCase()),
+              )
+            : stories
+        }
         keyExtractor={(story) => String(story.id)}
         renderItem={({ item, index }) => (
           <StoryCard
