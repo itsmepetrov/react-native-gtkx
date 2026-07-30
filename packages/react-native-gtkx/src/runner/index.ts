@@ -1,15 +1,17 @@
 // The `run-linux` CLI command (registered through the package's
 // react-native.config.js, the react-native-windows model): ensure the gtkx
-// codegen store, build the jsbundle with Metro for --platform linux, then
-// execute it in the Node+GTK host (./host.ts, spawned as a fresh process so
-// the GTK app never shares the CLI's process state).
+// codegen store, then either build a release jsbundle with Metro and run
+// it in the Node+GTK host (./host.ts), or — with --dev — start/reuse a
+// Metro dev server and supervise the DEV host (./host-dev.ts): Fast
+// Refresh applies edits to the live window, and a full-refresh request
+// (exit code 65) restarts the host process.
 //
-// Like host.ts, this module must stay runnable under bare Node: builtins
-// and bare specifiers only.
-import { spawnSync } from "node:child_process"
+// Like the hosts, this module must stay runnable under bare Node:
+// builtins and bare specifiers only.
+import { spawn, spawnSync, type ChildProcess } from "node:child_process"
 import { mkdirSync } from "node:fs"
 import { createRequire } from "node:module"
-import { dirname, join } from "node:path"
+import { basename, dirname, extname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const fromPackage = createRequire(import.meta.url)
@@ -19,7 +21,12 @@ type RunLinuxArgs = {
   entryFile: string
   bundleOutput?: string
   skipBundling?: boolean
+  dev?: boolean
+  port?: string
 }
+
+/** Exit code host-dev.ts uses to request a supervisor restart. */
+const FULL_REFRESH_EXIT_CODE = 65
 
 const run = (command: string, args: string[], cwd: string): number => {
   const result = spawnSync(command, args, { cwd, stdio: "inherit" })
@@ -89,21 +96,114 @@ const bundle = (root: string, entryFile: string, output: string): void => {
   }
 }
 
-const runLinux = (
+const isMetroRunning = async (server: string): Promise<boolean> => {
+  try {
+    const response = await fetch(`${server}/status`)
+    return (await response.text()).includes("packager-status:running")
+  } catch {
+    return false
+  }
+}
+
+const waitForMetro = async (server: string): Promise<void> => {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    if (await isMetroRunning(server)) {
+      return
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500))
+  }
+  console.error(
+    `[react-native-gtkx] Metro dev server never came up (${server}).`,
+  )
+  process.exit(1)
+}
+
+let activeHost: ChildProcess | null = null
+
+const spawnHost = (
+  script: string,
+  argument: string,
+  cwd: string,
+): Promise<number> =>
+  new Promise((resolve) => {
+    const hostPath = fileURLToPath(new URL(script, import.meta.url))
+    const child = spawn(process.execPath, [hostPath, argument], {
+      cwd,
+      stdio: "inherit",
+    })
+    activeHost = child
+    child.on("exit", (code) => {
+      activeHost = null
+      resolve(code ?? 1)
+    })
+  })
+
+const runLinuxDev = async (
+  config: CliConfig,
+  args: RunLinuxArgs,
+): Promise<never> => {
+  const port = args.port ?? "8081"
+  const server = `http://localhost:${port}`
+  let metro: ChildProcess | null = null
+  if (await isMetroRunning(server)) {
+    console.warn(
+      `[react-native-gtkx] reusing the Metro dev server at ${server}`,
+    )
+  } else {
+    console.warn(
+      `[react-native-gtkx] starting the Metro dev server at ${server}…`,
+    )
+    const appRequire = createRequire(join(config.root, "package.json"))
+    metro = spawn(
+      process.execPath,
+      [
+        binOf(appRequire, "react-native", "react-native"),
+        "start",
+        "--port",
+        port,
+      ],
+      { cwd: config.root, stdio: "inherit" },
+    )
+    await waitForMetro(server)
+  }
+  const entry = basename(args.entryFile, extname(args.entryFile))
+  const bundleUrl = `${server}/${entry}.bundle?platform=linux&dev=true&minify=false`
+  const shutdown = (code: number): never => {
+    activeHost?.kill()
+    metro?.kill()
+    process.exit(code)
+  }
+  process.on("SIGINT", () => shutdown(0))
+  process.on("SIGTERM", () => shutdown(0))
+  // Supervisor: a full-refresh request restarts the host with the window
+  // reopening on the fresh bundle; any other exit ends the session.
+  for (;;) {
+    const code = await spawnHost("./host-dev.js", bundleUrl, config.root)
+    if (code !== FULL_REFRESH_EXIT_CODE) {
+      shutdown(code)
+    }
+    console.warn("[react-native-gtkx] restarting the app after a full refresh…")
+  }
+}
+
+const runLinux = async (
   _argv: string[],
   config: CliConfig,
   args: RunLinuxArgs,
-): void => {
+): Promise<void> => {
+  ensureCodegenStore()
+  if (args.dev) {
+    await runLinuxDev(config, args)
+    return
+  }
   const output =
     args.bundleOutput ??
     join(config.root, "node_modules", ".react-native-gtkx", "main.jsbundle")
-  ensureCodegenStore()
   if (!args.skipBundling) {
     mkdirSync(dirname(output), { recursive: true })
     bundle(config.root, args.entryFile, output)
   }
-  const hostPath = fileURLToPath(new URL("./host.js", import.meta.url))
-  const status = run(process.execPath, [hostPath, output], config.root)
+  const status = await spawnHost("./host.js", output, config.root)
   process.exit(status)
 }
 
@@ -127,6 +227,15 @@ export const commands = [
       {
         name: "--skip-bundling",
         description: "Reuse the existing bundle at --bundle-output",
+      },
+      {
+        name: "--dev",
+        description:
+          "Development mode: Metro dev server + Fast Refresh (edits apply to the live window)",
+      },
+      {
+        name: "--port <number>",
+        description: "Metro dev server port for --dev (default: 8081)",
       },
     ],
     func: runLinux,

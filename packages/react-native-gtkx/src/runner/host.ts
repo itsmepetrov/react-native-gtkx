@@ -87,11 +87,6 @@ registerHooks({
   },
 })
 
-declare global {
-  var __hostModules: Record<string, HostModule>
-  var __hostRequire: NodeJS.Require
-}
-
 globalThis.__hostModules = {}
 for (const name of HOST_MODULE_EXTERNALS) {
   try {

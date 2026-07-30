@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Dev-mode spike, error path: break App.tsx on the LIVE app (parse error),
-# assert Metro's error reaches the dev-host log readably, then fix the file
-# and assert the next update applies (recovery without restart).
+# Dev-mode error path through the PRODUCT command: break App.tsx on the
+# LIVE app (parse error), assert Metro's error reaches the log readably,
+# then fix the file and assert the next update applies (recovery without
+# restart).
 # Usage (in the VM): bash run-dev-error-probe.sh
 set -euo pipefail
 export XDG_RUNTIME_DIR="/run/user/$(id -u)"
@@ -10,7 +11,9 @@ cd "$(dirname "$0")"
 cleanup() {
   sed -i 's/const HMR_MARKER = ((("v1"/const HMR_MARKER = "v1"/' App.tsx || true
   sed -i 's/const HMR_MARKER = "v2"/const HMR_MARKER = "v1"/' App.tsx || true
-  kill "${APP:-0}" "${METRO:-0}" 2>/dev/null || true
+  kill "${APP:-0}" 2>/dev/null || true
+  pkill -f "host-dev.js" 2>/dev/null || true
+  pkill -f "react-native.*start" 2>/dev/null || true
   pkill -f "sway -V -c $CONF" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -27,20 +30,10 @@ WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1 \
 sleep 2
 SOCKET=$(grep -o "wayland display '[^']*'" /tmp/sway-spike-dev.log | cut -d"'" -f2 | head -1)
 
-npx react-native start --port 8081 >/tmp/spike-metro.log 2>&1 &
-METRO=$!
-for _ in $(seq 1 30); do
-  if curl -sf "http://127.0.0.1:8081/status" | grep -q "packager-status:running"; then
-    break
-  fi
-  sleep 2
-done
-echo "METRO-UP"
-
 WAYLAND_DISPLAY="$SOCKET" DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent \
-  node dev-host.mjs >/tmp/spike-dev-host.log 2>&1 &
+  npx react-native run-linux --dev --port 8081 >/tmp/spike-dev-host.log 2>&1 &
 APP=$!
-for _ in $(seq 1 45); do
+for _ in $(seq 1 60); do
   if grep -q "ticks=" /tmp/spike-hmr-state.txt 2>/dev/null; then
     break
   fi
