@@ -2,6 +2,7 @@ import { existsSync } from "node:fs"
 import { useEffect, useRef } from "react"
 import type { StyleProp } from "../contracts"
 import { Gtk, GtkPicture } from "../gtkx/bridge/index"
+import { isRemoteUri, loadRemoteImage } from "./image-loader"
 import { useLayoutChild, type LayoutEvent } from "./use-layout-child"
 
 export type ImageSource = { uri: string } | string
@@ -28,9 +29,10 @@ const toPath = (source: ImageSource): string => {
   return uri.startsWith("file://") ? uri.slice("file://".length) : uri
 }
 
-// v1: local files only (the whole Node fs is available to apps). Sizing comes
-// from the style (width/height or flex) — like RN, which also cannot infer
-// remote image sizes synchronously.
+// Local files load synchronously; http(s) URIs download through the
+// on-disk cache (image-loader.ts) and set the picture when ready. Sizing
+// comes from the style (width/height or flex) — like RN, which also cannot
+// infer remote image sizes synchronously.
 export const Image = ({
   source,
   style,
@@ -49,6 +51,27 @@ export const Image = ({
     const widget = widgetRef.current
     if (!widget) {
       return
+    }
+    if (isRemoteUri(path)) {
+      let cancelled = false
+      loadRemoteImage(path).then(
+        (file) => {
+          // Unmount (or a source change) during the download must not touch
+          // the widget or fire stale callbacks.
+          if (!cancelled && widgetRef.current) {
+            widgetRef.current.setFilename(file)
+            onLoad?.()
+          }
+        },
+        (error: unknown) => {
+          if (!cancelled) {
+            onError?.({ nativeEvent: { error: String(error) } })
+          }
+        },
+      )
+      return () => {
+        cancelled = true
+      }
     }
     if (!existsSync(path)) {
       onError?.({ nativeEvent: { error: `Image not found: ${path}` } })

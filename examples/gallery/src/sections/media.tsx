@@ -1,6 +1,6 @@
 // Image → GtkPicture: four resizeMode values over a local SVG from the
-// Adwaita theme + onError on a nonexistent path. v1 limitation: local files
-// only (http/https sources are a documented limitation).
+// Adwaita theme, remote http(s) sources through the disk cache, and onError
+// on a nonexistent path / dead URL.
 import { useState } from "react"
 import { Image, StyleSheet, Text, View } from "react-native"
 import { Caption, DemoCard, palette, Section } from "../ui"
@@ -46,11 +46,13 @@ const styles = StyleSheet.create({
 export const MediaSection = () => {
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState("(no error)")
+  const [remote, setRemote] = useState("loading…")
+  const [remoteError, setRemoteError] = useState("(no error)")
 
   return (
     <Section
       title="Media"
-      subtitle="Image renders local files (SVG/PNG/…) via GtkPicture; the style sets the size, the resizeMode prop sets contentFit. Network sources are not supported in v1."
+      subtitle="Image renders local files and http(s) sources (Node fetch → disk cache) via GtkPicture; the style sets the size, the resizeMode prop sets contentFit."
     >
       <DemoCard
         title="resizeMode"
@@ -91,6 +93,40 @@ export const MediaSection = () => {
           <Text style={styles.status}>
             onLoad: {loaded ? "fired" : "not yet"}
           </Text>
+        </View>
+      </DemoCard>
+
+      <DemoCard
+        title="remote images"
+        hint="an https source downloads with Node fetch into the disk cache — repeat renders of the same URL are instant, no network; a dead URL fires onError"
+      >
+        <View style={styles.row}>
+          <View style={styles.item}>
+            <View style={styles.frame}>
+              <Image
+                source={{
+                  uri: "https://icons.duckduckgo.com/ip3/news.ycombinator.com.ico",
+                }}
+                resizeMode="contain"
+                style={styles.image}
+                onLoad={() => setRemote("onLoad fired (cached on disk)")}
+                onError={({ nativeEvent }) => setRemote(nativeEvent.error)}
+              />
+            </View>
+            <Text style={styles.status}>{remote}</Text>
+          </View>
+          <View style={styles.item}>
+            <View style={styles.frame}>
+              <Image
+                source={{ uri: "https://127.0.0.1:1/broken.png" }}
+                style={styles.image}
+                onError={({ nativeEvent }) =>
+                  setRemoteError(nativeEvent.error.slice(0, 60))
+                }
+              />
+            </View>
+            <Text style={styles.errorText}>{remoteError}</Text>
+          </View>
         </View>
       </DemoCard>
 
