@@ -1,6 +1,7 @@
 // View: backgrounds, borders (including per-side and dashed/dotted), corner
 // radii, opacity and nesting of GtkFixed containers.
-import { StyleSheet, Text, View } from "react-native"
+import { useState } from "react"
+import { Pressable, StyleSheet, Text, View } from "react-native"
 import { Caption, DemoCard, palette, Section } from "../ui"
 
 const styles = StyleSheet.create({
@@ -220,6 +221,13 @@ export const ViewsSection = () => (
     </DemoCard>
 
     <DemoCard
+      title="pointerEvents"
+      hint="an overlay covers the button; none and box-none let the click through (GTK picking: can-target + a contains() override), auto and box-only block it"
+    >
+      <PointerEventsDemo />
+    </DemoCard>
+
+    <DemoCard
       title="Nesting"
       hint="three levels of containers: each View is a GtkFixed with its own CSS class, padding sets the insets via Yoga"
     >
@@ -233,3 +241,68 @@ export const ViewsSection = () => (
     </DemoCard>
   </Section>
 )
+
+const PE_MODES = ["auto", "none", "box-none", "box-only"] as const
+
+const PointerEventsDemo = () => {
+  const [mode, setMode] = useState<(typeof PE_MODES)[number]>("none")
+  const [presses, setPresses] = useState(0)
+  return (
+    <View style={{ gap: 10 }}>
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        {PE_MODES.map((candidate) => (
+          <Pressable
+            key={candidate}
+            onPress={() => setMode(candidate)}
+            style={{
+              paddingHorizontal: 10,
+              paddingVertical: 6,
+              borderRadius: 6,
+              backgroundColor:
+                candidate === mode ? palette.accent : palette.cardAlt,
+            }}
+          >
+            <Text style={{ color: palette.text, fontSize: 12 }}>
+              {candidate}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+      <View style={{ height: 70 }}>
+        <Pressable
+          onPress={() => setPresses((value) => value + 1)}
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 220,
+            height: 44,
+            borderRadius: 8,
+            backgroundColor: palette.accent,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Text style={{ color: palette.text, fontWeight: "700" }}>
+            {`press me (${presses})`}
+          </Text>
+        </Pressable>
+        <View
+          pointerEvents={mode}
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 220,
+            height: 44,
+            borderRadius: 8,
+            backgroundColor: "#f6d32d55",
+          }}
+        />
+      </View>
+      <Text style={{ color: palette.textDim, fontSize: 12 }}>
+        the yellow overlay sits on top of the button
+      </Text>
+    </View>
+  )
+}

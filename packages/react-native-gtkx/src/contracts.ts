@@ -123,7 +123,15 @@ export type VisualStyle = Partial<{
   transform: TransformPart[]
 }>
 
-export type FlatStyle = LayoutStyle & VisualStyle
+// RN pointerEvents (also allowed in styles since RN 0.71); behavioral, so
+// it belongs to neither the layout nor the visual bucket — splitStyle
+// ignores it and View reads it from the flattened style.
+export type PointerEventsValue = "auto" | "none" | "box-none" | "box-only"
+
+export type FlatStyle = LayoutStyle &
+  VisualStyle & {
+    pointerEvents?: PointerEventsValue
+  }
 
 // Style prop as components accept it: single object, array (with falsy holes).
 export type StyleProp<T = FlatStyle> =

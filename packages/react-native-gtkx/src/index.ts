@@ -78,6 +78,7 @@ export type {
   DimensionValue,
   FlatStyle,
   LayoutStyle,
+  PointerEventsValue,
   StyleProp,
   TransformPart,
   VisualStyle,

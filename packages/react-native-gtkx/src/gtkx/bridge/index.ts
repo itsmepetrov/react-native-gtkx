@@ -47,6 +47,7 @@ export {
 export { css, cx, injectGlobal } from "@gtkx/css"
 
 export { createTextProbe, measureWidget, toNumber } from "./measure"
+export { getViewBoxComponent, setBoxPassthrough } from "./view-box"
 export {
   allocateChild,
   attachRnLayout,
