@@ -11,8 +11,8 @@ react-native-gtkx lets you write native Linux (GTK4/Adwaita) applications with t
 ## New project from the template
 
 ```bash
-cp -r <repository>/template my-app && cd my-app
-npm install        # until the package is published: replace the dependency with a file: path, see the template README
+npx degit itsmepetrov/react-native-gtkx/template my-app && cd my-app
+npm install
 npm run dev        # window with Fast Refresh (edits apply without a restart)
 npm run build && npm start   # production bundle, runs with plain node
 ```
