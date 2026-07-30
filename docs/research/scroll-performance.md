@@ -65,8 +65,9 @@ whole viewports per tick, so the target window is an almost entirely new set
 of rows — and mounting all of them in the frame that discovered them is the
 freeze. The teleport phase isolates it: **27 cell mounts inside ONE frame (54
 with the wider window), and that frame took 88 ms** — five frames of work in
-one; the list's very first window fill costs 113 mounts in one frame. The kinetic handoff merely coincides, which is why it reads as "as if
-computing the scroll force".
+one; the list's very first window fill costs 113 mounts in one frame. The
+kinetic handoff merely coincides, which is why it reads as "as if computing
+the scroll force".
 
 The fix is RN's own batching pair (`maxToRenderPerBatch` 10,
 `updateCellsBatchingPeriod` 50 ms), and getting the burst to actually
@@ -122,8 +123,8 @@ snapshot.
   reported.** The churn claim reproduces (mount+unmount over a 6000 px scroll:
   118 at 5 → 96 at 11, −19%), but the late-frame improvement does not: with
   the dirty-set flush and batching in place, 5 and 11 land inside the noise of
-  each other (`engine.flush` 1.05 vs 1.40 ms per flush, GTK allocate 8.4 vs
-  10.0 ms/s — the wider window costs a bigger tree). What the wider window
+  each other (`engine.flush` 0.89 vs 1.26 ms per flush, GTK allocate 7.3 vs
+  8.6 ms/s — the wider window costs a bigger tree). What the wider window
   definitely used to cost was the mount burst on a jump (54 mounts in a frame
   versus 27), and batching is what removes that. Keep 11 as the default; it is
   not a lever to reach for first.
