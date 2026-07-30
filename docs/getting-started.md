@@ -167,10 +167,10 @@ which are silently ignored today, and what the desktop cannot mean).
 
 ## Tests
 
-Unit logic is plain vitest. Component tests use `@gtkx/testing` (render/screen/fireEvent) under headless Wayland: see `packages/react-native-gtkx/tests/gtk/` and `npm run test:gtk`. In tests, click via `fireEvent` and query roles with `Gtk.AccessibleRole` enums (see docs/gtkx-rc1-vs-main.md).
+Unit logic is plain vitest. Component tests use `@gtkx/testing` (render/screen/fireEvent) under headless Wayland: see `packages/react-native-gtkx/tests/gtk/` and `npm run test:gtk`. In tests, click via `fireEvent` and query roles with `Gtk.AccessibleRole` enums (see docs/gtkx-rc2-notes.md).
 
 ## Next steps
 
 - [docs/api.md](api.md) — the entire v1 surface and differences from RN;
 - [CONTRIBUTING.md](../CONTRIBUTING.md) — developing the library itself (from macOS — via the UTM VM);
-- [docs/gtkx-rc1-vs-main.md](gtkx-rc1-vs-main.md) — rc.1 workarounds and the migration plan.
+- [docs/gtkx-rc2-notes.md](gtkx-rc2-notes.md) — the gtkx rc.2 baseline: workarounds, what it fixed, quirks that stay.

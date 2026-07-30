@@ -96,7 +96,7 @@ notes behind the mechanism (with measurements) live in
 
 ## Upstream divergence
 
-gtkx is pinned to rc.1, while main has already moved ahead. All workarounds for missing capabilities are marked in the code with the `RC1-WORKAROUND(<name>)` tag and cataloged in [docs/gtkx-rc1-vs-main.md](docs/gtkx-rc1-vs-main.md) along with the rc.2 migration plan. If you add a workaround, add the tag and a row to the table.
+gtkx is pinned to an exact RC (`1.0.0-rc.2`). Everything we do because of a gap in that release is marked in the code with the `RC2-WORKAROUND(<name>)` tag and catalogued in [docs/gtkx-rc2-notes.md](docs/gtkx-rc2-notes.md), together with what rc.2 already fixed and the quirks that are here to stay. If you add a workaround, add the tag and a row to the table; what we want from upstream in return is collected in [docs/upstream-gtkx.md](docs/upstream-gtkx.md).
 
 ## Code rules
 

@@ -12,9 +12,9 @@ FFI) and Yoga (WASM) for layout. Linux is an RN out-of-tree platform here:
   in doubt, check what RN/react-native-windows/react-native-web do.
 - **All `@gtkx/*` imports live ONLY in
   `packages/react-native-gtkx/src/gtkx/bridge/`** (eslint-enforced).
-  gtkx is an RC dependency — API drift is absorbed in the bridge; rc.1
-  workarounds carry an `RC1-WORKAROUND(<name>)` tag and a row in
-  docs/gtkx-rc1-vs-main.md.
+  gtkx is an RC dependency — API drift is absorbed in the bridge; each
+  workaround carries an `RC2-WORKAROUND(<name>)` tag and a row in
+  docs/gtkx-rc2-notes.md.
 - **Imports are extensionless** (`moduleResolution: "Bundler"`, never
   NodeNext). Files that bare Node executes (`src/runner/*`, `src/metro`,
   `src/vite`) must be self-contained: node builtins, bare specifiers and

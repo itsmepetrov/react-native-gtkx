@@ -1,0 +1,94 @@
+# gtkx rc.2: what we work around, and why
+
+The platform is pinned to `@gtkx/*@1.0.0-rc.2`. This file is the baseline for
+that pin: the workarounds still live in the code, the rc.1-era ones rc.2 let us
+delete, and the quirks that are simply how the stack behaves.
+
+Every live workaround is tagged in code with `RC2-WORKAROUND(<name>)` —
+`grep -rn "RC2-WORKAROUND"` gives the full list of sites, and every tag has a
+row below. **Rule:** new workaround → tag in the code AND a row here; when a
+release removes the need, delete both in the same commit. (The rc.1 tag
+`RC1-WORKAROUND` is retired — nothing in the tree carries it any more.)
+
+The upstream side of these — reproductions, asks, what we would delete in
+return — lives in [docs/upstream-gtkx.md](upstream-gtkx.md).
+
+## Live workarounds
+
+| Name                       | What rc.2 does                                                                                                                                                                                                                                     | Our workaround                                                                                                                                      | Removal condition                                                           |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `use-signal-stale-handler` | `useSignal` routes the handler through React's `useEffectEvent`, whose ref stops refreshing for components deep in the tree (a ScrollView at its 8th render still ran the mount closure) — a fetch-fed FlatList empties itself on the first scroll | `gtkx/bridge/use-signal.ts` re-pins the latest handler (insertion effect) and hands gtkx a stable wrapper; the bridge exports that hook, not gtkx's | Upstream restores its documented "handler from the latest render" contract  |
+| `codegen-cwd`              | `gtkx codegen` run with a cwd inside `node_modules` prints "bindings up to date" and creates no store at all (re-verified on rc.2 with the store removed)                                                                                          | `src/runner/index.ts` resolves the project that OWNS the hosting `node_modules` and runs the CLI from there                                         | The CLI validates the store instead of a stamp, or fails loudly on that cwd |
+| `runtime-dedupe`           | Two bundled copies of the gtkx runtime still double-init GLib and abort (`g_log_set_writer_func` called twice); nothing guards against it                                                                                                          | `src/vite/index.ts` puts `resolve.dedupe` over `@gtkx/*` + `react` (+ `@react-navigation/*` for its context) into the preset every app inherits     | Idempotent runtime init upstream, or an error that names the duplicate      |
+| `renderhook-no-window`     | `renderHook` still mounts into a bare `Gtk.Box`, so window-dependent APIs have no toplevel to read                                                                                                                                                 | Hook tests create a window with `render()` first (`tests/gtk/apis/dimensions.test.tsx`)                                                             | `renderHook` mounts into the same harness window `render` uses              |
+
+## Fixed in rc.2 (rc.1 history, one line each)
+
+- **`vitest-compositor`** — rc.1 defaulted the headless display to weston and
+  took sway through an option; rc.2's default IS sway, so `vitest.config.ts`
+  calls the plugin with no arguments.
+- **`no-virtual-seat`** — rc.1 had no input seat under sway, so windows never
+  activated and `userEvent` was impossible; rc.2 starts a virtual seat for sway
+  (`needsVirtualSeat: true`), a rendered toplevel now reports `is-active: true`,
+  and coordinate-level input is on the table.
+- **`fixed-layout-child`** — rc.1's declarative `<GtkFixedLayoutChild>` created
+  a detached object (Gtk-CRITICAL, positions never applied); moot for us since
+  containers moved to our own `RnGtkxLayout` manager and GtkFixed left the
+  codebase entirely.
+- **`controllers-as-children`** — rc.1 silently ignored controllers passed as
+  JSX; rc.2 has a `controllers` slot on `GtkWidget`. Pressable and TextInput
+  still attach theirs imperatively on purpose (wired once per widget, handlers
+  read from a ref) — a choice now, not a workaround.
+
+## New in the rc.2 era
+
+Two regressions/gaps first seen on rc.2, both with reproductions and both
+written up for upstream in [docs/upstream-gtkx.md](upstream-gtkx.md):
+
+- **The `useSignal` freeze.** Instrumented: `closure_render=1`,
+  `effectEvent_render=1`, `ref_render=8` in the same component. Shallow
+  components refresh correctly, which is why it survives casual testing; the
+  visible symptom was a virtualized list that blanked on the first scroll.
+  Repro: `tests/gtk/components/list-late-data.gtk.test.tsx`, plus the contract
+  test in `tests/gtk/bridge.smoke.test.tsx`.
+- **The codegen freshness lie.** `npm install` prunes `node_modules/.gtkx` (npm
+  sees `@gtkx/gi`/`@gtkx/jsx` as extraneous), and afterwards codegen can report
+  "bindings up to date" over a store that is not there — from the project root
+  because a stamp outlives the store, and unconditionally when the cwd is
+  inside `node_modules`. `rm -rf node_modules/.gtkx` before `npm run codegen`
+  is the reliable sequence.
+
+## Non-workarounds (quirks that stay)
+
+- 64-bit FFI values arrive as BigInt → `toNumber()` at the boundary
+  (`gtkx/bridge/measure.ts`);
+- signal names are kebab-case ("value-changed"); signals do not pass the
+  emitter (get the widget from a ref);
+- role queries in tests use the `Gtk.AccessibleRole` enum, not strings;
+- `npm install` prunes the codegen store (`node_modules/.gtkx` is not in the
+  lockfile) → run `npm run codegen` after installing — npm behavior, not gtkx;
+- measuring unmapped widgets yields 0 (offscreen Label probes are the
+  exception) → re-measure on the `map` signal + re-commit measured leaves on
+  every flush (`layout/node.ts`);
+- mixed-session setups only: running an app on a bare compositor (headless
+  sway) while `XDG_RUNTIME_DIR` points at a full GNOME session can segfault in
+  a GTK signal handler when the GNOME settings portal pushes updates into the
+  app (`g_cclosure_marshal_VOID__OBJECTv` via the FFI emit path); cutting
+  `DBUS_SESSION_BUS_ADDRESS` avoids it, which is why the headless scripts do.
+  Normal desktop and container runs are unaffected. Retested on rc.2 (gallery
+  under headless sway with the real session bus attached): the app ran clean
+  and SIGTERM teardown exited 143, so the exit-time segfault we saw on rc.1 no
+  longer reproduces; the portal-push crash needs a live settings change to
+  trigger and stays on the list unconfirmed.
+
+## Procedure when the next release ships
+
+1. Update the `@gtkx/*` pins (root, spike, examples, template), then
+   `npm install && rm -rf node_modules/.gtkx && npm run codegen`;
+2. Run everything on Linux: `npm run typecheck && npm test`, `build:dist`,
+   `check:package`, plus the headless example proofs;
+3. Walk the live-workaround table: for each row check the removal condition,
+   delete the tag and the row together when it is met, and move the entry into
+   the history section above;
+4. Re-tag whatever survives (`RC2-WORKAROUND` → the new release) and update
+   `docs/upstream-gtkx.md` if an ask was answered.

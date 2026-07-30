@@ -31,7 +31,7 @@ And the portability proof — `examples/profile` renders ONE source file with bo
 
 - [x] Yoga + GtkFixed spike — **GO** (0 px accuracy, 500-node reflow in 0.17 ms, 60 fps — `docs/research/yoga-gtk-spike.md`)
 - [x] Dev environment (UTM VM with a native GNOME session, headless sway for tests) and dev workflow
-- [x] gtkx bridge (isolation from the RC API; [rc.1 workaround catalog](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/gtkx-rc1-vs-main.md))
+- [x] gtkx bridge (isolation from the RC API; [workaround catalog](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/gtkx-rc2-notes.md))
 - [x] Layout engine (Yoga shadow tree, measure via Pango, batching, diffing, onLayout)
 - [x] StyleSheet: layout/visual split, CSS Color 4 colors, PlatformColor → Adwaita
 - [x] View / Text / Image / AppRegistry — first RN render in GTK
@@ -42,8 +42,40 @@ And the portability proof — `examples/profile` renders ONE source file with bo
 - [x] Windowed lists: virtualization (10k rows), sticky headers, SectionList, scrollToIndex, viewability, inverted (RN chat semantics), refresh parity
 - [x] Linux as an RN **out-of-tree platform**: the standard Metro/Babel toolchain, `react-native.config.js` declared by the dependency, `npx react-native run-linux`, compiled package distribution (attw-checked) — see `examples/rn-app` (a cli-init app with ios + android + linux)
 - [x] **Fast Refresh on both toolchains**: `run-linux --dev` (Metro dev server + HMR in the GTK host, state preserved) and `gtkx dev` (vite)
+- [x] **Navigation on real Adwaita widgets**: react-navigation navigators backed by `Adw.NavigationView` and `Adw.NavigationSplitView` — see below
 
-Verified live: `examples/gallery` (the whole surface) and the interactive `examples/playground` — 372 tests (unit + component tests under headless Wayland).
+Verified live: `examples/hn-app` (a Hacker News reader on the Metro path), `examples/gallery` (the whole surface) and the interactive `examples/playground` — 448 tests (unit + component tests under headless Wayland).
+
+## Navigation is native, not redrawn
+
+```tsx
+import {
+  createStackNavigator,
+  NavigationContainer,
+} from "react-native-gtkx/navigation"
+```
+
+Screens are real `Adw.NavigationPage`s inside an `Adw.NavigationView`, and
+react-navigation state stays the source of truth. The consequence: the back
+button, the slide transition, Escape, the back gesture and the back-history
+menu are the platform's, not a JS re-implementation — and a native pop is
+reported back into react-navigation state instead of fighting it. Screen
+options map onto the real chrome (`title`, `headerShown`, `gestureEnabled`
+→ the page's `can-pop`, which is also what makes `usePreventRemove` work),
+`headerLeft`/`headerRight` accept ordinary React Native content rendered
+_inside_ the HeaderBar, and `createSidebarNavigator` gives the desktop
+answer to a drawer: a persistent `Adw.NavigationSplitView` sidebar
+(`examples/gallery` runs on it).
+
+**No other out-of-tree React Native platform does this.** react-native-screens
+lists Windows support, but it is an old-architecture stub that does not build
+against modern react-native-windows — Microsoft's own showcase app falls back
+to the JS drawer; react-native-macos is not supported by it at all, because
+AppKit has no navigation-stack primitive to bind to. GTK4/libadwaita does have
+one, so the model here is the iOS `native-stack` one:
+[docs/research/navigation-extensibility.md](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/research/navigation-extensibility.md)
+maps every native-stack option against what we support, what is coming, and
+what is meaningless on a desktop.
 
 ## Performance architecture
 
@@ -67,6 +99,8 @@ docs/research/layout-manager.md).
 
 - [Getting Started](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/getting-started.md) — a new project in a minute, and adding Linux to an existing RN app;
 - [API v1](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/api.md) — the full surface and differences from RN;
+- [Navigation research](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/research/navigation-extensibility.md) — every native-stack option mapped, how an existing react-navigation app ports, and why the other desktop RN platforms never got native navigation;
+- [What we need from gtkx](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/upstream-gtkx.md) — the standing upstream agenda (bugs with repros, API asks, workarounds we want to delete);
 - [CONTRIBUTING](https://github.com/itsmepetrov/react-native-gtkx/blob/main/CONTRIBUTING.md) — developing the library (from macOS — via the UTM VM).
 
 ## Requirements
