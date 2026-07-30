@@ -4,7 +4,7 @@
 // absolutely positioned at its offset. Heights come from getItemLayout (exact)
 // or estimatedItemSize refined by per-cell onLayout; corrections above the
 // first visible row are anchored by compensating the scroll offset in the
-// same commit (spike/list-window/FINDINGS.md).
+// same commit (docs/research/list-window.md).
 import {
   forwardRef,
   useEffect,

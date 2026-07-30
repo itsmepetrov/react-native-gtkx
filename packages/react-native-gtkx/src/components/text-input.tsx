@@ -227,7 +227,6 @@ const MultilineTextInput = ({
       suppressEcho.current = false
       setEmpty(next === "")
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [controlled, value])
 
   useFocusController(viewRef, onFocus, onBlur)

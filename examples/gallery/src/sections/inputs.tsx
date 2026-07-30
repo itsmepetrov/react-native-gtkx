@@ -3,7 +3,7 @@
 // Honest v1 limitation: multiline does not render — always a single-line
 // GtkEntry (GtkTextView is roadmap branch H).
 import { useState } from "react"
-import { StyleSheet, Text, TextInput, View } from "react-native"
+import { StyleSheet, Text, TextInput } from "react-native"
 import { Caption, DemoCard, palette, Section } from "../ui"
 
 const styles = StyleSheet.create({

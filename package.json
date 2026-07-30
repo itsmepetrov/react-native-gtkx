@@ -15,7 +15,7 @@
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:gtk": "vitest run --project gtk",
-    "docs:check": "node scripts/check-docs-coverage.mjs",
+    "docs:check": "bash scripts/check-docs-coverage.sh",
     "build:dist": "npm run build:dist -w react-native-gtkx",
     "watch:dist": "npm run watch:dist -w react-native-gtkx",
     "check:package": "npm run build:dist && attw --pack packages/react-native-gtkx --profile esm-only --ignore-rules internal-resolution-error"

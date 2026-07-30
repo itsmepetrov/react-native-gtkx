@@ -55,24 +55,11 @@ The helper is `scripts/vm.sh`. The VM address is machine-specific: export `VM_HO
 
 After `sync`, run `npm install && npm run codegen && npm run build:dist` once in the VM (dist folders are not synced; build:dist emits the whole package including the metro/runner/vite subpaths). GL rendering in the Apple backend is software (llvmpipe) — EGL/ZINK warnings at startup are normal.
 
-## Docker container (alternative)
-
-The full cycle works in any Linux container: the image is built from `docker/dev.Dockerfile` (GTK 4.22, Node 24, xvfb, sway, x11vnc) and mounts the repository at `/work`:
-
-```bash
-docker build -t rn-gtkx-dev -f docker/dev.Dockerfile docker
-docker run --rm --init -v "$PWD":/work -w /work rn-gtkx-dev \
-  bash -lc 'npm install && npm run codegen && npm test && npm run test:gtk'
-```
-
-To view the window live from the host, run `scripts/live-app.sh <app-dir>` inside the container (VNC on port 5901).
-
 ## Known infrastructure quirks
 
-- write GUI application output in the container to a file, not to stdout — an orphaned `dbus-daemon` holds the pipe and hangs `docker run`;
 - set `GTK_A11Y=none` in headless tests to silence the accessibility bus warning;
 - 64-bit values from the gtkx FFI arrive as BigInt — convert them with `Number()` at the boundary;
-- `@gtkx/testing` tests need a headless Wayland compositor — the image ships sway.
+- `@gtkx/testing` tests need a headless Wayland compositor (sway).
 
 ## Layout manager
 
@@ -90,9 +77,9 @@ of `GtkLayoutManager`, registered from pure JS via `@gtkx/runtime`
   window-root allocation pass those queue calls are deferred until the pass
   ends (see `beginAllocatePass`).
 
-Debugging tips: `GTK_DEBUG=layout` traces measure/allocate;
-`spike/layout-manager/` contains the standalone probe of the mechanism with
-its findings (FINDINGS.md), and `run-vm.sh` there reproduces it headless.
+Debugging tips: `GTK_DEBUG=layout` traces measure/allocate; the research
+notes behind the mechanism (with measurements) live in
+`docs/research/layout-manager.md`.
 
 ## Upstream divergence
 

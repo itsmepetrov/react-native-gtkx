@@ -278,7 +278,7 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       // The viewport translates the content by the FRACTIONAL adjustment
       // value while widget allocations are integer — an unquantized pin
       // disagrees with the translation by ±1px and shimmers every frame.
-      // Frame telemetry (spike/sticky-probe) proved the viewport quantizes
+      // Frame telemetry (docs/research/sticky-probe.md) proved the viewport quantizes
       // like floor: with Math.floor the header's window-relative position is
       // a flat 0.00 across every frame; round oscillates 0/1, ceil sits at 1.
       const scrollTop = Math.floor(rawScrollTop)

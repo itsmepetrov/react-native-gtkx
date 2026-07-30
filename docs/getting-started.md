@@ -157,5 +157,5 @@ Unit logic is plain vitest. Component tests use `@gtkx/testing` (render/screen/f
 ## Next steps
 
 - [docs/api.md](api.md) — the entire v1 surface and differences from RN;
-- [CONTRIBUTING.md](../CONTRIBUTING.md) — developing the library itself (including from macOS via a remote container);
+- [CONTRIBUTING.md](../CONTRIBUTING.md) — developing the library itself (from macOS — via the UTM VM);
 - [docs/gtkx-rc1-vs-main.md](gtkx-rc1-vs-main.md) — rc.1 workarounds and the migration plan.

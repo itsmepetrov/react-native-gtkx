@@ -12,8 +12,8 @@ The same source built with react-native-web ([portability proof](docs/shots/prof
 
 ## Status
 
-- [x] Yoga + GtkFixed spike — **GO** (0 px accuracy, 500-node reflow in 0.17 ms, 60 fps — `spike/RESULTS.md`)
-- [x] Dev environment (Docker/VM, GTK 4.22, live VNC) and CI workflow
+- [x] Yoga + GtkFixed spike — **GO** (0 px accuracy, 500-node reflow in 0.17 ms, 60 fps — `docs/research/yoga-gtk-spike.md`)
+- [x] Dev environment (UTM VM with a native GNOME session, headless sway for tests) and dev workflow
 - [x] gtkx bridge (isolation from the RC API; [rc.1 workaround catalog](docs/gtkx-rc1-vs-main.md))
 - [x] Layout engine (Yoga shadow tree, measure via Pango, batching, diffing, onLayout)
 - [x] StyleSheet: layout/visual split, CSS Color 4 colors, PlatformColor → Adwaita
@@ -43,14 +43,14 @@ GtkLayoutManager subclass; a full measure+allocate pass over a 50-child
 container costs ~0.21 ms including every FFI hop. Animation frames bypass
 layout entirely — an Animated value write is a WeakMap store plus one queued
 GTK allocation. Two orders of magnitude of headroom against a 60 fps frame
-budget, measured, not estimated (see spike/RESULTS.md and
-spike/layout-manager/FINDINGS.md).
+budget, measured, not estimated (see docs/research/yoga-gtk-spike.md and
+docs/research/layout-manager.md).
 
 ## Documentation
 
 - [Getting Started](docs/getting-started.md) — a new project in a minute, and adding Linux to an existing RN app;
 - [API v1](docs/api.md) — the full surface and differences from RN;
-- [CONTRIBUTING](CONTRIBUTING.md) — developing the library (including from macOS via a remote container).
+- [CONTRIBUTING](CONTRIBUTING.md) — developing the library (from macOS — via the UTM VM).
 
 ## Requirements
 

@@ -1,0 +1,64 @@
+---
+name: vm
+description: Run Linux-only work (typecheck, GTK tests, build:dist, launching apps, headless proofs) in the project's Linux VM from macOS. Use whenever a task needs GTK, the codegen store, or a visual check.
+---
+
+# Working with the Linux VM
+
+react-native-gtkx is Linux-only at runtime: `typecheck`, `test:gtk`,
+`build:dist` and anything that opens a window need the codegen store and
+GTK — on macOS all of that runs in a UTM VM through `scripts/vm.sh`.
+The VM address comes from `VM_HOST` (put the export into
+`scripts/local/env.sh`, gitignored). One-time VM setup: CONTRIBUTING.md.
+
+## Commands
+
+| Command | Purpose |
+| --- | --- |
+| `scripts/vm.sh sync` | rsync the repo into the VM (excludes node_modules, dist, logs) |
+| `scripts/vm.sh run '<cmd>'` | run a shell command in the VM repo dir |
+| `scripts/vm.sh app examples/<name>` | launch a BUILT vite-path app into the VM's GNOME session |
+| `scripts/vm.sh app-stop` | stop it |
+
+Quoting over ssh is fragile — for anything beyond a one-liner, write a
+script file, sync, and `vm.sh run 'bash path/to/script.sh'`.
+
+## The critical quirks
+
+1. **`npm install` prunes the codegen store** (`@gtkx/gi`, `@gtkx/jsx`
+   are "extraneous" to npm): after EVERY install in the VM run
+   `npm run codegen`, or typecheck/build will fail with
+   "Cannot find module '@gtkx/gi/...'".
+2. **dist is not synced**: after sync run `npm run build:dist` in the VM
+   before anything that consumes the package (examples, Metro, vite).
+3. First-time after sync: `npm install && npm run codegen && npm run build:dist`.
+
+## Headless proofs (no desktop session needed)
+
+- `bash scripts/run-linux-headless.sh examples/rn-app /tmp/shot.png` —
+  full `react-native run-linux` under headless sway + a screenshot;
+- `bash scripts/gtkx-dev-headless.sh` — the vite dev path: edits a gallery
+  component on the live app and asserts a Fast Refresh in the log;
+- `bash spike/rn-platform/run-dev-headless.sh` /
+  `run-dev-error-probe.sh` — Metro dev-mode regressions (HMR applies,
+  state survives, errors are readable and recoverable);
+- `bash scripts/gallery-shots-vm.sh` — golden screenshots of every
+  gallery section.
+
+Screenshots land in the VM's /tmp — `scp` them back to inspect.
+
+## Launching into the user's desktop session
+
+`vm.sh app` covers built vite-path examples. For anything else use the
+same systemd-run pattern (detaches cleanly; a plain nohup keeps ssh open):
+
+```bash
+ssh "$VM_HOST" 'export XDG_RUNTIME_DIR=/run/user/$(id -u); \
+  systemctl --user stop rn-gtkx-app 2>/dev/null; \
+  systemctl --user reset-failed rn-gtkx-app 2>/dev/null; \
+  systemd-run --user --unit=rn-gtkx-app --setenv=WAYLAND_DISPLAY=wayland-0 \
+    --working-directory=$HOME/dev/react-native-gtkx/examples/rn-app \
+    bash -lc "npx react-native run-linux"'
+```
+
+EGL/ZINK warnings at startup are normal (software rendering in the VM).

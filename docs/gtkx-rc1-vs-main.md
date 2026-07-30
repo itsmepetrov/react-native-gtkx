@@ -29,4 +29,4 @@ gives the full list of sites. When rc.2 is out, walk the table top to bottom.
 1. Update the `@gtkx/*` pins in package.json (root, spike, examples, template), then `npm install && npm run codegen`;
 2. Run everything: `npm run typecheck && npm test && npm run test:gtk` plus the example builds;
 3. Walk the table: for each row, check whether it is resolved, migrate, remove the tag;
-4. Update this file and the `spike/RESULTS.md` references.
+4. Update this file and the `docs/research/yoga-gtk-spike.md` references.

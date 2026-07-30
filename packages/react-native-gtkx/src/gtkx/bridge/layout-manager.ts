@@ -1,5 +1,5 @@
 // RnGtkxLayout — a GObject subclass of GtkLayoutManager registered entirely
-// from JS (spike/layout-manager/FINDINGS.md, "B0"). The manager obeys ONLY the
+// from JS (docs/research/layout-manager.md, "B0"). The manager obeys ONLY the
 // layout engine: measure() reports the engine-provided size (minimum ==
 // natural, children are never queried) and allocate() delegates to the engine,
 // which places every child at exactly its computed rect via allocateChild().

@@ -23,7 +23,7 @@ npm run build   # single bundle: dist/bundle.js
 npm start       # node dist/bundle.js
 ```
 
-> ⏱ "Install to window" measurement in a clean Ubuntu 26.04 container (system dependencies preinstalled): **63 seconds** (npm install + gtkx build + launch; 2026-07-29, scripts/verify-template.sh).
+> ⏱ "Install to window" measurement in a clean Ubuntu 26.04 container (system dependencies preinstalled): **63 seconds** (npm install + gtkx build + launch; measured 2026-07-29).
 
 ## ⚠️ Until the packages are published
 
