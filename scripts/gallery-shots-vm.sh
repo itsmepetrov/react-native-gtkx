@@ -20,6 +20,11 @@ sudo ydotoold --socket-path "$SOCK" --socket-own "$(id -u):$(id -g)" >/tmp/ydoto
 trap 'sudo pkill ydotoold 2>/dev/null || true' EXIT
 sleep 1.5
 
+# Alt+Print captures the FOCUSED window — close interactive example
+# windows first or they steal every frame.
+systemctl --user stop rn-gtkx-app rn-gtkx-hnapp 2>/dev/null || true
+sleep 1
+
 GALLERY="$(cd "$(dirname "$0")/../examples/gallery" && pwd)"
 [ -f "$GALLERY/dist/bundle.js" ] || {
   echo "missing $GALLERY/dist/bundle.js — build the gallery first" >&2

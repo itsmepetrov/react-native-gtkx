@@ -38,6 +38,7 @@ const styles = StyleSheet.create({
   },
   bodyContent: {
     alignItems: "stretch",
+    paddingTop: 12,
     paddingHorizontal: 16,
     paddingBottom: 16,
   },
