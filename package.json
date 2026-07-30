@@ -23,6 +23,7 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
     "@eslint/js": "^9.30.0",
+    "@gtkx/vitest": "1.0.0-rc.1",
     "@ianvs/prettier-plugin-sort-imports": "^4.7.1",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",

@@ -130,7 +130,7 @@ export default typescriptEslint.config(
       "packages/react-native-gtkx/src/runner/**",
       "packages/react-native-gtkx/tests/gtk/**",
       "**/gtkx.config.ts",
-      "**/vitest.gtk.config.ts",
+      "vitest.config.ts",
       "spike/**",
     ],
     rules: {

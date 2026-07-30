@@ -37,7 +37,7 @@ dev server watches the workspace dist through the symlink and hot-applies
 package changes; the Metro path picks up dist changes on the next
 `run-linux`.
 
-System packages (Ubuntu 26.04+): `libgtk-4-dev libadwaita-1-dev xvfb dbus-x11 sway xwayland` (sway is a headless Wayland compositor for `test:gtk`; in rc.1 the @gtkx/vitest plugin expects weston by default, so `vitest.gtk.config.ts` explicitly sets `compositor: "sway"`).
+System packages (Ubuntu 26.04+): `libgtk-4-dev libadwaita-1-dev xvfb dbus-x11 sway xwayland` (sway is a headless Wayland compositor for `test:gtk`; in rc.1 the @gtkx/vitest plugin expects weston by default, so the gtk project in `vitest.config.ts` explicitly sets `compositor: "sway"`).
 
 ## Developing from macOS: UTM virtual machine (primary path)
 
