@@ -1,14 +1,152 @@
+# Dependabot for an alpha-stage, single-maintainer library.
+#
+# The goal is a quiet inbox, not a current one. Weekly ungrouped updates
+# produced ~8 open PRs, almost all of them noise: cosmetic bumps inside the
+# example apps, and majors (babel 8, eslint 10) that need a migration rather
+# than a version bump. So: monthly, grouped, and scoped to what we actually
+# ship.
+#
+# SECURITY UPDATES ARE NOT AFFECTED BY ANY OF THIS. Dependabot security
+# updates are driven by Dependabot alerts, not by the schedule below, and they
+# open PRs as soon as an advisory lands — the `schedule`, `cooldown` and
+# `open-pull-requests-limit` keys here only govern version updates. `ignore`
+# rules do apply to security updates, which is why nothing below ignores a
+# package outright except @gtkx/*, and why `exclude-paths` is safe: it
+# suppresses version updates only, so an advisory affecting an example app
+# still surfaces as an alert.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: weekly
+      # Monthly. Anything more frequent is just re-reading the same changelogs:
+      # this repo has one published package with six runtime dependencies, five
+      # of which are pinned @gtkx/* rcs. Real urgency arrives through security
+      # alerts, which ignore this schedule entirely.
+      interval: monthly
+    # Two grouped PRs plus room for one straggler major.
+    open-pull-requests-limit: 3
+
+    # Only bump the range in package.json when the existing range genuinely
+    # cannot resolve the new version. The default (`increase`) rewrote
+    # `react: "^19.2.0"` to `"^19.2.8"` across every example and, worse,
+    # narrowed the published peerDependency `react: "^19.2"` to `"^19.2.8"`,
+    # which would have locked out consumers on 19.2.0-19.2.7. A library must
+    # not tighten its peer ranges by accident.
+    versioning-strategy: increase-if-necessary
+
+    # Let a release sit before we adopt it, so yanked or hotfixed versions
+    # never reach a PR.
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+
+    # Demos, not shipped artefacts. examples/* are npm workspaces, so their
+    # dependencies used to ride along on the root lockfile and generated most
+    # of the noise; template/ and spike/* are not workspaces at all and were
+    # already out of scope — they are listed here so they stay out of scope if
+    # anyone adds them to the `workspaces` array later.
+    #
+    # Consequence, accepted deliberately: the example apps' react/react-native
+    # versions now only move when we move them by hand, which is the right
+    # moment to check them against the library anyway.
+    exclude-paths:
+      - "examples/**"
+      - "template/**"
+      - "spike/**"
+
+    groups:
+      # One PR a month for the toolchain. Majors are deliberately excluded so
+      # they arrive alone, with their own changelog and their own CI run.
+      dev-dependencies:
+        dependency-type: development
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+      # Kept separate from devDeps because these ship to npm consumers and
+      # deserve their own review and a full test run before merging.
+      runtime-dependencies:
+        dependency-type: production
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
     ignore:
-      # gtkx is pinned to an exact rc — upgrades are deliberate, reviewed
-      # against the workaround catalog in docs/gtkx-rc1-vs-main.md.
+      # gtkx is pinned to an exact rc on purpose — upgrades are a deliberate,
+      # reviewed exercise against the gtkx notes in docs/, not a version bump.
+      # This is the one blanket ignore here, and it does suppress security
+      # updates for @gtkx/* as well; the rc is tracked by hand.
       - dependency-name: "@gtkx/*"
+
+      # Majors below are ignored, not the packages themselves: patches and
+      # minors still flow, and security updates still flow. A major in any of
+      # these means a migration pass, which is work to schedule rather than a
+      # PR to merge. Evidence: @eslint/js 10 opened a PR that could not even
+      # install, because it peers on eslint ^10 while the repo is on eslint ^9.
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@eslint/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript-eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      # vitest's major is tied to @gtkx/vitest's peer range, and that is pinned.
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
+      # react and vite are peerDependencies of the published package; a major
+      # is an API decision about what we support, not a dependency update.
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vite"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@react-navigation/native"
+        update-types: ["version-update:semver-major"]
+
+      # These live only inside examples/, which exclude-paths already covers.
+      # They are repeated here as a backstop: `exclude-paths` is young, and if
+      # it turns out not to reach workspace members through the shared root
+      # lockfile, this is what keeps babel 8 and the next react-native major
+      # from reappearing.
+      - dependency-name: "@babel/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-native"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@react-native/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@react-native-community/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "metro"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "metro-*"
+        update-types: ["version-update:semver-major"]
+
+      # Not ignored, on purpose: yoga-layout. It is the only runtime dependency
+      # we do not pin, so its majors must surface.
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 2
+    cooldown:
+      default-days: 7
+    groups:
+      # Every action here is referenced by major tag (`actions/checkout@v7`),
+      # so minor and patch releases never produce a PR — in practice this
+      # ecosystem only ever proposes majors. Excluding majors from the group
+      # would therefore make the group inert, so this one groups everything:
+      # one PR a month covering all workflow actions.
+      #
+      # It also keeps upload-artifact and download-artifact moving together,
+      # which they have to, since the download side must understand what the
+      # upload side produced.
+      github-actions:
+        patterns:
+          - "*"
