@@ -27,7 +27,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "engines": {
-    "node": ">=22.15"
+    "node": ">=24"
   },
   "exports": {
     "./package.json": "./package.json",

@@ -72,7 +72,7 @@ docs/research/layout-manager.md).
 
 ## Requirements
 
-Linux, GTK4 ≥ 4.20, libadwaita ≥ 1.8, Node.js ≥ 22.15 (24 recommended).
+Linux, GTK4 ≥ 4.20, libadwaita ≥ 1.8, Node.js ≥ 24.
 
 ## License
 

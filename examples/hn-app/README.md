@@ -15,7 +15,7 @@ npx react-native run-linux           # release bundle
 npx react-native run-linux --dev     # Metro dev server + Fast Refresh
 ```
 
-Needs GTK4 + libadwaita and Node >= 22.15.
+Needs GTK4 + libadwaita and Node >= 24.
 
 ## What it demonstrates
 

@@ -21,7 +21,7 @@ const fail = (message: string): never => {
 
 if (typeof registerHooks !== "function") {
   fail(
-    `Node ${process.version} lacks module.registerHooks — the linux host needs Node >= 22.15.`,
+    `Node ${process.version} lacks module.registerHooks — the linux host needs Node >= 24.`,
   )
 }
 

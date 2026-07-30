@@ -24,7 +24,7 @@ transforms as-is.
 ## Run it
 
 ```sh
-# Linux (needs GTK4 + libadwaita and Node >= 22.15)
+# Linux (needs GTK4 + libadwaita and Node >= 24)
 npm run linux                        # release bundle
 npx react-native run-linux --dev     # Metro dev server + Fast Refresh
 

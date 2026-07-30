@@ -5,7 +5,7 @@ react-native-gtkx lets you write native Linux (GTK4/Adwaita) applications with t
 ## Requirements
 
 - Linux (x64/arm64, glibc), GTK4 ≥ 4.20, libadwaita ≥ 1.8 (Ubuntu 26.04+, Fedora 43+);
-- Node.js ≥ 22.15 (24 recommended);
+- Node.js ≥ 24;
 - dev packages: `sudo apt install libgtk-4-dev libadwaita-1-dev` (Ubuntu).
 
 ## New project from the template
