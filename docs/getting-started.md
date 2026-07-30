@@ -5,7 +5,7 @@ react-native-gtkx lets you write native Linux (GTK4/Adwaita) applications with t
 ## Requirements
 
 - Linux (x64/arm64, glibc), GTK4 ≥ 4.20, libadwaita ≥ 1.8 (Ubuntu 26.04+, Fedora 43+);
-- Node.js ≥ 24;
+- Node.js ≥ 22.15 (24 recommended);
 - dev packages: `sudo apt install libgtk-4-dev libadwaita-1-dev` (Ubuntu).
 
 ## New project from the template
@@ -53,11 +53,93 @@ AppRegistry.runApplication("app", { title: "My App", width: 800, height: 600 })
 
 `runApplication` accepts desktop parameters (`title`, `width`, `height`) — the only extension over the RN signature.
 
+## Add Linux to an existing React Native app
+
+Linux is an [out-of-tree platform](https://reactnative.dev/docs/out-of-tree-platforms)
+(the react-native-windows/macOS model): your app keeps its ios/ and
+android/ folders, its Metro/Babel toolchain, and gains one more target.
+Four steps:
+
+1. **Install the platform package:**
+
+   ```bash
+   npm install react-native-gtkx
+   ```
+
+   Its own `react-native.config.js` declares the `linux` platform and the
+   `run-linux` command — nothing to declare app-side.
+
+2. **Wrap your Metro config** (`metro.config.js`):
+
+   ```js
+   const { getDefaultConfig } = require("@react-native/metro-config")
+   const { withLinuxPlatform } = require("react-native-gtkx/metro")
+
+   module.exports = withLinuxPlatform(getDefaultConfig(__dirname))
+   ```
+
+   The wrap adds the platform (`.linux.tsx` extensions,
+   `Platform.OS === "linux"`), redirects `react-native` imports to the
+   platform package, and keeps host-side modules (GTK bindings, react,
+   yoga) out of the bundle. Babel stays completely stock.
+
+3. **Add `gtkx.config.ts`** with the GTK application id:
+
+   ```ts
+   import { defineConfig } from "@gtkx/config"
+
+   export default defineConfig({
+     libraries: ["Gtk-4.0", "Adw-1"],
+     applicationId: "com.example.myapp",
+   })
+   ```
+
+4. **Start the app from the entry** — on desktop the entry launches the
+   app itself (the same pattern as react-native-web's `index.web.js`):
+
+   ```js
+   // index.js, after AppRegistry.registerComponent(...)
+   if (Platform.OS === "linux") {
+     AppRegistry.runApplication(appName, {
+       title: "My App",
+       width: 800,
+       height: 600,
+     })
+   }
+   ```
+
+Run it:
+
+```bash
+npx react-native run-linux
+```
+
+The command ensures the gtkx codegen store, bundles with Metro for
+`--platform linux` and opens the window (release bundle; a Metro dev
+server with Fast Refresh is on the roadmap — the vite path below already
+has it). `examples/rn-app` is a complete cli-init app with all three
+platforms wired this way.
+
+Notes for typed code: the stock `react-native` types close the
+`Platform.select` key set, so pass an out-of-tree key through a typed
+variable instead of an inline literal (see `examples/rn-app/App.tsx`);
+deep imports (`react-native/Libraries/...`) are not supported — only the
+public `react-native` surface.
+
+## Metro or vite?
+
+- **Adding Linux to an existing RN app** (ios/android + Metro): the
+  section above — standard RN toolchain end to end.
+- **Linux-first project**: the template with the vite preset (`gtkx dev`
+  gives Fast Refresh today, builds are single-file bundles). Both paths
+  consume the same published package.
+
 ## Examples in the repository
 
 - `examples/profile` — a static layout; the same source also builds with react-native-web (`examples/profile-web`);
 - `examples/playground` — interactive: Pressable, TextInput, Switch, FlatList, Modal, Animated, responsive via flexWrap;
-- `examples/gallery` — a gallery of the entire v1 surface.
+- `examples/gallery` — a gallery of the entire v1 surface;
+- `examples/rn-app` — a cli-init React Native app with ios + android + linux.
 
 ## Tests
 

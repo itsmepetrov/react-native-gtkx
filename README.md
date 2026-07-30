@@ -2,7 +2,7 @@
 
 **React Native for the Linux desktop.** Write apps against the familiar React Native API (`View`, `Text`, `StyleSheet`, flexbox) — they run as native GNOME applications on real GTK4/Adwaita widgets, with no WebView and no canvas rendering.
 
-Under the hood: [gtkx](https://github.com/gtkx-org/gtkx) (a React reconciler for GTK4 on Node.js) + [Yoga](https://yogalayout.dev) (the RN flexbox engine). The model follows react-native-web: a compatibility layer on top of another renderer, with the `react-native` → `react-native-gtkx` alias provided by the vite preset.
+Under the hood: [gtkx](https://github.com/gtkx-org/gtkx) (a React reconciler for GTK4 on Node.js) + [Yoga](https://yogalayout.dev) (the RN flexbox engine). The model follows react-native-web: a compatibility layer on top of another renderer, with the `react-native` → `react-native-gtkx` alias provided by the Metro preset (Linux as a standard RN [out-of-tree platform](https://reactnative.dev/docs/out-of-tree-platforms) — `npx react-native run-linux` next to `run-ios`/`run-android`) or by the vite preset for Linux-first projects.
 
 ![profile — GTK](docs/shots/profile.png)
 
@@ -21,9 +21,11 @@ The same source built with react-native-web ([portability proof](docs/shots/prof
 - [x] Platform / Dimensions / Appearance / AppState / Alert / Linking (+ hooks)
 - [x] Pressable / TouchableOpacity / TextInput / ScrollView / FlatList / Switch / Modal / Animated
 - [x] Vite preset (alias, platform extensions) + project template (install → window in 63 s)
-- [ ] Component gallery, final documentation — in progress
+- [x] Component gallery and documentation
+- [x] Windowed lists: virtualization (10k rows), sticky headers, SectionList, scrollToIndex, viewability, inverted (RN chat semantics), refresh parity
+- [x] Linux as an RN **out-of-tree platform**: the standard Metro/Babel toolchain, `react-native.config.js` declared by the dependency, `npx react-native run-linux`, compiled package distribution (attw-checked) — see `examples/rn-app` (a cli-init app with ios + android + linux)
 
-Verified live: the interactive `examples/playground` (buttons, input, scrolling, modals, animation, responsive layout via flexWrap) — 325 tests (unit + component tests under headless Wayland).
+Verified live: `examples/gallery` (the whole surface) and the interactive `examples/playground` — 352 tests (unit + component tests under headless Wayland).
 
 ## Performance architecture
 
@@ -45,14 +47,13 @@ spike/layout-manager/FINDINGS.md).
 
 ## Documentation
 
-- [Getting Started](docs/getting-started.md) — a new project in a minute;
+- [Getting Started](docs/getting-started.md) — a new project in a minute, and adding Linux to an existing RN app;
 - [API v1](docs/api.md) — the full surface and differences from RN;
-- [CONTRIBUTING](CONTRIBUTING.md) — developing the library (including from macOS via a remote container);
-- roadmap and decisions: `.claude/prds/`, `.claude/epics/` (ccpm).
+- [CONTRIBUTING](CONTRIBUTING.md) — developing the library (including from macOS via a remote container).
 
 ## Requirements
 
-Linux, GTK4 ≥ 4.20, libadwaita ≥ 1.8, Node.js ≥ 24.
+Linux, GTK4 ≥ 4.20, libadwaita ≥ 1.8, Node.js ≥ 22.15 (24 recommended).
 
 ## License
 

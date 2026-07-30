@@ -8,14 +8,14 @@ The "Yoga on the JS side + imperative positioning in GtkFixed" architecture is c
 
 ## Measurements
 
-| Check                                                                                                    | Result                                                                                      | Budget  | Verdict                             |
-| -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------- | ----------------------------------- |
-| Layout accuracy (23 widgets, nested flexbox: row/column, flex, gap, padding, space-between, center)      | maxDelta = **0 px**                                                                         | ±1 px   | ✅                                  |
-| Text accuracy (12 cases: 3 texts × widths 120/200/320/480, line wrapping)                                | maxDelta = **0 px**                                                                         | ±1 px   | ✅                                  |
-| Reflow of a 500-node Yoga tree (100 passes with style changes)                                           | **0.13–0.17 ms**                                                                            | ≤ 16 ms | ✅ (~100× headroom)                 |
-| Animating 100 widgets, direct path (`fixed.move()` in a tick callback)                                   | **60.0 fps**                                                                                | 60 fps  | ✅ (capped by Xvfb)                 |
-| Animating 100 widgets through React state (setState → render → layoutEffect → 100 moves)                 | **57.4 fps**                                                                                | —       | ✅ (even the worst-case path is close) |
-| Visual check                                                                                             | `shots/static.png` — header/sidebar/cards/footer, text wrapping, rounded corners via GTK CSS | —       | ✅                                  |
+| Check                                                                                               | Result                                                                                       | Budget  | Verdict                                |
+| --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------- | -------------------------------------- |
+| Layout accuracy (23 widgets, nested flexbox: row/column, flex, gap, padding, space-between, center) | maxDelta = **0 px**                                                                          | ±1 px   | ✅                                     |
+| Text accuracy (12 cases: 3 texts × widths 120/200/320/480, line wrapping)                           | maxDelta = **0 px**                                                                          | ±1 px   | ✅                                     |
+| Reflow of a 500-node Yoga tree (100 passes with style changes)                                      | **0.13–0.17 ms**                                                                             | ≤ 16 ms | ✅ (~100× headroom)                    |
+| Animating 100 widgets, direct path (`fixed.move()` in a tick callback)                              | **60.0 fps**                                                                                 | 60 fps  | ✅ (capped by Xvfb)                    |
+| Animating 100 widgets through React state (setState → render → layoutEffect → 100 moves)            | **57.4 fps**                                                                                 | —       | ✅ (even the worst-case path is close) |
+| Visual check                                                                                        | `shots/static.png` — header/sidebar/cards/footer, text wrapping, rounded corners via GTK CSS | —       | ✅                                     |
 
 Screenshot: ![static](shots/static.png)
 

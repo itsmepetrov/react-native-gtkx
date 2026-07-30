@@ -27,8 +27,8 @@ host-side).
    - `react`, `react/jsx-runtime`, `react/jsx-dev-runtime` — the app and the
      reconciler inside @gtkx/react MUST share one React instance;
    - `yoga-layout` — WASM.
-   Proxies are generated at Metro-config load time
-   (`module.exports = global.__hostModules["<name>"]`).
+     Proxies are generated at Metro-config load time
+     (`module.exports = global.__hostModules["<name>"]`).
 3. **Node builtins are a platform feature**: any `isBuiltin()` specifier
    resolves to a lazy proxy `global.__hostRequire(name)` — apps on this
    platform may use the whole Node API, no pre-registration.
