@@ -23,9 +23,9 @@ intermediate allocations (e.g. 496×627 while sharing the width); the
 final allocation is always correct, but layout-reactive code should not
 latch onto mid-transition values.
 
-## Risk 2 — @react-navigation/native: MOUNTS; the "stub list" is three
+## Risk 2 — @react-navigation/native: MOUNTS
 
-items, all now real package APIs
+The "stub list" is three items, all now real package APIs.
 
 Build-time missing exports and the one runtime gap, found empirically
 (vite fails the build on missing named exports — an honest catalog):
