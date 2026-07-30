@@ -6,13 +6,18 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "react-native": "./src/index.ts",
+  "engines": {
+    "node": ">=22.15"
+  },
   "exports": {
     "./package.json": "./package.json",
     ".": {
       "types": "./dist/index.d.ts",
-      "react-native": "./src/index.ts",
       "default": "./dist/index.js"
+    },
+    "./metro": {
+      "types": "./dist/metro/index.d.ts",
+      "default": "./dist/metro/index.js"
     }
   },
   "scripts": {
@@ -36,6 +41,6 @@
   },
   "files": [
     "dist",
-    "src"
+    "react-native.config.js"
   ]
 }
