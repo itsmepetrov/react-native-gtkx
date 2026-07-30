@@ -15,8 +15,11 @@ const timers = new Map<string, { totalMs: number; count: number; maxMs: number }
 // Frame-clock interval tracking: deltas between consecutive ticks.
 let lastFrameAt = -1
 let frameCount = 0
-let frameLate = 0 // interval > 17ms
-let frameVeryLate = 0 // interval > 33ms
+// A healthy 60Hz tick jitters 16.6-16.9ms, so 17ms would count noise:
+// "late" = one visibly stretched frame (>20ms), "veryLate" = at least one
+// whole frame dropped (>34ms).
+let frameLate = 0 // interval > 20ms
+let frameVeryLate = 0 // interval > 34ms
 let frameMaxMs = 0
 let frameTotalMs = 0
 
@@ -57,10 +60,10 @@ export const perfFrameTick = (now: number): void => {
     if (delta < 250) {
       frameCount += 1
       frameTotalMs += delta
-      if (delta > 17) {
+      if (delta > 20) {
         frameLate += 1
       }
-      if (delta > 33) {
+      if (delta > 34) {
         frameVeryLate += 1
       }
       if (delta > frameMaxMs) {
