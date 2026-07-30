@@ -19,6 +19,7 @@ import {
   StackActions,
   StackRouter,
   useNavigationBuilder,
+  usePreventRemoveContext,
   type NavigationProp,
   type ParamListBase,
   type RouteProp,
@@ -31,6 +32,7 @@ import {
   useState,
   type ComponentType,
   type ReactNode,
+  type RefObject,
 } from "react"
 import { InteractionManager } from "../apis/interaction-manager"
 import { getActiveChrome } from "../components/app-registry"
@@ -52,6 +54,7 @@ const STACK_OPTION_KEYS: ReadonlySet<string> = new Set([
   "headerButtons",
   "headerLeft",
   "headerRight",
+  "gestureEnabled",
 ])
 
 export type StackNavigationOptions = {
@@ -67,6 +70,10 @@ export type StackNavigationOptions = {
   headerLeft?: () => ReactNode
   /** RN content packed at the end of the HeaderBar, before headerButtons. */
   headerRight?: () => ReactNode
+  /** false disables the native back button, Escape and the back gesture
+   *  for this screen (the page's Adwaita can-pop). Programmatic goBack
+   *  still works. Also the mechanism behind usePreventRemove. */
+  gestureEnabled?: boolean
 }
 
 type StackDescriptor = {
@@ -272,69 +279,117 @@ const StackNavigator = ({
 
   return (
     <NavigationContent>
-      <AdwNavigationView
-        ref={viewRef}
-        onPopped={(page) => handlePopped(page)}
-      >
-        {renderedKeys.map((key) => {
-          const route = state.routes.find((candidate) => candidate.key === key)
-          const descriptor = route
-            ? (descriptors[key] as StackDescriptor | undefined)
-            : undefined
-          const snapshot = snapshots.get(key)
-          const options = descriptor?.options ?? snapshot?.options ?? {}
-          const headerShown = options.headerShown ?? true
-          const content = descriptor ? (
-            <NestedRoot>{descriptor.render()}</NestedRoot>
-          ) : (
-            (snapshot?.element ?? null)
-          )
-          return (
-            <AdwNavigationPage
-              key={key}
-              tag={key}
-              title={options.title ?? route?.name ?? snapshot?.name ?? key}
-              onHidden={() => handleHidden(key)}
-            >
-              {headerShown ? (
-                <AdwToolbarView
-                  topBar={
-                    <AdwHeaderBar
-                      start={
-                        options.headerLeft ? (
-                          <IntrinsicRoot>{options.headerLeft()}</IntrinsicRoot>
-                        ) : undefined
-                      }
-                      end={[
-                        ...(options.headerRight
-                          ? [
-                              <IntrinsicRoot key="header-right">
-                                {options.headerRight()}
-                              </IntrinsicRoot>,
-                            ]
-                          : []),
-                        ...(options.headerButtons?.map((button) => (
-                          <GtkButton
-                            key={button.id}
-                            iconName={button.icon}
-                            tooltipText={button.tooltip}
-                            onClicked={button.onPress}
-                          />
-                        )) ?? []),
-                      ]}
-                    />
-                  }
-                >
-                  {content}
-                </AdwToolbarView>
-              ) : (
-                content
-              )}
-            </AdwNavigationPage>
-          )
-        })}
-      </AdwNavigationView>
+      <StackView
+        viewRef={viewRef}
+        renderedKeys={renderedKeys}
+        routeKeys={state.routes.map((route) => route.key)}
+        descriptors={descriptors}
+        snapshots={snapshots}
+        onPopped={handlePopped}
+        onHidden={handleHidden}
+      />
     </NavigationContent>
+  )
+}
+
+type StackViewProps = {
+  viewRef: RefObject<Adw.NavigationView | null>
+  renderedKeys: string[]
+  routeKeys: string[]
+  descriptors: Record<string, unknown>
+  snapshots: Map<
+    string,
+    { name: string; options: StackNavigationOptions; element: ReactNode }
+  >
+  onPopped: (page: Adw.NavigationPage | null) => void
+  onHidden: (key: string) => void
+}
+
+// The page list lives inside NavigationContent so it can read the
+// prevent-remove context (which useNavigationBuilder only provides to
+// NavigationContent's children). A page whose route is prevented — or whose
+// screen set gestureEnabled: false — reports canPop: false, so Adwaita
+// disables the back button, Escape and the back gesture for it; a
+// programmatic goBack still pops (once the app lifts the prevention, e.g.
+// after its own confirmation dialog). This is why a native pop can never
+// race react-navigation state for these routes.
+const StackView = ({
+  viewRef,
+  renderedKeys,
+  routeKeys,
+  descriptors,
+  snapshots,
+  onPopped,
+  onHidden,
+}: StackViewProps) => {
+  const { preventedRoutes } = usePreventRemoveContext()
+  return (
+    <AdwNavigationView
+      ref={viewRef}
+      onPopped={(page) => onPopped(page)}
+    >
+      {renderedKeys.map((key) => {
+        const isLive = routeKeys.includes(key)
+        const descriptor = isLive
+          ? (descriptors[key] as StackDescriptor | undefined)
+          : undefined
+        const snapshot = snapshots.get(key)
+        const options = descriptor?.options ?? snapshot?.options ?? {}
+        const headerShown = options.headerShown ?? true
+        const canPop =
+          options.gestureEnabled !== false &&
+          !preventedRoutes[key]?.preventRemove
+        const content = descriptor ? (
+          <NestedRoot>{descriptor.render()}</NestedRoot>
+        ) : (
+          (snapshot?.element ?? null)
+        )
+        return (
+          <AdwNavigationPage
+            key={key}
+            tag={key}
+            title={options.title ?? snapshot?.name ?? key}
+            canPop={canPop}
+            onHidden={() => onHidden(key)}
+          >
+            {headerShown ? (
+              <AdwToolbarView
+                topBar={
+                  <AdwHeaderBar
+                    start={
+                      options.headerLeft ? (
+                        <IntrinsicRoot>{options.headerLeft()}</IntrinsicRoot>
+                      ) : undefined
+                    }
+                    end={[
+                      ...(options.headerRight
+                        ? [
+                            <IntrinsicRoot key="header-right">
+                              {options.headerRight()}
+                            </IntrinsicRoot>,
+                          ]
+                        : []),
+                      ...(options.headerButtons?.map((button) => (
+                        <GtkButton
+                          key={button.id}
+                          iconName={button.icon}
+                          tooltipText={button.tooltip}
+                          onClicked={button.onPress}
+                        />
+                      )) ?? []),
+                    ]}
+                  />
+                }
+              >
+                {content}
+              </AdwToolbarView>
+            ) : (
+              content
+            )}
+          </AdwNavigationPage>
+        )
+      })}
+    </AdwNavigationView>
   )
 }
 
@@ -409,5 +464,6 @@ export {
   useIsFocused,
   useNavigation,
   useNavigationContainerRef,
+  usePreventRemove,
   useRoute,
 } from "@react-navigation/native"

@@ -113,6 +113,13 @@ const App = () => (
   real RN content in the HeaderBar (inputs included), hosted by an
   intrinsic-size root; `headerButtons` render after `headerRight`
   (hn-app's header search filter is the demo).
+- Stack screen option `gestureEnabled: false` disables the native back
+  button, Escape and the back gesture for that screen (the page's
+  Adwaita `can-pop`); a programmatic `goBack` still pops. `usePreventRemove`
+  works through the same mechanism — a prevented route reports
+  `can-pop: false`, so no native pop can race react-navigation state; the
+  route pops once the app lifts the guard (e.g. after its own
+  confirmation dialog).
 - The factories are typed: `createStackNavigator<ParamList>()` gives
   typed `Screen` configs and `StackScreenProps<ParamList, Route>` for
   screen components (`SidebarScreenProps` likewise).

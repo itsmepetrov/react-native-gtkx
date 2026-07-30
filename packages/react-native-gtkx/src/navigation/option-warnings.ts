@@ -25,7 +25,6 @@ const VERDICTS: Record<string, string> = {
   animation: 'transitions are Adwaita\'s own; "none" is planned',
   animationDuration: "transitions are Adwaita's own",
   animationTypeForReplace: "transitions are Adwaita's own",
-  gestureEnabled: "planned on AdwNavigationPage's can-pop",
   gestureDirection: "the platform defines gesture directions",
   fullScreenGestureEnabled: "the platform defines gestures",
   statusBarStyle: "no status bar on desktop",
