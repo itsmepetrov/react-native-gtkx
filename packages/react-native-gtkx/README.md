@@ -8,6 +8,12 @@
 Write apps against the familiar React Native API — they run as native GNOME<br/>
 applications on real GTK4/Adwaita widgets, with no WebView and no canvas rendering.</p>
 
+<p align="center">
+  <a href="https://github.com/itsmepetrov/react-native-gtkx/actions/workflows/ci.yml"><img src="https://github.com/itsmepetrov/react-native-gtkx/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://www.npmjs.com/package/react-native-gtkx"><img src="https://img.shields.io/npm/v/react-native-gtkx" alt="npm" /></a>
+  <a href="https://github.com/itsmepetrov/react-native-gtkx/releases"><img src="https://img.shields.io/github/v/release/itsmepetrov/react-native-gtkx?label=deb%20packages" alt="releases" /></a>
+</p>
+
 Under the hood: [gtkx](https://github.com/gtkx-org/gtkx) (a React reconciler for GTK4 on Node.js) + [Yoga](https://yogalayout.dev) (the RN flexbox engine). The model follows react-native-web: a compatibility layer on top of another renderer, with the `react-native` → `react-native-gtkx` alias provided by the Metro preset (Linux as a standard RN [out-of-tree platform](https://reactnative.dev/docs/out-of-tree-platforms) — `npx react-native run-linux` next to `run-ios`/`run-android`) or by the vite preset for Linux-first projects.
 
 <p align="center">
