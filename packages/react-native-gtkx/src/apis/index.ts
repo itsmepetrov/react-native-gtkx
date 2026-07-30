@@ -5,9 +5,11 @@
 import { createAlert } from "./alert"
 import { createAppState } from "./app-state"
 import { createAppearance } from "./appearance"
+import { createBackHandler } from "./back-handler"
 import { createDimensions } from "./dimensions"
 import { createUseColorScheme, createUseWindowDimensions } from "./hooks"
 import { gtkxHost } from "./host.gtkx"
+import { createI18nManager } from "./i18n-manager"
 import { createLinking } from "./linking"
 import { createPlatform } from "./platform"
 
@@ -17,6 +19,8 @@ export const Appearance = createAppearance(gtkxHost)
 export const AppState = createAppState(gtkxHost)
 export const Alert = createAlert(gtkxHost)
 export const Linking = createLinking(gtkxHost)
+export const I18nManager = createI18nManager(gtkxHost)
+export const BackHandler = createBackHandler(gtkxHost)
 export { DevSettings } from "./dev-settings"
 
 export const useWindowDimensions = createUseWindowDimensions(Dimensions)

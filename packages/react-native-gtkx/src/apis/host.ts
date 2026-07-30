@@ -66,9 +66,20 @@ export interface LinkingHost {
   launchUri(uri: string): Promise<void>
 }
 
+export interface I18nHost {
+  // Locale text direction as GTK resolved it (the widget default direction).
+  isRTL(): boolean
+}
+
+export interface BackHandlerHost {
+  exitApp(): void
+}
+
 export type Host = PlatformHost &
   DimensionsHost &
   AppearanceHost &
   AppStateHost &
   AlertHost &
-  LinkingHost
+  LinkingHost &
+  I18nHost &
+  BackHandlerHost

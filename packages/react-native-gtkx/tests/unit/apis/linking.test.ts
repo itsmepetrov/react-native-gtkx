@@ -68,3 +68,13 @@ describe("Linking", () => {
     await expect(linking.getInitialURL()).resolves.toBeNull()
   })
 })
+
+describe("addEventListener", () => {
+  it("honors the url subscription contract without delivering events", () => {
+    const linking = createLinking(createLinkingMockHost())
+    const handler = vi.fn()
+    const subscription = linking.addEventListener("url", handler)
+    subscription.remove()
+    expect(handler).not.toHaveBeenCalled()
+  })
+})

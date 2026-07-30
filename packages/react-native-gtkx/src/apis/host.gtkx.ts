@@ -9,6 +9,7 @@ import {
   Gdk,
   Gio,
   Gtk,
+  quit,
   styleManager,
   toNumber,
 } from "../gtkx/bridge/index"
@@ -341,6 +342,15 @@ const launchUri = async (uri: string): Promise<void> => {
   await launcher.launch(resolveWindow())
 }
 
+// The default widget direction is GTK's read of the locale text direction.
+const isRTL = (): boolean => {
+  try {
+    return Gtk.Widget.getDefaultDirection() === Gtk.TextDirection.RTL
+  } catch {
+    return false
+  }
+}
+
 export const gtkxHost: Host = {
   gtkVersion,
   getWindowMetrics: windowMetrics,
@@ -354,4 +364,6 @@ export const gtkxHost: Host = {
   onActiveChange: (notify) => watchWindow(WINDOW_ACTIVE_SIGNALS, [], notify),
   showAlert,
   launchUri,
+  isRTL,
+  exitApp: () => quit(),
 }

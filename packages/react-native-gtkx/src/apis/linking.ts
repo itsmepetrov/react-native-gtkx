@@ -1,3 +1,4 @@
+import type { SubscriptionHandle } from "../contracts"
 import type { LinkingHost } from "./host"
 
 // Schemes every Linux desktop resolves through the portal / default handlers.
@@ -32,6 +33,19 @@ export const createLinking = (host: LinkingHost) => ({
   },
   // Desktop apps are not launched through deep links: always null.
   getInitialURL: (): Promise<string | null> => Promise.resolve(null),
+
+  // RN parity for consumers that subscribe to incoming deep links
+  // (react-navigation's useLinking does on mount). Nothing delivers "url"
+  // events on desktop today — a future Gio.Application::open wiring would;
+  // the subscription contract is honored so such consumers mount cleanly.
+  addEventListener: (
+    type: "url",
+    handler: (event: { url: string }) => void,
+  ): SubscriptionHandle => {
+    void type
+    void handler
+    return { remove: () => {} }
+  },
 })
 
 export type LinkingModule = ReturnType<typeof createLinking>
