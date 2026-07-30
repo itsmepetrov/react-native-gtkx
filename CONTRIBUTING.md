@@ -55,6 +55,19 @@ The helper is `scripts/vm.sh`. The VM address is machine-specific: export `VM_HO
 
 After `sync`, run `npm install && npm run codegen && npm run build:dist` once in the VM (dist folders are not synced; build:dist emits the whole package including the metro/runner/vite subpaths). GL rendering in the Apple backend is software (llvmpipe) — EGL/ZINK warnings at startup are normal.
 
+## Multi-root architecture
+
+One `LayoutEngine` per layout root. The window path (`AppRegistry`) mounts
+`Root followAllocation` as the window's direct child; `NestedRoot` mounts
+the same mechanism inside ANY GTK container slot (an Adw.NavigationPage,
+a toolbar view content area) — the slot's allocation becomes that engine's
+viewport, synchronously adopted inside the allocation pass (`beforeAllocate`
+→ `flushSync`). Attach is the JSX mount, detach is the unmount (the engine
+is disposed). Allocation passes may nest across roots: the rect-store keeps
+a pass DEPTH counter, so commit-time GTK queue jobs stay deferred until the
+outermost pass ends. GTK gives a zero-minimum box no space in regular
+containers — `NestedRoot` sets the expand flags to claim its slot.
+
 ## Known infrastructure quirks
 
 - set `GTK_A11Y=none` in headless tests to silence the accessibility bus warning;

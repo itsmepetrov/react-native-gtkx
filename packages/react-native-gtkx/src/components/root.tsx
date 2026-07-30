@@ -19,6 +19,10 @@ export type RootProps = {
   // adopt whatever the window actually allocates as the engine viewport —
   // the allocation IS the layout viewport, headerbar excluded by GTK itself.
   followAllocation?: boolean
+  // Claim the parent slot: a zero-minimum box inside a plain GTK container
+  // gets no space unless it expands (window children fill implicitly, other
+  // containers honor the expand flags).
+  expand?: boolean
   children?: ReactNode
 }
 
@@ -30,6 +34,7 @@ export const Root = ({
   width,
   height,
   followAllocation = false,
+  expand = false,
   children,
 }: RootProps) => {
   const widgetRef = useRef<Gtk.Box | null>(null)
@@ -96,10 +101,38 @@ export const Root = ({
   )
 
   return (
-    <GtkBox ref={widgetRef}>
+    <GtkBox
+      ref={widgetRef}
+      hexpand={expand}
+      vexpand={expand}
+    >
       <HostNodeContext.Provider value={host}>
         {children}
       </HostNodeContext.Provider>
     </GtkBox>
   )
 }
+
+export type NestedRootProps = {
+  children?: ReactNode
+}
+
+// Nested layout root: a full Yoga engine mounted inside ANY GTK container
+// slot — an Adw.NavigationPage, a toolbar view content area, a future
+// gtk-components container. The slot's allocation is the layout viewport
+// (viewport-following; the initial 0×0 viewport is replaced synchronously
+// inside the first allocation pass, so nothing paints at zero). Attach is
+// the JSX mount; detach is the unmount — the engine is disposed with it.
+// Allocate passes of sibling/nested roots may overlap: the rect-store
+// tracks pass depth, so deferred GTK queue jobs run only after the
+// outermost pass ends.
+export const NestedRoot = ({ children }: NestedRootProps) => (
+  <Root
+    width={0}
+    height={0}
+    followAllocation
+    expand
+  >
+    {children}
+  </Root>
+)
