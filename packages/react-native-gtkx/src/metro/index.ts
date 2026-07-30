@@ -22,7 +22,7 @@
 // 5. Drops InitializeCore (RN's mobile environment polyfills): the runtime
 //    environment IS Node, the host provides everything.
 import { mkdirSync, writeFileSync } from "node:fs"
-import { isBuiltin } from "node:module"
+import { builtinModules, isBuiltin } from "node:module"
 import { join } from "node:path"
 
 /** Modules the run-linux host provides to the bundle at runtime. */
@@ -79,11 +79,29 @@ export type LinuxPlatformOptions = {
 
 const sanitize = (name: string): string => name.replace(/[@/:]/g, "_") + ".js"
 
-const writeProxy = (dir: string, name: string, source: string): string => {
-  const filePath = join(dir, sanitize(name))
+const hostModuleProxy = (name: string): string =>
+  // The run-linux host guarantees __hostModules before executing the bundle.
+  `module.exports = global.__hostModules[${JSON.stringify(name)}]\n`
+
+const builtinProxy = (name: string): string =>
+  `module.exports = global.__hostRequire(${JSON.stringify(name)})\n`
+
+// Every proxy is generated eagerly when the config loads: Metro crawls the
+// file map before transforming, and files that appear mid-build lose the
+// race ("Failed to get the SHA-1"). The builtin list is finite, so the
+// whole proxy set can exist up front.
+const generateProxies = (dir: string, externals: Set<string>): void => {
   mkdirSync(dir, { recursive: true })
-  writeFileSync(filePath, source)
-  return filePath
+  for (const name of externals) {
+    writeFileSync(join(dir, sanitize(name)), hostModuleProxy(name))
+  }
+  for (const bare of builtinModules) {
+    writeFileSync(join(dir, sanitize(bare)), builtinProxy(bare))
+    writeFileSync(
+      join(dir, sanitize(`node:${bare}`)),
+      builtinProxy(`node:${bare}`),
+    )
+  }
 }
 
 export type LinuxPlatformConfig<T extends MetroLikeConfig> = T & {
@@ -117,6 +135,7 @@ export const withLinuxPlatform = <T extends MetroLikeConfig>(
       ".react-native-gtkx",
       "metro-externals",
     )
+  generateProxies(proxyDir, externals)
   const previousResolve = config.resolver?.resolveRequest ?? null
 
   const fallback: MetroResolver = (context, moduleName, platform) =>
@@ -128,25 +147,10 @@ export const withLinuxPlatform = <T extends MetroLikeConfig>(
     if (platform !== LINUX_PLATFORM) {
       return fallback(context, moduleName, platform)
     }
-    if (externals.has(moduleName)) {
+    if (externals.has(moduleName) || isBuiltin(moduleName)) {
       return {
         type: "sourceFile",
-        filePath: writeProxy(
-          proxyDir,
-          moduleName,
-          // The host guarantees __hostModules before executing the bundle.
-          `module.exports = global.__hostModules[${JSON.stringify(moduleName)}]\n`,
-        ),
-      }
-    }
-    if (isBuiltin(moduleName)) {
-      return {
-        type: "sourceFile",
-        filePath: writeProxy(
-          proxyDir,
-          moduleName,
-          `module.exports = global.__hostRequire(${JSON.stringify(moduleName)})\n`,
-        ),
+        filePath: join(proxyDir, sanitize(moduleName)),
       }
     }
     if (
