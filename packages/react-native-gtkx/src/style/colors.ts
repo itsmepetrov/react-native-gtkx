@@ -269,7 +269,9 @@ const hslToRgb = (
   const chroma = (1 - Math.abs(2 * l - 1)) * s
   const hh = h / 60
   const x = chroma * (1 - Math.abs((hh % 2) - 1))
-  let rgb: [number, number, number] = [0, 0, 0]
+  // Every branch assigns, so the sextant picks the triple outright — the
+  // placeholder initialiser it used to start from was dead.
+  let rgb: [number, number, number]
   if (hh < 1) {
     rgb = [chroma, x, 0]
   } else if (hh < 2) {
