@@ -125,11 +125,14 @@ gesture) opens the Dev Menu: Reload plus any entries the app registers
 via `DevSettings.addMenuItem`. `examples/rn-app` is a complete cli-init
 app with all three platforms wired this way.
 
-Notes for typed code: the stock `react-native` types close the
-`Platform.select` key set, so pass an out-of-tree key through a typed
-variable instead of an inline literal (see `examples/rn-app/App.tsx`);
-deep imports (`react-native/Libraries/...`) are not supported — only the
-public `react-native` surface.
+Notes for typed code: add an `env.d.ts` with
+`import "react-native-gtkx/types"` — it augments the stock `react-native`
+types so `Platform.select({ linux: ... })` typechecks (future
+platform-specific props land in the same file). One thing augmentation
+cannot teach is `Platform.OS === "linux"` (property types do not merge) —
+use `Platform.select` in typed code. Deep imports
+(`react-native/Libraries/...`) are not supported — only the public
+`react-native` surface.
 
 ## Metro or vite?
 

@@ -1,6 +1,6 @@
 # API v1
 
-The surface mirrors `react-native`; everything in the tables below is imported from `"react-native"` (aliased by the Metro preset — `react-native-gtkx/metro` — or the vite preset) or directly from `"react-native-gtkx"`. Completeness is enforced by `npm run docs:check` (every public export must be mentioned in this file). Toolchain subpaths: `react-native-gtkx/metro` (`withLinuxPlatform`), `react-native-gtkx/vite` (the vite preset) and `react-native-gtkx/runner` (the `run-linux` command implementation) — see [getting-started](getting-started.md).
+The surface mirrors `react-native`; everything in the tables below is imported from `"react-native"` (aliased by the Metro preset — `react-native-gtkx/metro` — or the vite preset) or directly from `"react-native-gtkx"`. Completeness is enforced by `npm run docs:check` (every public export must be mentioned in this file). Toolchain subpaths: `react-native-gtkx/metro` (`withLinuxPlatform`), `react-native-gtkx/vite` (the vite preset), `react-native-gtkx/runner` (the `run-linux` command implementation) and `react-native-gtkx/types` (augments the stock RN types with the `linux` platform — reference it from an `env.d.ts`) — see [getting-started](getting-started.md).
 
 ## Components
 

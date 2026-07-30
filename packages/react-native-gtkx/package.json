@@ -26,6 +26,10 @@
     "./vite": {
       "types": "./dist/vite/index.d.ts",
       "default": "./dist/vite/index.js"
+    },
+    "./types": {
+      "types": "./types.d.ts",
+      "default": "./types.js"
     }
   },
   "scripts": {
@@ -56,6 +60,8 @@
   },
   "files": [
     "dist",
-    "react-native.config.js"
+    "react-native.config.js",
+    "types.d.ts",
+    "types.js"
   ]
 }

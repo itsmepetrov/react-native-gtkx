@@ -24,17 +24,6 @@ DevSettings.addMenuItem("Show greeting", () => {
   Alert.alert("Dev Menu", "The custom DevSettings item works!")
 })
 
-// react-native's own types close the Platform.select key set (ios, android,
-// windows, macos, web, native) — an out-of-tree key can't appear in an
-// inline literal. A typed variable sidesteps the excess-property check and
-// keeps the code cast-free; the linux runtime picks its branch as usual.
-const selectBranches = {
-  ios: "Platform.select picked the ios branch",
-  android: "Platform.select picked the android branch",
-  linux: "Platform.select picked the linux branch",
-  default: "Platform.select fell through to default",
-}
-
 const styles = StyleSheet.create({
   root: {
     flex: 1,
@@ -101,7 +90,16 @@ export const App = () => {
         {`Hello from ${Platform.OS}${name ? `, ${name}` : ""}`}
       </Text>
       <Text style={[styles.line, dim]}>{platformDescription()}</Text>
-      <Text style={[styles.line, dim]}>{Platform.select(selectBranches)}</Text>
+      <Text style={[styles.line, dim]}>
+        {Platform.select({
+          ios: "Platform.select picked the ios branch",
+          android: "Platform.select picked the android branch",
+          // The linux key typechecks thanks to env.d.ts referencing
+          // react-native-gtkx/types (stock RN types augmented).
+          linux: "Platform.select picked the linux branch",
+          default: "Platform.select fell through to default",
+        })}
+      </Text>
       <TextInput
         style={styles.input}
         value={name}
