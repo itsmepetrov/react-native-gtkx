@@ -36,6 +36,7 @@ export const HOST_MODULE_EXTERNALS = [
   "@gtkx/gi/gsk",
   "@gtkx/gi/gtk",
   "@gtkx/gi/pango",
+  "@gtkx/jsx/adw",
   "@gtkx/jsx/gtk",
   "@gtkx/react",
   "@gtkx/react/internal",

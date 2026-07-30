@@ -43,6 +43,10 @@
       "types": "./dist/runner/index.d.ts",
       "default": "./dist/runner/index.js"
     },
+    "./navigation": {
+      "types": "./dist/navigation/index.d.ts",
+      "default": "./dist/navigation/index.js"
+    },
     "./vite": {
       "types": "./dist/vite/index.d.ts",
       "default": "./dist/vite/index.js"
@@ -58,10 +62,14 @@
     "watch:dist": "tsc -p tsconfig.build.json --watch --preserveWatchOutput"
   },
   "peerDependencies": {
+    "@react-navigation/native": "^7.0.0",
     "react": "^19",
     "vite": "^7.0.0 || ^8.0.0"
   },
   "peerDependenciesMeta": {
+    "@react-navigation/native": {
+      "optional": true
+    },
     "vite": {
       "optional": true
     }

@@ -93,11 +93,19 @@ export const platformCandidates = (
   ]
 }
 
+// Source extensions Metro strips before trying platform variants: an
+// import of "./useLinking.js" (the TS-ESM style react-navigation and most
+// compiled RN libraries use) must still find useLinking.native.tsx /
+// useLinking.native.js — Metro resolves the BASE name platform-first, the
+// literal file is only the fallback.
+const STRIPPABLE_EXTENSIONS = new Set([".js", ".jsx", ".mjs", ".ts", ".tsx"])
+
 /**
- * Metro platform-extension resolution for a single import:
- * only extensionless relative (or absolute) specifiers participate; the first
- * existing candidate wins; the `?query` suffix is carried over. Returns null
- * when the import is out of scope or no platform file exists, handing the
+ * Metro platform-extension resolution for a single import: relative (or
+ * absolute) specifiers that are extensionless — or carry a strippable
+ * source extension — try platform candidates first; the first existing
+ * candidate wins; the `?query` suffix is carried over. Returns null when
+ * the import is out of scope or no platform file exists, handing the
  * import back to the default resolver.
  */
 export const resolvePlatformSpecifier = (
@@ -113,12 +121,15 @@ export const resolvePlatformSpecifier = (
   if (!isRelative(specifier) && !isAbsolute(specifier)) {
     return null
   }
-  if (extname(specifier) !== "") {
+  const extension = extname(specifier)
+  if (extension !== "" && !STRIPPABLE_EXTENSIONS.has(extension)) {
     return null
   }
-  const base = isAbsolute(specifier)
+  const withExtension = isAbsolute(specifier)
     ? specifier
     : resolve(dirname(splitQuery(importer).specifier), specifier)
+  const base =
+    extension === "" ? withExtension : withExtension.slice(0, -extension.length)
   for (const candidate of platformCandidates(base, options)) {
     if (exists(candidate)) {
       return candidate + query
@@ -157,6 +168,22 @@ export const reactNativeGtkx = (
       // forces the full plugin resolution, where the alias rewrites the
       // import to react-native-gtkx.
       noExternal: ["react-native-gtkx", "react-native"],
+    },
+    resolve: {
+      // The gtkx runtime and react are single-instance hosts: when the app
+      // and react-native-gtkx resolve them from different node_modules
+      // (file:-installed package, nested installs), two bundled copies
+      // double-init the runtime and GLib aborts. dedupe pins every copy to
+      // the project's own resolution.
+      dedupe: [
+        "@gtkx/css",
+        "@gtkx/gi",
+        "@gtkx/jsx",
+        "@gtkx/native",
+        "@gtkx/react",
+        "@gtkx/runtime",
+        "react",
+      ],
     },
   }),
 

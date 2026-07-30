@@ -134,6 +134,14 @@ use `Platform.select` in typed code. Deep imports
 (`react-native/Libraries/...`) are not supported — only the public
 `react-native` surface.
 
+## Navigation
+
+Multi-screen apps use the standard react-navigation API with a native
+Adwaita stack navigator: install `@react-navigation/native` and import
+`createStackNavigator` from `react-native-gtkx/navigation` — pages render
+as `Adw.NavigationPage` with the HeaderBar back button wired to
+react-navigation state. See [docs/api.md](api.md#navigation-react-native-gtkxnavigation).
+
 ## Metro or vite?
 
 - **Adding Linux to an existing RN app** (ios/android + Metro): the

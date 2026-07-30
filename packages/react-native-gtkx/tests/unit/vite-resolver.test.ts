@@ -162,8 +162,12 @@ describe("resolvePlatformSpecifier", () => {
     ).toBe("/app/src/Comp.linux.tsx")
   })
 
-  test("skips imports that already have an extension", () => {
-    expect(resolvePlatformSpecifier("./Comp.tsx", importer, always)).toBeNull()
+  test("source-extension imports resolve platform variants first", () => {
+    // Metro parity: "./Comp.tsx" still prefers Comp.linux.tsx — compiled RN
+    // libraries import with explicit .js and expect .native.js to win.
+    expect(resolvePlatformSpecifier("./Comp.tsx", importer, always)).toBe(
+      "/app/src/Comp.linux.tsx",
+    )
   })
 
   test("skips bare package imports", () => {
@@ -197,5 +201,37 @@ describe("resolvePlatformSpecifier", () => {
 
   test("returns null when nothing matches", () => {
     expect(resolvePlatformSpecifier("./Comp", importer, never)).toBeNull()
+  })
+})
+
+describe("strippable source extensions", () => {
+  test("resolves platform variants for .js-suffixed imports (Metro parity)", () => {
+    const files = new Set([
+      "/pkg/src/useLinking.js",
+      "/pkg/src/useLinking.native.js",
+    ])
+    expect(
+      resolvePlatformSpecifier("./useLinking.js", "/pkg/src/index.js", (path) =>
+        files.has(path),
+      ),
+    ).toBe("/pkg/src/useLinking.native.js")
+  })
+
+  test("leaves .js imports without platform variants to the default resolver", () => {
+    const files = new Set(["/pkg/src/plain.js"])
+    expect(
+      resolvePlatformSpecifier("./plain.js", "/pkg/src/index.js", (path) =>
+        files.has(path),
+      ),
+    ).toBeNull()
+  })
+
+  test("never touches non-source extensions", () => {
+    const files = new Set(["/pkg/src/styles.native.css"])
+    expect(
+      resolvePlatformSpecifier("./styles.css", "/pkg/src/index.js", (path) =>
+        files.has(path),
+      ),
+    ).toBeNull()
   })
 })

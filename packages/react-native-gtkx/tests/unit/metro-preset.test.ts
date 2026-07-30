@@ -153,8 +153,14 @@ test("every bundle-side bare import in src is host-provided", () => {
   }
   visit(srcRoot)
   expect(specifiers.size).toBeGreaterThan(0)
+  // Regular dependencies that Metro is SUPPOSED to bundle (not host
+  // singletons): the app installs them itself (optional peers).
+  const bundled = new Set(["@react-navigation/native"])
   const missing = [...specifiers].filter(
-    (name) => !isBuiltin(name) && !HOST_MODULE_EXTERNALS.includes(name),
+    (name) =>
+      !isBuiltin(name) &&
+      !HOST_MODULE_EXTERNALS.includes(name) &&
+      !bundled.has(name),
   )
   expect(missing).toEqual([])
 })

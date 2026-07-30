@@ -128,7 +128,10 @@ const spawnHost = (
   cwd: string,
 ): Promise<number> =>
   new Promise((resolve) => {
-    const hostPath = fileURLToPath(new URL(script, import.meta.url))
+    // join over `new URL(script, import.meta.url)`: the global URL and the
+    // node:url URL come from different type copies when the dependency tree
+    // splits @types/node, and the two structurally diverge.
+    const hostPath = join(dirname(fileURLToPath(import.meta.url)), script)
     const child = spawn(process.execPath, [hostPath, argument], {
       cwd,
       stdio: "inherit",

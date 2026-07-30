@@ -58,3 +58,47 @@ Styles (which keys go where and what is unsupported) — [style system table](..
 6. **Animations never auto-stop**: the desktop "reduce animations" hint is not applied automatically (GTK-side animations are kept on to match `Animated`, which runs on its own timers) — honoring reduced motion stays an app-level opt-in, as in RN;
 7. **Lists are windowed like RN's**: FlatList/SectionList mount only the rows around the viewport (prefix-sum offsets, `estimatedItemSize` refined by real measurements or exact `getItemLayout`); sticky headers translate the REAL widget (no duplicate) and `inverted` follows the RN chat contract — `contentOffset` counts from the end where `data[0]` renders. The one RefreshControl compromise: desktop has no pull gesture, so `refreshing`/`onRefresh` are API-compatible but the trigger is app chrome (a button/shortcut);
 8. The package ships compiled (`dist/`: ESM + `.d.ts` alongside, sources embedded in the maps); consumers — Metro (`react-native-gtkx/metro` preset) and vite (preset) — both consume the built output. Requires Node ≥ 22.15 (the run-linux host relies on `module.registerHooks`).
+
+## Navigation (`react-native-gtkx/navigation`)
+
+A [react-navigation](https://reactnavigation.org) stack navigator backed by
+`Adw.NavigationView` — native Adwaita page transitions, the HeaderBar back
+button and back gestures stay in sync with react-navigation state (the
+react-native-windows / native-stack model). Requires the optional peer
+`@react-navigation/native` (v7).
+
+```tsx
+import {
+  createStackNavigator,
+  NavigationContainer,
+} from "react-native-gtkx/navigation"
+
+const Stack = createStackNavigator()
+
+const App = () => (
+  <NavigationContainer>
+    <Stack.Navigator>
+      <Stack.Screen
+        name="Home"
+        component={HomeScreen}
+      />
+      <Stack.Screen
+        name="Details"
+        component={DetailsScreen}
+        options={{ title: "Details page" }}
+      />
+    </Stack.Navigator>
+  </NavigationContainer>
+)
+```
+
+- Screen `options`: `title` (HeaderBar title, defaults to the route name),
+  `headerShown` (default true).
+- `useNavigation`, `useRoute`, `useFocusEffect`, `useIsFocused`,
+  `useNavigationContainerRef`, `CommonActions`, `StackActions` and
+  `NavigationContainer` are re-exported — one import site for linux apps.
+- Each screen mounts its own layout root inside the page: the page's
+  content allocation is that screen's viewport.
+- Differences from `@react-navigation/native-stack`: `headerRight`/custom
+  header widgets are not supported yet; deep-link "url" events never fire
+  on desktop (see `Linking`).

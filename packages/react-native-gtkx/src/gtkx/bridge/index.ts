@@ -19,6 +19,14 @@ import * as Pango from "@gtkx/gi/pango"
 export { Adw, Gdk, Gio, GLib, Graphene, Gsk, Gtk, Pango }
 
 export {
+  AdwApplicationWindow,
+  AdwHeaderBar,
+  AdwNavigationPage,
+  AdwNavigationView,
+  AdwToolbarView,
+} from "@gtkx/jsx/adw"
+
+export {
   GtkApplication,
   GtkApplicationWindow,
   GtkBox,

@@ -1,3 +1,4 @@
+import { resolve } from "node:path"
 import { defineConfig } from "vitest/config"
 
 // The single vitest entry for the whole repo, both projects in one place:
@@ -30,14 +31,41 @@ export default defineConfig(async () => ({
               // the dev image and the VM ship sway.
               plugins: [
                 (await import("@gtkx/vitest")).default({ compositor: "sway" }),
+                // Metro-style platform resolution for inlined RN libraries
+                // (@react-navigation resolves .native variants through it,
+                // exactly like the app build does).
+                (
+                  await import("./packages/react-native-gtkx/src/vite/index")
+                ).reactNativeGtkx(),
               ],
               // The package root: @gtkx/vitest discovers gtkx.config.ts
               // (applicationId) from here, c12 does not walk up to the repo.
               root: "packages/react-native-gtkx",
+              resolve: {
+                alias: {
+                  // @react-navigation (pulled by the navigation tests)
+                  // imports "react-native"; without the app presets' alias
+                  // the REAL react-native (Flow sources) would be parsed.
+                  // Point it at the package source the tests already use.
+                  "react-native": resolve(
+                    import.meta.dirname,
+                    "packages/react-native-gtkx/src/index.ts",
+                  ),
+                },
+              },
               test: {
                 name: "gtk",
                 include: ["tests/gtk/**/*.test.{ts,tsx}"],
                 setupFiles: ["./tests/gtk/setup.ts"],
+                server: {
+                  deps: {
+                    // Externalized node_modules load through plain Node,
+                    // where the "react-native" alias above cannot apply —
+                    // inline @react-navigation so its react-native imports
+                    // go through the vite resolver.
+                    inline: [/@react-navigation/],
+                  },
+                },
                 // Window-resize signal delivery races under parallel workers
                 // (each spawns its own compositor); the whole suite takes
                 // seconds — run serially.
