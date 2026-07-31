@@ -251,21 +251,46 @@ closure itself: a fresh, isolated install of the locally-packed
 hoisted `node_modules` (which would prove nothing about what a real install
 needs).
 
-### One executable file (Metro path)
+### One file (Metro path)
 
 The Metro artifact above is the worse of the two — a jsbundle plus a
-runtime `node_modules` tree — so it's the one that got a true
-single-executable build. Ask `build-linux` for it with `--sea`:
+runtime `node_modules` tree — so it's the one that got the packaging work.
+`build-linux` produces three artifacts, cheapest to heaviest, and which
+one you want is a question about the delivery channel, not about the
+build:
+
+| Flag           | Artifact                   | Needs installed                    | Size (`hn-app`, linux-arm64) |
+| -------------- | -------------------------- | ---------------------------------- | ---------------------------- |
+| _(none)_       | `dist/main.jsbundle`       | a `node_modules` tree **and** Node | ~1 MB + the tree             |
+| `--standalone` | `dist/<name>.cjs`          | Node only (`Depends: nodejs`)      | ~5 MB                        |
+| `--sea`        | `dist/<name>` (executable) | nothing at all                     | ~122 MB                      |
 
 ```bash
-npx react-native build-linux --sea            # in the app root
-./dist/<your-package-name>                    # one file, runs standalone
+npx react-native build-linux --standalone     # in the app root
+node ./dist/<your-package-name>.cjs           # one script, system node
+
+npx react-native build-linux --sea
+./dist/<your-package-name>                    # one executable, nothing else
 ```
 
-That produces the jsbundle exactly as before, then one additional file
-next to it: no `node_modules`, no system Node required to run it. Where it
-goes is `--sea-output <path>`; the default is `dist/<package name>` with
-any npm scope stripped.
+Both flags produce the jsbundle exactly as before, then one additional
+file next to it. `--sea-output <path>` overrides where it goes; the
+default is `dist/<package name>` with any npm scope stripped (plus `.cjs`
+for `--standalone`).
+
+**Pick `--standalone` for anything installed through a package manager** —
+it is the same artifact shape the vite path already ships in its `.deb`
+(a bundle plus a `nodejs` dependency), and the ~120 MB difference is
+nothing but the Node binary the system already has. **Pick `--sea` for
+"download this one file and run it"**, where nothing can be assumed to be
+installed. They are not competing implementations: `--sea` is
+`--standalone` with a copy of Node wrapped around it.
+
+The native addon (`@gtkx/native-*.node`, a real `dlopen`ed library) cannot
+be JavaScript, so both artifacts carry it as bytes — a SEA asset in the
+executable, a base64 literal in the `.cjs` — and extract it to
+`$XDG_CACHE_HOME/react-native-gtkx-sea` on first run, keyed by content
+hash. That is what keeps "one file" honest in both cases.
 
 Nothing extra to install to bundle it. That work is done by **rolldown**,
 which is vite's own engine — vite 8 depends on it outright, `@gtkx/cli`
