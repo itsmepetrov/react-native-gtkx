@@ -74,7 +74,7 @@
     "watch:dist": "tsc -p tsconfig.build.json --watch --preserveWatchOutput"
   },
   "peerDependencies": {
-    "@react-navigation/native": "^7.0.0",
+    "@react-navigation/native": "^8.0.0-alpha.40 || ^8.0.0",
     "react": "^19.2",
     "vite": "^7.0.0 || ^8.0.0"
   },
