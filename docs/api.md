@@ -123,6 +123,20 @@ const App = () => (
   Navigator prop `headerButtons` packs declarative native buttons into the
   content HeaderBar end (`{id, icon, tooltip, onPress}`, `icon` is an
   Adwaita symbolic name) — the gallery's color-scheme toggle uses it.
+  Navigator prop `collapseWidth` (sp): below this width the split view
+  collapses to the sidebar or the content pane alone, through a native
+  `Adw.Breakpoint` wrapping the view in an `AdwBreakpointBin` — NOT a
+  `useWindowDimensions` conditional (see docs/platform-layer.md, "Two ways
+  to react to size"); the property flip happens inside GTK's own
+  allocation pass, costing no React render for the resize itself. Unset by
+  default — no `AdwBreakpointBin` is mounted at all, so existing consumers
+  see no behavior change. Selecting a row while collapsed reveals content
+  (`AdwNavigationSplitView.showContent`, also a plain native property
+  write, not React state); the native back button that then appears
+  reverses it. Re-selecting the same, already-active row after that also
+  reveals content again — GTK's `row-selected` does not refire for a
+  re-click with no selection change, so this is driven by `row-activated`
+  (fires on every click) in addition.
 - Stack screen options `headerLeft` / `headerRight`: `() => ReactNode` —
   real RN content in the HeaderBar (inputs included), hosted by an
   intrinsic-size root; `headerButtons` render after `headerRight`

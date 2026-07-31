@@ -27,7 +27,10 @@ import { getActiveChrome } from "../components/app-registry"
 // Widgets come from the public subpaths, the same ones an app would use —
 // the adapter has no privileged access to gtkx.
 import {
+  Adw,
   AdwActionRow,
+  AdwBreakpoint,
+  AdwBreakpointBin,
   AdwHeaderBar,
   AdwNavigationPage,
   AdwNavigationSplitView,
@@ -36,6 +39,7 @@ import {
 import { SlotContent } from "../common"
 import {
   css,
+  GObject,
   Gtk,
   GtkBox,
   GtkButton,
@@ -102,6 +106,16 @@ type SidebarNavigatorProps = {
   sidebarTitle?: string
   /** Buttons packed at the end of the content AdwHeaderBar. */
   headerButtons?: HeaderButton[]
+  /**
+   * Width (sp) below which the split view collapses to the sidebar or the
+   * content pane alone, driven by a native `Adw.Breakpoint` — NOT a
+   * `useWindowDimensions` check (see docs/platform-layer.md, "Two ways to
+   * react to size"). The property flip happens inside GTK's own allocation
+   * pass, with no React render for the resize itself. Unset by default: no
+   * `AdwBreakpointBin` is mounted at all, so existing consumers
+   * (`examples/gallery`) see no behavior change.
+   */
+  collapseWidth?: number
   children: ReactNode
 }
 
@@ -110,6 +124,7 @@ const SidebarNavigator = ({
   screenOptions,
   sidebarTitle = "Sidebar",
   headerButtons,
+  collapseWidth,
   children,
 }: SidebarNavigatorProps) => {
   const { state, descriptors, navigation, NavigationContent } =
@@ -126,6 +141,31 @@ const SidebarNavigator = ({
     })
 
   const listRef = useRef<Gtk.ListBox | null>(null)
+  const splitViewRef = useRef<Adw.NavigationSplitView | null>(null)
+  const breakpointRef = useRef<Adw.Breakpoint | null>(null)
+  const collapseRegisteredRef = useRef(false)
+
+  // Registers the native setter exactly once: Breakpoint.addSetter wants a
+  // real boxed GObject.Value (a bare JS boolean fails a G_IS_VALUE
+  // assertion on the native side — see docs/platform-layer.md). Once
+  // registered, GTK flips AdwNavigationSplitView's `collapsed` property
+  // itself at the threshold, inside its own allocation pass — no React
+  // state, no re-render for the resize itself.
+  useEffect(() => {
+    if (collapseWidth === undefined || collapseRegisteredRef.current) {
+      return
+    }
+    const breakpoint = breakpointRef.current
+    const splitView = splitViewRef.current
+    if (!breakpoint || !splitView) {
+      return
+    }
+    const collapsed = new GObject.Value()
+    collapsed.init(GObject.typeFromName("gboolean"))
+    collapsed.setBoolean(true)
+    breakpoint.addSetter(splitView, "collapsed", collapsed)
+    collapseRegisteredRef.current = true
+  }, [collapseWidth])
 
   useEffect(() => {
     for (const route of state.routes) {
@@ -184,101 +224,149 @@ const SidebarNavigator = ({
   const titleOf = (routeKey: string, fallback: string): string =>
     optionsOf(routeKey).title ?? fallback
 
-  return (
-    <NavigationContent>
-      <AdwNavigationSplitView
-        sidebar={
-          <AdwNavigationPage
-            title={sidebarTitle}
-            tag="sidebar"
-          >
-            <AdwToolbarView topBar={<AdwHeaderBar />}>
-              {/* The list must not dictate the window minimum: the sidebar
-                  scrolls when the window is shorter than its rows — the
-                  Adwaita sidebar pattern (and RN semantics: scrolling is
-                  explicit, never the window's). */}
-              <GtkScrolledWindow
-                hscrollbarPolicy={Gtk.PolicyType.NEVER}
-                propagateNaturalWidth
-              >
-                <GtkListBox
-                  ref={listRef}
-                  cssClasses={["navigation-sidebar"]}
-                  onRowSelected={(row) => {
-                    if (!row) {
-                      return
-                    }
-                    const route = state.routes[row.getIndex()]
-                    if (route && route.key !== active.key) {
-                      navigation.dispatch({
-                        ...TabActions.jumpTo(route.name),
-                        target: state.key,
-                      })
-                    }
-                  }}
-                >
-                  {state.routes.map((route) => {
-                    const options = optionsOf(route.key)
-                    return (
-                      <AdwActionRow
-                        key={route.key}
-                        title={titleOf(route.key, route.name)}
-                        prefix={
-                          options.color ? (
-                            <GtkBox
-                              valign={Gtk.Align.CENTER}
-                              cssClasses={[listDot(options.color)]}
-                              accessibleRole={Gtk.AccessibleRole.PRESENTATION}
-                            />
-                          ) : options.icon ? (
-                            <GtkImage iconName={options.icon} />
-                          ) : undefined
-                        }
-                        suffix={
-                          options.count && options.count > 0 ? (
-                            <GtkLabel
-                              valign={Gtk.Align.CENTER}
-                              cssClasses={["dimmed", "numeric"]}
-                            >
-                              {String(options.count)}
-                            </GtkLabel>
-                          ) : undefined
-                        }
-                      />
-                    )
-                  })}
-                </GtkListBox>
-              </GtkScrolledWindow>
-            </AdwToolbarView>
-          </AdwNavigationPage>
-        }
-      >
+  // Selecting a sidebar row while collapsed must reveal the content page —
+  // AdwNavigationSplitView already defines the mini push/pop for that
+  // (`showContent`), so this is a plain native property write through the
+  // ref, not React state. Reads `getCollapsed()` live: when collapseWidth
+  // is unset the split view never collapses, so this is always a no-op.
+  const showContentIfCollapsed = (): void => {
+    const splitView = splitViewRef.current
+    if (splitView?.getCollapsed()) {
+      splitView.setShowContent(true)
+    }
+  }
+
+  const splitView = (
+    <AdwNavigationSplitView
+      ref={splitViewRef}
+      sidebar={
         <AdwNavigationPage
-          title={titleOf(active.key, active.name)}
-          tag="content"
+          title={sidebarTitle}
+          tag="sidebar"
         >
-          <AdwToolbarView
-            topBar={
-              <AdwHeaderBar
-                end={headerButtons?.map((button) => (
-                  <GtkButton
-                    key={button.id}
-                    iconName={button.icon}
-                    tooltipText={button.tooltip}
-                    onClicked={button.onPress}
-                  />
-                ))}
-              />
-            }
-          >
-            {/* Keyed by route: switching sections swaps the whole screen —
-                a fresh SlotContent per section, the previous one disposes. */}
-            <SlotContent key={active.key}>
-              {activeDescriptor?.render()}
-            </SlotContent>
+          <AdwToolbarView topBar={<AdwHeaderBar />}>
+            {/* The list must not dictate the window minimum: the sidebar
+                scrolls when the window is shorter than its rows — the
+                Adwaita sidebar pattern (and RN semantics: scrolling is
+                explicit, never the window's). */}
+            <GtkScrolledWindow
+              hscrollbarPolicy={Gtk.PolicyType.NEVER}
+              propagateNaturalWidth
+            >
+              <GtkListBox
+                ref={listRef}
+                cssClasses={["navigation-sidebar"]}
+                onRowSelected={(row) => {
+                  if (!row) {
+                    return
+                  }
+                  const route = state.routes[row.getIndex()]
+                  if (route && route.key !== active.key) {
+                    navigation.dispatch({
+                      ...TabActions.jumpTo(route.name),
+                      target: state.key,
+                    })
+                  }
+                }}
+                // row-selected does not refire for a re-click on the
+                // ALREADY-selected row (GTK only emits it on a selection
+                // CHANGE) — found while testing the collapsed back-button
+                // path: without this, re-clicking the same row after the
+                // native back button hid content left the user stranded
+                // on the sidebar. row-activated fires on every click
+                // regardless, so it carries only the showContent side —
+                // the dispatch above already covers an actual selection
+                // change, and calling it twice for one click would be a
+                // harmless but pointless duplicate dispatch.
+                onRowActivated={showContentIfCollapsed}
+              >
+                {state.routes.map((route) => {
+                  const options = optionsOf(route.key)
+                  return (
+                    <AdwActionRow
+                      key={route.key}
+                      title={titleOf(route.key, route.name)}
+                      prefix={
+                        options.color ? (
+                          <GtkBox
+                            valign={Gtk.Align.CENTER}
+                            cssClasses={[listDot(options.color)]}
+                            accessibleRole={Gtk.AccessibleRole.PRESENTATION}
+                          />
+                        ) : options.icon ? (
+                          <GtkImage iconName={options.icon} />
+                        ) : undefined
+                      }
+                      suffix={
+                        options.count && options.count > 0 ? (
+                          <GtkLabel
+                            valign={Gtk.Align.CENTER}
+                            cssClasses={["dimmed", "numeric"]}
+                          >
+                            {String(options.count)}
+                          </GtkLabel>
+                        ) : undefined
+                      }
+                    />
+                  )
+                })}
+              </GtkListBox>
+            </GtkScrolledWindow>
           </AdwToolbarView>
         </AdwNavigationPage>
-      </AdwNavigationSplitView>
+      }
+    >
+      <AdwNavigationPage
+        title={titleOf(active.key, active.name)}
+        tag="content"
+      >
+        <AdwToolbarView
+          topBar={
+            <AdwHeaderBar
+              end={headerButtons?.map((button) => (
+                <GtkButton
+                  key={button.id}
+                  iconName={button.icon}
+                  tooltipText={button.tooltip}
+                  onClicked={button.onPress}
+                />
+              ))}
+            />
+          }
+        >
+          {/* Keyed by route: switching sections swaps the whole screen —
+                a fresh SlotContent per section, the previous one disposes. */}
+          <SlotContent key={active.key}>
+            {activeDescriptor?.render()}
+          </SlotContent>
+        </AdwToolbarView>
+      </AdwNavigationPage>
+    </AdwNavigationSplitView>
+  )
+
+  return (
+    <NavigationContent>
+      {collapseWidth === undefined ? (
+        splitView
+      ) : (
+        // A breakpoint's setters may only target widgets INSIDE the bin
+        // they're attached to, never the bin itself (Adwaita's own
+        // restriction) — so the split view must be the bin's child.
+        <AdwBreakpointBin
+          breakpoints={
+            <AdwBreakpoint
+              ref={breakpointRef}
+              condition={Adw.BreakpointCondition.newLength(
+                Adw.BreakpointConditionLengthType.MAX_WIDTH,
+                collapseWidth,
+                Adw.LengthUnit.SP,
+              )}
+            />
+          }
+        >
+          {splitView}
+        </AdwBreakpointBin>
+      )}
     </NavigationContent>
   )
 }

@@ -43,7 +43,10 @@ export {
 // mechanism the style prop's visual half uses under the hood. Re-exported
 // here rather than left to a direct @gtkx/css dependency for the same
 // reason the namespaces above are: one subpath for the whole gtkx toolkit
-// surface, not just Gtk.Widget subclasses.
+// surface, not just Gtk.Widget subclasses. `GObject` above is exported
+// mainly for `GObject.Value` — constructing a boxed value is required by
+// APIs like `Adw.Breakpoint.addSetter`, which reject a bare JS primitive
+// (see docs/platform-layer.md, "Two ways to react to size").
 export { css, cx, injectGlobal } from "../gtkx/bridge/index"
 
 // The window and application AppRegistry itself sits on: useParentWindow
