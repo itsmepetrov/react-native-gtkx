@@ -248,3 +248,20 @@ same one pass.
 Scope: this rig has no GPU, so the wasted repaint was at its most expensive
 here and the win is at its most visible. The waste was real everywhere
 though — it is work that produced no pixel change on any renderer.
+
+### Do not reach for `GSK_RENDERER=cairo`
+
+The VM logs `libEGL warning: failed to get driver name` and `MESA: error:
+ZINK: failed to choose pdev` on every launch, which reads like a broken GL
+path worth routing around. It is not: Mesa simply finds no Vulkan device,
+falls back to software GL, and that fallback is twice as fast as cairo.
+Measured maximized, steady scroll: 17.3 ms per frame on the default path
+against 32.6 ms with `GSK_RENDERER=cairo`, and 0.8 late frames a second
+against 13.0. The warnings are noise, not a diagnosis.
+
+Hardware acceleration is not available here at all: `systemd-detect-virt`
+reports `apple`, so the guest runs on Apple's Virtualization.framework, whose
+virtio-gpu is display-only for Linux guests. Getting GL would mean rebuilding
+the VM on UTM's QEMU backend with `virtio-gpu-gl`. Worth knowing before
+chasing renderer settings — and worth remembering that the software renderer
+is what made the wasted allocations above expensive enough to notice.
