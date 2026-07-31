@@ -9,7 +9,12 @@ that shows a task list or an open task's editor — built **entirely through
 
 That other example is a separate, unmerged branch (`epic/tasks-app`); this
 one does not depend on it, copy from it, or share a directory name with it.
-It is independent, and intentionally smaller — see "Out of scope" below.
+It is independent: the same application twice, one built by hand from
+Adwaita widgets and one from the navigator, which is only a useful
+comparison if they are actually the same application — so the features
+that were parked while the navigator was still being proven (drag-reorder,
+due dates, sorting, dialogs, shortcuts) are here too now. See
+"Out of scope" for the short list that remains deliberately tasks-app's.
 
 | ![Tasks (nav): a sidebar with smart views and colored lists next to a task list with a filter toggle group.](../../docs/shots/tasks-nav.png) | ![The same window narrower than 500sp, collapsed to the sidebar alone.](../../docs/shots/tasks-nav-collapsed.png) |
 | :------------------------------------------------------------------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------------------------------------: |
@@ -55,23 +60,69 @@ Every one of the three gaps `examples/tasks-app`'s README named, closed on
   content pane works, and exactly why `createStackNavigator` was never the
   right tool for it. No stack is used anywhere in this app.
 
+## Drag-and-drop reorder
+
+Rows are dragged into a new order with GTK4's own drag-and-drop —
+`GtkDragSource`/`GtkDropTarget` on each `AdwActionRow`, reached through
+`react-native-gtkx/gtk` (`src/components/task-row.tsx`). The drag icon is
+`Gtk.WidgetPaintable` of the row itself, the payload is the task id as a
+`GObject` string value, and the drop calls the store's `reorder`.
+
+| ![The task list before the drag: Water the plants, Renew passport, Book dentist appointment, Review the navigation-depth-2 PR, Update the sprint board.](../../docs/shots/tasks-nav-dnd-before.png) | ![The same list after dragging the last row onto the first: Update the sprint board is now at the top.](../../docs/shots/tasks-nav-dnd-after.png) |
+| :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: | :-----------------------------------------------------------------------------------------------------------------------------------------------: |
+|                                                                         before — the last row is "Update the sprint board"                                                                          |                                 after dragging it onto the first row, with a real pointer in a real GNOME session                                 |
+
+**Why not a React Native drag library.** `react-native-draggable-flatlist`
+and every relative of it are built on `react-native-gesture-handler` plus
+`react-native-reanimated`. This platform implements neither, and neither is
+shimmed or aliased — `docs/research/gestures.md` names draggable-flatlist
+by name as blocked on Reanimated, and puts Reanimated-dependent consumers
+out of scope. They would fail at import, not at runtime. A hand-rolled JS
+drag is blocked one level lower: `View` has no touch or responder props at
+all (only `Pressable`'s discrete press/hover, whose event carries just
+`{x, y}`), and there is no `measure()`/`measureInWindow` to turn a row's
+rect into window coordinates — the two things any JS drag needs. So the
+choice was not "native vs. library", it was "native or build the RN gesture
+stack first".
+
+Even with both available, GTK's own drag-and-drop would still be the right
+call for this app: it brings a real drag icon, correct cursors and GDK's
+content negotiation (so a drop can cross widgets, or come from another
+application) for free. The honest cost is portability — this path is
+Linux-only, and an app sharing this screen with iOS/Android would have to
+take the RN route instead. It costs this example nothing, because its whole
+body is already a GTK widget tree (`contentLayout: "widget"`), but that is
+a property of this app, not a general argument.
+
+**When dragging is off.** `isReorderable` (`src/selectors.ts`) attaches the
+controllers only where a drop means something: manual sort order, no active
+search, not Trash. A drop under "sort by due date" would be overwritten by
+the sort on the very next render; a search result is a projection with gaps,
+so "put it here" has no single answer; and Trash is not a place to arrange
+things. Same three conditions as `examples/tasks-app`'s own predicate, and
+they are unit-tested (`tests/unit/selectors.test.ts`) rather than left to a
+screenshot.
+
 ## Out of scope
 
-Deliberately smaller than `examples/tasks-app`, because the point of this
-example is the navigator, not feature parity with the gtkx tutorial:
+Still deliberately smaller than `examples/tasks-app` — but only where the
+difference is tasks-app's own subject rather than the navigator's:
 
-- No GSettings-backed preferences, desktop notifications, toasts, or
-  drag-reorder.
+- No desktop notifications, reminders or toasts.
 - No "New List" dialog with a text field — a new list gets an
   auto-generated name and the next color in a fixed palette
-  (`src/store.tsx`'s `LIST_COLOR_PALETTE`), added immediately. The point
+  (`src/store.ts`'s `LIST_COLOR_PALETTE`), added immediately. The point
   being proven is that adding a screen at runtime works, not dialog UX.
-- No due dates or a "Today" smart view — only All Tasks, Important and
-  Trash, plus user lists. Three smart views is already enough to show
-  icon rows distinct from colored-dot rows.
-- Task storage is in-memory (a `useReducer`, see `src/store.tsx`) — closing
-  the app loses data. `examples/tasks-app` demonstrates file-backed
-  persistence; that is not what this example is about.
+- No "Today" smart view — only All Tasks, Important and Trash, plus user
+  lists. Three smart views is already enough to show icon rows distinct
+  from colored-dot rows, and tasks have due dates now regardless.
+- No task notes, and no created/completed timestamps in the editor.
+- Task storage is in-memory (see `src/store.ts`) — closing the app loses
+  the tasks. PREFERENCES do persist, through GSettings
+  (`data/dev.rngtkx.tasksnav.gschema.xml`): theme and sort order are
+  settings, which is a different thing from the document being edited.
+  `examples/tasks-app` demonstrates file-backed task persistence; that is
+  not what this example is about.
 
 ## What this could not do
 
@@ -162,6 +213,60 @@ navigation, so it predates and is independent of the `collapseWidth`
 work — most likely a `chrome: "content"` window-chrome detail, not
 anything in `createSidebarNavigator` itself. Not investigated further;
 recorded here rather than silently left unmentioned.
+
+### The parity pass (drag-reorder, due dates, sorting, dialogs, shortcuts)
+
+Driven with a real pointer this time, not the keyboard, because a drag
+cannot be proven any other way. The "HiDPI coordinate-scaling issue" the
+pass above (and `examples/tasks-app`'s README) recorded turned out to be
+ydotool's own documented requirement rather than anything about this
+session: `mousemove --absolute` is implemented as a homing move plus a
+relative one, so pointer acceleration bends it — its `--help` says so
+outright. With `org.gnome.desktop.peripherals.mouse accel-profile` set to
+`flat`, absolute coordinates land exactly, in LOGICAL desktop pixels
+(this session: a 2560×1600 mode at scale 1.25, so a 2048×1280 space).
+Calibrated by clicking a sidebar row and checking the app switched to it.
+Anyone repeating this should set the flat profile first and restore it
+afterwards.
+
+- **Drag reorder**: dragged the last row ("Update the sprint board") onto
+  the first — button down on the row, relative moves up the list, release
+  over the target. It landed first, and its star/trash state came with
+  it. Both screenshots are the pair shown under "Drag-and-drop reorder"
+  above.
+- **The drag gate**: with Sort order switched to "Due date" in
+  Preferences, the byte-identical drag changed nothing — no
+  `GtkDragSource` is attached at all in that state.
+- **Sorting**: switching to "Due date" re-sorted the list live
+  (yesterday → today → tomorrow → next week → undated last), through
+  GSettings, and survived the dialog closing.
+- **Preferences / Shortcuts / delete confirmation**: all opened and
+  worked. `Ctrl+?` opened the Shortcuts window (so `actionAccels` and the
+  `win.*` actions are really registered, not just declared); the Trash
+  row's permanent-delete button raised the confirmation, and confirming
+  emptied Trash down to its empty state.
+- **`Ctrl+N` and `Escape`**: Ctrl+N added a task and opened its editor;
+  Escape closed the editor back to the list.
+
+**Two things this pass found that no test had:**
+
+1. `Ctrl+N` added a task and then opened **the wrong one** — "Water the
+   plants" instead of the task it had just created. The id counter starts
+   at zero, so the first generated id was `task-1`, which was already a
+   seeded task's id, and `tasks.find(id)` matched the seed first. A
+   pre-existing bug in this example, invisible until something actually
+   created a task and navigated to it. Fixed by giving seeds their own
+   `seed-*` namespace, disjoint from generated ids by construction rather
+   than by counting.
+2. `windowActions`/`windowControllers` render as props of the window
+   `AppRegistry.runApplication` builds — **siblings of the app's own tree,
+   not descendants**. No React context from inside the app can reach them,
+   so this example's Context store had to become a module-level external
+   store (`useSyncExternalStore`) before `Ctrl+N` could add a task at all.
+   Not a defect — those elements have to exist before the app mounts — but
+   a real constraint on any app that wants window actions, and one
+   `examples/tasks-app` never met because zustand is module-global anyway.
+   Worth a line in `docs/api.md` if it bites a third app.
 
 ## Attribution
 
