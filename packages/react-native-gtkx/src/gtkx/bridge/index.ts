@@ -51,6 +51,24 @@ export { css, cx, injectGlobal } from "@gtkx/css"
 export { createTextProbe, measureWidget, toNumber } from "./measure"
 export { getViewBoxComponent, setBoxPassthrough } from "./view-box"
 export {
+  getSvgNodeComponent,
+  getSvgNodeDescriptor,
+  queueSvgRedraw,
+  resolveSvgColor,
+  resolveSvgPaint,
+  setSvgNodeDescriptor,
+  type SvgDefsDescriptor,
+  type SvgGradientUnits,
+  type SvgGroupDescriptor,
+  type SvgLinearGradientDescriptor,
+  type SvgNodeDescriptor,
+  type SvgPaintSpec,
+  type SvgRadialGradientDescriptor,
+  type SvgShapeDescriptor,
+  type SvgStopDescriptor,
+  type SvgSvgDescriptor,
+} from "./svg-node"
+export {
   allocateChild,
   attachRnLayout,
   detachRnLayout,
