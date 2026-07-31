@@ -22,7 +22,9 @@ export const parseComponentNames = (dtsPath) => {
   const unrecognized = []
   for (const line of text.split("\n")) {
     const match = CONST_RE.exec(line)
-    if (!match) continue
+    if (!match) {
+      continue
+    }
     const [, name, rhs] = match
     if (/^"\w+"$/.test(rhs)) {
       markers.push(name)
