@@ -133,6 +133,30 @@ const App = () => (
 - The factories are typed: `createStackNavigator<ParamList>()` gives
   typed `Screen` configs and `StackScreenProps<ParamList, Route>` for
   screen components (`SidebarScreenProps` likewise).
+- The stack navigator emits `transitionStart` / `transitionEnd` on a
+  screen's `navigation` object, matching `@react-navigation/stack` and
+  `@react-navigation/native-stack` exactly: `{ data: { closing: boolean } }`,
+  `closing: false` for the screen being pushed in, `closing: true` for the
+  screen being popped out. A screen that stays mounted without actually
+  entering or leaving (e.g. the screen underneath a push) gets neither
+  event, same as upstream. Two things worth knowing before relying on
+  timing:
+  - **`transitionEnd` on the entering screen is timer-based**, not tied to
+    an observed animation-finished signal — Adwaita's `Adw.NavigationView`
+    does not expose one. It fires `transitionDuration` (default 400 ms)
+    after the transition starts. `transitionEnd` on the _leaving_ screen
+    is more precise (tied to the page's real "hidden" signal when the
+    compositor delivers one, with the same timer as a fallback), because
+    it has to be: the leaving screen unmounts as soon as its close
+    finishes, and a purely time-based signal can arrive after that
+    unmount already happened, missing the screen's own listeners
+    entirely.
+  - **Native pops do not fire these events at all today.** A user-driven
+    pop (the Adwaita back button, Escape, the back gesture) is handled by
+    the widget itself before this package's code is told about it, so
+    there is nothing to hook a `transitionStart` into. Only
+    programmatic navigation (`navigate`, `goBack`, `dispatch`, …) fires
+    `transitionStart`/`transitionEnd`.
 - The rest of the react-navigation surface — `useNavigation`, `useRoute`,
   `useFocusEffect`, `useIsFocused`, `useNavigationContainerRef`,
   `CommonActions`, `StackActions`, `usePreventRemove`, `NavigationContainer`
