@@ -137,6 +137,26 @@ const App = () => (
   reveals content again — GTK's `row-selected` does not refire for a
   re-click with no selection change, so this is driven by `row-activated`
   (fires on every click) in addition.
+- Sidebar screen options `headerLeft` / `headerRight` / `headerTitle`:
+  `() => ReactNode` — the content HeaderBar's own start/end/title, per
+  screen, on top of the one navigator-wide default. This is what lets one
+  screen's header change shape with ITS OWN selection (a filter toggle
+  group for a list, a back button plus star/trash for an open item):
+  call `navigation.setOptions({ headerLeft, headerRight, headerTitle })`
+  from inside the screen, in an effect keyed on whatever local state
+  decides its shape — no stack involved, and no new navigator API beyond
+  the options themselves (`useNavigationBuilder` already re-resolves
+  descriptor options on every `setOptions` call). `headerTitle` replaces
+  the HeaderBar's title widget outright (unset, the page's own title
+  shows automatically, as before). A screen's own `headerButtons`
+  (`HeaderButton[]`, same shape as the navigator prop) replaces the
+  navigator-level default entirely for that screen. **Caveat, found
+  while testing this**: `setOptions` MERGES into the previously resolved
+  options rather than replacing them — a call that omits `headerRight`
+  does not clear a `headerRight` a PREVIOUS call set, it leaves it in
+  place. A screen that flips between shapes must give every one of these
+  four keys an explicit value (`undefined` counts as a real overwrite; an
+  absent key does not) on every call, not just the ones currently in use.
 - Stack screen options `headerLeft` / `headerRight`: `() => ReactNode` —
   real RN content in the HeaderBar (inputs included), hosted by an
   intrinsic-size root; `headerButtons` render after `headerRight`

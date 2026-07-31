@@ -36,7 +36,7 @@ import {
   AdwNavigationSplitView,
   AdwToolbarView,
 } from "../adw"
-import { SlotContent } from "../common"
+import { IntrinsicContent, SlotContent } from "../common"
 import {
   css,
   GObject,
@@ -55,6 +55,10 @@ const SIDEBAR_OPTION_KEYS: ReadonlySet<string> = new Set([
   "icon",
   "color",
   "count",
+  "headerLeft",
+  "headerRight",
+  "headerTitle",
+  "headerButtons",
 ])
 
 export type SidebarNavigationOptions = {
@@ -71,6 +75,26 @@ export type SidebarNavigationOptions = {
   /** Badge shown as the row's suffix. Hidden when 0 or undefined — an
    *  empty view shows no badge, not a "0". */
   count?: number
+  /** RN content packed at the start of the CONTENT AdwHeaderBar (an
+   *  intrinsic-size root, same contract as the stack navigator's
+   *  `headerLeft`) — a back button for an in-place "item open" state, a
+   *  "New" action, anything that changes with THIS screen's selection.
+   *  Call `navigation.setOptions({ headerLeft: … })` from the screen to
+   *  change it as its own internal state changes — no stack involved. */
+  headerLeft?: () => ReactNode
+  /** RN content packed at the end of the content AdwHeaderBar, before
+   *  `headerButtons`. Same contract as `headerLeft`. */
+  headerRight?: () => ReactNode
+  /** Replaces the content AdwHeaderBar's title widget for this screen —
+   *  a filter toggle group, an editable title plus a star toggle,
+   *  anything a plain string `title` cannot express. Left unset, the
+   *  HeaderBar shows the page's own title automatically (unchanged
+   *  default behavior). */
+  headerTitle?: () => ReactNode
+  /** Overrides the navigator-level `headerButtons` prop for this screen
+   *  specifically (replaces it entirely when set, same as the stack
+   *  navigator's per-screen option override). */
+  headerButtons?: HeaderButton[]
 }
 
 // A one-off CSS class for a colored dot prefix — the same mechanism
@@ -223,6 +247,18 @@ const SidebarNavigator = ({
     (descriptors[routeKey] as SidebarDescriptor | undefined)?.options ?? {}
   const titleOf = (routeKey: string, fallback: string): string =>
     optionsOf(routeKey).title ?? fallback
+  // The content HeaderBar's own shape — the thing tasks-app's README named
+  // as a structural-sounding complaint ("one content header shared by the
+  // whole navigator") and the PRD allowed finding a real gap. It is not
+  // one: descriptor options already merge navigator-level `screenOptions`
+  // with the active screen's own `options`, and `navigation.setOptions()`
+  // (called from inside the screen, in an effect keyed on the screen's own
+  // "what am I showing" state) re-resolves them on every call — this is
+  // core react-navigation behavior, nothing built here. Reading
+  // headerLeft/headerRight/headerTitle off the ACTIVE descriptor on every
+  // render is the entire fix.
+  const activeOptions = optionsOf(active.key)
+  const activeButtons = activeOptions.headerButtons ?? headerButtons
 
   // Selecting a sidebar row while collapsed must reveal the content page —
   // AdwNavigationSplitView already defines the mini push/pop for that
@@ -323,14 +359,37 @@ const SidebarNavigator = ({
         <AdwToolbarView
           topBar={
             <AdwHeaderBar
-              end={headerButtons?.map((button) => (
-                <GtkButton
-                  key={button.id}
-                  iconName={button.icon}
-                  tooltipText={button.tooltip}
-                  onClicked={button.onPress}
-                />
-              ))}
+              titleWidget={
+                activeOptions.headerTitle ? (
+                  <IntrinsicContent>
+                    {activeOptions.headerTitle()}
+                  </IntrinsicContent>
+                ) : undefined
+              }
+              start={
+                activeOptions.headerLeft ? (
+                  <IntrinsicContent>
+                    {activeOptions.headerLeft()}
+                  </IntrinsicContent>
+                ) : undefined
+              }
+              end={[
+                ...(activeOptions.headerRight
+                  ? [
+                      <IntrinsicContent key="header-right">
+                        {activeOptions.headerRight()}
+                      </IntrinsicContent>,
+                    ]
+                  : []),
+                ...(activeButtons?.map((button) => (
+                  <GtkButton
+                    key={button.id}
+                    iconName={button.icon}
+                    tooltipText={button.tooltip}
+                    onClicked={button.onPress}
+                  />
+                )) ?? []),
+              ]}
             />
           }
         >
