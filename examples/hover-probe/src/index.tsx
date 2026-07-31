@@ -33,7 +33,7 @@ import {
   View,
   type FlatListHandle,
 } from "react-native"
-import { Gtk, GtkScrolledWindow } from "react-native-gtkx/adwaita"
+import { Gtk, GtkScrolledWindow } from "react-native-gtkx/gtk"
 
 const env = (name: string, fallback: string): string => {
   const value =
