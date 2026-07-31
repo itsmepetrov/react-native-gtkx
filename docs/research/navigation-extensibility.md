@@ -73,6 +73,36 @@ still instructive:
 - _Screen props and options had to be hand-rolled._ Fixed:
   `createStackNavigator<ParamList>()` types `Stack.Screen`, its options and
   the screen props (`examples/hn-app` relies on it).
+- _`SidebarNavigationOptions` was `{ title }` only — no per-row icon,
+  colored dot or count._ This was `examples/tasks-app`'s (PR #18) exact
+  complaint, and the reason it built its own sidebar directly on
+  `AdwActionRow` instead of the navigator. Fixed: `icon`, `color`
+  (mutually exclusive, `color` wins if both are set) and `count` (hidden
+  at 0), rendered as `AdwActionRow` — the same widget that example's
+  hand-rolled sidebar used. `examples/tasks-nav` (navigation-depth-2
+  epic) is the same navigational shape, now through the navigator.
+- _No collapse at narrow widths._ Also from tasks-app's README. Fixed
+  through a native `Adw.Breakpoint`, not a `useWindowDimensions`
+  conditional — a new opt-in `collapseWidth` prop wraps the split view in
+  an `AdwBreakpointBin` and registers a setter on `collapsed` directly
+  through GObject, inside GTK's own allocation pass; a resize costs no
+  React render. See [../platform-layer.md](../platform-layer.md), "Two
+  ways to react to size", for the general mechanism and why no
+  `useBreakpoint` hook exists.
+- _One static content header shared by the whole navigator._ Tasks-app's
+  third complaint, and the one the navigation-depth-2 PRD explicitly
+  allowed turning out to be a structural gap. It wasn't: descriptor
+  options already merge navigator-level `screenOptions` with a screen's
+  own `options` and re-resolve on `navigation.setOptions()` — core
+  react-navigation behavior. `SidebarNavigationOptions` gained
+  `headerLeft`/`headerRight`/`headerTitle`, mirroring the stack
+  navigator's own `headerLeft`/`headerRight`; a screen that toggles local
+  state and calls `setOptions` in an effect gets a header that changes
+  shape with its own selection, with no stack involved — confirming
+  tasks-app's own conclusion that a stack was never the right tool for
+  the "open an item" case. Caveat found while testing this: `setOptions`
+  merges into the previously resolved options rather than replacing them
+  (see docs/api.md).
 
 On typing, one clarification worth recording, since it was raised publicly.
 The complaint was never that custom navigators cannot be typed — the docs
@@ -85,6 +115,7 @@ API (`NavigatorTypeBagBase`, `createScreenFactory`); adopting it is the
 
 ## 3. Still open
 
+<<<<<<< HEAD
 Meaningful on this platform and not done yet: toolbar top-bar style (the
 `headerTransparent`/`headerShadowVisible` analogue), search-bar options
 (`Gtk.SearchBar` / `headerSearchBarOptions` — note v8 renamed its
@@ -140,6 +171,15 @@ ported), each with a small library change, not a workaround:**
   but the toast's own visual appearance could not be confirmed on screen
   in that session, for a reason not yet root-caused. Worth a real fix (or
   at least a live confirmation) before another app leans on it.
+=======
+Meaningful on this platform and not done yet: `animation: "none"`
+(`animate-transitions`), toolbar top-bar style (the
+`headerTransparent`/`headerShadowVisible` analogue), `Adw.Dialog`
+presentation, search-bar options (`Gtk.SearchBar` /
+`headerSearchBarOptions` — note v8 renamed its `onChangeText` to
+`onChange`), and deep links (they parse, but nothing delivers a URL on
+the desktop yet).
+>>>>>>> 367a114 (Record the sidebar gaps this epic closed in the research doc)
 
 **Meaningless on desktop, skip forever:** status-bar and home-indicator
 options, large titles, blur effects, gesture direction, form sheets,
