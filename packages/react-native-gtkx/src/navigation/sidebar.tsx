@@ -21,7 +21,8 @@ import {
 } from "@react-navigation/native"
 import { useEffect, useRef, type ComponentType, type ReactNode } from "react"
 import { getActiveChrome } from "../components/app-registry"
-import { NestedRoot } from "../components/root"
+// Widgets come from the adwaita subpath, the same public primitives an app
+// would use — the adapter has no privileged access to gtkx.
 import {
   AdwHeaderBar,
   AdwNavigationPage,
@@ -33,17 +34,18 @@ import {
   GtkListBox,
   GtkListBoxRow,
   GtkScrolledWindow,
-} from "../gtkx/bridge/index"
+  PageContent,
+} from "../adwaita"
 import { warnIgnoredOptions } from "./option-warnings"
 
 const SIDEBAR_OPTION_KEYS: ReadonlySet<string> = new Set(["title"])
 
 export type SidebarNavigationOptions = {
-  /** Sidebar row and content HeaderBar title; defaults to the route name. */
+  /** Sidebar row and content AdwHeaderBar title; defaults to the route name. */
   title?: string
 }
 
-// A declarative HeaderBar button: the RN-facing API stays GTK-free — the
+// A declarative AdwHeaderBar button: the RN-facing API stays GTK-free — the
 // navigator renders the native button itself. `icon` is an Adwaita symbolic
 // icon name (e.g. "weather-clear-night-symbolic").
 export type HeaderButton = {
@@ -61,9 +63,9 @@ type SidebarDescriptor = {
 type SidebarNavigatorProps = {
   initialRouteName?: string
   screenOptions?: SidebarNavigationOptions
-  /** Title of the sidebar pane's HeaderBar. */
+  /** Title of the sidebar pane's AdwHeaderBar. */
   sidebarTitle?: string
-  /** Buttons packed at the end of the content HeaderBar. */
+  /** Buttons packed at the end of the content AdwHeaderBar. */
   headerButtons?: HeaderButton[]
   children: ReactNode
 }
@@ -203,10 +205,10 @@ const SidebarNavigator = ({
             }
           >
             {/* Keyed by route: switching sections swaps the whole screen —
-                a fresh NestedRoot per section, the previous one disposes. */}
-            <NestedRoot key={active.key}>
+                a fresh PageContent per section, the previous one disposes. */}
+            <PageContent key={active.key}>
               {activeDescriptor?.render()}
-            </NestedRoot>
+            </PageContent>
           </AdwToolbarView>
         </AdwNavigationPage>
       </AdwNavigationSplitView>
