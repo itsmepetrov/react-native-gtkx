@@ -1,6 +1,7 @@
-# Tag push (v*) → .deb packages of the example apps for amd64 + arm64,
-# attached to a GitHub Release. Runs in the same ubuntu:26.04 container as CI
-# (codegen needs GTK dev + introspection packages).
+# Tag push (v*) → .deb packages of the example apps for amd64 + arm64, plus a
+# zstd-compressed single executable of the Metro-path app, attached to a GitHub
+# Release. Runs in the same ubuntu:26.04 container as CI (codegen needs GTK dev
+# + introspection packages).
 name: Release
 
 on:
@@ -31,7 +32,7 @@ jobs:
           apt-get install -y --no-install-recommends \
             libgtk-4-dev libadwaita-1-dev gobject-introspection \
             libgirepository1.0-dev build-essential pkg-config python3 \
-            curl ca-certificates git
+            curl ca-certificates git zstd
       - name: Node 24
         run: |
           curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
@@ -47,6 +48,10 @@ jobs:
           (cd examples/monitor && npm run build)
           (cd examples/gallery && npm run build)
           (cd examples/tasks-app && npm run build)
+          # The same app on the navigator, so a release ships both shapes:
+          # tasks-app builds its window by hand, tasks-nav gets it from
+          # createSidebarNavigator (see examples/tasks-nav/README.md).
+          (cd examples/tasks-nav && npm run build)
           # Metro path (react-native build-linux): produces dist/main.jsbundle,
           # not dist/bundle.js — build-deb.sh tells the two shapes apart.
           (cd examples/hn-app && npm run build)
@@ -56,12 +61,39 @@ jobs:
           node scripts/build-deb.ts monitor "System Monitor" "$VERSION" debs
           node scripts/build-deb.ts gallery "RN Gallery" "$VERSION" debs
           node scripts/build-deb.ts tasks-app "Tasks" "$VERSION" debs
+          node scripts/build-deb.ts tasks-nav "Tasks (nav)" "$VERSION" debs
           node scripts/build-deb.ts hn-app "Hacker News" "$VERSION" debs
           ls -la debs/
+      - name: Build the single executable (hn-app)
+        run: |
+          # An EXTRA artifact, never a replacement for the .deb: the debs above
+          # are how you install these apps. This is the one file to hand
+          # someone who has no Node at all — build-linux --sea wraps the app in
+          # a copy of the Node binary. Metro-path only (docs/getting-started.md
+          # explains why the vite path cannot do this), so hn-app is the whole
+          # list.
+          #
+          # Runs after the debs: --sea re-bundles with Metro and drops its own
+          # scratch files (sea-bundle.cjs, sea-prep.blob) into the same dist/
+          # the deb step reads dist/main.jsbundle from.
+          (cd examples/hn-app && npx react-native build-linux --sea)
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p sea
+          # 104 MiB -> 29 MiB. Uploading it uncompressed is not defensible for
+          # a download this size; zstd carries the executable bit through, so
+          # `zstd -d` is the entire install step.
+          zstd -19 -T0 \
+            -o "sea/react-native-gtkx-hn-app_${VERSION}_${{ matrix.arch }}.zst" \
+            examples/hn-app/dist/hn-app
+          ls -la sea/
       - uses: actions/upload-artifact@v7
         with:
           name: debs-${{ matrix.arch }}
           path: debs/*.deb
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sea-${{ matrix.arch }}
+          path: sea/*.zst
 
   release:
     needs: debs
@@ -69,14 +101,15 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          path: debs
+          path: assets
           merge-multiple: true
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          ls -la assets/
           gh release create "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --title "$GITHUB_REF_NAME" \
             --generate-notes \
-            debs/*.deb
+            assets/*.deb assets/*.zst
