@@ -263,6 +263,29 @@ type SidebarNavigatorProps = {
    */
   collapseWidth?: number
   /**
+   * The narrowest width (px) this navigator's UI supports, applied to the
+   * `AdwBreakpointBin` `collapseWidth` mounts. Ignored when `collapseWidth`
+   * is unset, since no bin exists then.
+   *
+   * Adwaita cannot measure a breakpoint bin: what it contains changes with
+   * the breakpoints, so the bin reports a minimum of ZERO and warns
+   * ("AdwBreakpointBin does not have a minimum size, set the
+   * 'width-request' and 'height-request' properties to specify it"). With
+   * no minimum the window can be dragged narrower than the pane inside it
+   * can render, and Adwaita then over-allocates and CLIPS the pane rather
+   * than adapting it — visible as a task list running off the right edge
+   * and, in the journal, as "AdwNavigationSplitView exceeds
+   * AdwBreakpointBin width: requested 469 px, 360 px available".
+   *
+   * The default is GNOME's own adaptive floor. An app whose content
+   * HeaderBar needs more than that (a segmented control as `headerTitle`
+   * costs ~110px on its own) must say so — measure the pane, don't guess:
+   * the number is the width below which its own chrome stops fitting.
+   */
+  minWidth?: number
+  /** Height counterpart of {@link minWidth}, same reasoning. */
+  minHeight?: number
+  /**
    * Replaces the ENTIRE sidebar pane's body — for a sidebar that needs
    * sections, a search field, a footer, or anything a flat list of rows
    * cannot express.
@@ -284,12 +307,20 @@ type SidebarNavigatorProps = {
   children: ReactNode
 }
 
+// GNOME's adaptive floor — the size every GNOME app is expected to keep
+// working at, and the default a breakpoint bin gets here so that "no
+// minimum at all" (Adwaita's own, which clips) is never the behavior.
+const DEFAULT_MIN_WIDTH = 360
+const DEFAULT_MIN_HEIGHT = 294
+
 const SidebarNavigator = ({
   initialRouteName,
   screenOptions,
   sidebarTitle = "Sidebar",
   headerButtons,
   collapseWidth,
+  minWidth = DEFAULT_MIN_WIDTH,
+  minHeight = DEFAULT_MIN_HEIGHT,
   sidebarContent,
   children,
 }: SidebarNavigatorProps) => {
@@ -719,17 +750,25 @@ const SidebarNavigator = ({
         // size, and its docs say these properties "must always be set" in
         // that case (otherwise it warns on every use: "does not have a
         // minimum size, set the 'width-request' and 'height-request'
-        // properties to specify it"). This bin's actual size always comes
-        // from our own Yoga layout (wrapReactNative allocates it the
-        // engine-computed rect regardless of GTK's own size negotiation), so
-        // there is no separate GTK-side minimum to declare and any value
-        // satisfies the contract — 1, not 0: the current @gtkx property
+        // properties to specify it").
+        //
+        // The value is load-bearing, not a formality: this bin is NOT laid
+        // out by Yoga. Under `chrome: "content"` — the chrome this navigator
+        // requires — it is the window's own child, so GTK's size negotiation
+        // is what decides how narrow the window may go, and the bin's
+        // reported minimum IS that floor. Left at zero, the window resizes
+        // straight past what the pane inside can draw and Adwaita clips it
+        // rather than adapting it: "AdwNavigationSplitView exceeds
+        // AdwBreakpointBin width: requested 469 px, 360 px available", felt
+        // as a task list running off the right edge. See minWidth's doc.
+        //
+        // Whatever the value, it must never be 0: the current @gtkx property
         // diffing treats 0 as "unset" for numeric props (falsy skip) and
-        // never issues the native call, which would silently defeat the
-        // point. 1px is functionally identical to 0 here either way.
+        // never issues the native call, so a 0 would silently leave the bin
+        // with no minimum at all.
         <AdwBreakpointBin
-          widthRequest={1}
-          heightRequest={1}
+          widthRequest={minWidth}
+          heightRequest={minHeight}
           breakpoints={
             <AdwBreakpoint
               ref={breakpointRef}

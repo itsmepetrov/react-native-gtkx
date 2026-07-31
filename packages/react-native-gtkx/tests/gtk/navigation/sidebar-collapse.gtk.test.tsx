@@ -25,6 +25,7 @@ import {
 } from "@react-navigation/native"
 import { useEffect } from "react"
 import { expect, it } from "vitest"
+import { Gtk } from "../../../src/gtk"
 import { type Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
 import { Text, View } from "../../../src/index"
 import {
@@ -76,6 +77,28 @@ const findSplitView = (
   return null
 }
 
+const findBreakpointBin = (
+  widget: GtkNs.Widget | null,
+): InstanceType<typeof Adw.BreakpointBin> | null => {
+  if (!widget) {
+    return null
+  }
+  if (widget instanceof Adw.BreakpointBin) {
+    return widget
+  }
+  for (
+    let child = widget.getFirstChild();
+    child;
+    child = child.getNextSibling()
+  ) {
+    const found = findBreakpointBin(child)
+    if (found) {
+      return found
+    }
+  }
+  return null
+}
+
 const FirstScreen = () => (
   <View style={{ flex: 1 }}>
     <Text>first section body</Text>
@@ -111,11 +134,18 @@ const Harness = () => (
 // plain GtkListBoxRow the Harness above gets — which is where the reported
 // "the focused section cannot be opened" bug lived, so the tests for it use
 // this shape (examples/tasks-nav's shape) rather than the bare one.
-const RichHarness = ({ customRow }: { customRow?: boolean }) => (
+const RichHarness = ({
+  minWidth,
+  customRow,
+}: {
+  minWidth?: number
+  customRow?: boolean
+}) => (
   <NavigationContainer>
     <Sidebar.Navigator
       sidebarTitle="Collapsible"
       collapseWidth={500}
+      minWidth={minWidth}
     >
       <Sidebar.Screen
         name="first"
@@ -201,6 +231,48 @@ it("opens the already-focused section while collapsed, through GTK's own row act
   // Still the same route: this reveals a pane, it does not navigate.
   expect(list.getSelectedRow()).toBe(focusedRow)
   expect(screen.getByText("first section body")).toBeTruthy()
+})
+
+it("gives the breakpoint bin a minimum size, so the window cannot shrink past the pane", async () => {
+  // Adwaita cannot measure a breakpoint bin (its content changes with the
+  // breakpoints): it reports a minimum of zero and warns. Left at zero the
+  // window can be dragged narrower than the content pane can draw, and
+  // Adwaita over-allocates and CLIPS it — seen as the task list running off
+  // the right edge in examples/tasks-nav, and logged as
+  // "AdwNavigationSplitView exceeds AdwBreakpointBin width".
+  const { container } = await render(<RichHarness />)
+  const window = container as GtkNs.Window
+  await waitFor(() => {
+    expect(screen.getByText("first section body")).toBeTruthy()
+  })
+  const bin = findBreakpointBin(window.getChild())
+  expect(bin).not.toBeNull()
+  expect(bin!.widthRequest).toBe(360)
+  expect(bin!.heightRequest).toBe(294)
+  // The size request IS the bin's minimum — its own measure() contributes
+  // nothing, so this is the whole floor, not one input to it.
+  const [minWidth] = bin!.measure(
+    Gtk.Orientation.HORIZONTAL,
+    -1,
+  ) as unknown as [number, number]
+  expect(minWidth).toBe(360)
+})
+
+it("lets an app raise the minimum to what its own chrome needs", async () => {
+  // examples/tasks-nav does exactly this: its collapsed content HeaderBar
+  // asks for 469px (a segmented control as headerTitle cannot ellipsize the
+  // way a title label does), so 360 would still clip it.
+  const { container } = await render(<RichHarness minWidth={480} />)
+  const window = container as GtkNs.Window
+  await waitFor(() => {
+    expect(screen.getByText("first section body")).toBeTruthy()
+  })
+  const bin = findBreakpointBin(window.getChild())!
+  const [minWidth] = bin.measure(Gtk.Orientation.HORIZONTAL, -1) as unknown as [
+    number,
+    number,
+  ]
+  expect(minWidth).toBe(480)
 })
 
 it("collapses natively below collapseWidth and expands back above it", async () => {

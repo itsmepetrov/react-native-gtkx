@@ -154,6 +154,24 @@ const App = () => (
   round trip, the same size-class behavior a mobile master-detail app
   relies on; see docs/research/navigation-extensibility.md for the
   evidence.
+- Sidebar navigator props `minWidth` / `minHeight` (px, default 360×294 —
+  GNOME's own adaptive floor): the narrowest size this navigator's UI
+  supports, applied to the `AdwBreakpointBin` that `collapseWidth` mounts.
+  Ignored when `collapseWidth` is unset, since no bin exists then. Adwaita
+  cannot measure a breakpoint bin — what it contains changes with the
+  breakpoints — so the bin reports a minimum of ZERO and warns that
+  `width-request`/`height-request` must be set. Under `chrome: "content"`
+  the bin is the window's own child, so that zero IS the window's floor:
+  the window resizes straight past what the pane inside can draw, and
+  Adwaita clips the pane instead of adapting it ("AdwNavigationSplitView
+  exceeds AdwBreakpointBin width: requested 469 px, 360 px available" in
+  the journal, felt as a list running off the right edge with its trailing
+  controls cut away). An app whose content HeaderBar needs more than the
+  default must raise it — measure the pane rather than guessing: a
+  segmented control as `headerTitle` costs ~110px on its own and, unlike a
+  title label, cannot ellipsize. `examples/tasks-nav` passes `480` for
+  exactly that reason; the value stays below its `collapseWidth`, so the
+  collapsed layout is still fully reachable.
 - Sidebar screen options `headerLeft` / `headerRight` / `headerTitle`:
   `() => ReactNode` — the content HeaderBar's own start/end/title, per
   screen, on top of the one navigator-wide default. This is what lets one

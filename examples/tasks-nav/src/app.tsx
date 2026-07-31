@@ -30,6 +30,16 @@ const AppShell = () => {
       <Sidebar.Navigator
         sidebarTitle="Tasks (nav)"
         collapseWidth={500}
+        // This app's own narrow floor, measured rather than guessed: the
+        // collapsed content HeaderBar (the split view's back button, New
+        // Task, Search, the All/Open/Done toggle group as headerTitle, New
+        // List, and the window controls) asks for 469px, and a segmented
+        // control cannot ellipsize the way a title label does. Left at the
+        // 360px default the window kept shrinking past that and Adwaita
+        // clipped the pane — the task list ran off the right edge with its
+        // star/trash buttons cut away. 480 still sits below collapseWidth,
+        // so the collapsed layout is fully reachable.
+        minWidth={480}
         // Every screen's body is a GTK widget tree (AdwClamp + a
         // `.boxed-list` GtkListBox), not a React Native one — see
         // screens/content-screen.tsx for why that is the right choice for
