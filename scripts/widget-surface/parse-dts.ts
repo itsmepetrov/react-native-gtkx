@@ -15,17 +15,23 @@ import { readFileSync } from "node:fs"
 
 const CONST_RE = /^export declare const (\w+): (.+);$/
 
-export const parseComponentNames = (dtsPath) => {
+export interface ComponentNames {
+  components: string[]
+  markers: string[]
+}
+
+export const parseComponentNames = (dtsPath: string): ComponentNames => {
   const text = readFileSync(dtsPath, "utf8")
-  const components = []
-  const markers = []
-  const unrecognized = []
+  const components: string[] = []
+  const markers: string[] = []
+  const unrecognized: string[] = []
   for (const line of text.split("\n")) {
     const match = CONST_RE.exec(line)
     if (!match) {
       continue
     }
-    const [, name, rhs] = match
+    const name = match[1] ?? ""
+    const rhs = match[2] ?? ""
     if (/^"\w+"$/.test(rhs)) {
       markers.push(name)
     } else if (/=>\s*ReactNode$/.test(rhs)) {

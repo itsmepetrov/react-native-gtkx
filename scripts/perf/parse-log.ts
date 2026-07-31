@@ -1,21 +1,29 @@
 // Aggregates GTKX_PERF per-second dumps from a probe run, split by the
-// PERF_MARK phases the probe app logs. Usage: node parse-log.mjs <log> [...]
+// PERF_MARK phases the probe app logs. Usage: node parse-log.ts <log> [...]
 import { readFileSync } from "node:fs"
 
-const aggregate = (file) => {
+interface PhaseEntry {
+  seconds: number
+  sums: Map<string, number>
+  maxes: Map<string, number>
+}
+
+const aggregate = (file: string): void => {
   const lines = readFileSync(file, "utf8").split("\n")
   let phase = "startup"
-  const phases = new Map()
-  const bucket = () => {
-    if (!phases.has(phase)) {
-      phases.set(phase, { seconds: 0, sums: new Map(), maxes: new Map() })
+  const phases = new Map<string, PhaseEntry>()
+  const bucket = (): PhaseEntry => {
+    let entry = phases.get(phase)
+    if (!entry) {
+      entry = { seconds: 0, sums: new Map(), maxes: new Map() }
+      phases.set(phase, entry)
     }
-    return phases.get(phase)
+    return entry
   }
   for (const line of lines) {
-    const markMatch = line.match(/^(?:GTKX_)?PERF_MARK (\S+)/)
+    const markMatch = /^(?:GTKX_)?PERF_MARK (\S+)/.exec(line)
     if (markMatch) {
-      const label = markMatch[1]
+      const label = markMatch[1] ?? ""
       if (label.endsWith(":start")) {
         phase = label.slice(0, -":start".length)
       } else if (label.endsWith(":end")) {
@@ -33,7 +41,10 @@ const aggregate = (file) => {
     if (!line.startsWith("GTKX_PERF ")) {
       continue
     }
-    const data = JSON.parse(line.slice("GTKX_PERF ".length))
+    const data = JSON.parse(line.slice("GTKX_PERF ".length)) as Record<
+      string,
+      number
+    >
     const entry = bucket()
     entry.seconds += 1
     for (const [key, value] of Object.entries(data)) {
@@ -59,7 +70,7 @@ const aggregate = (file) => {
     console.log(`\n--- phase ${name} (${entry.seconds}s)`)
     const keys = [...entry.sums.keys()].sort()
     for (const key of keys) {
-      const total = entry.sums.get(key)
+      const total = entry.sums.get(key) ?? 0
       const perSec = total / entry.seconds
       const rounded = Math.round(perSec * 100) / 100
       if (key === "frame.avg") {
