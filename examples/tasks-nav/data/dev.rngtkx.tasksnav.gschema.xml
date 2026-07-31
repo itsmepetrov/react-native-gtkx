@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Preferences only. Tasks themselves stay in memory (see README) — this is
+  the app's SETTINGS store, which is a different thing from its document
+  store, and GSettings is what a GNOME app uses for it.
+-->
+<schemalist>
+  <enum id="dev.rngtkx.tasksnav.SortOrder">
+    <value nick="manual" value="0"/>
+    <value nick="due-date" value="1"/>
+    <value nick="title" value="2"/>
+    <value nick="created" value="3"/>
+  </enum>
+  <schema id="dev.rngtkx.tasksnav" path="/dev/rngtkx/tasksnav/">
+    <key name="sort-order" enum="dev.rngtkx.tasksnav.SortOrder">
+      <default>'manual'</default>
+      <summary>Sort order</summary>
+      <description>How tasks are ordered in the list. Only "manual" allows drag-reorder.</description>
+    </key>
+    <key name="color-scheme" type="s">
+      <choices>
+        <choice value="default"/>
+        <choice value="light"/>
+        <choice value="dark"/>
+      </choices>
+      <default>'default'</default>
+      <summary>Color scheme</summary>
+      <description>Follow the system theme or force light or dark</description>
+    </key>
+  </schema>
+</schemalist>
