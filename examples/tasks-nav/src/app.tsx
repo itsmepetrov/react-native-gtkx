@@ -30,6 +30,11 @@ const AppShell = () => {
       <Sidebar.Navigator
         sidebarTitle="Tasks (nav)"
         collapseWidth={500}
+        // Every screen's body is a GTK widget tree (AdwClamp + a
+        // `.boxed-list` GtkListBox), not a React Native one — see
+        // screens/content-screen.tsx for why that is the right choice for
+        // this app, and docs/api.md for what the option changes.
+        screenOptions={{ contentLayout: "widget" }}
         headerButtons={[
           {
             id: "new-list",

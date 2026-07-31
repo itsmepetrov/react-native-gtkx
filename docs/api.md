@@ -174,6 +174,20 @@ const App = () => (
   place. A screen that flips between shapes must give every one of these
   four keys an explicit value (`undefined` counts as a real overwrite; an
   absent key does not) on every call, not just the ones currently in use.
+- Sidebar screen option `contentLayout`: `"react-native"` (default) or
+  `"widget"` — what the screen's body IS. The default mounts it in a Yoga
+  layout root that fills the pane, so `<View style={{ flex: 1 }}>` behaves
+  the way it does anywhere else. `"widget"` packs the body into the page
+  directly, with no layout root in between, for a screen whose body is a
+  GTK widget tree (a `GtkScrolledWindow` around an `AdwClamp` around a
+  `.boxed-list` `GtkListBox`, say): GTK's own sizing — `vexpand`, a list's
+  natural height — then applies normally. **Under the default a widget tree
+  collapses instead**, and quietly: every widget becomes a single Yoga LEAF
+  measured for its own natural size, so a container renders its first child,
+  drops the rest, and reports the ~1px it can shrink to, with no error
+  anywhere. `examples/tasks-nav` is built this way. Mixing is per screen,
+  not per subtree — a `"widget"` screen that wants React Native content
+  somewhere inside it wraps that part in `SlotContent` itself.
 - Stack screen options `headerLeft` / `headerRight`: `() => ReactNode` —
   real RN content in the HeaderBar (inputs included), hosted by an
   intrinsic-size root; `headerButtons` render after `headerRight`

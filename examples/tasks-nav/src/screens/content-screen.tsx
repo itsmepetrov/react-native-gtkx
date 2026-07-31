@@ -13,14 +13,36 @@
 // shapes come out of one screen component: a filter toggle group for a
 // list, a plain title for Trash, and a back/star/trash editor header for
 // an open task.
+//
+// The BODY is built from the same Adwaita widgets examples/tasks-app uses
+// — AdwClamp, a `.boxed-list` GtkListBox, AdwEntryRow, AdwActionRow — not
+// from React Native View/Text. That is deliberate, and it is the point of
+// the example: the navigator supplies the chrome (pages, HeaderBars, the
+// split view's collapse behaviour) while the pane inside keeps full
+// Adwaita fidelity. RN primitives render flat rows with no list frame, no
+// hover and no row activation — visibly worse than the platform's own, for
+// no portability gain in an app that is Linux-only by design.
 import { useEffect, useState } from "react"
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native"
-import { AdwWindowTitle } from "react-native-gtkx/adw"
 import {
+  AdwActionRow,
+  AdwClamp,
+  AdwEntryRow,
+  AdwStatusPage,
+  AdwSwitchRow,
+  AdwToggle,
+  AdwToggleGroup,
+  AdwWindowTitle,
+} from "react-native-gtkx/adw"
+import {
+  Gtk,
   GtkBox,
   GtkButton,
   GtkCheckButton,
-  GtkEntry,
+  GtkListBox,
+  GtkScrolledWindow,
+  GtkSearchBar,
+  GtkSearchEntry,
+  GtkToggleButton,
 } from "react-native-gtkx/gtk"
 import type {
   SidebarNavigationOptions,
@@ -63,34 +85,50 @@ const matchesFilter = (task: Task, filter: Filter): boolean => {
   return true
 }
 
-const FILTERS: { id: Filter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "open", label: "Open" },
-  { id: "done", label: "Done" },
-]
+/** AdwActionRow's title takes Pango markup when `useMarkup` is set, which
+ *  is how a completed task gets a real strikethrough — so the task's own
+ *  text has to be escaped before being embedded in it. */
+const escapeMarkup = (text: string): string =>
+  text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
 
-const styles = StyleSheet.create({
-  screen: { flex: 1 },
-  // ScrollView's content defaults to alignItems: "flex-start" — a row
-  // hugging its own content width instead of stretching to the screen's
-  // width means a flex: 1 child inside it collapses to zero (flex: 1 is
-  // flexBasis: 0, and a hug-width parent has no free space to grow into).
-  // Found the hard way: the task title disappeared entirely, leaving only
-  // the (non-flex) list-name badge visible per row. Same fix
-  // examples/gallery documents for its own ScrollView sections.
-  listContent: { alignItems: "stretch" },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-  },
-  rowTitle: { flex: 1 },
-  doneRowTitle: { opacity: 0.5 },
-  detail: { flex: 1, padding: 16, gap: 12 },
-  empty: { padding: 24, alignItems: "center" },
-})
+type EmptyState = { icon: string; title: string; description: string }
+
+const emptyState = (
+  selection: Selection,
+  isTrash: boolean,
+  query: string,
+): EmptyState => {
+  if (query) {
+    return {
+      icon: "system-search-symbolic",
+      title: "No Results",
+      description: `No tasks match “${query}”`,
+    }
+  }
+  if (isTrash) {
+    return {
+      icon: "user-trash-symbolic",
+      title: "Trash Is Empty",
+      description: "Deleted tasks show up here.",
+    }
+  }
+  if (selection.kind === "smart" && selection.view === "important") {
+    return {
+      icon: "starred-symbolic",
+      title: "Nothing Important",
+      description: "Star a task to see it here.",
+    }
+  }
+  return {
+    icon: "view-list-symbolic",
+    title: "No Tasks",
+    description: "Add one with the field above.",
+  }
+}
 
 // `route`/`navigation` are read as PROPS, not via `useNavigation()`/
 // `useRoute()` — react-navigation passes both to any screen `component`
@@ -114,6 +152,8 @@ export const ContentScreen = ({ route, navigation }: SidebarScreenProps) => {
   } = useStore()
   const [filter, setFilter] = useState<Filter>("all")
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
+  const [searchMode, setSearchMode] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
 
   // The split view's own back button/Escape/back gesture (narrow window)
   // hides content and shows the sidebar again — a presentation change with
@@ -141,11 +181,25 @@ export const ContentScreen = ({ route, navigation }: SidebarScreenProps) => {
     ? tasks.find((task) => task.id === openTaskId && !task.deleted)
     : undefined
 
+  // Where a task typed into the "Add a task…" row lands: the current list
+  // when a list is selected, the first list otherwise — a smart view is a
+  // query, not a place to put things (tasks-app's addListId, same rule).
+  const addTargetListId =
+    selection.kind === "list" ? selection.listId : lists[0]?.id
+
+  const createTask = (title: string): Task | undefined => {
+    const trimmed = title.trim()
+    if (!trimmed || !addTargetListId) {
+      return undefined
+    }
+    return addTask(addTargetListId, trimmed)
+  }
+
   // The header's own shape changes with THIS screen's local state — see
   // the file header comment. setOptions MERGES into the previously
   // resolved options (see docs/api.md), so every branch gives every one
-  // of these four keys an explicit value, including the ones it does not
-  // use, rather than omitting them.
+  // of these keys an explicit value, including the ones it does not use,
+  // rather than omitting them.
   useEffect(() => {
     let options: SidebarNavigationOptions
     if (openTask) {
@@ -159,12 +213,13 @@ export const ContentScreen = ({ route, navigation }: SidebarScreenProps) => {
         ),
         headerRight: () => (
           <>
-            <GtkButton
+            <GtkToggleButton
               iconName={
                 openTask.important ? "starred-symbolic" : "non-starred-symbolic"
               }
+              active={openTask.important}
               tooltipText="Important"
-              onClicked={() => toggleImportant(openTask.id)}
+              onToggled={() => toggleImportant(openTask.id)}
             />
             <GtkButton
               iconName="user-trash-symbolic"
@@ -187,32 +242,58 @@ export const ContentScreen = ({ route, navigation }: SidebarScreenProps) => {
     } else {
       options = {
         headerLeft: () => (
-          <GtkButton
-            iconName="list-add-symbolic"
-            tooltipText="New Task"
-            onClicked={() => {
-              const listId =
-                selection.kind === "list" ? selection.listId : lists[0]?.id
-              if (!listId) {
-                return
-              }
-              const created = addTask(listId, "New Task")
-              setOpenTaskId(created.id)
-            }}
-          />
+          <>
+            <GtkButton
+              iconName="list-add-symbolic"
+              tooltipText="New Task"
+              onClicked={() => {
+                // Inlined rather than calling createTask(): a closure
+                // recreated every render would have to be an effect
+                // dependency, re-running the whole header rebuild on every
+                // render. Depending on the DATA it reads is the honest form.
+                if (addTargetListId) {
+                  setOpenTaskId(addTask(addTargetListId, "New Task").id)
+                }
+              }}
+            />
+            <GtkToggleButton
+              iconName="system-search-symbolic"
+              tooltipText="Search"
+              active={searchMode}
+              onToggled={(self) => setSearchMode(self.active)}
+            />
+          </>
         ),
         headerRight: undefined,
+        // AdwToggleGroup, not a hand-built GtkBox of GtkButtons: the
+        // Adwaita widget IS the compact segmented pill this design calls
+        // for. A box of buttons cannot be made to look like one — `.linked`
+        // styles siblings by adjacency, and each wrapped child sits in its
+        // own container, so the buttons come out as three separate rounded
+        // rects instead of one joined control.
         headerTitle: () => (
-          <GtkBox cssClasses={["linked"]}>
-            {FILTERS.map((entry) => (
-              <GtkButton
-                key={entry.id}
-                label={entry.label}
-                cssClasses={filter === entry.id ? ["suggested-action"] : []}
-                onClicked={() => setFilter(entry.id)}
-              />
-            ))}
-          </GtkBox>
+          <AdwToggleGroup
+            activeName={filter}
+            cssClasses={["round"]}
+            onNotifyActiveName={(name) => {
+              if (name === "all" || name === "open" || name === "done") {
+                setFilter(name)
+              }
+            }}
+          >
+            <AdwToggle
+              name="all"
+              label="All"
+            />
+            <AdwToggle
+              name="open"
+              label="Open"
+            />
+            <AdwToggle
+              name="done"
+              label="Done"
+            />
+          </AdwToggleGroup>
         ),
       }
     }
@@ -223,84 +304,178 @@ export const ContentScreen = ({ route, navigation }: SidebarScreenProps) => {
     openTask,
     isTrash,
     filter,
+    searchMode,
     selection,
     navigation,
-    lists,
     addTask,
+    addTargetListId,
     toggleImportant,
     moveToTrash,
   ])
 
   if (openTask) {
+    const list = lists.find((entry) => entry.id === openTask.listId)
     return (
-      <ScrollView
-        style={styles.screen}
-        contentContainerStyle={styles.detail}
-      >
-        <GtkEntry
-          text={openTask.title}
-          onNotifyText={(value) => setTitle(openTask.id, value ?? "")}
-        />
-        <View style={styles.row}>
-          <GtkCheckButton
-            active={openTask.done}
-            label="Done"
-            onToggled={() => toggleDone(openTask.id)}
-          />
-        </View>
-      </ScrollView>
+      <GtkScrolledWindow vexpand>
+        <AdwClamp
+          maximumSize={640}
+          marginTop={24}
+          marginBottom={24}
+          marginStart={12}
+          marginEnd={12}
+        >
+          <GtkListBox
+            selectionMode={Gtk.SelectionMode.NONE}
+            cssClasses={["boxed-list"]}
+          >
+            <AdwEntryRow
+              title="Title"
+              text={openTask.title}
+              onNotifyText={(value) => setTitle(openTask.id, value ?? "")}
+            />
+            <AdwSwitchRow
+              title="Done"
+              active={openTask.done}
+              onNotifyActive={() => toggleDone(openTask.id)}
+            />
+            <AdwSwitchRow
+              title="Important"
+              active={openTask.important}
+              onNotifyActive={() => toggleImportant(openTask.id)}
+            />
+            <AdwActionRow
+              title="List"
+              subtitle={list?.name ?? "—"}
+            />
+          </GtkListBox>
+        </AdwClamp>
+      </GtkScrolledWindow>
     )
   }
 
-  const visible = visibleTasks.filter(
-    (task) => isTrash || matchesFilter(task, filter),
-  )
-
-  if (visible.length === 0) {
-    return (
-      <View style={styles.empty}>
-        <Text>{isTrash ? "Trash is empty" : "No tasks here yet"}</Text>
-      </View>
-    )
-  }
+  const query = searchMode ? searchQuery.trim().toLowerCase() : ""
+  const visible = visibleTasks
+    .filter((task) => isTrash || matchesFilter(task, filter))
+    .filter((task) => !query || task.title.toLowerCase().includes(query))
+  const empty = emptyState(selection, isTrash, query)
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.listContent}
+    <GtkBox
+      orientation={Gtk.Orientation.VERTICAL}
+      vexpand
     >
-      {visible.map((task) => {
-        const list = lists.find((entry) => entry.id === task.listId)
-        return (
-          <Pressable
-            key={task.id}
-            style={styles.row}
-            onPress={() =>
-              isTrash ? restore(task.id) : setOpenTaskId(task.id)
-            }
+      <GtkSearchBar
+        searchModeEnabled={searchMode}
+        onNotifySearchModeEnabled={(enabled) => setSearchMode(enabled ?? false)}
+      >
+        <GtkSearchEntry
+          placeholderText="Search tasks…"
+          text={searchQuery}
+          onSearchChanged={(self) => setSearchQuery(self.text)}
+        />
+      </GtkSearchBar>
+      <GtkScrolledWindow vexpand>
+        <AdwClamp
+          maximumSize={640}
+          marginTop={12}
+          marginBottom={12}
+          marginStart={12}
+          marginEnd={12}
+        >
+          <GtkBox
+            orientation={Gtk.Orientation.VERTICAL}
+            spacing={12}
           >
-            {!isTrash && (
-              <GtkCheckButton
-                active={task.done}
-                onToggled={() => toggleDone(task.id)}
+            <GtkListBox
+              selectionMode={Gtk.SelectionMode.NONE}
+              cssClasses={["boxed-list"]}
+            >
+              {/* Trash is a graveyard, not a place to file new work — an
+                  add row there would have nowhere sensible to put a task. */}
+              {isTrash ? null : (
+                <AdwEntryRow
+                  title="Add a task…"
+                  onEntryActivated={(self) => {
+                    createTask(self.text)
+                    self.text = ""
+                  }}
+                />
+              )}
+              {visible.map((task) => {
+                const list = lists.find((entry) => entry.id === task.listId)
+                const title = task.done
+                  ? `<s>${escapeMarkup(task.title)}</s>`
+                  : escapeMarkup(task.title)
+                return (
+                  <AdwActionRow
+                    key={task.id}
+                    title={title}
+                    useMarkup
+                    subtitle={
+                      selection.kind === "list" ? undefined : list?.name
+                    }
+                    activatable
+                    onActivated={() =>
+                      isTrash ? restore(task.id) : setOpenTaskId(task.id)
+                    }
+                    prefix={
+                      isTrash ? undefined : (
+                        <GtkCheckButton
+                          valign={Gtk.Align.CENTER}
+                          active={task.done}
+                          accessibleLabel="Mark complete"
+                          onToggled={() => toggleDone(task.id)}
+                        />
+                      )
+                    }
+                    suffix={
+                      isTrash ? (
+                        <GtkButton
+                          valign={Gtk.Align.CENTER}
+                          iconName="edit-undo-symbolic"
+                          tooltipText="Restore"
+                          cssClasses={["flat"]}
+                          onClicked={() => restore(task.id)}
+                        />
+                      ) : (
+                        <>
+                          <GtkToggleButton
+                            valign={Gtk.Align.CENTER}
+                            iconName={
+                              task.important
+                                ? "starred-symbolic"
+                                : "non-starred-symbolic"
+                            }
+                            active={task.important}
+                            accessibleLabel="Toggle important"
+                            cssClasses={["flat"]}
+                            onToggled={() => toggleImportant(task.id)}
+                          />
+                          <GtkButton
+                            valign={Gtk.Align.CENTER}
+                            iconName="user-trash-symbolic"
+                            accessibleLabel="Delete task"
+                            cssClasses={["flat"]}
+                            onClicked={() => moveToTrash(task.id)}
+                          />
+                        </>
+                      )
+                    }
+                  />
+                )
+              })}
+            </GtkListBox>
+            {visible.length === 0 ? (
+              <AdwStatusPage
+                cssClasses={["compact"]}
+                iconName={empty.icon}
+                title={empty.title}
+                description={empty.description}
               />
-            )}
-            <Text style={[styles.rowTitle, task.done && styles.doneRowTitle]}>
-              {task.title}
-            </Text>
-            {selection.kind !== "list" && list ? (
-              <Text style={styles.doneRowTitle}>{list.name}</Text>
             ) : null}
-            {isTrash && (
-              <GtkButton
-                iconName="edit-undo-symbolic"
-                tooltipText="Restore"
-                onClicked={() => restore(task.id)}
-              />
-            )}
-          </Pressable>
-        )
-      })}
-    </ScrollView>
+          </GtkBox>
+        </AdwClamp>
+      </GtkScrolledWindow>
+    </GtkBox>
   )
 }

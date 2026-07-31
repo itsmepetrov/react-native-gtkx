@@ -62,7 +62,7 @@ import {
   AdwNavigationSplitView,
   AdwToolbarView,
 } from "../adw"
-import { IntrinsicContent, SlotContent } from "../common"
+import { HeaderSlotContent, SlotContent, WidgetContent } from "../common"
 import {
   css,
   GObject,
@@ -85,6 +85,7 @@ const SIDEBAR_OPTION_KEYS: ReadonlySet<string> = new Set([
   "headerRight",
   "headerTitle",
   "headerButtons",
+  "contentLayout",
 ])
 
 export type SidebarNavigationOptions = {
@@ -117,6 +118,24 @@ export type SidebarNavigationOptions = {
    *  HeaderBar shows the page's own title automatically (unchanged
    *  default behavior). */
   headerTitle?: () => ReactNode
+  /** How this screen's body is mounted into the content page.
+   *
+   *  - `"react-native"` (default): the body is a React Native tree, so it
+   *    gets a Yoga layout root that fills the pane — `<View style={{ flex: 1 }}>`
+   *    and friends behave exactly as they do anywhere else.
+   *  - `"widget"`: the body IS a GTK widget tree (a `GtkScrolledWindow`
+   *    around a `.boxed-list` `GtkListBox`, say) and is packed into the page
+   *    directly, with no layout root in between. GTK's own sizing —
+   *    `vexpand`, `AdwClamp`, a list's natural height — then works normally.
+   *    Under the default a widget tree collapses instead: every widget
+   *    becomes a single Yoga LEAF measured for its own natural size, so a
+   *    scrolled window reports the ~1px it can shrink to and the pane comes
+   *    up empty. `examples/tasks-nav` is built this way.
+   *
+   *  Mixing is per SCREEN, not per subtree: a `"widget"` screen that wants
+   *  React Native content somewhere inside it wraps that part in
+   *  `SlotContent` (or `IntrinsicContent`) itself. */
+  contentLayout?: "react-native" | "widget"
   /** Overrides the navigator-level `headerButtons` prop for this screen
    *  specifically (replaces it entirely when set, same as the stack
    *  navigator's per-screen option override). */
@@ -446,24 +465,24 @@ const SidebarNavigator = ({
             <AdwHeaderBar
               titleWidget={
                 activeOptions.headerTitle ? (
-                  <IntrinsicContent>
+                  <HeaderSlotContent>
                     {activeOptions.headerTitle()}
-                  </IntrinsicContent>
+                  </HeaderSlotContent>
                 ) : undefined
               }
               start={
                 activeOptions.headerLeft ? (
-                  <IntrinsicContent>
+                  <HeaderSlotContent>
                     {activeOptions.headerLeft()}
-                  </IntrinsicContent>
+                  </HeaderSlotContent>
                 ) : undefined
               }
               end={[
                 ...(activeOptions.headerRight
                   ? [
-                      <IntrinsicContent key="header-right">
+                      <HeaderSlotContent key="header-right">
                         {activeOptions.headerRight()}
-                      </IntrinsicContent>,
+                      </HeaderSlotContent>,
                     ]
                   : []),
                 ...(activeButtons?.map((button) => (
@@ -479,10 +498,16 @@ const SidebarNavigator = ({
           }
         >
           {/* Keyed by route: switching sections swaps the whole screen —
-                a fresh SlotContent per section, the previous one disposes. */}
-          <SlotContent key={active.key}>
-            {activeDescriptor?.render()}
-          </SlotContent>
+                a fresh root per section, the previous one disposes. */}
+          {activeOptions.contentLayout === "widget" ? (
+            <WidgetContent key={active.key}>
+              {activeDescriptor?.render()}
+            </WidgetContent>
+          ) : (
+            <SlotContent key={active.key}>
+              {activeDescriptor?.render()}
+            </SlotContent>
+          )}
         </AdwToolbarView>
       </AdwNavigationPage>
     </AdwNavigationSplitView>
