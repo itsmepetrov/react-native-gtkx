@@ -24,6 +24,10 @@ type RunLinuxArgs = {
   dev?: boolean
   port?: string
 }
+type BuildLinuxArgs = {
+  entryFile: string
+  bundleOutput?: string
+}
 
 /** Exit code host-dev.ts uses to request a supervisor restart. */
 const FULL_REFRESH_EXIT_CODE = 65
@@ -213,6 +217,25 @@ const runLinux = async (
   process.exit(status)
 }
 
+// The android/ios counterpart to run-linux's dev-only bundling: bundle for
+// distribution and stop, the way a release APK/IPA build does not launch
+// the app it produces. Deliberately skips ensureCodegenStore() — codegen
+// generates the @gtkx/gi bindings host.js imports to talk to GTK at RUN
+// time; bundling never touches them (Metro only reads/transforms JS, and
+// the GTK/react/yoga modules are proxied rather than imported — see
+// ../metro's HOST_MODULE_EXTERNALS). A machine that only builds never needs
+// GTK dev headers installed.
+const buildLinux = async (
+  _argv: string[],
+  config: CliConfig,
+  args: BuildLinuxArgs,
+): Promise<void> => {
+  const output = args.bundleOutput ?? join(config.root, "dist", "main.jsbundle")
+  mkdirSync(dirname(output), { recursive: true })
+  bundle(config.root, args.entryFile, output)
+  console.warn(`[react-native-gtkx] wrote the release bundle to ${output}`)
+}
+
 /** Commands contributed to the RN CLI by the package's react-native.config.js. */
 export const commands = [
   {
@@ -245,5 +268,23 @@ export const commands = [
       },
     ],
     func: runLinux,
+  },
+  {
+    name: "build-linux",
+    description:
+      "Bundle the app with Metro for the linux platform for distribution, without running it",
+    options: [
+      {
+        name: "--entry-file <path>",
+        description: "Path to the app entry file",
+        default: "index.js",
+      },
+      {
+        name: "--bundle-output <path>",
+        description:
+          "Where to write the release jsbundle (default: dist/main.jsbundle)",
+      },
+    ],
+    func: buildLinux,
   },
 ]

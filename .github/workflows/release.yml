@@ -45,11 +45,17 @@ jobs:
           npm run build:dist
           (cd examples/monitor && npm run build)
           (cd examples/gallery && npm run build)
+          (cd examples/tasks-app && npm run build)
+          # Metro path (react-native build-linux): produces dist/main.jsbundle,
+          # not dist/bundle.js — build-deb.sh tells the two shapes apart.
+          (cd examples/hn-app && npm run build)
       - name: Build debs
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           bash scripts/build-deb.sh monitor "System Monitor" "$VERSION" debs
           bash scripts/build-deb.sh gallery "RN Gallery" "$VERSION" debs
+          bash scripts/build-deb.sh tasks-app "Tasks" "$VERSION" debs
+          bash scripts/build-deb.sh hn-app "Hacker News" "$VERSION" debs
           ls -la debs/
       - uses: actions/upload-artifact@v7
         with:

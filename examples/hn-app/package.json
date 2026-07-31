@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "linux": "react-native run-linux",
+    "build": "react-native build-linux",
     "start": "react-native start",
     "typecheck": "tsc --noEmit"
   },
