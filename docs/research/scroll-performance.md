@@ -194,14 +194,41 @@ instrumentation.
 `idle` is the control: unchanged (late frames even fell, 6 → 1.3), so this is
 not a constant tax on a big window. It appears only while pixels change.
 
-**What this means.** Nothing in the virtualization or layout path explains
-the maximized symptom, and there is no fix for it on our side of the
-boundary. The rig has no GPU acceleration — llvmpipe is software rendering —
-so the honest scope of the finding is _this VM_. On accelerated hardware the
-same measurement is the obvious next question, and it needs real hardware
-rather than another probe run.
+**What this means — corrected by the control run.** The first reading of
+this data was "paint scales with area, nothing on our side". A control run
+disproved it: the same probe in `PERF_MODE=scrollview`, where all 500 rows
+are mounted and scrolling is a pure native adjustment translation, is
+**identical maximized and windowed** — `frame.avg` 16.4 vs 17.0 ms,
+`frame.veryLate` under 1/s, at full screen area.
+
+| Maximized, scrolling | `frame.avg` | `frame.veryLate`/s |
+| -------------------- | ----------: | -----------------: |
+| ScrollView           |     16.4 ms |                0.6 |
+| FlatList             |     40.4 ms |               22.1 |
+
+So area alone costs nothing. A full-screen window scrolling 500 mounted
+rows holds 60 fps. The cost appears only when the virtualized list is
+driving, and only then does it scale with area.
+
+The mechanism is not proven yet, and the leading hypothesis is ours:
+during motion the list queues an allocation on nearly every frame, and a
+queued allocation on a large widget plausibly drags a relayout and repaint
+proportional to its area. ScrollView never queues, which is exactly why it
+does not care how big the window is. If that holds, the fix is on our side —
+queue only when something actually changed, and invalidate the affected
+region rather than the container.
+
+What the numbers do rule out: it is not our measured Yoga, commit or
+allocate time, all of which stayed flat while frames got 2.6× longer. The
+cost lives in what those queues trigger, not in what we spend computing
+them.
+
+Scope: this rig has no GPU, so the repaint is software-rendered and its
+area-scaling is at its most visible here. On accelerated hardware the same
+trigger may be cheap enough to disappear — which makes it a question for
+real hardware, not for another probe run.
 
 Caveats: one run per configuration, and frame maxima are noisy on this rig
 (±30 ms). The `veryLate` swing (0.13/s → 22/s) is two orders of magnitude
-past that noise, which is why one run is reported as settling the question
-where a 10% difference would not have been.
+past that noise, and the ScrollView control reproduces flat across both
+sizes, which is why these are reported as findings rather than impressions.
