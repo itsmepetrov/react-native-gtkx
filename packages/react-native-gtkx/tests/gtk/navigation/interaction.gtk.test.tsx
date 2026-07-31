@@ -10,6 +10,7 @@ import {
 } from "../../../src/apis/interaction-manager"
 import { Text, View } from "../../../src/index"
 import {
+  CommonActions,
   createStackNavigator,
   NavigationContainer,
   useNavigationContainerRef,
@@ -85,7 +86,7 @@ it("defers runAfterInteractions work until the push transition ends", async () =
   const completed = vi.fn()
   InteractionManager.addListener("interactionComplete", completed)
 
-  navRef.navigate("Details" as never)
+  navRef.dispatch(CommonActions.navigate("Details"))
 
   // The pushed screen mounts (its content is up immediately)...
   await waitFor(() => {

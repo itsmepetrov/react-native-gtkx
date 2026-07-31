@@ -8,6 +8,7 @@ import { expect, it, vi } from "vitest"
 import { Gtk, type Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
 import { Text, View } from "../../../src/index"
 import {
+  CommonActions,
   createSidebarNavigator,
   NavigationContainer,
   useNavigationContainerRef,
@@ -121,7 +122,7 @@ it("native row selection and programmatic navigation stay in sync", async () => 
   })
 
   // Programmatic navigation → the native selection follows.
-  navRef.navigate("first" as never)
+  navRef.dispatch(CommonActions.navigate("first"))
   await waitFor(() => {
     expect(screen.getByText("first section body")).toBeTruthy()
     expect(list!.getSelectedRow()?.getIndex()).toBe(0)
