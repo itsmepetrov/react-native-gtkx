@@ -125,6 +125,12 @@ gesture) opens the Dev Menu: Reload plus any entries the app registers
 via `DevSettings.addMenuItem`. `examples/rn-app` is a complete cli-init
 app with all three platforms wired this way.
 
+`run-linux` always runs what it builds — for a release build that stops
+short of opening a window (packaging, CI, handing a bundle to someone
+else's machine), use `build-linux` instead; see
+[Shipping an app](#shipping-an-app) below for what it produces and what
+running it later needs.
+
 Notes for typed code: add an `env.d.ts` with
 `import "react-native-gtkx/types"` — it augments the stock `react-native`
 types so `Platform.select({ linux: ... })` typechecks, and `Pressable`'s
@@ -200,6 +206,63 @@ declaration of `"react-native-svg"` in play.
 - **Linux-first project**: the template with the vite preset
   (`react-native-gtkx/vite`; `gtkx dev` gives Fast Refresh, builds are
   single-file bundles). Both paths consume the same published package.
+
+## Shipping an app
+
+The two paths get you from source to something installable differently,
+because they take different positions on what stays out of the bundle.
+
+**vite path** (`gtkx build`): everything except the native GTK addon is
+inlined into one file. `dist/bundle.js` + `dist/gtkx.node` (plus
+`dist/gschemas.compiled` if the app declares a GSettings schema — the
+bundle's own banner points `GSETTINGS_SCHEMA_DIR` at its own directory) is
+the whole runtime: copy those anywhere with Node ≥24, GTK4 ≥4.20 and
+libadwaita ≥1.8, and `node bundle.js` runs it. No `node_modules` involved.
+
+**Metro path** (`react-native build-linux`): the release counterpart to
+`run-linux` that iOS, Android and react-native-windows already have and
+this platform did not until now — it bundles with Metro and stops, instead
+of bundling and immediately running like `run-linux` does:
+
+```bash
+npx react-native build-linux         # writes dist/main.jsbundle
+```
+
+This is **not** self-contained, unlike the vite path. Metro deliberately
+keeps `@gtkx/*`, `react` and `yoga-layout` out of the bundle — they have to
+be the exact instances the Node+GTK host loads, not a second copy Metro
+inlines (see `packages/react-native-gtkx/src/metro/index.ts`,
+`HOST_MODULE_EXTERNALS`, for why). So running `dist/main.jsbundle` needs,
+on top of Node ≥24/GTK4/libadwaita, a real `node_modules` with
+`react-native-gtkx` installed and the app's `gtkx.config.ts` present at the
+working directory:
+
+```bash
+node node_modules/react-native-gtkx/dist/runner/host.js dist/main.jsbundle
+```
+
+(run from the app root — the config loader reads `gtkx.config.ts` from the
+current directory, exactly like `run-linux` itself). Any ordinary
+`npm install` of the app already has that `node_modules`; the difference
+from the vite path only matters when packaging for a machine that never
+ran one — see `scripts/build-deb.sh`'s Metro branch, which builds that
+closure itself: a fresh, isolated install of the locally-packed
+`react-native-gtkx` plus `gtkx codegen`, never a copy of a monorepo's own
+hoisted `node_modules` (which would prove nothing about what a real install
+needs).
+
+**Why not one self-contained binary?** gtkx's own tutorial builds one
+(`gtkx-org/gtkx examples/tutorial`: esbuild-bundle to CJS, then
+`node --experimental-sea-config` + postject injects it into a copy of the
+`node` binary itself — one executable, no separate Node install needed).
+Evaluated and deliberately not adopted here: every example this project
+ships today distributes as "Node + native addon" with a `nodejs` package
+dependency, and Node's SEA support is still explicitly experimental. Doing
+it for the Metro path alone would make the packaged examples inconsistent —
+three would need a system Node, one wouldn't, for no user-facing problem
+this release needs solved. A single-executable story is worth having, but
+applied uniformly across every example, not half-adopted under release
+pressure for one app.
 
 ## Examples in the repository
 
