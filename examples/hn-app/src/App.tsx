@@ -335,7 +335,7 @@ const TopStoriesScreen = ({
     })
   }, [navigation, refresh, query])
 
-  // Headless-proof hook for scripts/run-linux-headless-hnapp.sh — dev only.
+  // Headless-proof hook for scripts/run-linux-headless-hnapp.ts — dev only.
   // With HN_APP_PROOF=1 the app drives itself through the screenshot
   // sequence (no input devices under headless sway): scroll the list, push
   // a story with comments, go back. The console markers pace the script's
