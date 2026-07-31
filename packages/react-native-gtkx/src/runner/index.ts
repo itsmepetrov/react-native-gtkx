@@ -315,7 +315,7 @@ const buildLinux = async (
   args: BuildLinuxArgs,
 ): Promise<void> => {
   if (args.sea || args.standalone) {
-    ensureCodegenStore()
+    await ensureCodegenStore(config.root)
   }
   const output = args.bundleOutput ?? join(config.root, "dist", "main.jsbundle")
   mkdirSync(dirname(output), { recursive: true })
