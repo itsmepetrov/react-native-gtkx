@@ -128,11 +128,19 @@ test("every bundle-side bare import in src is host-provided", () => {
   // A bare specifier missing from HOST_MODULE_EXTERNALS gets bundled by
   // Metro, reaches host-only virtual modules (virtual:gtkx-config) and
   // breaks standalone apps — the @gtkx/react/internal regression. runner/,
-  // metro/ and vite/ are host-side and never enter the bundle; vitest/ and
-  // testing/ are test-time-only subpaths an app's own source never imports,
-  // so Metro never bundles them either.
+  // Host-side or test-time-only subpaths that never enter an app bundle:
+  // runner/, metro/ and vite/ drive the toolchain, mcp/ is the
+  // react-native-gtkx-mcp CLI (a separate process), and vitest/ and
+  // testing/ are imported only by an app's tests.
   const srcRoot = join(import.meta.dirname, "../../src")
-  const hostSide = new Set(["runner", "metro", "vite", "vitest", "testing"])
+  const hostSide = new Set([
+    "runner",
+    "metro",
+    "vite",
+    "vitest",
+    "testing",
+    "mcp",
+  ])
   const specifiers = new Set<string>()
   const visit = (dir: string): void => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
