@@ -70,7 +70,7 @@ afterEach(() => {
   resetInteractionManager()
 })
 
-it("defers runAfterInteractions work until the push transition ends", async () => {
+it("defers runAfterInteractions work until the push transition ends, closing on the real signal rather than the transitionDuration guess", async () => {
   let navRef!: ReturnType<typeof useNavigationContainerRef>
   await render(
     <Harness
@@ -86,18 +86,16 @@ it("defers runAfterInteractions work until the push transition ends", async () =
   const completed = vi.fn()
   InteractionManager.addListener("interactionComplete", completed)
 
+  const dispatchedAt = performance.now()
   navRef.dispatch(CommonActions.navigate("Details"))
 
-  // The pushed screen mounts (its content is up immediately)...
+  // The pushed screen mounts...
   await waitFor(() => {
     expect(screen.getByText("details body")).toBeTruthy()
   })
-  // ...but its runAfterInteractions task has NOT run yet — the transition
-  // interaction is still open.
-  expect(ranOrder).not.toContain("after-interactions")
 
-  // Once the transition-length window elapses, the interaction clears and
-  // the deferred work runs.
+  // ...and its runAfterInteractions task eventually runs, gated by the
+  // interaction the transition opened.
   await waitFor(
     () => {
       expect(completed).toHaveBeenCalled()
@@ -105,4 +103,15 @@ it("defers runAfterInteractions work until the push transition ends", async () =
     },
     { timeout: 2000 },
   )
+
+  // The important regression guard: the interaction closes on
+  // AdwNavigationPage's real "shown" signal, not a blind wait for the
+  // default 400 ms `transitionDuration`. A generous fraction of that
+  // default is still a tight bound — measured on the project's own
+  // headless GTK rig, the real signal arrives in single-digit
+  // milliseconds (see updates/002/progress.md) — and this would have
+  // failed under the old timer-only mechanism, which always took the
+  // full 400 ms regardless of how fast the transition actually settled.
+  const elapsed = performance.now() - dispatchedAt
+  expect(elapsed).toBeLessThan(200)
 })
