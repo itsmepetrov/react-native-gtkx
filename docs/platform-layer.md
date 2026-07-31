@@ -167,6 +167,27 @@ genuine `swaymsg` resize past the condition's threshold (see
 a throwaway app launched via `scripts/vm.sh app`). Treat it as untestable
 under headless sway today, not as broken.
 
+### The window and application AppRegistry built
+
+`useParentWindow` (the `Gtk.Window` ancestor), `useApplication` (the
+`Adw.Application` — `.sendNotification(id, notification)` is the common
+reason to reach it) and `quit` (the same function `AppRegistry` wires to a
+window's own close button) are re-exported from `react-native-gtkx/gtk`.
+None of these give you the window or application object ITSELF to build —
+`AppRegistry.runApplication` already did that — they let already-mounted
+code reach back into it, the same way `useBindSetting` needs a `Gtk.Window`
+to bind a `defaultWidth` property on:
+
+```tsx
+const window = useParentWindow()
+useBindSetting({
+  schema,
+  key: "window-width",
+  object: window,
+  property: "defaultWidth",
+})
+```
+
 ### GSettings
 
 `useSetting` and `useBindSetting` come straight from `@gtkx/react`, re-
