@@ -71,6 +71,16 @@ button and back gestures stay in sync with react-navigation state (the
 react-native-windows / native-stack model). Requires the optional peer
 `@react-navigation/native` (v8).
 
+`@react-navigation/native@8` itself peers on `react-native: "*"` (unlike
+`@react-navigation/core@8`, which has no react-native peer at all). If your
+app has no `react-native` package anywhere in its tree — a vite+gtkx app
+with no Metro side, exactly what `examples/gallery` demonstrates —
+`npm install` will print an unmet-peer-dependency warning for it. This is
+harmless: react-native-gtkx never imports anything from the `react-native`
+package, so nothing actually needs it at runtime; the warning is npm being
+strict about a peer range upstream declared loosely (`"*"` — any version
+satisfies it, npm just wants the package present at all).
+
 ```tsx
 import { NavigationContainer } from "@react-navigation/native"
 import { createStackNavigator } from "react-native-gtkx/navigation"
