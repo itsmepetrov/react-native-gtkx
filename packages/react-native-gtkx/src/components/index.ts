@@ -43,6 +43,38 @@ export {
   type ScrollViewHandle,
   type ScrollViewProps,
 } from "./scroll-view"
+export {
+  Circle,
+  Defs,
+  Ellipse,
+  G,
+  Line,
+  LinearGradient,
+  Path,
+  Polygon,
+  Polyline,
+  RadialGradient,
+  Rect,
+  Stop,
+  Svg,
+  type AnimatableNumber,
+  type CircleProps,
+  type DefsProps,
+  type EllipseProps,
+  type GProps,
+  type LinearGradientProps,
+  type LineProps,
+  type PathProps,
+  type PolygonProps,
+  type PolylineProps,
+  type RadialGradientProps,
+  type RectProps,
+  type StopProps,
+  type SvgFillRule,
+  type SvgLineCap,
+  type SvgLineJoin,
+  type SvgProps,
+} from "./svg/index"
 export { Switch, type SwitchProps } from "./switch"
 export { Text, type TextProps } from "./text"
 export { TextInput, type TextInputProps } from "./text-input"
