@@ -38,6 +38,13 @@ it("Adw.Breakpoint flips a target widget property natively, both directions", as
 
   const { container } = await render(
     <AdwBreakpointBin
+      // Required by Adwaita whenever a breakpoint is attached — see
+      // sidebar.tsx's own AdwBreakpointBin usage: this bin's size in the
+      // test is unrelated to the value, only the "does not have a minimum
+      // size" warning cares that it's set, and 1 (not 0) is what actually
+      // reaches GTK through the current @gtkx property diffing.
+      widthRequest={1}
+      heightRequest={1}
       breakpoints={
         <AdwBreakpoint
           ref={(instance) => {
