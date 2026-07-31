@@ -539,6 +539,12 @@ const SidebarNavigator = ({
                     // the dispatch above already covers an actual selection
                     // change, and calling it twice for one click would be a
                     // harmless but pointless duplicate dispatch.
+                    //
+                    // "fires on every click" is only true for rows GTK
+                    // considers ACTIVATABLE: gtk_list_box_activate() gates
+                    // the emission on gtk_list_box_row_get_activatable(),
+                    // so every row rendered below sets it explicitly. See
+                    // the comments there.
                     onRowActivated={showContentIfCollapsed}
                   >
                     {state.routes.map((route) => {
@@ -551,7 +557,15 @@ const SidebarNavigator = ({
                         // holds, and React Native content (the common case for
                         // a custom row) needs a real root to render at all.
                         return (
-                          <GtkListBoxRow key={route.key}>
+                          <GtkListBoxRow
+                            key={route.key}
+                            // GtkListBoxRow already defaults this to true;
+                            // spelled out because the collapsed reveal
+                            // DEPENDS on it (see onRowActivated above), and
+                            // a row silently losing row-activated is exactly
+                            // the bug this navigator shipped with.
+                            activatable
+                          >
                             <IntrinsicContent>
                               {options.sidebarRow()}
                             </IntrinsicContent>
@@ -568,7 +582,10 @@ const SidebarNavigator = ({
                       // paying it since.
                       if (!options.icon && !options.color && !options.count) {
                         return (
-                          <GtkListBoxRow key={route.key}>
+                          <GtkListBoxRow
+                            key={route.key}
+                            activatable
+                          >
                             <GtkLabel
                               label={titleOf(route.key, route.name)}
                               xalign={0}
@@ -584,6 +601,21 @@ const SidebarNavigator = ({
                         <AdwActionRow
                           key={route.key}
                           title={titleOf(route.key, route.name)}
+                          // AdwActionRow defaults GtkListBoxRow:activatable
+                          // to FALSE (verified, not assumed: a plain
+                          // GtkListBoxRow reports true in the same list,
+                          // this reports false), and GtkListBox only emits
+                          // row-activated for activatable rows. Without
+                          // this, clicking the row ALREADY selected did
+                          // nothing at all while collapsed: the state.index
+                          // effect cannot fire (state does not change) and
+                          // row-activated never reached the handler either,
+                          // so the focused section — the one a cold start
+                          // at a collapsed width lands on — was the single
+                          // section that could not be opened. Every row
+                          // must be openable, the already-selected one
+                          // included.
+                          activatable
                           prefix={
                             options.color ? (
                               <GtkBox

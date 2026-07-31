@@ -107,6 +107,102 @@ const Harness = () => (
   </NavigationContainer>
 )
 
+// Rows carrying an icon/color/count render as AdwActionRow rather than the
+// plain GtkListBoxRow the Harness above gets — which is where the reported
+// "the focused section cannot be opened" bug lived, so the tests for it use
+// this shape (examples/tasks-nav's shape) rather than the bare one.
+const RichHarness = ({ customRow }: { customRow?: boolean }) => (
+  <NavigationContainer>
+    <Sidebar.Navigator
+      sidebarTitle="Collapsible"
+      collapseWidth={500}
+    >
+      <Sidebar.Screen
+        name="first"
+        component={FirstScreen}
+        options={{
+          title: "First",
+          icon: "view-list-symbolic",
+          count: 3,
+          ...(customRow
+            ? { sidebarRow: () => <Text>custom first row</Text> }
+            : {}),
+        }}
+      />
+      <Sidebar.Screen
+        name="second"
+        component={SecondScreen}
+        options={{ title: "Second", icon: "starred-symbolic", count: 1 }}
+      />
+      <Sidebar.Screen
+        name="third"
+        component={SecondScreen}
+        options={{ title: "Third" }}
+      />
+    </Sidebar.Navigator>
+  </NavigationContainer>
+)
+
+it("keeps every sidebar row activatable, whatever it is rendered as", async () => {
+  // The precondition the collapsed reveal rides on, and the one this
+  // navigator silently lost: GtkListBox emits row-activated ONLY for rows
+  // where gtk_list_box_row_get_activatable() is true, and AdwActionRow —
+  // what a row with an icon/color/count renders as — defaults it to FALSE.
+  // A plain GtkListBoxRow defaults it to true, which is why examples/gallery
+  // (title-only rows) never showed the bug and examples/tasks-nav did.
+  const { container } = await render(<RichHarness customRow />)
+  const window = container as GtkNs.Window
+  await waitFor(() => {
+    expect(screen.getByText("first section body")).toBeTruthy()
+  })
+  const list = findListBox(window.getChild())!
+  // 0: a custom sidebarRow (plain GtkListBoxRow wrapper), 1: AdwActionRow
+  // (icon + count), 2: the compact title-only GtkListBoxRow.
+  for (const index of [0, 1, 2]) {
+    expect(list.getRowAtIndex(index)!.getActivatable()).toBe(true)
+  }
+})
+
+it("opens the already-focused section while collapsed, through GTK's own row activation", async () => {
+  // The reported bug, at the level a real click actually works at: rather
+  // than emitting row-activated on the list (which bypasses the very check
+  // that was failing), this goes through GtkListBoxRow::activate — the
+  // signal whose default handler calls gtk_list_box_select_and_activate(),
+  // the same internal path GtkListBox's click gesture takes, including the
+  // activatable gate. On a cold start at a collapsed width the FOCUSED row
+  // is the one already selected, so nothing else can reveal content for it:
+  // the state.index effect cannot fire (state does not change) and
+  // row-selected does not refire without a selection change.
+  const { container } = await render(<RichHarness />)
+  const window = container as GtkNs.Window
+  await waitFor(() => {
+    expect(screen.getByText("first section body")).toBeTruthy()
+  })
+  const splitView = findSplitView(window.getChild())!
+  const list = findListBox(window.getChild())!
+
+  window.setVisible(false)
+  window.setDefaultSize(400, 400)
+  window.present()
+  await waitFor(() => {
+    expect(splitView.getCollapsed()).toBe(true)
+  })
+  // A fresh collapse shows the sidebar, deliberately (see
+  // docs/research/navigation-extensibility.md) — the focused row is
+  // selected but its content is not on screen.
+  expect(splitView.getShowContent()).toBe(false)
+  const focusedRow = list.getRowAtIndex(0)!
+  expect(list.getSelectedRow()).toBe(focusedRow)
+
+  await fireEvent(focusedRow, "activate")
+  await waitFor(() => {
+    expect(splitView.getShowContent()).toBe(true)
+  })
+  // Still the same route: this reveals a pane, it does not navigate.
+  expect(list.getSelectedRow()).toBe(focusedRow)
+  expect(screen.getByText("first section body")).toBeTruthy()
+})
+
 it("collapses natively below collapseWidth and expands back above it", async () => {
   const { container } = await render(<Harness />)
   const window = container as GtkNs.Window
