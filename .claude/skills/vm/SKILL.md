@@ -7,7 +7,7 @@ description: Run Linux-only work (typecheck, GTK tests, build:dist, launching ap
 
 react-native-gtkx is Linux-only at runtime: `typecheck`, `test:gtk`,
 `build:dist` and anything that opens a window need the codegen store and
-GTK — on macOS all of that runs in a UTM VM through `scripts/vm.sh`.
+GTK — on macOS all of that runs in a UTM VM through `scripts/vm.ts`.
 The VM address comes from `VM_HOST` (put the export into
 `scripts/local/env.sh`, gitignored). One-time VM setup: CONTRIBUTING.md.
 
@@ -15,13 +15,13 @@ The VM address comes from `VM_HOST` (put the export into
 
 | Command | Purpose |
 | --- | --- |
-| `scripts/vm.sh sync` | rsync the repo into the VM (excludes node_modules, dist, logs) |
-| `scripts/vm.sh run '<cmd>'` | run a shell command in the VM repo dir |
-| `scripts/vm.sh app examples/<name>` | launch a BUILT vite-path app into the VM's GNOME session |
-| `scripts/vm.sh app-stop` | stop it |
+| `node scripts/vm.ts sync` | rsync the repo into the VM (excludes node_modules, dist, logs) |
+| `node scripts/vm.ts run '<cmd>'` | run a shell command in the VM repo dir |
+| `node scripts/vm.ts app examples/<name>` | launch a BUILT vite-path app into the VM's GNOME session |
+| `node scripts/vm.ts app-stop` | stop it |
 
 Quoting over ssh is fragile — for anything beyond a one-liner, write a
-script file, sync, and `vm.sh run 'bash path/to/script.sh'`.
+script file, sync, and `vm.ts run 'bash path/to/script.sh'`.
 
 ## The critical quirks
 
@@ -35,9 +35,9 @@ script file, sync, and `vm.sh run 'bash path/to/script.sh'`.
 
 ## Headless proofs (no desktop session needed)
 
-- `bash scripts/run-linux-headless.sh examples/rn-app /tmp/shot.png` —
+- `node scripts/run-linux-headless.ts examples/rn-app /tmp/shot.png` —
   full `react-native run-linux` under headless sway + a screenshot;
-- `bash scripts/gtkx-dev-headless.sh` — the vite dev path: edits a gallery
+- `node scripts/gtkx-dev-headless.ts` — the vite dev path: edits a gallery
   component on the live app and asserts a Fast Refresh in the log;
 - `bash spike/rn-platform/run-dev-headless.sh` /
   `run-dev-error-probe.sh` — Metro dev-mode regressions (HMR applies,
@@ -47,7 +47,7 @@ Screenshots land in the VM's /tmp — `scp` them back to inspect.
 
 ## Launching into the user's desktop session
 
-`vm.sh app` covers built vite-path examples. For anything else use the
+`vm.ts app` covers built vite-path examples. For anything else use the
 same systemd-run pattern (detaches cleanly; a plain nohup keeps ssh open):
 
 ```bash
@@ -78,6 +78,6 @@ YDOTOOL_SOCKET=/tmp/.ydotool.sock ydotool key 56:1 99:1 99:0 56:0   # Alt+Print
 
 Needs `ydotool` installed and passwordless sudo in the VM (a dev sandbox).
 For live CPU bars in the monitor example run `yes > /dev/null` workers
-during the shot. `bash scripts/gallery-shots-vm.sh` shoots every gallery
+during the shot. `node scripts/gallery-shots-vm.ts` shoots every gallery
 section this way for docs/shots/gallery/. For a shot without the outer
 shadow, crop to the bounding box of alpha ≥ 250 pixels afterwards.
