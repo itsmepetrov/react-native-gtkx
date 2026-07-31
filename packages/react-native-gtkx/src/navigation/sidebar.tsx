@@ -378,6 +378,11 @@ const SidebarNavigator = ({
   const splitView = (
     <AdwNavigationSplitView
       ref={splitViewRef}
+      // Adwaita's own defaults for a sidebar of rows. Set explicitly
+      // because they are what keeps the sidebar's width off the window's
+      // minimum now that the scrolled window no longer propagates it.
+      minSidebarWidth={180}
+      maxSidebarWidth={280}
       onNotifyShowContent={handleShowContentChanged}
       sidebar={
         <AdwNavigationPage
@@ -388,11 +393,19 @@ const SidebarNavigator = ({
             {/* The list must not dictate the window minimum: the sidebar
                 scrolls when the window is shorter than its rows — the
                 Adwaita sidebar pattern (and RN semantics: scrolling is
-                explicit, never the window's). */}
-            <GtkScrolledWindow
-              hscrollbarPolicy={Gtk.PolicyType.NEVER}
-              propagateNaturalWidth
-            >
+                explicit, never the window's).
+
+                Deliberately NOT propagateNaturalWidth, which does the
+                opposite on the other axis: it makes the scrolled window
+                request the widest ROW's width, so one long title becomes a
+                floor the whole window cannot be resized below (seen as
+                "AdwNavigationSplitView exceeds AdwBreakpointBin width:
+                requested 469 px, 360 px available" in the journal, and felt
+                as a window that stops shrinking early). The split view sizes
+                the sidebar itself — see minSidebarWidth/maxSidebarWidth
+                below — which is the Adwaita answer and leaves long titles to
+                ellipsize instead of pushing the window around. */}
+            <GtkScrolledWindow hscrollbarPolicy={Gtk.PolicyType.NEVER}>
               <GtkListBox
                 ref={listRef}
                 cssClasses={["navigation-sidebar"]}
