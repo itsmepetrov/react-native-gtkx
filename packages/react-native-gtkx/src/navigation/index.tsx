@@ -29,7 +29,7 @@ import {
   type StackNavigationState,
   type TypedNavigator,
 } from "@react-navigation/native"
-import { useEffect, type ComponentType, type ReactNode } from "react"
+import { useEffect, useRef, type ComponentType, type ReactNode } from "react"
 import { getActiveChrome } from "../components/app-registry"
 import { AdwHeaderBar, AdwToolbarView } from "../adw"
 import {
@@ -70,6 +70,27 @@ export type StackNavigationOptions = {
   gestureEnabled?: boolean
 }
 
+// Matches @react-navigation/stack's and @react-navigation/native-stack's
+// own NativeStackNavigationEventMap/StackNavigationEventMap exactly (both
+// verified against their v8 source — this package is not a dependency, so
+// docs cannot be trusted here, see docs/api.md and 007.md). `closing` is
+// false for a route becoming visible (pushed) and true for a route leaving
+// the visible stack (popped); a route whose visibility does not change
+// (e.g. the screen covered by a push) never receives either event — an app
+// that listens for `transitionEnd` gets the identical event name and
+// payload shape it would get on iOS or Android.
+export type StackNavigationEventMap = {
+  /** Fires when a push/pop/replace transition starts, once per involved
+   *  route (not once per gesture or user tap). */
+  transitionStart: { data: { closing: boolean } }
+  /** Fires when the transition settles. Timer-based (see docs/api.md):
+   *  Adwaita has no real transition-end signal, so this is Adwaita's
+   *  documented transition length after the start, not observed
+   *  completion. Native pops (back button, Escape, back gesture) do not
+   *  fire this at all today — see docs/api.md. */
+  transitionEnd: { data: { closing: boolean } }
+}
+
 type StackDescriptor = {
   options: StackNavigationOptions
   render: () => ReactNode
@@ -94,12 +115,24 @@ const StackNavigator = ({
       Record<string, unknown>,
       Record<string, () => void>,
       StackNavigationOptions,
-      Record<string, unknown>
+      StackNavigationEventMap
     >(StackRouter, {
       initialRouteName,
       screenOptions,
       children,
     })
+
+  // React Navigation 8: `state.routes` is no longer just the visible stack —
+  // it is active routes followed by retained routes (closing, kept mounted
+  // for `inactiveBehavior`) and preloaded routes (`navigation.preload()`,
+  // not yet navigated to), all concatenated, with the focused/visible tail
+  // ending at `state.index` (see StackRouter's `getStateWithRoutes`: `routes:
+  // activeRoutes.concat(retainedRoutes, preloadedRoutes)`, `index:
+  // activeRoutes.length - 1`). Handing the whole array to NavigationStack
+  // would push a preloaded screen onto the widget as if it were a real page
+  // the user navigated to. Only the active slice is the visible stack.
+  const visibleRoutes = state.routes.slice(0, state.index + 1)
+  const visibleKeys = visibleRoutes.map((route) => route.key)
 
   useEffect(() => {
     for (const route of state.routes) {
@@ -136,23 +169,137 @@ const StackNavigator = ({
     // reporting the animation we asked for. Nothing to do.
   }
 
-  // React Navigation 8: `state.routes` is no longer just the visible stack —
-  // it is active routes followed by retained routes (closing, kept mounted
-  // for `inactiveBehavior`) and preloaded routes (`navigation.preload()`,
-  // not yet navigated to), all concatenated, with the focused/visible tail
-  // ending at `state.index` (see StackRouter's `getStateWithRoutes`: `routes:
-  // activeRoutes.concat(retainedRoutes, preloadedRoutes)`, `index:
-  // activeRoutes.length - 1`). Handing the whole array to NavigationStack
-  // would push a preloaded screen onto the widget as if it were a real page
-  // the user navigated to. Only the active slice is the visible stack.
-  const visibleRoutes = state.routes.slice(0, state.index + 1)
+  // transitionStart/transitionEnd: translates NavigationStack's primitive
+  // callbacks into react-navigation's own per-route events, matching
+  // @react-navigation/stack and @react-navigation/native-stack's v8
+  // behavior byte for byte (verified against their source, not docs — see
+  // 007.md): a route that just became visible fires `closing: false`, a
+  // route that just left the visible stack fires `closing: true`, and a
+  // route whose visibility did not change (e.g. covered by a push) gets
+  // neither event.
+  //
+  // The start and end sides deliberately use TWO DIFFERENT primitive
+  // signals, not the same onTransitionStart/onTransitionEnd pair for both:
+  //
+  // - transitionStart (both directions) rides onTransitionStart, a
+  //   view-level "a transition just began" signal with no per-route
+  //   identity — the adapter supplies that identity itself by diffing
+  //   visibleKeys against the previous render's visible keys.
+  // - transitionEnd for an OPENING route also rides the view-level,
+  //   timer-based onTransitionEnd (Adwaita has no real transition-end
+  //   signal — see docs/api.md): the pushed screen stays mounted
+  //   indefinitely once it is the active page, so nothing about waiting
+  //   out the fixed transitionDuration is unsafe here.
+  // - transitionEnd for a CLOSING route rides onPageClosed instead, fired
+  //   PER TAG when that page's exit actually finishes (a real GTK
+  //   "hidden" signal when available, the primitive's own timer as
+  //   fallback). This was not a style choice: routing the closing side
+  //   through the generic view-level timer was tried first and is wrong
+  //   whenever the real close finishes before the fixed transitionDuration
+  //   default (guaranteed in headless test environments with animations
+  //   disabled, and possible on a real desktop too) — the closing screen's
+  //   React component has already unmounted (and unsubscribed its
+  //   listeners) by the time the generic, one-size-fits-all timer gets
+  //   around to firing, so the event never reaches anyone. onPageClosed
+  //   fires synchronously before React commits that unmount, so the
+  //   listener is still there to receive it.
+  //
+  // previousVisibleKeysRef is compared by CONTENT, not a call-count flag:
+  // NavigationStack's sync effect can call beginTransition() (hence
+  // onTransitionStart) more than once for one state update — e.g. popping
+  // back past two routes and pushing two new ones in the same dispatch
+  // calls it three times — and every one of those calls closes over the
+  // SAME visibleKeys for this render. Diffing against the ref and only
+  // then updating it makes every call after the first a no-op (the ref
+  // already equals visibleKeys), without a manual "already handling a
+  // transition" flag that would also incorrectly swallow a second,
+  // genuinely separate transition starting before the first one settles.
+  const previousVisibleKeysRef = useRef<string[]>(visibleKeys)
+  const pendingOpeningEndRef = useRef<string[]>([])
+  // Tags this adapter itself put in flight via transitionStart(closing:
+  // true) — NOT every tag onPageClosed ever reports. A native pop (back
+  // button, Escape, back gesture) also eventually drops its tag through
+  // the exact same primitive mechanism, but never called beginTransition()
+  // (see the primitive: a native pop's own handlePopped reconciles
+  // syncedRef directly, so the sync effect finds nothing left to push or
+  // pop once react-navigation's state catches up) — so it never got a
+  // transitionStart either. Without this guard, handlePageClosed would
+  // emit a transitionEnd with no matching transitionStart for every native
+  // pop, which is worse than emitting neither: a listener would see an
+  // end event out of nowhere. Documented as Known limitation #2 in 007.md
+  // — native pops fire neither event today.
+  const pendingClosingRef = useRef<Set<string>>(new Set())
+
+  const emitTransitionEvent = (
+    type: "transitionStart" | "transitionEnd",
+    keys: readonly string[],
+    closing: boolean,
+  ): void => {
+    for (const key of keys) {
+      navigation.emit({ type, data: { closing }, target: key })
+    }
+  }
+
+  const handleTransitionStart = (): void => {
+    const previous = previousVisibleKeysRef.current
+    if (
+      previous.length === visibleKeys.length &&
+      previous.every((key, index) => key === visibleKeys[index])
+    ) {
+      // A duplicate beginTransition() call for the same commit (see
+      // above) — already diffed by an earlier call this render.
+      return
+    }
+    const opening = visibleKeys.filter((key) => !previous.includes(key))
+    const closing = previous.filter((key) => !visibleKeys.includes(key))
+    previousVisibleKeysRef.current = visibleKeys
+    pendingOpeningEndRef.current.push(...opening)
+    for (const key of closing) {
+      pendingClosingRef.current.add(key)
+    }
+    emitTransitionEvent("transitionStart", opening, false)
+    emitTransitionEvent("transitionStart", closing, true)
+  }
+
+  // Drains whatever opening keys are pending rather than trusting call
+  // count, for the same reason handleTransitionStart diffs by content: a
+  // compound update's several onTransitionEnd calls (one per
+  // beginTransition() above) all land at essentially the same moment, so
+  // the first one emits everything queued and the rest find nothing left
+  // to drain. Closing keys are NOT handled here — see handlePageClosed.
+  const handleTransitionEnd = (): void => {
+    const opening = pendingOpeningEndRef.current
+    if (opening.length === 0) {
+      return
+    }
+    pendingOpeningEndRef.current = []
+    emitTransitionEvent("transitionEnd", opening, false)
+  }
+
+  const handlePageClosed = (tag: string): void => {
+    if (!pendingClosingRef.current.has(tag)) {
+      // Not a tag this adapter put in flight (a native pop, or a stray
+      // call) — no transitionStart was ever emitted for it, so no
+      // transitionEnd either.
+      return
+    }
+    pendingClosingRef.current.delete(tag)
+    navigation.emit({
+      type: "transitionEnd",
+      data: { closing: true },
+      target: tag,
+    })
+  }
 
   return (
     <NavigationContent>
       <StackView
-        routeKeys={visibleRoutes.map((route) => route.key)}
+        routeKeys={visibleKeys}
         descriptors={descriptors}
         onPopped={handlePopped}
+        onTransitionStart={handleTransitionStart}
+        onTransitionEnd={handleTransitionEnd}
+        onPageClosed={handlePageClosed}
       />
     </NavigationContent>
   )
@@ -162,6 +309,9 @@ type StackViewProps = {
   routeKeys: string[]
   descriptors: Record<string, unknown>
   onPopped: (tag: string) => void
+  onTransitionStart: () => void
+  onTransitionEnd: () => void
+  onPageClosed: (tag: string) => void
 }
 
 // The page list lives inside NavigationContent so it can read the
@@ -172,12 +322,22 @@ type StackViewProps = {
 // programmatic goBack still pops (once the app lifts the prevention, e.g.
 // after its own confirmation dialog). This is why a native pop can never
 // race react-navigation state for these routes.
-const StackView = ({ routeKeys, descriptors, onPopped }: StackViewProps) => {
+const StackView = ({
+  routeKeys,
+  descriptors,
+  onPopped,
+  onTransitionStart,
+  onTransitionEnd,
+  onPageClosed,
+}: StackViewProps) => {
   const { preventedRoutes } = usePreventRemoveContext()
   return (
     <NavigationStack
       stack={routeKeys}
       onPopped={onPopped}
+      onTransitionStart={onTransitionStart}
+      onTransitionEnd={onTransitionEnd}
+      onPageClosed={onPageClosed}
     >
       {routeKeys.map((key) => {
         const descriptor = descriptors[key] as StackDescriptor | undefined
@@ -283,7 +443,8 @@ export type StackNavigationHelpers<
   ParamList,
   RouteName,
   StackNavigationState<ParamList>,
-  StackNavigationOptions
+  StackNavigationOptions,
+  StackNavigationEventMap
 >
 
 export type StackScreenProps<
@@ -312,7 +473,7 @@ interface StackTypeBag extends NavigatorTypeBagBase {
   ParamList: ParamListBase
   State: StackNavigationState<ParamListBase>
   ScreenOptions: StackNavigationOptions
-  EventMap: Record<string, unknown>
+  EventMap: StackNavigationEventMap
   ActionHelpers: Record<string, () => void>
   Navigator: typeof StackNavigator
 }
