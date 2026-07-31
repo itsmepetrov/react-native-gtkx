@@ -239,6 +239,44 @@ patterns in context. Query roles with `Gtk.AccessibleRole` enums (see
 docs/gtkx-rc2-notes.md for the live workarounds still baked into that
 recipe).
 
+## MCP server for agents
+
+An agent working inside a project that depends on react-native-gtkx can
+ask the library about itself instead of guessing: `react-native-gtkx-mcp`
+is a [Model Context Protocol](https://modelcontextprotocol.io) server that
+ships as a `bin` on this package. Register it in `.mcp.json` (Claude
+Code, project-level) or the equivalent config of any MCP-compatible
+client:
+
+```json
+{
+  "mcpServers": {
+    "react-native-gtkx": { "command": "npx", "args": ["react-native-gtkx-mcp"] }
+  }
+}
+```
+
+Running it as `npx react-native-gtkx-mcp` from the project root resolves
+the locally installed `node_modules/.bin` entry — no separate install,
+and it always answers for the exact react-native-gtkx version the
+project actually has.
+
+Three tools:
+
+- `rn_gtkx_list_surface` — browse the surface without knowing a name
+  first (portable components/APIs, gtk/adw widgets, common) with counts;
+- `rn_gtkx_describe_component` — the one to reach for first: does a
+  component/widget exist, which subpath it is exported from, what GTK
+  widget backs it, what differs from React Native, whether a gtk/adw
+  widget is wrapped (takes `style`/`onLayout`) or raw;
+- `rn_gtkx_search_docs` — free-text fallback for symptoms and known-issue
+  questions the other two cannot answer by name.
+
+It works without GTK installed — plain Node, no `@gtkx/*` import
+anywhere in it, reading only the package's own bundled docs/manifest data.
+That matters in practice: the agent is often reading the project from a
+Mac, with no GTK toolchain around at all.
+
 ## Next steps
 
 - [docs/api.md](api.md) — the entire v1 surface and differences from RN;
