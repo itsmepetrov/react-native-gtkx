@@ -251,19 +251,24 @@ closure itself: a fresh, isolated install of the locally-packed
 hoisted `node_modules` (which would prove nothing about what a real install
 needs).
 
+That is the **default** artifact, and it is the only one that carries the
+`node_modules` caveat. `--standalone` below removes it entirely: the same
+Metro build, emitted as one self-contained file that runs on a system Node
+with nothing installed beside it — the vite path's shape, on the Metro
+path.
+
 ### One file (Metro path)
 
-The Metro artifact above is the worse of the two — a jsbundle plus a
-runtime `node_modules` tree — so it's the one that got the packaging work.
-`build-linux` produces three artifacts, cheapest to heaviest, and which
-one you want is a question about the delivery channel, not about the
-build:
+`build-linux` produces three artifacts. Which one you want is a question
+about the delivery channel, not about the build — they share the same
+Metro step and differ only in how much of the runtime travels with the
+app:
 
 | Flag           | Artifact                   | Needs installed                    | Size (`hn-app`, linux-arm64) |
 | -------------- | -------------------------- | ---------------------------------- | ---------------------------- |
-| _(none)_       | `dist/main.jsbundle`       | a `node_modules` tree **and** Node | ~1 MB + the tree             |
-| `--standalone` | `dist/<name>.cjs`          | Node only (`Depends: nodejs`)      | ~5 MB                        |
-| `--sea`        | `dist/<name>` (executable) | nothing at all                     | ~122 MB                      |
+| _(none)_       | `dist/main.jsbundle`       | a `node_modules` tree **and** Node | 0.4 MB + the tree            |
+| `--standalone` | `dist/<name>.cjs`          | Node only (`Depends: nodejs`)      | 6.9 MB                       |
+| `--sea`        | `dist/<name>` (executable) | nothing at all                     | 122 MB                       |
 
 ```bash
 npx react-native build-linux --standalone     # in the app root
@@ -278,13 +283,15 @@ file next to it. `--sea-output <path>` overrides where it goes; the
 default is `dist/<package name>` with any npm scope stripped (plus `.cjs`
 for `--standalone`).
 
-**Pick `--standalone` for anything installed through a package manager** —
-it is the same artifact shape the vite path already ships in its `.deb`
-(a bundle plus a `nodejs` dependency), and the ~120 MB difference is
-nothing but the Node binary the system already has. **Pick `--sea` for
-"download this one file and run it"**, where nothing can be assumed to be
-installed. They are not competing implementations: `--sea` is
-`--standalone` with a copy of Node wrapped around it.
+**Pick `--standalone` for anything installed through a package manager.**
+It is the same shape gtkx's own packaging produces and the same shape the
+vite path already ships in its `.deb` — a bundle plus a `nodejs`
+dependency — and it is the lightest of the three by any measure that
+counts: the plain jsbundle looks smaller only because its `node_modules`
+tree is not weighed. **Pick `--sea` for "download this one file and run
+it"**, where nothing can be assumed to be installed. They are not
+competing implementations: `--sea` is `--standalone` with a copy of Node
+wrapped around it, and that copy is the entire 115 MB between them.
 
 The native addon (`@gtkx/native-*.node`, a real `dlopen`ed library) cannot
 be JavaScript, so both artifacts carry it as bytes — a SEA asset in the
