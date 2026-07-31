@@ -62,6 +62,7 @@ Styles (which keys go where and what is unsupported) — [style system table](..
 6. **Animations never auto-stop**: the desktop "reduce animations" hint is not applied automatically (GTK-side animations are kept on to match `Animated`, which runs on its own timers) — honoring reduced motion stays an app-level opt-in, as in RN;
 7. **Lists are windowed like RN's**: FlatList/SectionList mount only the rows around the viewport (prefix-sum offsets, `estimatedItemSize` refined by real measurements or exact `getItemLayout`); sticky headers translate the REAL widget (no duplicate) and `inverted` follows the RN chat contract — `contentOffset` counts from the end where `data[0]` renders. The one RefreshControl compromise: desktop has no pull gesture, so `refreshing`/`onRefresh` are API-compatible but the trigger is app chrome (a button/shortcut);
 8. The package ships compiled (`dist/`: ESM + `.d.ts` alongside, sources embedded in the maps); consumers — Metro (`react-native-gtkx/metro` preset) and vite (preset) — both consume the built output. Requires Node ≥ 24 (the gtkx runtime floor; the run-linux host also relies on `module.registerHooks`).
+9. **Pre-commit hooks regenerate derived data**: editing this file (or the other generator inputs) and forgetting to run `scripts/generate-mcp-data.mjs` no longer fails CI — the pre-commit hook regenerates `packages/react-native-gtkx/src/mcp/data/generated.ts` and stages it for you.
 
 ## Navigation (`react-native-gtkx/navigation`)
 

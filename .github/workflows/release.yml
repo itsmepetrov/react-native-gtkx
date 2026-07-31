@@ -23,6 +23,7 @@ jobs:
     container: ubuntu:26.04
     env:
       DEBIAN_FRONTEND: noninteractive
+      HUSKY: 0
     steps:
       - name: System dependencies
         run: |
