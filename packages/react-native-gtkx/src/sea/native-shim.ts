@@ -4,13 +4,15 @@
 // a Node SEA is a V8 code cache blob, and dlopen needs a real file on a
 // real filesystem, not bytes inside the executable.
 //
-// Node's SEA "assets" mechanism embeds arbitrary bytes in the blob and
-// hands them back through node:sea at runtime. This plugin swaps every
-// static import of a given specifier (in practice, "@gtkx/native" — see
-// ../sea/bundle.ts) for a shim that extracts the embedded asset to a
-// per-user cache directory (content-hash-keyed, so repeat launches reuse
-// the same file instead of re-extracting ~1.6MB every start) and requires
-// it from there.
+// So it has to be carried as bytes and written back to disk before use.
+// This plugin swaps every import of a given specifier (in practice,
+// "@gtkx/native" — see ../sea/bundle.ts) for a shim that does exactly
+// that: extract to a per-user cache directory (content-hash-keyed, so
+// repeat launches reuse the file instead of re-extracting ~1.6 MB every
+// start) and dlopen it from there. Where the bytes come from is the one
+// difference between the two single-file artifacts — Node's SEA "assets"
+// mechanism for the executable, a base64 literal for the standalone .cjs;
+// see {@link NativeAddonSource}.
 //
 // Cache location: XDG_CACHE_HOME (or ~/.cache) first, os.tmpdir() as a
 // fallback for a read-only $HOME. Deliberately NOT the SEA executable's
@@ -26,14 +28,40 @@ import type { Plugin } from "rolldown"
 
 export const NATIVE_ASSET_KEY = "gtkx-native.node"
 
-const shimSource = (assetKey: string): string => `
-const { getAsset } = require("node:sea");
+/**
+ * Where the shim gets the addon's bytes from — the only difference between
+ * the two single-file artifacts:
+ *
+ * - `"sea-asset"`: from the SEA blob, via node:sea. Only works inside a
+ *   real single executable.
+ * - `"inline"`: from a base64 literal in the bundle itself, so the CJS
+ *   file is self-contained under a plain `node app.cjs` — the same
+ *   artifact minus the embedded Node runtime. Costs ~4/3 of the addon's
+ *   size in source text (the addon is ~1.6 MB) and is parsed once at
+ *   startup; the extraction and dlopen below are shared.
+ */
+export type NativeAddonSource = "sea-asset" | "inline"
+
+const bytesExpression = (
+  source: NativeAddonSource,
+  assetKey: string,
+): string =>
+  source === "sea-asset"
+    ? `Buffer.from(require("node:sea").getAsset(${JSON.stringify(assetKey)}))`
+    : `Buffer.from(__gtkxNativeBase64, "base64")`
+
+const shimSource = (
+  source: NativeAddonSource,
+  assetKey: string,
+  base64: string,
+): string => `
 const { createHash } = require("node:crypto");
 const { mkdirSync, existsSync, writeFileSync, renameSync } = require("node:fs");
 const { join } = require("node:path");
 const os = require("node:os");
+${source === "inline" ? `const __gtkxNativeBase64 = ${JSON.stringify(base64)};` : ""}
 
-const bytes = Buffer.from(getAsset(${JSON.stringify(assetKey)}));
+const bytes = ${bytesExpression(source, assetKey)};
 const hash = createHash("sha256").update(bytes).digest("hex").slice(0, 16);
 const fileName = "native-" + hash + ".node";
 
@@ -73,7 +101,9 @@ if (!target) {
 // restriction doesn't apply to process.dlopen(), the lower-level
 // primitive require() itself uses for ".node" files (Module._extensions
 // [".node"]) — it works on any real path, which is exactly what makes
-// this shim work at all.
+// this shim work at all. The "inline" build could use a plain require()
+// here, but shares dlopen() rather than branching: one code path that is
+// proven by both artifacts beats two, one of which is rarely exercised.
 const nativeModule = { exports: {} };
 process.dlopen(nativeModule, target);
 // The vite path's own build (dist/bundle.js, gtkx's CLI plugin) calls
@@ -90,6 +120,19 @@ nativeModule.exports.init();
 module.exports = nativeModule.exports;
 `
 
+export type NativeAddonShimOptions = {
+  /** The bare specifier to replace, in practice "@gtkx/native". */
+  specifier: string
+  /** The app root — the shim's id lives here, see above. */
+  appRoot: string
+  /** Where the addon's bytes come from at runtime. */
+  source: NativeAddonSource
+  /** SEA asset key; unused when `source` is "inline". */
+  assetKey?: string
+  /** The addon's bytes; required when `source` is "inline". */
+  addonBytes?: Buffer
+}
+
 /**
  * Intercepts every import/require of `specifier` (an exact bare module
  * specifier, e.g. "@gtkx/native") and replaces it with the extraction shim
@@ -103,14 +146,21 @@ module.exports = nativeModule.exports;
  * specifier inside it resolve normally.
  */
 export const nativeAddonShimPlugin = (
-  specifier: string,
-  appRoot: string,
-  assetKey: string = NATIVE_ASSET_KEY,
+  options: NativeAddonShimOptions,
 ): Plugin => {
+  const { specifier, appRoot, source } = options
+  if (source === "inline" && !options.addonBytes) {
+    throw new Error('the "inline" native addon source needs addonBytes')
+  }
   const shimId = join(appRoot, "__gtkx-sea-native-shim.cjs")
+  const contents = shimSource(
+    source,
+    options.assetKey ?? NATIVE_ASSET_KEY,
+    options.addonBytes?.toString("base64") ?? "",
+  )
   return {
     name: "gtkx-native-addon-shim",
-    resolveId: (source) => (source === specifier ? shimId : null),
-    load: (id) => (id === shimId ? shimSource(assetKey) : null),
+    resolveId: (id) => (id === specifier ? shimId : null),
+    load: (id) => (id === shimId ? contents : null),
   }
 }

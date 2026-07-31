@@ -53,6 +53,30 @@ const run = (command: string, args: string[]): void => {
 }
 
 /**
+ * Produces the middle artifact: one self-contained CJS file with the app,
+ * its whole node_modules closure and the native addon inlined, run by a
+ * system `node`. Everything the SEA is except the embedded Node runtime —
+ * so ~120 MB smaller, at the cost of a `nodejs` dependency to declare.
+ * Returns its size in bytes.
+ */
+export const bundleStandalone = async (options: {
+  appRoot: string
+  jsbundlePath: string
+  outFile: string
+}): Promise<number> => {
+  const { appRoot, jsbundlePath, outFile } = options
+  mkdirSync(dirname(outFile), { recursive: true })
+  console.warn("[react-native-gtkx] bundling a standalone script…")
+  await bundleMetroSea({
+    appRoot,
+    jsbundlePath,
+    outFile,
+    nativeAddonSource: "inline",
+  })
+  return statSync(outFile).size
+}
+
+/**
  * Produces a single executable at {@link AssembleSeaOptions.outFile} and
  * returns its size in bytes. Requires network access on first run unless
  * postject is already in the npx cache.

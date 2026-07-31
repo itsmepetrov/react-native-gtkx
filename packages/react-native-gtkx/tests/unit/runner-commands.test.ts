@@ -25,21 +25,24 @@ test("registers run-linux and build-linux", () => {
   ])
 })
 
-test("build-linux offers the single-executable flags", () => {
+test("build-linux offers all three distribution artifacts", () => {
   expect(optionNames("build-linux")).toEqual([
     "--entry-file",
     "--bundle-output",
+    "--standalone",
     "--sea",
     "--sea-output",
   ])
 })
 
-test("--sea is opt-in, not a default", () => {
-  const sea = commandNamed("build-linux").options.find(
-    (option) => option.name === "--sea",
-  )
-  expect(sea).toBeDefined()
-  expect(sea).not.toHaveProperty("default")
+test("--standalone and --sea are opt-in, not defaults", () => {
+  for (const name of ["--standalone", "--sea"]) {
+    const option = commandNamed("build-linux").options.find(
+      (entry) => entry.name === name,
+    )
+    expect(option).toBeDefined()
+    expect(option).not.toHaveProperty("default")
+  }
 })
 
 test("run-linux keeps its dev-server flags", () => {

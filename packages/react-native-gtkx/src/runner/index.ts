@@ -27,6 +27,7 @@ type RunLinuxArgs = {
 type BuildLinuxArgs = {
   entryFile: string
   bundleOutput?: string
+  standalone?: boolean
   sea?: boolean
   seaOutput?: string
 }
@@ -244,38 +245,57 @@ const appBinaryName = (root: string): string => {
 // ../metro's HOST_MODULE_EXTERNALS). A machine that only builds never needs
 // GTK dev headers installed.
 //
-// --sea is the exception: it inlines "virtual:gtkx-config", which re-exports
-// @gtkx/jsx/metadata — a codegen product — so a SEA build DOES need the
-// store, and therefore GTK dev headers. Only that path ensures it.
+// --standalone and --sea are the exception: both inline
+// "virtual:gtkx-config", which re-exports @gtkx/jsx/metadata — a codegen
+// product — so they DO need the store, and therefore GTK dev headers.
+// Only those paths ensure it.
+//
+// The three artifacts, cheapest to heaviest, are deliberately one command
+// with flags rather than three commands: they share the Metro bundle step,
+// and the choice between them is a distribution question, not a different
+// build.
+//   (default)     main.jsbundle  + a runtime node_modules + a system node
+//   --standalone  one .cjs file, no node_modules, + a system node
+//   --sea         one executable, nothing preinstalled at all
 const buildLinux = async (
   _argv: string[],
   config: CliConfig,
   args: BuildLinuxArgs,
 ): Promise<void> => {
-  if (args.sea) {
+  if (args.sea || args.standalone) {
     ensureCodegenStore()
   }
   const output = args.bundleOutput ?? join(config.root, "dist", "main.jsbundle")
   mkdirSync(dirname(output), { recursive: true })
   bundle(config.root, args.entryFile, output)
   console.warn(`[react-native-gtkx] wrote the release bundle to ${output}`)
-  if (!args.sea) {
+  if (!args.sea && !args.standalone) {
     return
   }
+  const name = appBinaryName(config.root)
   const seaOutput =
-    args.seaOutput ?? join(config.root, "dist", appBinaryName(config.root))
-  // Dynamically imported so the esbuild dependency is never loaded — nor
-  // required to exist — on the ordinary jsbundle path.
-  const { assembleSea } = await import("../sea/assemble.js")
-  const bytes = await assembleSea({
-    appRoot: config.root,
-    jsbundlePath: output,
-    outFile: seaOutput,
-  })
+    args.seaOutput ?? join(config.root, "dist", args.sea ? name : `${name}.cjs`)
+  // Dynamically imported so the bundler is never loaded on the ordinary
+  // jsbundle path.
+  const { assembleSea, bundleStandalone } = await import("../sea/assemble.js")
+  const bytes = args.sea
+    ? await assembleSea({
+        appRoot: config.root,
+        jsbundlePath: output,
+        outFile: seaOutput,
+      })
+    : await bundleStandalone({
+        appRoot: config.root,
+        jsbundlePath: output,
+        outFile: seaOutput,
+      })
   const megabytes = (bytes / 1024 / 1024).toFixed(0)
   console.warn(
-    `[react-native-gtkx] wrote the single executable to ${seaOutput} ` +
-      `(${megabytes} MB — Node itself is most of it)`,
+    args.sea
+      ? `[react-native-gtkx] wrote the single executable to ${seaOutput} ` +
+          `(${megabytes} MB — Node itself is most of it)`
+      : `[react-native-gtkx] wrote the standalone script to ${seaOutput} ` +
+          `(${megabytes} MB — run it with \`node ${seaOutput}\`)`,
   )
 }
 
@@ -328,6 +348,12 @@ export const commands = [
           "Where to write the release jsbundle (default: dist/main.jsbundle)",
       },
       {
+        name: "--standalone",
+        description:
+          "Also produce one self-contained .cjs — no node_modules, run it " +
+          "with a system node (dist/<package name>.cjs)",
+      },
+      {
         name: "--sea",
         description:
           "Also produce a single executable (Node SEA): one file that runs " +
@@ -337,7 +363,8 @@ export const commands = [
       {
         name: "--sea-output <path>",
         description:
-          "Where to write the --sea executable (default: dist/<package name>)",
+          "Where to write the --sea / --standalone artifact " +
+          "(default: dist/<package name>[.cjs])",
       },
     ],
     func: buildLinux,

@@ -19,9 +19,10 @@
 //   the built executable (require resolved from
 //   dirname(process.execPath)). That is two files, not one — the actual
 //   central design decision this epic exists to make — so this diverges:
-//   the addon is embedded as a SEA asset and extracted to a per-user
-//   cache directory on first run. See ./native-shim.ts's header for the
-//   full reasoning.
+//   the addon is embedded IN the artifact (as a SEA asset, or as a base64
+//   literal for the --standalone .cjs) and extracted to a per-user cache
+//   directory on first run. See ./native-shim.ts's header for the full
+//   reasoning.
 // - Metro's externals: the tutorial has no equivalent problem, its source
 //   is already a single vite/rollup bundle. Metro deliberately
 //   externalizes @gtkx/*, react and yoga-layout (../metro/index.ts,
@@ -32,7 +33,7 @@
 //   for why they don't share code) that builds those globals from real,
 //   STATICALLY imported modules — every name in HOST_MODULE_EXTERNALS
 //   becomes a literal `import * as` statement in the generated entry — so
-//   esbuild can inline them instead of the app needing a runtime
+//   the bundler can inline them instead of the app needing a runtime
 //   node_modules to dynamically load them from. gtkx.config.ts is also
 //   resolved once here, at bundle time (see ./gtkx-config-module.ts).
 //
@@ -54,7 +55,11 @@ import {
   buildGtkxConfigModule,
   virtualConfigModulePlugin,
 } from "./gtkx-config-module.js"
-import { NATIVE_ASSET_KEY, nativeAddonShimPlugin } from "./native-shim.js"
+import {
+  NATIVE_ASSET_KEY,
+  nativeAddonShimPlugin,
+  type NativeAddonSource,
+} from "./native-shim.js"
 import { reactAnchorPlugin } from "./react-anchor-plugin.js"
 
 export type MetroSeaBundleOptions = {
@@ -65,6 +70,10 @@ export type MetroSeaBundleOptions = {
   jsbundlePath: string
   /** Where to write the bundled CJS entry (e.g. dist/bundle.cjs). */
   outFile: string
+  /** Where the native addon's bytes come from at runtime — "sea-asset"
+   * for a real single executable, "inline" for a self-contained .cjs run
+   * by a system Node (default: "sea-asset"). */
+  nativeAddonSource?: NativeAddonSource
 }
 
 export type NativeAddonAsset = {
@@ -177,6 +186,7 @@ export const bundleMetroSea = async (
   options: MetroSeaBundleOptions,
 ): Promise<NativeAddonAsset> => {
   const { appRoot, jsbundlePath, outFile } = options
+  const nativeAddonSource = options.nativeAddonSource ?? "sea-asset"
   const configModuleSource = await buildGtkxConfigModule(appRoot)
   const nativeAddon = resolveNativeAddon(appRoot)
   const entrySource = buildEntrySource(jsbundlePath)
@@ -200,7 +210,16 @@ export const bundleMetroSea = async (
         load: (id) => (id === entryId ? entrySource : null),
       },
       reactAnchorPlugin(appRoot),
-      nativeAddonShimPlugin("@gtkx/native", appRoot, nativeAddon.key),
+      nativeAddonShimPlugin({
+        specifier: "@gtkx/native",
+        appRoot,
+        source: nativeAddonSource,
+        assetKey: nativeAddon.key,
+        addonBytes:
+          nativeAddonSource === "inline"
+            ? readFileSync(nativeAddon.path)
+            : undefined,
+      }),
       virtualConfigModulePlugin(configModuleSource, appRoot),
     ],
   })
