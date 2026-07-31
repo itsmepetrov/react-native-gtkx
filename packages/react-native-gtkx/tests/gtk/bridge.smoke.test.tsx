@@ -50,7 +50,8 @@ it("normalizes BigInt FFI values", () => {
 // The whole platform assumes a signal emission runs the handler from the
 // LATEST render (every component holds props in its handlers). This states the
 // contract on the bridge's own hook; the case that actually catches the rc.2
-// freeze is components/list-late-data (it needs a deep tree to reproduce).
+// freeze is components/list-late-data, whose ScrollView is a forwardRef (the
+// trigger — see gtkx#467 — not tree depth, which this Subscriber lacks).
 it("runs signal handlers from the latest render", async () => {
   const seen: number[] = []
   const adjustment = new Gtk.Adjustment()
