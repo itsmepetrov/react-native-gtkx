@@ -7,7 +7,9 @@
     "dev": "gtkx dev",
     "build": "gtkx build",
     "start": "node dist/bundle.js",
-    "typecheck": "tsc -p ."
+    "typecheck": "tsc -p .",
+    "pretest": "gtkx codegen",
+    "test": "vitest run"
   },
   "dependencies": {
     "react": "^19.0.0",
@@ -19,6 +21,7 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "typescript": "^5.9.0",
-    "vite": "^8.1.4"
+    "vite": "^8.1.4",
+    "vitest": "^4.1.0"
   }
 }

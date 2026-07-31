@@ -12,8 +12,14 @@
     "lib": ["esnext"],
     "types": ["node"],
     "paths": {
-      "react-native": ["./node_modules/react-native-gtkx/src/index.ts"]
+      "react-native": ["./node_modules/react-native-gtkx"]
     }
   },
-  "include": ["src", "vite.config.ts", "gtkx.config.ts"]
+  "include": [
+    "src",
+    "tests",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "gtkx.config.ts"
+  ]
 }

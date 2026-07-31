@@ -167,7 +167,77 @@ which are silently ignored today, and what the desktop cannot mean).
 
 ## Tests
 
-Unit logic is plain vitest. Component tests use `@gtkx/testing` (render/screen/fireEvent) under headless Wayland: see `packages/react-native-gtkx/tests/gtk/` and `npm run test:gtk`. In tests, click via `fireEvent` and query roles with `Gtk.AccessibleRole` enums (see docs/gtkx-rc2-notes.md).
+Unit logic is plain vitest — no special setup, runs anywhere. Component
+tests render real GTK widgets under a headless Wayland compositor, and
+react-native-gtkx ships the whole recipe as two subpaths so a consumer app
+does not have to rediscover it:
+
+- `react-native-gtkx/vitest` — `reactNativeGtkxTest()`, a ready Vitest
+  project config: the headless-compositor plugin, the `react-native` alias
+  and Metro-style platform extensions, an inline-deps default for RN
+  libraries that import `react-native` themselves (`@react-navigation`),
+  and the React act-environment setup;
+- `react-native-gtkx/testing` — re-exports `@gtkx/testing`'s
+  render/screen/userEvent/fireEvent surface (already RN-shaped: `getByText`
+  finds a `Text`, `userEvent.click` walks up to a `Pressable`'s gesture
+  controller — no wrapper needed) plus `renderHookWithWindow`, for hooks
+  that read the active window (`useWindowDimensions` and similar) —
+  `renderHook` alone mounts into a windowless container.
+
+Minimal `vitest.config.ts`:
+
+```ts
+import { reactNativeGtkxTest } from "react-native-gtkx/vitest"
+import { defineConfig } from "vitest/config"
+
+export default defineConfig(reactNativeGtkxTest())
+```
+
+The default test glob is `**/*.gtk.test.{ts,tsx}`; override `include` (and
+`name`, `headless`, `platform`, `inlineDeps`, `setupFiles`,
+`fileParallelism`) through `reactNativeGtkxTest`'s options. For a project
+that also has portable unit tests, use the result as one entry of
+`test.projects` instead of the whole config — `vitest.config.ts` at this
+repo's root is the reference (`process.platform === "linux"` guards the
+gtk project so `npm test` still works on a non-Linux dev machine, running
+only the unit project there).
+
+```tsx
+import { Root } from "react-native"
+import { render, screen } from "react-native-gtkx/testing"
+import { expect, it } from "vitest"
+import { App } from "../src/App"
+
+it("renders the greeting", async () => {
+  // react-native-gtkx components need a layout root — AppRegistry.runApplication()
+  // in the real app, <Root> in a test.
+  await render(
+    <Root
+      width={800}
+      height={600}
+    >
+      <App />
+    </Root>,
+  )
+  expect(screen.getByText("Hello, GNOME!")).toBeTruthy()
+})
+```
+
+Requirements: a headless Wayland compositor and D-Bus on PATH — the same
+system packages CI installs, `sway xwayland dbus` (Ubuntu:
+`apt install sway xwayland dbus`). A missing compositor fails a test run
+with a readable error (`Cannot find the "sway" executable on PATH`) rather
+than hanging. `gtkx codegen` must already have generated the project's
+`@gtkx/gi` bindings before the first test run — a bare `vitest run` does
+not trigger codegen itself, unlike `gtkx dev`/`gtkx build`; the template's
+own `package.json` wires this as a `pretest` script.
+
+`packages/react-native-gtkx/tests/gtk/` is this repo's own suite, built on
+the same `@gtkx/testing` surface directly (it tests source, not the
+published package) — a good place to see more query and `userEvent`
+patterns in context. Query roles with `Gtk.AccessibleRole` enums (see
+docs/gtkx-rc2-notes.md for the live workarounds still baked into that
+recipe).
 
 ## Next steps
 
