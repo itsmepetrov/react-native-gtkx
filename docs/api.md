@@ -154,6 +154,24 @@ const App = () => (
   round trip, the same size-class behavior a mobile master-detail app
   relies on; see docs/research/navigation-extensibility.md for the
   evidence.
+- Sidebar navigator props `minWidth` / `minHeight` (px, default 360×294 —
+  GNOME's own adaptive floor): the narrowest size this navigator's UI
+  supports, applied to the `AdwBreakpointBin` that `collapseWidth` mounts.
+  Ignored when `collapseWidth` is unset, since no bin exists then. Adwaita
+  cannot measure a breakpoint bin — what it contains changes with the
+  breakpoints — so the bin reports a minimum of ZERO and warns that
+  `width-request`/`height-request` must be set. Under `chrome: "content"`
+  the bin is the window's own child, so that zero IS the window's floor:
+  the window resizes straight past what the pane inside can draw, and
+  Adwaita clips the pane instead of adapting it ("AdwNavigationSplitView
+  exceeds AdwBreakpointBin width: requested 469 px, 360 px available" in
+  the journal, felt as a list running off the right edge with its trailing
+  controls cut away). An app whose content HeaderBar needs more than the
+  default must raise it — measure the pane rather than guessing: a
+  segmented control as `headerTitle` costs ~110px on its own and, unlike a
+  title label, cannot ellipsize. `examples/tasks-nav` passes `480` for
+  exactly that reason; the value stays below its `collapseWidth`, so the
+  collapsed layout is still fully reachable.
 - Sidebar screen options `headerLeft` / `headerRight` / `headerTitle`:
   `() => ReactNode` — the content HeaderBar's own start/end/title, per
   screen, on top of the one navigator-wide default. This is what lets one
@@ -174,6 +192,48 @@ const App = () => (
   place. A screen that flips between shapes must give every one of these
   four keys an explicit value (`undefined` counts as a real overwrite; an
   absent key does not) on every call, not just the ones currently in use.
+- Sidebar navigator prop `sidebarContent`:
+  `(props: SidebarContentProps) => ReactNode` — replaces the ENTIRE sidebar
+  pane's body, for a sidebar that needs sections, a search field, a footer,
+  or anything a flat list of rows cannot express. The sidebar's children
+  stop being "one row per screen": you draw what you like, and navigation
+  is just the `jumpTo` you were handed. `SidebarContentProps` carries
+  `routes` (key, name, resolved options, title, `focused`), `focusedIndex`
+  and `jumpTo(name)` — use those rather than dispatching yourself, so
+  selection cannot drift from navigation state. The pane's AdwHeaderBar and
+  `sidebarTitle` still belong to the navigator: this is the body under it,
+  not the chrome. Mounted as React Native content (a layout root filling
+  the pane); a sidebar built from GTK widgets wraps its own tree in
+  `WidgetContent`, the same escape hatch `contentLayout: "widget"` is for a
+  screen body. Reach for `sidebarRow` first if you only want a different
+  ROW — it keeps the navigator's list and everything attached to it.
+- Sidebar screen option `sidebarRow`: `() => ReactNode` — draw the row
+  yourself instead of letting `title`/`icon`/`color`/`count` compose one.
+  Those four are a convenience, not the ceiling: they build an
+  `AdwActionRow`, which brings Adwaita's own row metrics with it, so an app
+  wanting a different shape, density or height had nothing to reach for.
+  Return anything a `GtkListBoxRow` can hold — React Native content, GTK
+  widgets, a differently-configured Adwaita row. The navigator keeps owning
+  row BEHAVIOUR (selection, click → `jumpTo`, staying in step with
+  navigation state, the collapsed reveal), so a custom row cannot drift out
+  of sync with the router; only what is drawn changes. A screen that passes
+  none of `icon`/`color`/`count` gets a compact `GtkListBoxRow` + label
+  automatically — `AdwActionRow`'s height is right when there IS a prefix
+  and a count to lay out and pure cost when there is not.
+- Sidebar screen option `contentLayout`: `"react-native"` (default) or
+  `"widget"` — what the screen's body IS. The default mounts it in a Yoga
+  layout root that fills the pane, so `<View style={{ flex: 1 }}>` behaves
+  the way it does anywhere else. `"widget"` packs the body into the page
+  directly, with no layout root in between, for a screen whose body is a
+  GTK widget tree (a `GtkScrolledWindow` around an `AdwClamp` around a
+  `.boxed-list` `GtkListBox`, say): GTK's own sizing — `vexpand`, a list's
+  natural height — then applies normally. **Under the default a widget tree
+  collapses instead**, and quietly: every widget becomes a single Yoga LEAF
+  measured for its own natural size, so a container renders its first child,
+  drops the rest, and reports the ~1px it can shrink to, with no error
+  anywhere. `examples/tasks-nav` is built this way. Mixing is per screen,
+  not per subtree — a `"widget"` screen that wants React Native content
+  somewhere inside it wraps that part in `SlotContent` itself.
 - Stack screen options `headerLeft` / `headerRight`: `() => ReactNode` —
   real RN content in the HeaderBar (inputs included), hosted by an
   intrinsic-size root; `headerButtons` render after `headerRight`

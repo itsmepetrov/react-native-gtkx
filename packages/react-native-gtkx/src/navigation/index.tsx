@@ -33,7 +33,7 @@ import { useEffect, useRef, type ComponentType, type ReactNode } from "react"
 import { getActiveChrome } from "../components/app-registry"
 import { AdwHeaderBar, AdwToolbarView } from "../adw"
 import {
-  IntrinsicContent,
+  HeaderSlotContent,
   NavigationStack,
   NavigationStackPage,
   SlotContent,
@@ -412,17 +412,17 @@ const StackView = ({
                   <AdwHeaderBar
                     start={
                       options.headerLeft ? (
-                        <IntrinsicContent>
+                        <HeaderSlotContent>
                           {options.headerLeft()}
-                        </IntrinsicContent>
+                        </HeaderSlotContent>
                       ) : undefined
                     }
                     end={[
                       ...(options.headerRight
                         ? [
-                            <IntrinsicContent key="header-right">
+                            <HeaderSlotContent key="header-right">
                               {options.headerRight()}
-                            </IntrinsicContent>,
+                            </HeaderSlotContent>,
                           ]
                         : []),
                       ...(options.headerButtons?.map((button) => (

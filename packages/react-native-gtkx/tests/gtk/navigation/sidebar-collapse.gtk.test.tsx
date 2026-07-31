@@ -25,6 +25,7 @@ import {
 } from "@react-navigation/native"
 import { useEffect } from "react"
 import { expect, it } from "vitest"
+import { Gtk } from "../../../src/gtk"
 import { type Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
 import { Text, View } from "../../../src/index"
 import {
@@ -76,6 +77,28 @@ const findSplitView = (
   return null
 }
 
+const findBreakpointBin = (
+  widget: GtkNs.Widget | null,
+): InstanceType<typeof Adw.BreakpointBin> | null => {
+  if (!widget) {
+    return null
+  }
+  if (widget instanceof Adw.BreakpointBin) {
+    return widget
+  }
+  for (
+    let child = widget.getFirstChild();
+    child;
+    child = child.getNextSibling()
+  ) {
+    const found = findBreakpointBin(child)
+    if (found) {
+      return found
+    }
+  }
+  return null
+}
+
 const FirstScreen = () => (
   <View style={{ flex: 1 }}>
     <Text>first section body</Text>
@@ -106,6 +129,151 @@ const Harness = () => (
     </Sidebar.Navigator>
   </NavigationContainer>
 )
+
+// Rows carrying an icon/color/count render as AdwActionRow rather than the
+// plain GtkListBoxRow the Harness above gets — which is where the reported
+// "the focused section cannot be opened" bug lived, so the tests for it use
+// this shape (examples/tasks-nav's shape) rather than the bare one.
+const RichHarness = ({
+  minWidth,
+  customRow,
+}: {
+  minWidth?: number
+  customRow?: boolean
+}) => (
+  <NavigationContainer>
+    <Sidebar.Navigator
+      sidebarTitle="Collapsible"
+      collapseWidth={500}
+      minWidth={minWidth}
+    >
+      <Sidebar.Screen
+        name="first"
+        component={FirstScreen}
+        options={{
+          title: "First",
+          icon: "view-list-symbolic",
+          count: 3,
+          ...(customRow
+            ? { sidebarRow: () => <Text>custom first row</Text> }
+            : {}),
+        }}
+      />
+      <Sidebar.Screen
+        name="second"
+        component={SecondScreen}
+        options={{ title: "Second", icon: "starred-symbolic", count: 1 }}
+      />
+      <Sidebar.Screen
+        name="third"
+        component={SecondScreen}
+        options={{ title: "Third" }}
+      />
+    </Sidebar.Navigator>
+  </NavigationContainer>
+)
+
+it("keeps every sidebar row activatable, whatever it is rendered as", async () => {
+  // The precondition the collapsed reveal rides on, and the one this
+  // navigator silently lost: GtkListBox emits row-activated ONLY for rows
+  // where gtk_list_box_row_get_activatable() is true, and AdwActionRow —
+  // what a row with an icon/color/count renders as — defaults it to FALSE.
+  // A plain GtkListBoxRow defaults it to true, which is why examples/gallery
+  // (title-only rows) never showed the bug and examples/tasks-nav did.
+  const { container } = await render(<RichHarness customRow />)
+  const window = container as GtkNs.Window
+  await waitFor(() => {
+    expect(screen.getByText("first section body")).toBeTruthy()
+  })
+  const list = findListBox(window.getChild())!
+  // 0: a custom sidebarRow (plain GtkListBoxRow wrapper), 1: AdwActionRow
+  // (icon + count), 2: the compact title-only GtkListBoxRow.
+  for (const index of [0, 1, 2]) {
+    expect(list.getRowAtIndex(index)!.getActivatable()).toBe(true)
+  }
+})
+
+it("opens the already-focused section while collapsed, through GTK's own row activation", async () => {
+  // The reported bug, at the level a real click actually works at: rather
+  // than emitting row-activated on the list (which bypasses the very check
+  // that was failing), this goes through GtkListBoxRow::activate — the
+  // signal whose default handler calls gtk_list_box_select_and_activate(),
+  // the same internal path GtkListBox's click gesture takes, including the
+  // activatable gate. On a cold start at a collapsed width the FOCUSED row
+  // is the one already selected, so nothing else can reveal content for it:
+  // the state.index effect cannot fire (state does not change) and
+  // row-selected does not refire without a selection change.
+  const { container } = await render(<RichHarness />)
+  const window = container as GtkNs.Window
+  await waitFor(() => {
+    expect(screen.getByText("first section body")).toBeTruthy()
+  })
+  const splitView = findSplitView(window.getChild())!
+  const list = findListBox(window.getChild())!
+
+  window.setVisible(false)
+  window.setDefaultSize(400, 400)
+  window.present()
+  await waitFor(() => {
+    expect(splitView.getCollapsed()).toBe(true)
+  })
+  // A fresh collapse shows the sidebar, deliberately (see
+  // docs/research/navigation-extensibility.md) — the focused row is
+  // selected but its content is not on screen.
+  expect(splitView.getShowContent()).toBe(false)
+  const focusedRow = list.getRowAtIndex(0)!
+  expect(list.getSelectedRow()).toBe(focusedRow)
+
+  await fireEvent(focusedRow, "activate")
+  await waitFor(() => {
+    expect(splitView.getShowContent()).toBe(true)
+  })
+  // Still the same route: this reveals a pane, it does not navigate.
+  expect(list.getSelectedRow()).toBe(focusedRow)
+  expect(screen.getByText("first section body")).toBeTruthy()
+})
+
+it("gives the breakpoint bin a minimum size, so the window cannot shrink past the pane", async () => {
+  // Adwaita cannot measure a breakpoint bin (its content changes with the
+  // breakpoints): it reports a minimum of zero and warns. Left at zero the
+  // window can be dragged narrower than the content pane can draw, and
+  // Adwaita over-allocates and CLIPS it — seen as the task list running off
+  // the right edge in examples/tasks-nav, and logged as
+  // "AdwNavigationSplitView exceeds AdwBreakpointBin width".
+  const { container } = await render(<RichHarness />)
+  const window = container as GtkNs.Window
+  await waitFor(() => {
+    expect(screen.getByText("first section body")).toBeTruthy()
+  })
+  const bin = findBreakpointBin(window.getChild())
+  expect(bin).not.toBeNull()
+  expect(bin!.widthRequest).toBe(360)
+  expect(bin!.heightRequest).toBe(294)
+  // The size request IS the bin's minimum — its own measure() contributes
+  // nothing, so this is the whole floor, not one input to it.
+  const [minWidth] = bin!.measure(
+    Gtk.Orientation.HORIZONTAL,
+    -1,
+  ) as unknown as [number, number]
+  expect(minWidth).toBe(360)
+})
+
+it("lets an app raise the minimum to what its own chrome needs", async () => {
+  // examples/tasks-nav does exactly this: its collapsed content HeaderBar
+  // asks for 469px (a segmented control as headerTitle cannot ellipsize the
+  // way a title label does), so 360 would still clip it.
+  const { container } = await render(<RichHarness minWidth={480} />)
+  const window = container as GtkNs.Window
+  await waitFor(() => {
+    expect(screen.getByText("first section body")).toBeTruthy()
+  })
+  const bin = findBreakpointBin(window.getChild())!
+  const [minWidth] = bin.measure(Gtk.Orientation.HORIZONTAL, -1) as unknown as [
+    number,
+    number,
+  ]
+  expect(minWidth).toBe(480)
+})
 
 it("collapses natively below collapseWidth and expands back above it", async () => {
   const { container } = await render(<Harness />)

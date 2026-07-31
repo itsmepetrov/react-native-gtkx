@@ -22,8 +22,10 @@ export {
 } from "./navigation-stack"
 
 export {
+  HeaderSlotContent,
   IntrinsicContent,
   SlotContent,
+  WidgetContent,
   type IntrinsicContentProps,
   type SlotContentProps,
 } from "./content"
