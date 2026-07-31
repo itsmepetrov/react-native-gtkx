@@ -11,6 +11,10 @@ GTK — on macOS all of that runs in a UTM VM through `scripts/vm.ts`.
 The VM address comes from `VM_HOST` (put the export into
 `scripts/local/env.sh`, gitignored). One-time VM setup: CONTRIBUTING.md.
 
+To just verify a UI change without a full build (`build:dist` + build the
+example + relaunch), see the `dev-loop` skill instead — it syncs onto the
+already-running `gtkx dev` server and waits for HMR.
+
 ## Commands
 
 | Command | Purpose |
