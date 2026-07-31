@@ -64,7 +64,7 @@ export type NavigationStackPageProps = AdwPageProps & {
  * One page of an {@link NavigationStack}.
  *
  * Children are passed to the widget untouched. To put React Native content
- * inside a page, wrap it in `PageContent` (see ./content) — the primitive
+ * inside a page, wrap it in `SlotContent` (see ./content) — the primitive
  * deliberately does not guess, so raw GTK children keep working.
  */
 export const NavigationStackPage = ({

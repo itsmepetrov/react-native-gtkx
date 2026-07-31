@@ -47,7 +47,7 @@ export type WidgetProps = {
  * exactly like React Native children — because to Yoga they now are.
  *
  * For the reverse direction (React Native content inside a GTK slot) see
- * `PageContent` and `IntrinsicContent`.
+ * `SlotContent` and `IntrinsicContent`.
  */
 export const Widget = ({ style, onLayout, children, testID }: WidgetProps) => {
   // The wrapper box IS the Yoga leaf, and it is measured through GTK, so the

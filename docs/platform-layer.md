@@ -1,4 +1,4 @@
-# `react-native-gtkx/adwaita` — the GTK layer
+# `react-native-gtkx/gtk` and `/adw` — the platform layer
 
 React Native gives you a portable surface. This subpath gives you the platform
 underneath it: GTK4 and libadwaita widgets as React components, with **nothing
@@ -7,11 +7,11 @@ filtered out**.
 Three rules make it easy to reason about:
 
 1. **It is not portable, and the import says so.** Anything you take from
-   `react-native-gtkx/adwaita` is Linux-only. That is deliberate — it shows up
+   `react-native-gtkx/gtk` and `react-native-gtkx/adw` is Linux-only. That is deliberate — it shows up
    in review as a decision, not as an accident.
 2. **A prefix tells you whose component it is.** `AdwHeaderBar`, `GtkButton`,
    `AdwNavigationView` — that IS the widget, as gtkx binds it. No prefix —
-   `NavigationStack`, `PageContent`, `Widget` — means it is ours. A wrapper of
+   `NavigationStack`, `SlotContent`, `Widget` — means it is ours. A wrapper of
    ours therefore never makes a standard widget unreachable.
 3. **It does not know about react-navigation.** No router is involved, none is
    required. `react-native-gtkx/navigation` is a thin adapter built on top of
@@ -22,7 +22,8 @@ Three rules make it easy to reason about:
 your app
    ├── react-native                    portable components
    ├── react-native-gtkx/navigation    react-navigation adapter   (optional)
-   └── react-native-gtkx/adwaita       GTK widgets                (this page)
+   ├── react-native-gtkx/adw           libadwaita widgets         (this page)
+   └── react-native-gtkx/gtk           GTK widgets + the bridge   (this page)
 ```
 
 ## Why you would reach for it
@@ -56,7 +57,7 @@ anything you could set on `Adw.NavigationPage` you can set on
 
 | Export             | Sizing                       | Use for                                          |
 | ------------------ | ---------------------------- | ------------------------------------------------ |
-| `PageContent`      | fills the slot               | a page body, a pane, a dialog body               |
+| `SlotContent`      | fills the slot               | a page body, a pane, a dialog body               |
 | `IntrinsicContent` | sized by its own Yoga layout | an AdwHeaderBar slot, a toolbar area, a list row |
 
 ### GTK widgets, driven by React Native
@@ -126,8 +127,8 @@ import {
   AdwToolbarView,
   NavigationStack,
   NavigationStackPage,
-  PageContent,
-} from "react-native-gtkx/adwaita"
+  SlotContent,
+} from "react-native-gtkx/gtk` and `react-native-gtkx/adw"
 
 const App = () => {
   const [stack, setStack] = useState(["home"])
@@ -144,11 +145,11 @@ const App = () => {
         title="Home"
       >
         <AdwToolbarView topBar={<AdwHeaderBar />}>
-          <PageContent>
+          <SlotContent>
             <Pressable onPress={() => setStack((s) => [...s, "detail"])}>
               <Text>Open detail</Text>
             </Pressable>
-          </PageContent>
+          </SlotContent>
         </AdwToolbarView>
       </NavigationStackPage>
 
@@ -157,9 +158,9 @@ const App = () => {
         title="Detail"
       >
         <AdwToolbarView topBar={<AdwHeaderBar />}>
-          <PageContent>
+          <SlotContent>
             <View />
-          </PageContent>
+          </SlotContent>
         </AdwToolbarView>
       </NavigationStackPage>
     </NavigationStack>
@@ -218,7 +219,7 @@ An AdwHeaderBar slot wants a widget that knows its own size, which is what
 
 They compose, because the navigator is built on these primitives. Use
 `react-native-gtkx/navigation` for the app's structure and drop to
-`react-native-gtkx/adwaita` where you need a widget the options do not cover —
+`react-native-gtkx/gtk` and `react-native-gtkx/adw` where you need a widget the options do not cover —
 for example a raw `GtkButton` in `headerButtons`, or a `GtkListBox` inside a
 screen.
 
@@ -235,7 +236,7 @@ widget's own props keep their types:
 
 ```tsx
 import { GtkPopover } from "@gtkx/jsx/gtk"
-import { wrapReactNative } from "react-native-gtkx/adwaita"
+import { wrapReactNative } from "react-native-gtkx/gtk` and `react-native-gtkx/adw"
 
 const Popover = wrapReactNative(GtkPopover)
 // <Popover style={{ width: 240 }} autohide … /> — `autohide` still typed

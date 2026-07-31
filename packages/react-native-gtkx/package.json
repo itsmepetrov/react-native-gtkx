@@ -47,9 +47,13 @@
       "types": "./dist/navigation/index.d.ts",
       "default": "./dist/navigation/index.js"
     },
-    "./adwaita": {
-      "types": "./dist/adwaita/index.d.ts",
-      "default": "./dist/adwaita/index.js"
+    "./gtk": {
+      "types": "./dist/gtk/index.d.ts",
+      "default": "./dist/gtk/index.js"
+    },
+    "./adw": {
+      "types": "./dist/adw/index.d.ts",
+      "default": "./dist/adw/index.js"
     },
     "./vite": {
       "types": "./dist/vite/index.d.ts",
