@@ -10,7 +10,7 @@
 // invalid GTK rather than a convenience — exported as gtkx binds them, same
 // as the hand-picked ones were before this file existed.
 
-import { wrapReactNative } from "../gtk/widget"
+import { wrapReactNative } from "../common/widget"
 import {
   AdwAboutDialog as RawAdwAboutDialog,
   AdwAlertDialog as RawAdwAlertDialog,

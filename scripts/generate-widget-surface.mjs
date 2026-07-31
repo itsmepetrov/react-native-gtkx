@@ -99,12 +99,24 @@ const manifest = {
 // ---------------------------------------------------------------------------
 const summarizeBuckets = (m) => {
   const map = new Map()
-  for (const name of m.gtk.wrapped) map.set(name, "gtk:wrapped")
-  for (const { name } of m.gtk.raw) map.set(name, "gtk:raw")
-  for (const name of m.gtk.notAWidget) map.set(name, "gtk:not-a-widget")
-  for (const name of m.adw.wrapped) map.set(name, "adw:wrapped")
-  for (const { name } of m.adw.raw) map.set(name, "adw:raw")
-  for (const name of m.adw.notAWidget) map.set(name, "adw:not-a-widget")
+  for (const name of m.gtk.wrapped) {
+    map.set(name, "gtk:wrapped")
+  }
+  for (const { name } of m.gtk.raw) {
+    map.set(name, "gtk:raw")
+  }
+  for (const name of m.gtk.notAWidget) {
+    map.set(name, "gtk:not-a-widget")
+  }
+  for (const name of m.adw.wrapped) {
+    map.set(name, "adw:wrapped")
+  }
+  for (const { name } of m.adw.raw) {
+    map.set(name, "adw:raw")
+  }
+  for (const name of m.adw.notAWidget) {
+    map.set(name, "adw:not-a-widget")
+  }
   return map
 }
 
@@ -119,9 +131,12 @@ if (existsSync(MANIFEST_PATH)) {
     (k) => before.has(k) && before.get(k) !== after.get(k),
   )
   const lines = []
-  if (added.length) lines.push(`  added (${added.length}): ${added.join(", ")}`)
-  if (removed.length)
+  if (added.length) {
+    lines.push(`  added (${added.length}): ${added.join(", ")}`)
+  }
+  if (removed.length) {
     lines.push(`  removed (${removed.length}): ${removed.join(", ")}`)
+  }
   if (reclassified.length) {
     lines.push(
       `  reclassified (${reclassified.length}): ` +
@@ -163,7 +178,13 @@ const emitBridgeWidgets = () => {
   writeFileSync(BRIDGE_WIDGETS, body)
 }
 
-const emitPlatformWidgets = ({ path, prefix, wrapped, raw, wrapReactNativeFrom }) => {
+const emitPlatformWidgets = ({
+  path,
+  prefix,
+  wrapped,
+  raw,
+  wrapReactNativeFrom,
+}) => {
   const rawNames = raw.map((r) => r.name).sort()
   const body =
     GENERATED_HEADER(
@@ -238,12 +259,17 @@ console.log(
     `${manifest.adw.notAWidget.length} not-a-widget (out of scope)`,
 )
 console.log("\n--- gtk raw (with reason) ---")
-for (const r of manifest.gtk.raw) console.log(`  ${r.name}: ${r.reason}`)
+for (const r of manifest.gtk.raw) {
+  console.log(`  ${r.name}: ${r.reason}`)
+}
 console.log("\n--- adw raw (with reason) ---")
-for (const r of manifest.adw.raw) console.log(`  ${r.name}: ${r.reason}`)
+for (const r of manifest.adw.raw) {
+  console.log(`  ${r.name}: ${r.reason}`)
+}
 console.log("\n--- denylist entries in effect ---")
-for (const [name, { reason }] of Object.entries(DENYLIST))
+for (const [name, { reason }] of Object.entries(DENYLIST)) {
   console.log(`  ${name}: ${reason}`)
+}
 console.log("\n--- change since previous run ---")
 console.log(changeReport)
 console.log("\nWrote:")

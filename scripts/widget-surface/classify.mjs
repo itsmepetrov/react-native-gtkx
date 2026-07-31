@@ -85,12 +85,16 @@ export const classify = ({
 
   const gtkResults = gtkComponentNames.map((name) => {
     const cls = resolve(name, "Gtk", Gtk)
-    if (!cls) return { name, bucket: "unresolved" }
+    if (!cls) {
+      return { name, bucket: "unresolved" }
+    }
     return classifyOne(name, cls)
   })
   const adwResults = adwComponentNames.map((name) => {
     const cls = resolve(name, "Adw", Adw)
-    if (!cls) return { name, bucket: "unresolved" }
+    if (!cls) {
+      return { name, bucket: "unresolved" }
+    }
     return classifyOne(name, cls)
   })
 

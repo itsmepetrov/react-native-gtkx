@@ -61,7 +61,11 @@ describe("widget-surface skip list stays honest", () => {
       ...ADW_WRAPPED_WIDGET_NAMES,
     ])
     for (const name of Object.keys(SKIP)) {
-      expect(allNames.has(name)).toBe(true)
+      // Object.keys widens to string; the set is keyed by the generated
+      // literal union, so narrow before asking.
+      expect(
+        allNames.has(name as (typeof GTK_WRAPPED_WIDGET_NAMES)[number]),
+      ).toBe(true)
     }
   })
 })
