@@ -143,7 +143,9 @@ test("every bundle-side bare import in src is host-provided", () => {
   // breaks standalone apps — the @gtkx/react/internal regression. runner/,
   // Host-side or test-time-only subpaths that never enter an app bundle:
   // runner/, metro/ and vite/ drive the toolchain, mcp/ is the
-  // react-native-gtkx-mcp CLI (a separate process), and vitest/ and
+  // react-native-gtkx-mcp CLI (a separate process), sea/ is the SEA
+  // bundler (a build-time tool that runs under plain Node with a full
+  // node_modules, never part of an app's own bundle), and vitest/ and
   // testing/ are imported only by an app's tests.
   const srcRoot = join(import.meta.dirname, "../../src")
   const hostSide = new Set([
@@ -153,6 +155,7 @@ test("every bundle-side bare import in src is host-provided", () => {
     "vitest",
     "testing",
     "mcp",
+    "sea",
   ])
   const specifiers = new Set<string>()
   const visit = (dir: string): void => {

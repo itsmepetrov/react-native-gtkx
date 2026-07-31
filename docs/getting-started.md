@@ -251,18 +251,85 @@ closure itself: a fresh, isolated install of the locally-packed
 hoisted `node_modules` (which would prove nothing about what a real install
 needs).
 
-**Why not one self-contained binary?** gtkx's own tutorial builds one
-(`gtkx-org/gtkx examples/tutorial`: esbuild-bundle to CJS, then
-`node --experimental-sea-config` + postject injects it into a copy of the
-`node` binary itself — one executable, no separate Node install needed).
-Evaluated and deliberately not adopted here: every example this project
-ships today distributes as "Node + native addon" with a `nodejs` package
-dependency, and Node's SEA support is still explicitly experimental. Doing
-it for the Metro path alone would make the packaged examples inconsistent —
-three would need a system Node, one wouldn't, for no user-facing problem
-this release needs solved. A single-executable story is worth having, but
-applied uniformly across every example, not half-adopted under release
-pressure for one app.
+### One executable file (Metro path)
+
+The Metro artifact above is the worse of the two — a jsbundle plus a
+runtime `node_modules` tree — so it's the one that got a true
+single-executable build: `scripts/build-sea.sh <example> <out-dir>` (needs
+`npm run build:dist` and `react-native build-linux` run first) produces
+`<out-dir>/app`, one file, no `node_modules`, no system Node required to
+run it:
+
+```bash
+npm run build:dist                            # react-native-gtkx itself
+(cd examples/hn-app && npx react-native build-linux)
+bash scripts/build-sea.sh examples/hn-app /tmp/sea-out
+/tmp/sea-out/app                              # runs standalone
+```
+
+This follows gtkx's own tutorial (`gtkx-org/gtkx examples/tutorial`:
+esbuild-bundle to CJS, `node --experimental-sea-config`, postject injects
+the blob into a copy of the `node` binary) for the SEA/postject mechanics.
+It diverges on the two hard parts specific to this project — full
+reasoning, including everything found empirically while building it (not
+just designed on paper), lives in
+`packages/react-native-gtkx/src/sea/bundle.ts` and `native-shim.ts`; the
+short version:
+
+- **The native addon** (`@gtkx/native-<platform>-<libc>`, loaded through
+  dlopen) cannot be embedded as bundled code — a SEA is a V8 code cache
+  blob, dlopen needs a real file. The tutorial's own answer is to keep it
+  BESIDE the executable; that's two files, which is exactly what this
+  build exists to stop being. This build embeds it as a Node SEA "asset"
+  instead and extracts it to a per-user cache directory
+  (`$XDG_CACHE_HOME/react-native-gtkx-sea`, falling back to `os.tmpdir()`
+  for a read-only `$HOME`) on first run, keyed by a content hash so
+  repeat launches reuse the extracted file. Loading it back turned out to
+  need `process.dlopen()`, not `require()` — a SEA's main script can only
+  `require()` built-ins and embedded assets (confirmed empirically:
+  `require(anyAbsolutePath)` throws `ERR_UNKNOWN_BUILTIN_MODULE`) — and,
+  found only by actually running the result, an explicit
+  `nativeModule.exports.init()` call right after `dlopen()`: without it
+  the first GTK-driven callback into JS panics on the Rust side ("the
+  Node environment was accessed from a thread it is not installed on").
+- **Metro's externals** (`HOST_MODULE_EXTERNALS`) are inlined by a
+  generated entry — a third host implementation alongside `host.ts` and
+  `host-dev.ts` — that `await import()`s every externalized name and
+  assembles `globalThis.__hostModules` before running the jsbundle text,
+  instead of the app needing a runtime `node_modules` to load them from.
+  `gtkx.config.ts` is resolved once, at bundle time (like the vite path
+  already does), not on every process start (like `host.ts` does) — a SEA
+  has no "app root" to read a config file from at runtime.
+
+Size, measured on the one platform this was built and proven on
+(linux-arm64): **123 MB** for `hn-app`. Node itself is ~116 MB of that —
+the bundled app code plus the embedded native addon is under 7 MB. Worth
+saying plainly: that is a heavy download for what a Hacker News reader
+needs, and it will not shrink much as long as the artifact carries a full
+Node binary. Still likely the right trade for "download and run with
+nothing preinstalled" — but the maintainer should decide that knowing the
+number, not be surprised by it.
+
+**Proof, not just a build**: copied `dist/app` alone (no `node_modules`,
+no source tree) to an isolated directory on the VM, removed `/usr/bin/node`
+from the system (confirmed `command -v node` found nothing), launched the
+binary under a headless Wayland compositor, and screenshotted a live,
+working "Hacker News" window with real fetched data — not a build log, not
+a run from the source tree.
+
+**vite path — not done here.** Investigated, and it does not generalize
+the same way: the vite bundle loads the native addon through
+`createRequire(import.meta.url)("./gtkx.node")` — a dynamically obtained
+`require`, not a literal `require(...)` call — which esbuild does not
+intercept the way it intercepts a static import (verified: the `onResolve`
+hook never fires for it in a real rebuild of `dist/bundle.js`). The vite
+bundle also has its own top-level await, incompatible with the CJS format
+a Node SEA main script requires. Both are fixable in principle (a
+text-level rewrite of the compiled `require` call before re-bundling,
+version-coupled to `@gtkx/cli`'s vite plugin), but that is a different,
+more fragile technique than the Metro path's, and wasn't built or proven
+here. If a true single file is wanted for the vite path too, that rewrite
+is where to start — not a repeat of this approach.
 
 ## Examples in the repository
 
