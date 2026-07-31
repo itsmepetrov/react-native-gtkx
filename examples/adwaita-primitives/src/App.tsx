@@ -17,7 +17,7 @@ import {
   Adw,
   AdwHeaderBar,
   AdwNavigationPage,
-  AdwNavigationView,
+  AdwNavigationStack,
   AdwToolbarView,
   GtkButton,
   GtkEntry,
@@ -52,7 +52,7 @@ const App = () => {
     setStack((current) => current.slice(0, current.indexOf(tag) + 1))
 
   return (
-    <AdwNavigationView
+    <AdwNavigationStack
       ref={viewRef}
       stack={stack}
       // The widget popped by itself: the back button, Escape, the back
@@ -157,7 +157,7 @@ const App = () => {
           </PageContent>
         </AdwToolbarView>
       </AdwNavigationPage>
-    </AdwNavigationView>
+    </AdwNavigationStack>
   )
 }
 

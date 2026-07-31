@@ -6,7 +6,7 @@
 // exit animation ends, bracketing transitions — lives in the primitive. What
 // stays here is exactly the react-navigation half:
 //
-// - state → the ordered tags handed to AdwNavigationView (route keys);
+// - state → the ordered tags handed to AdwNavigationStack (route keys);
 // - a native pop (back button, Escape, back gesture) → StackActions.pop,
 //   but only when the tag is still in state, otherwise the pop was one WE
 //   caused and echoing it would double-pop;
@@ -31,7 +31,7 @@ import { getActiveChrome } from "../components/app-registry"
 import {
   AdwHeaderBar,
   AdwNavigationPage,
-  AdwNavigationView,
+  AdwNavigationStack,
   AdwToolbarView,
   IntrinsicContent,
   PageContent,
@@ -162,7 +162,7 @@ type StackViewProps = {
 const StackView = ({ routeKeys, descriptors, onPopped }: StackViewProps) => {
   const { preventedRoutes } = usePreventRemoveContext()
   return (
-    <AdwNavigationView
+    <AdwNavigationStack
       stack={routeKeys}
       onPopped={onPopped}
     >
@@ -225,7 +225,7 @@ const StackView = ({ routeKeys, descriptors, onPopped }: StackViewProps) => {
           </AdwNavigationPage>
         )
       })}
-    </AdwNavigationView>
+    </AdwNavigationStack>
   )
 }
 
