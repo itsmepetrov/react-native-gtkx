@@ -28,7 +28,6 @@ import {
   GtkColumnView as RawGtkColumnView,
   GtkComboBox as RawGtkComboBox,
   GtkComboBoxText as RawGtkComboBoxText,
-  GtkDragIcon as RawGtkDragIcon,
   GtkDrawingArea as RawGtkDrawingArea,
   GtkDropDown as RawGtkDropDown,
   GtkEditableLabel as RawGtkEditableLabel,
@@ -117,7 +116,6 @@ export const GtkColorDialogButton = wrapReactNative(RawGtkColorDialogButton)
 export const GtkColumnView = wrapReactNative(RawGtkColumnView)
 export const GtkComboBox = wrapReactNative(RawGtkComboBox)
 export const GtkComboBoxText = wrapReactNative(RawGtkComboBoxText)
-export const GtkDragIcon = wrapReactNative(RawGtkDragIcon)
 export const GtkDrawingArea = wrapReactNative(RawGtkDrawingArea)
 export const GtkDropDown = wrapReactNative(RawGtkDropDown)
 export const GtkEditableLabel = wrapReactNative(RawGtkEditableLabel)
@@ -190,21 +188,22 @@ export const GtkWindowControls = wrapReactNative(RawGtkWindowControls)
 export const GtkWindowHandle = wrapReactNative(RawGtkWindowHandle)
 
 export {
-  GtkAboutDialog, // toplevel (derives Gtk.Window)
-  GtkAppChooserDialog, // toplevel (derives Gtk.Window)
-  GtkApplicationWindow, // toplevel (derives Gtk.Window)
-  GtkAssistant, // toplevel (derives Gtk.Window)
-  GtkColorChooserDialog, // toplevel (derives Gtk.Window)
-  GtkDialog, // toplevel (derives Gtk.Window)
-  GtkFileChooserDialog, // toplevel (derives Gtk.Window)
+  GtkAboutDialog, // toplevel (implements GtkRoot)
+  GtkAppChooserDialog, // toplevel (implements GtkRoot)
+  GtkApplicationWindow, // toplevel (implements GtkRoot)
+  GtkAssistant, // toplevel (implements GtkRoot)
+  GtkColorChooserDialog, // toplevel (implements GtkRoot)
+  GtkDialog, // toplevel (implements GtkRoot)
+  GtkDragIcon, // toplevel (implements GtkRoot)
+  GtkFileChooserDialog, // toplevel (implements GtkRoot)
   GtkFlowBoxChild, // child-only (derives Gtk.FlowBoxChild)
-  GtkFontChooserDialog, // toplevel (derives Gtk.Window)
+  GtkFontChooserDialog, // toplevel (implements GtkRoot)
   GtkListBoxRow, // child-only (derives Gtk.ListBoxRow)
-  GtkMessageDialog, // toplevel (derives Gtk.Window)
-  GtkPageSetupUnixDialog, // toplevel (derives Gtk.Window)
-  GtkPrintUnixDialog, // toplevel (derives Gtk.Window)
-  GtkShortcutsWindow, // toplevel (derives Gtk.Window)
-  GtkWindow, // toplevel (derives Gtk.Window)
+  GtkMessageDialog, // toplevel (implements GtkRoot)
+  GtkPageSetupUnixDialog, // toplevel (implements GtkRoot)
+  GtkPrintUnixDialog, // toplevel (implements GtkRoot)
+  GtkShortcutsWindow, // toplevel (implements GtkRoot)
+  GtkWindow, // toplevel (implements GtkRoot)
 } from "../gtkx/bridge/widgets.generated"
 
 export const GTK_WRAPPED_WIDGET_NAMES = [
@@ -224,7 +223,6 @@ export const GTK_WRAPPED_WIDGET_NAMES = [
   "GtkColumnView",
   "GtkComboBox",
   "GtkComboBoxText",
-  "GtkDragIcon",
   "GtkDrawingArea",
   "GtkDropDown",
   "GtkEditableLabel",

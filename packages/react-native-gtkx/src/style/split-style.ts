@@ -89,9 +89,33 @@ const VISUAL_KEYS: Record<keyof VisualStyle, true> = {
   transform: true,
 }
 
+// Behavioral props: supported, but by neither half of this pipeline. Since
+// RN 0.71 `pointerEvents` may be written in a style and not only as a prop,
+// and View reads it straight off the flattened style (components/view.tsx)
+// to drive GTK picking — it never reaches Yoga and it has no CSS
+// equivalent. So the splitter must CONSUME it silently: warning here told a
+// user that working code was being ignored, on the very line where
+// tests/gtk/components/pointer-events.gtk.test.tsx proves it is not.
+//
+// Exhaustive the same way the two buckets above are, but over what FlatStyle
+// adds ON TOP of LayoutStyle and VisualStyle — that Omit makes the three
+// records a partition of the contract, so a future fourth kind of style prop
+// cannot be added to FlatStyle without failing compilation right here. That
+// is exactly the drift this list suffered: `pointerEvents` was added to the
+// contract and to View, and nothing forced anyone to classify it.
+const BEHAVIORAL_KEYS: Record<
+  keyof Omit<FlatStyle, keyof LayoutStyle | keyof VisualStyle>,
+  true
+> = {
+  pointerEvents: true,
+}
+
 /**
- * Splits a flattened style into { layout, visual }. Unknown properties are
- * ignored with a one-time dev warning per key; undefined values are dropped.
+ * Splits a flattened style into { layout, visual }. Behavioral props
+ * (pointerEvents) belong to neither bucket and are consumed silently — the
+ * component that owns the behavior reads them from the flattened style.
+ * Unknown properties are ignored with a one-time dev warning per key;
+ * undefined values are dropped.
  */
 export const splitStyle = (flat: FlatStyle): SplitStyle => {
   const layout: LayoutStyle = {}
@@ -104,7 +128,7 @@ export const splitStyle = (flat: FlatStyle): SplitStyle => {
       ;(layout as Record<string, unknown>)[key] = value
     } else if (Object.hasOwn(VISUAL_KEYS, key)) {
       ;(visual as Record<string, unknown>)[key] = value
-    } else {
+    } else if (!Object.hasOwn(BEHAVIORAL_KEYS, key)) {
       warnOnce(
         `unknown-style-prop:${key}`,
         `[react-native-gtkx] Unknown style property "${key}" is not supported and will be ignored`,

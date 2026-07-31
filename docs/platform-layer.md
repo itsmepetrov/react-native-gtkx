@@ -63,7 +63,7 @@ anything you could set on `Adw.NavigationPage` you can set on
 
 ### GTK widgets, driven by React Native
 
-Every `GtkWidget` subclass gtkx binds — 87 of them at last count, from
+Every `GtkWidget` subclass gtkx binds — 86 of them at last count, from
 `GtkBox` and `GtkButton` to `GtkColumnView` and `GtkEmojiChooser`. The list is
 generated, not hand-picked: `scripts/generate-widget-surface.ts` classifies
 gtkx's full binding by real GObject inheritance (see
@@ -104,11 +104,21 @@ flag to remember.
 Two families of widget are exported **raw** instead of wrapped, because a
 wrapper box around them would be invalid GTK rather than a convenience:
 
-- **toplevels** — `GtkWindow` and everything that derives it: every
-  `Gtk*Dialog`, `GtkApplicationWindow`, `GtkAssistant`, `GtkShortcutsWindow`,
-  and their Adwaita counterparts (`AdwWindow`, `AdwApplicationWindow`,
-  `AdwAboutWindow`, `AdwMessageDialog`, `AdwPreferencesWindow`). A wrapper box
-  around a window is not a layout, it is two windows.
+- **toplevels** — everything that implements `GtkRoot`: `GtkWindow` and
+  everything that derives it (every `Gtk*Dialog`, `GtkApplicationWindow`,
+  `GtkAssistant`, `GtkShortcutsWindow`, and their Adwaita counterparts
+  `AdwWindow`, `AdwApplicationWindow`, `AdwAboutWindow`, `AdwMessageDialog`,
+  `AdwPreferencesWindow`) — plus `GtkDragIcon`, which derives `Gtk.Widget`
+  directly and is a toplevel all the same. A wrapper box around a window is
+  not a layout, it is two windows; and a drag icon inside one is a widget
+  GTK cannot present at all. The rule is written against `GtkRoot` (the
+  capability: owns its own surface, is presented, never parented) rather
+  than against `Gtk.Window` (one familiar instance of it) precisely because
+  `GtkDragIcon` is the case a class-shaped rule misses. `GtkPopover` sits on
+  the other side of the line — a `GtkNative` but not a `GtkRoot`, and gtkx
+  parents it with `gtk_popover_set_parent`, so it stays wrapped. Build a
+  drag icon the way GTK does, from the drag itself
+  (`Gtk.DragIcon.getForDrag(drag).setChild(…)`), not by mounting one.
 - **child-only widgets** — valid solely as the direct child of one specific
   parent. `GtkListBoxRow` and `GtkFlowBoxChild` (plus everything that derives
   them — every Adwaita preferences row, `AdwActionRow` included) are caught

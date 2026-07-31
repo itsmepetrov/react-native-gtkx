@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { resetDevWarnings, splitStyle } from "../../../src/style/index"
 import type {
+  BehavioralStyle,
   FlatStyle,
   LayoutStyle,
   VisualStyle,
@@ -83,6 +84,12 @@ const fullVisual: Required<VisualStyle> = {
   transform: [{ translateX: 5 }, { rotate: "45deg" }],
 }
 
+// Every key of the frozen BehavioralStyle contract: supported, but consumed
+// by the component rather than by either half of the style pipeline.
+const fullBehavioral: Required<BehavioralStyle> = {
+  pointerEvents: "box-none",
+}
+
 beforeEach(() => {
   resetDevWarnings()
 })
@@ -102,6 +109,53 @@ describe("splitStyle", () => {
     const { layout, visual } = splitStyle(fullVisual)
     expect(visual).toEqual(fullVisual)
     expect(layout).toEqual({})
+  })
+
+  // tests/gtk/components/pointer-events.gtk.test.tsx asserts that
+  // style.pointerEvents really drives GTK picking; for a while this splitter
+  // printed "Unknown style property" on the very same line. Supported on one
+  // path, unknown on another — the two must agree.
+  it("consumes every BehavioralStyle key silently, routing it nowhere", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const { layout, visual } = splitStyle(fullBehavioral)
+    expect(layout).toEqual({})
+    expect(visual).toEqual({})
+    expect(warn).not.toHaveBeenCalled()
+  })
+
+  it("keeps behavioral keys out of the buckets in a mixed style", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const { layout, visual } = splitStyle({
+      width: 10,
+      backgroundColor: "red",
+      pointerEvents: "none",
+    })
+    expect(layout).toEqual({ width: 10 })
+    expect(visual).toEqual({ backgroundColor: "red" })
+    expect(warn).not.toHaveBeenCalled()
+  })
+
+  // The three buckets are a partition of FlatStyle by construction (see
+  // BEHAVIORAL_KEYS' Omit in split-style.ts); this asserts it at runtime too,
+  // so a contract key that reaches neither bucket is caught by a failing test
+  // and not only by a type error someone can widen away.
+  it("classifies every key of the full contract without warning", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const full: Required<FlatStyle> = {
+      ...fullLayout,
+      ...fullVisual,
+      ...fullBehavioral,
+    }
+    const { layout, visual } = splitStyle(full)
+    const classified = new Set([
+      ...Object.keys(layout),
+      ...Object.keys(visual),
+      ...Object.keys(fullBehavioral),
+    ])
+    expect(
+      [...Object.keys(full)].filter((key) => !classified.has(key)),
+    ).toEqual([])
+    expect(warn).not.toHaveBeenCalled()
   })
 
   it("splits a mixed style without losing keys", () => {

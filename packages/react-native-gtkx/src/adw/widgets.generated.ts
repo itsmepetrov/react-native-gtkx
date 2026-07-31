@@ -112,22 +112,22 @@ export const AdwWindowTitle = wrapReactNative(RawAdwWindowTitle)
 export const AdwWrapBox = wrapReactNative(RawAdwWrapBox)
 
 export {
-  AdwAboutWindow, // toplevel (derives Gtk.Window)
+  AdwAboutWindow, // toplevel (implements GtkRoot)
   AdwActionRow, // child-only (derives Gtk.ListBoxRow)
-  AdwApplicationWindow, // toplevel (derives Gtk.Window)
+  AdwApplicationWindow, // toplevel (implements GtkRoot)
   AdwButtonRow, // child-only (derives Gtk.ListBoxRow)
   AdwComboRow, // child-only (derives Gtk.ListBoxRow)
   AdwEntryRow, // child-only (derives Gtk.ListBoxRow)
   AdwExpanderRow, // child-only (derives Gtk.ListBoxRow)
-  AdwMessageDialog, // toplevel (derives Gtk.Window)
+  AdwMessageDialog, // toplevel (implements GtkRoot)
   AdwNavigationPage, // child-only (denylist — see scripts/widget-surface/classify.ts)
   AdwPasswordEntryRow, // child-only (derives Gtk.ListBoxRow)
   AdwPreferencesPage, // child-only (denylist — see scripts/widget-surface/classify.ts)
   AdwPreferencesRow, // child-only (derives Gtk.ListBoxRow)
-  AdwPreferencesWindow, // toplevel (derives Gtk.Window)
+  AdwPreferencesWindow, // toplevel (implements GtkRoot)
   AdwSpinRow, // child-only (derives Gtk.ListBoxRow)
   AdwSwitchRow, // child-only (derives Gtk.ListBoxRow)
-  AdwWindow, // toplevel (derives Gtk.Window)
+  AdwWindow, // toplevel (implements GtkRoot)
 } from "../gtkx/bridge/widgets.generated"
 
 export const ADW_WRAPPED_WIDGET_NAMES = [
