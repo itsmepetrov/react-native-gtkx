@@ -38,6 +38,11 @@ jobs:
         run: npm run lint
       - name: Docs coverage
         run: npm run docs:check
+      - name: MCP data is in sync with the docs
+        # src/mcp/data/generated.ts embeds doc text verbatim; nothing else
+        # catches it drifting, and a stale copy makes the MCP server answer
+        # from documentation that no longer exists.
+        run: npm run mcp:check-data
       - name: Tests (unit + GTK components under headless sway)
         # sway refuses to start as root, so the test step runs as a dedicated
         # non-root user with its own XDG_RUNTIME_DIR.
