@@ -128,6 +128,10 @@ export default typescriptEslint.config(
     files: [
       "packages/react-native-gtkx/src/gtkx/bridge/**",
       "packages/react-native-gtkx/src/runner/**",
+      // The SEA bundler builds a single-executable artifact by reaching
+      // into @gtkx/* directly (resolving/loading HOST_MODULE_EXTERNALS
+      // and gtkx.config.ts at build time) — see src/sea/bundle.ts.
+      "packages/react-native-gtkx/src/sea/**",
       // The testing preset subpaths: they wrap @gtkx/vitest and
       // @gtkx/testing directly on purpose, same reasoning as src/runner/.
       "packages/react-native-gtkx/src/vitest/**",
