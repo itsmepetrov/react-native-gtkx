@@ -22,13 +22,11 @@
 // Adwaita fidelity. RN primitives render flat rows with no list frame, no
 // hover and no row activation — visibly worse than the platform's own, for
 // no portability gain in an app that is Linux-only by design.
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
-  AdwActionRow,
   AdwClamp,
   AdwEntryRow,
   AdwStatusPage,
-  AdwSwitchRow,
   AdwToggle,
   AdwToggleGroup,
   AdwWindowTitle,
@@ -37,7 +35,6 @@ import {
   Gtk,
   GtkBox,
   GtkButton,
-  GtkCheckButton,
   GtkListBox,
   GtkScrolledWindow,
   GtkSearchBar,
@@ -48,87 +45,20 @@ import type {
   SidebarNavigationOptions,
   SidebarScreenProps,
 } from "react-native-gtkx/navigation"
+import { MainMenu } from "../components/main-menu"
+import { TaskDetail } from "../components/task-detail"
+import { TaskRow } from "../components/task-row"
+import { useSortOrder } from "../hooks/use-sort-order"
+import {
+  addTargetListId,
+  emptyState,
+  isReorderable,
+  isTrashSelection,
+  parseRoute,
+  visibleTasks,
+} from "../selectors"
 import { useStore } from "../store"
-import type { Filter, Task } from "../types"
-
-type Selection =
-  | { kind: "smart"; view: "all" | "important" | "trash" }
-  | { kind: "list"; listId: string }
-
-const parseRoute = (name: string): Selection => {
-  if (name.startsWith("smart:")) {
-    return {
-      kind: "smart",
-      view: name.slice("smart:".length) as "all" | "important" | "trash",
-    }
-  }
-  return { kind: "list", listId: name.slice("list:".length) }
-}
-
-const matchesSelection = (task: Task, selection: Selection): boolean => {
-  if (selection.kind === "list") {
-    return task.listId === selection.listId
-  }
-  if (selection.view === "important") {
-    return task.important
-  }
-  return true // "all"
-}
-
-const matchesFilter = (task: Task, filter: Filter): boolean => {
-  if (filter === "open") {
-    return !task.done
-  }
-  if (filter === "done") {
-    return task.done
-  }
-  return true
-}
-
-/** AdwActionRow's title takes Pango markup when `useMarkup` is set, which
- *  is how a completed task gets a real strikethrough — so the task's own
- *  text has to be escaped before being embedded in it. */
-const escapeMarkup = (text: string): string =>
-  text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-
-type EmptyState = { icon: string; title: string; description: string }
-
-const emptyState = (
-  selection: Selection,
-  isTrash: boolean,
-  query: string,
-): EmptyState => {
-  if (query) {
-    return {
-      icon: "system-search-symbolic",
-      title: "No Results",
-      description: `No tasks match “${query}”`,
-    }
-  }
-  if (isTrash) {
-    return {
-      icon: "user-trash-symbolic",
-      title: "Trash Is Empty",
-      description: "Deleted tasks show up here.",
-    }
-  }
-  if (selection.kind === "smart" && selection.view === "important") {
-    return {
-      icon: "starred-symbolic",
-      title: "Nothing Important",
-      description: "Star a task to see it here.",
-    }
-  }
-  return {
-    icon: "view-list-symbolic",
-    title: "No Tasks",
-    description: "Add one with the field above.",
-  }
-}
+import type { Filter } from "../types"
 
 // `route`/`navigation` are read as PROPS, not via `useNavigation()`/
 // `useRoute()` — react-navigation passes both to any screen `component`
@@ -143,17 +73,19 @@ export const ContentScreen = ({ route, navigation }: SidebarScreenProps) => {
   const {
     lists,
     tasks,
+    selectedTaskId,
+    searchMode,
+    searchQuery,
     addTask,
-    setTitle,
-    toggleDone,
+    openTask,
     toggleImportant,
     moveToTrash,
-    restore,
+    setSearchMode,
+    setSearchQuery,
+    setActiveRoute,
   } = useStore()
   const [filter, setFilter] = useState<Filter>("all")
-  const [openTaskId, setOpenTaskId] = useState<string | null>(null)
-  const [searchMode, setSearchMode] = useState(false)
-  const [searchQuery, setSearchQuery] = useState("")
+  const [sortOrder] = useSortOrder()
 
   // The split view's own back button/Escape/back gesture (narrow window)
   // hides content and shows the sidebar again — a presentation change with
@@ -162,38 +94,48 @@ export const ContentScreen = ({ route, navigation }: SidebarScreenProps) => {
   // so re-selecting the SAME list from the sidebar lands back on the list,
   // not straight back into whatever task was open — "back" should mean
   // back, the same way a mobile master-detail app's own back button would.
-  useEffect(
-    () => navigation.addListener("sidebarShown", () => setOpenTaskId(null)),
-    [navigation],
-  )
-
-  const selection = parseRoute(route.name)
-  const isTrash = selection.kind === "smart" && selection.view === "trash"
-
-  const visibleTasks = tasks.filter((task) => {
-    if (isTrash) {
-      return task.deleted
+  //
+  // `focus` does the same for a DIFFERENT row being selected. The open task
+  // and the search term live in the store (they have to: Escape and Ctrl+F
+  // are window shortcuts, mounted outside this tree), so unlike the local
+  // state they replaced they are shared by every screen — arriving at
+  // another list still holding the previous list's open task would be
+  // wrong. This is examples/tasks-app's `select()` reset, moved to where
+  // this app learns that selection changed.
+  useEffect(() => {
+    const clear = () => {
+      openTask(null)
+      setSearchMode(false)
     }
-    return !task.deleted && matchesSelection(task, selection)
-  })
+    const unsubscribeShown = navigation.addListener("sidebarShown", clear)
+    const unsubscribeFocus = navigation.addListener("focus", () => {
+      clear()
+      // Mirror the focused route into the store for `win.new`, which is
+      // mounted outside the navigator and cannot read navigation state.
+      setActiveRoute(route.name)
+    })
+    return () => {
+      unsubscribeShown()
+      unsubscribeFocus()
+    }
+  }, [navigation, route.name, openTask, setSearchMode, setActiveRoute])
 
-  const openTask = openTaskId
-    ? tasks.find((task) => task.id === openTaskId && !task.deleted)
+  // Memoized on the route name alone: `selection` is a fresh object every
+  // render otherwise, and it is an effect dependency below — the header
+  // would be rebuilt on every single render for no reason.
+  const selection = useMemo(() => parseRoute(route.name), [route.name])
+  const isTrash = isTrashSelection(selection)
+
+  const openedTask = selectedTaskId
+    ? tasks.find((task) => task.id === selectedTaskId && !task.deleted)
     : undefined
 
-  // Where a task typed into the "Add a task…" row lands: the current list
-  // when a list is selected, the first list otherwise — a smart view is a
-  // query, not a place to put things (tasks-app's addListId, same rule).
-  const addTargetListId =
-    selection.kind === "list" ? selection.listId : lists[0]?.id
+  const addListId = addTargetListId(selection, lists)
 
-  const createTask = (title: string): Task | undefined => {
-    const trimmed = title.trim()
-    if (!trimmed || !addTargetListId) {
-      return undefined
-    }
-    return addTask(addTargetListId, trimmed)
-  }
+  // Drag-and-drop is only attached to rows when the current view can
+  // actually express an order — see selectors.ts's `isReorderable` for the
+  // three conditions and why each one disqualifies a drag.
+  const reorderable = isReorderable(selection, searchQuery, sortOrder)
 
   // The header's own shape changes with THIS screen's local state — see
   // the file header comment. setOptions MERGES into the previously
@@ -202,41 +144,44 @@ export const ContentScreen = ({ route, navigation }: SidebarScreenProps) => {
   // rather than omitting them.
   useEffect(() => {
     let options: SidebarNavigationOptions
-    if (openTask) {
+    if (openedTask) {
       options = {
         headerLeft: () => (
           <GtkButton
             iconName="go-previous-symbolic"
-            tooltipText="Back"
-            onClicked={() => setOpenTaskId(null)}
+            tooltipText="Back (Escape)"
+            onClicked={() => openTask(null)}
           />
         ),
+        // The menu goes LAST so it stays the rightmost control in the
+        // HeaderBar, where GNOME apps put it — headerRight's children pack
+        // left to right, after the navigator's own headerButtons.
         headerRight: () => (
           <>
             <GtkToggleButton
               iconName={
-                openTask.important ? "starred-symbolic" : "non-starred-symbolic"
+                openedTask.important
+                  ? "starred-symbolic"
+                  : "non-starred-symbolic"
               }
-              active={openTask.important}
+              active={openedTask.important}
               tooltipText="Important"
-              onToggled={() => toggleImportant(openTask.id)}
+              onToggled={() => toggleImportant(openedTask.id)}
             />
             <GtkButton
               iconName="user-trash-symbolic"
-              tooltipText="Delete"
-              onClicked={() => {
-                moveToTrash(openTask.id)
-                setOpenTaskId(null)
-              }}
+              tooltipText="Delete (Delete)"
+              onClicked={() => moveToTrash(openedTask.id)}
             />
+            <MainMenu />
           </>
         ),
-        headerTitle: () => <AdwWindowTitle title={openTask.title} />,
+        headerTitle: () => <AdwWindowTitle title={openedTask.title} />,
       }
     } else if (isTrash) {
       options = {
         headerLeft: undefined,
-        headerRight: undefined,
+        headerRight: () => <MainMenu />,
         headerTitle: undefined,
       }
     } else {
@@ -245,26 +190,20 @@ export const ContentScreen = ({ route, navigation }: SidebarScreenProps) => {
           <>
             <GtkButton
               iconName="list-add-symbolic"
-              tooltipText="New Task"
-              onClicked={() => {
-                // Inlined rather than calling createTask(): a closure
-                // recreated every render would have to be an effect
-                // dependency, re-running the whole header rebuild on every
-                // render. Depending on the DATA it reads is the honest form.
-                if (addTargetListId) {
-                  setOpenTaskId(addTask(addTargetListId, "New Task").id)
-                }
-              }}
+              tooltipText="New Task (Ctrl+N)"
+              // The window action, not a local handler: the same code path
+              // Ctrl+N takes, so the two can never drift apart.
+              actionName="win.new"
             />
             <GtkToggleButton
               iconName="system-search-symbolic"
-              tooltipText="Search"
+              tooltipText="Search (Ctrl+F)"
               active={searchMode}
               onToggled={(self) => setSearchMode(self.active)}
             />
           </>
         ),
-        headerRight: undefined,
+        headerRight: () => <MainMenu />,
         // AdwToggleGroup, not a hand-built GtkBox of GtkButtons: the
         // Adwaita widget IS the compact segmented pill this design calls
         // for. A box of buttons cannot be made to look like one — `.linked`
@@ -301,63 +240,33 @@ export const ContentScreen = ({ route, navigation }: SidebarScreenProps) => {
     // route.name is not in the deps: `selection` (derived from it) already
     // captures everything this effect reads from the route.
   }, [
-    openTask,
+    openedTask,
     isTrash,
     filter,
     searchMode,
     selection,
     navigation,
-    addTask,
-    addTargetListId,
+    openTask,
+    setSearchMode,
     toggleImportant,
     moveToTrash,
   ])
 
-  if (openTask) {
-    const list = lists.find((entry) => entry.id === openTask.listId)
+  if (openedTask) {
     return (
-      <GtkScrolledWindow vexpand>
-        <AdwClamp
-          maximumSize={640}
-          marginTop={24}
-          marginBottom={24}
-          marginStart={12}
-          marginEnd={12}
-        >
-          <GtkListBox
-            selectionMode={Gtk.SelectionMode.NONE}
-            cssClasses={["boxed-list"]}
-          >
-            <AdwEntryRow
-              title="Title"
-              text={openTask.title}
-              onNotifyText={(value) => setTitle(openTask.id, value ?? "")}
-            />
-            <AdwSwitchRow
-              title="Done"
-              active={openTask.done}
-              onNotifyActive={() => toggleDone(openTask.id)}
-            />
-            <AdwSwitchRow
-              title="Important"
-              active={openTask.important}
-              onNotifyActive={() => toggleImportant(openTask.id)}
-            />
-            <AdwActionRow
-              title="List"
-              subtitle={list?.name ?? "—"}
-            />
-          </GtkListBox>
-        </AdwClamp>
-      </GtkScrolledWindow>
+      <TaskDetail
+        task={openedTask}
+        list={lists.find((entry) => entry.id === openedTask.listId)}
+      />
     )
   }
 
-  const query = searchMode ? searchQuery.trim().toLowerCase() : ""
-  const visible = visibleTasks
-    .filter((task) => isTrash || matchesFilter(task, filter))
-    .filter((task) => !query || task.title.toLowerCase().includes(query))
-  const empty = emptyState(selection, isTrash, query)
+  const visible = visibleTasks(tasks, selection, {
+    query: searchQuery,
+    filter,
+    sortOrder,
+  })
+  const empty = emptyState(selection, searchQuery)
 
   return (
     <GtkBox
@@ -396,74 +305,23 @@ export const ContentScreen = ({ route, navigation }: SidebarScreenProps) => {
                 <AdwEntryRow
                   title="Add a task…"
                   onEntryActivated={(self) => {
-                    createTask(self.text)
+                    if (addListId) {
+                      addTask(addListId, self.text)
+                    }
                     self.text = ""
                   }}
                 />
               )}
-              {visible.map((task) => {
-                const list = lists.find((entry) => entry.id === task.listId)
-                const title = task.done
-                  ? `<s>${escapeMarkup(task.title)}</s>`
-                  : escapeMarkup(task.title)
-                return (
-                  <AdwActionRow
-                    key={task.id}
-                    title={title}
-                    useMarkup
-                    subtitle={
-                      selection.kind === "list" ? undefined : list?.name
-                    }
-                    activatable
-                    onActivated={() =>
-                      isTrash ? restore(task.id) : setOpenTaskId(task.id)
-                    }
-                    prefix={
-                      isTrash ? undefined : (
-                        <GtkCheckButton
-                          valign={Gtk.Align.CENTER}
-                          active={task.done}
-                          accessibleLabel="Mark complete"
-                          onToggled={() => toggleDone(task.id)}
-                        />
-                      )
-                    }
-                    suffix={
-                      isTrash ? (
-                        <GtkButton
-                          valign={Gtk.Align.CENTER}
-                          iconName="edit-undo-symbolic"
-                          tooltipText="Restore"
-                          cssClasses={["flat"]}
-                          onClicked={() => restore(task.id)}
-                        />
-                      ) : (
-                        <>
-                          <GtkToggleButton
-                            valign={Gtk.Align.CENTER}
-                            iconName={
-                              task.important
-                                ? "starred-symbolic"
-                                : "non-starred-symbolic"
-                            }
-                            active={task.important}
-                            accessibleLabel="Toggle important"
-                            cssClasses={["flat"]}
-                            onToggled={() => toggleImportant(task.id)}
-                          />
-                          <GtkButton
-                            valign={Gtk.Align.CENTER}
-                            iconName="user-trash-symbolic"
-                            accessibleLabel="Delete task"
-                            cssClasses={["flat"]}
-                            onClicked={() => moveToTrash(task.id)}
-                          />
-                        </>
-                      )
-                    }
-                  />
-                )
-              })}
+              {visible.map((task) => (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  list={lists.find((entry) => entry.id === task.listId)}
+                  isTrash={isTrash}
+                  reorderable={reorderable}
+                  showListName={selection.kind !== "list"}
+                />
+              ))}
             </GtkListBox>
             {visible.length === 0 ? (
               <AdwStatusPage

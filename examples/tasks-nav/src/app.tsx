@@ -5,9 +5,14 @@
 // shows a task list or an open task's editor), written through the
 // navigator instead of around it.
 import { NavigationContainer } from "@react-navigation/native"
+import schema from "#data/dev.rngtkx.tasksnav.gschema.xml"
+import { useEffect } from "react"
+import { useSetting } from "react-native-gtkx/gtk"
 import { createSidebarNavigator } from "react-native-gtkx/navigation"
+import { Dialogs } from "./components/dialogs"
 import { ContentScreen } from "./screens/content-screen"
-import { LIST_COLOR_PALETTE, StoreProvider, useStore } from "./store"
+import { LIST_COLOR_PALETTE, useStore } from "./store"
+import { applyColorScheme } from "./theme"
 
 const Sidebar = createSidebarNavigator()
 
@@ -17,8 +22,13 @@ export const smartViewRoute = (view: "all" | "important" | "trash"): string =>
   `smart:${view}`
 export const listRoute = (listId: string): string => `list:${listId}`
 
-const AppShell = () => {
+export const App = () => {
   const { lists, tasks, addList } = useStore()
+  const [colorScheme] = useSetting(schema, "color-scheme")
+
+  useEffect(() => {
+    applyColorScheme(colorScheme)
+  }, [colorScheme])
 
   const openCount = (predicate: (task: (typeof tasks)[number]) => boolean) =>
     tasks.filter((task) => !task.deleted && predicate(task)).length
@@ -26,87 +36,87 @@ const AppShell = () => {
   const trashCount = tasks.filter((task) => task.deleted).length
 
   return (
-    <NavigationContainer>
-      <Sidebar.Navigator
-        sidebarTitle="Tasks (nav)"
-        collapseWidth={500}
-        // This app's own narrow floor, measured rather than guessed: the
-        // collapsed content HeaderBar (the split view's back button, New
-        // Task, Search, the All/Open/Done toggle group as headerTitle, New
-        // List, and the window controls) asks for 469px, and a segmented
-        // control cannot ellipsize the way a title label does. Left at the
-        // 360px default the window kept shrinking past that and Adwaita
-        // clipped the pane — the task list ran off the right edge with its
-        // star/trash buttons cut away. 480 still sits below collapseWidth,
-        // so the collapsed layout is fully reachable.
-        minWidth={480}
-        // Every screen's body is a GTK widget tree (AdwClamp + a
-        // `.boxed-list` GtkListBox), not a React Native one — see
-        // screens/content-screen.tsx for why that is the right choice for
-        // this app, and docs/api.md for what the option changes.
-        screenOptions={{ contentLayout: "widget" }}
-        headerButtons={[
-          {
-            id: "new-list",
-            icon: "list-add-symbolic",
-            tooltip: "New List",
-            onPress: () => {
-              const color =
-                LIST_COLOR_PALETTE[lists.length % LIST_COLOR_PALETTE.length]!
-              addList(`List ${lists.length + 1}`, color)
+    <>
+      <NavigationContainer>
+        <Sidebar.Navigator
+          sidebarTitle="Tasks (nav)"
+          collapseWidth={500}
+          // This app's own narrow floor, measured rather than guessed: the
+          // collapsed content HeaderBar (the split view's back button, New
+          // Task, Search, the All/Open/Done toggle group as headerTitle, the
+          // main menu, New List, and the window controls) asks for 469px,
+          // and a segmented control cannot ellipsize the way a title label
+          // does. Left at the 360px default the window kept shrinking past
+          // that and Adwaita clipped the pane — the task list ran off the
+          // right edge with its star/trash buttons cut away. 480 still sits
+          // below collapseWidth, so the collapsed layout is fully reachable.
+          minWidth={480}
+          // Every screen's body is a GTK widget tree (AdwClamp + a
+          // `.boxed-list` GtkListBox), not a React Native one — see
+          // screens/content-screen.tsx for why that is the right choice for
+          // this app, and docs/api.md for what the option changes.
+          screenOptions={{ contentLayout: "widget" }}
+          headerButtons={[
+            {
+              id: "new-list",
+              icon: "list-add-symbolic",
+              tooltip: "New List",
+              onPress: () => {
+                const color =
+                  LIST_COLOR_PALETTE[lists.length % LIST_COLOR_PALETTE.length]!
+                addList(`List ${lists.length + 1}`, color)
+              },
             },
-          },
-        ]}
-      >
-        <Sidebar.Screen
-          name={smartViewRoute("all")}
-          component={ContentScreen}
-          options={{
-            title: "All Tasks",
-            icon: "view-list-symbolic",
-            count: openCount(() => true),
-          }}
-        />
-        <Sidebar.Screen
-          name={smartViewRoute("important")}
-          component={ContentScreen}
-          options={{
-            title: "Important",
-            icon: "starred-symbolic",
-            count: openCount((task) => task.important),
-          }}
-        />
-        {/* Dynamic: one screen per user list, added/removed as `lists`
-            changes at runtime — proves createSidebarNavigator (TabRouter)
-            tolerates a changing screen set, not just a fixed tab bar. */}
-        {lists.map((list) => (
+          ]}
+        >
           <Sidebar.Screen
-            key={list.id}
-            name={listRoute(list.id)}
+            name={smartViewRoute("all")}
             component={ContentScreen}
             options={{
-              title: list.name,
-              color: list.color,
-              count: openCount((task) => task.listId === list.id),
+              title: "All Tasks",
+              icon: "view-list-symbolic",
+              count: openCount(() => true),
             }}
           />
-        ))}
-        <Sidebar.Screen
-          name={smartViewRoute("trash")}
-          component={ContentScreen}
-          options={{
-            title: "Trash",
-            icon: "user-trash-symbolic",
-            count: trashCount,
-          }}
-        />
-      </Sidebar.Navigator>
-    </NavigationContainer>
+          <Sidebar.Screen
+            name={smartViewRoute("important")}
+            component={ContentScreen}
+            options={{
+              title: "Important",
+              icon: "starred-symbolic",
+              count: openCount((task) => task.important),
+            }}
+          />
+          {/* Dynamic: one screen per user list, added/removed as `lists`
+              changes at runtime — proves createSidebarNavigator (TabRouter)
+              tolerates a changing screen set, not just a fixed tab bar. */}
+          {lists.map((list) => (
+            <Sidebar.Screen
+              key={list.id}
+              name={listRoute(list.id)}
+              component={ContentScreen}
+              options={{
+                title: list.name,
+                color: list.color,
+                count: openCount((task) => task.listId === list.id),
+              }}
+            />
+          ))}
+          <Sidebar.Screen
+            name={smartViewRoute("trash")}
+            component={ContentScreen}
+            options={{
+              title: "Trash",
+              icon: "user-trash-symbolic",
+              count: trashCount,
+            }}
+          />
+        </Sidebar.Navigator>
+      </NavigationContainer>
+      {/* A sibling of the navigator, not a child of any screen: an
+          Adw.Dialog presents itself onto the window rather than being laid
+          out where it is written. */}
+      <Dialogs />
+    </>
   )
 }
-
-export const App = () => (
-  <StoreProvider>
-    <AppShell />
-  </StoreProvider>
-)
