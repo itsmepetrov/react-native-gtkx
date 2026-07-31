@@ -4,11 +4,10 @@
 // image. SVG **files** are a different, already-shipped feature: see the
 // Media section (Image loads .svg through Gdk.Texture/librsvg).
 import { useEffect, useState } from "react"
-import {
-  Animated,
+import { Animated, Easing, StyleSheet, View } from "react-native"
+import Svg, {
   Circle,
   Defs,
-  Easing,
   Ellipse,
   G,
   Line,
@@ -17,10 +16,7 @@ import {
   Polyline,
   Rect,
   Stop,
-  StyleSheet,
-  Svg,
-  View,
-} from "react-native"
+} from "react-native-svg"
 import { Caption, DemoCard, palette, Section } from "../ui"
 
 const styles = StyleSheet.create({
