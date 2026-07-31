@@ -1,7 +1,7 @@
 // Interactive components: signal-level behavior of Switch, TextInput and
 // dynamic FlatList data, driven through fireEvent — the widget contract
 // itself, independent of pointer geometry.
-import { fireEvent, render, screen, waitFor } from "@gtkx/testing"
+import { act, fireEvent, render, screen, waitFor } from "@gtkx/testing"
 import { useState } from "react"
 import { expect, it, vi } from "vitest"
 import { Gtk, type Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
@@ -59,22 +59,32 @@ it("Switch reports the change but stays prop-controlled", async () => {
 
 it("TextInput delivers text changes from the widget", async () => {
   const onChangeText = vi.fn()
-  await render(
-    <Root
-      width={300}
-      height={200}
-    >
-      <TextInput
-        defaultValue=""
-        onChangeText={onChangeText}
-      />
-    </Root>,
-  )
+  // render()'s own layout settling runs after its internal act() wrap
+  // closes, so the whole call needs act() too (same as entry.setText below
+  // — SingleLineTextInput's measureFromWidget remeasure-on-"map" effect
+  // lands here, not in the changed-signal handler).
+  await act(async () => {
+    await render(
+      <Root
+        width={300}
+        height={200}
+      >
+        <TextInput
+          defaultValue=""
+          onChangeText={onChangeText}
+        />
+      </Root>,
+    )
+  })
 
   const entry = (await screen.findByRole(
     Gtk.AccessibleRole.TEXT_BOX,
   )) as GtkNs.Entry
-  entry.setText("привет")
+  // setText fires GtkEntry's "changed" signal synchronously, which calls
+  // onChangeText — a native poke outside any React event handler.
+  await act(async () => {
+    entry.setText("привет")
+  })
 
   await waitFor(() => {
     expect(onChangeText).toHaveBeenCalledWith("привет")
@@ -97,10 +107,14 @@ it("FlatList renders appended rows in order", async () => {
     </Root>
   )
 
-  const { rerender } = await render(list(data))
+  // render()'s own layout settling runs after its internal act() wrap
+  // closes, so the whole call needs act() too (same as the rerender below).
+  const { rerender } = await act(async () => render(list(data)))
   expect(screen.getByText("Row #2")).toBeTruthy()
 
-  await rerender(list([...data, "Row #3"]))
+  await act(async () => {
+    await rerender(list([...data, "Row #3"]))
+  })
   const added = screen.getByText("Row #3") as GtkNs.Label
   expect(added).toBeTruthy()
   await waitFor(() => {
@@ -155,14 +169,16 @@ it("clearButtonMode shows GtkEntry's own clear icon and empties the field", asyn
       />
     )
   }
-  await render(
-    <Root
-      width={300}
-      height={200}
-    >
-      <Controlled />
-    </Root>,
-  )
+  await act(async () => {
+    await render(
+      <Root
+        width={300}
+        height={200}
+      >
+        <Controlled />
+      </Root>,
+    )
+  })
 
   const entry = (await screen.findByRole(
     Gtk.AccessibleRole.TEXT_BOX,

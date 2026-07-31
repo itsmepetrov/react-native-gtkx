@@ -13,7 +13,7 @@
 // does not evaluate under the @gtkx/vitest headless-sway compositor, even
 // though it works immediately in a real GNOME session) — only that the prop
 // reaches the window and does not crash it.
-import { userEvent, waitFor } from "@gtkx/testing"
+import { act, userEvent, waitFor } from "@gtkx/testing"
 import { expect, it } from "vitest"
 import { AppRegistry } from "../../../src/components/app-registry"
 import {
@@ -40,46 +40,51 @@ it("forwards actions, actionAccels, controllers and breakpoints to the running a
 
   const TITLE = `app-registry-probe-${process.pid}`
   AppRegistry.registerComponent("app-registry-probe-app", () => App)
-  AppRegistry.runApplication("app-registry-probe-app", {
-    title: TITLE,
-    chrome: "content",
-    width: 500,
-    height: 400,
-    applicationActions: (
-      <GSimpleAction
-        name="app-ping"
-        onActivate={() => appActivated.push("app-ping")}
-      />
-    ),
-    actionAccels: [
-      { detailedActionName: "app.app-ping", accels: ["<Control>k"] },
-    ],
-    windowActions: (
-      <GSimpleAction
-        name="ping"
-        onActivate={() => windowActivated.push("win-ping")}
-      />
-    ),
-    windowControllers: (
-      <GtkShortcutController
-        shortcuts={
-          <GtkShortcut
-            trigger={Gtk.ShortcutTrigger.parseString("<Control>j")}
-            action={Gtk.CallbackAction.new(() => {
-              accelTriggered.push("ctrl-j")
-              return true
-            })}
-          />
-        }
-      />
-    ),
-    breakpoints: (
-      <AdwBreakpoint
-        condition={Adw.BreakpointCondition.parse("max-width: 2000px")}
-        onApply={() => {}}
-        onUnapply={() => {}}
-      />
-    ),
+  // runApplication mounts its own React root (createRoot().render(...)) —
+  // a call the test makes directly, so its resulting state settling needs
+  // act() same as any other trigger here.
+  await act(async () => {
+    AppRegistry.runApplication("app-registry-probe-app", {
+      title: TITLE,
+      chrome: "content",
+      width: 500,
+      height: 400,
+      applicationActions: (
+        <GSimpleAction
+          name="app-ping"
+          onActivate={() => appActivated.push("app-ping")}
+        />
+      ),
+      actionAccels: [
+        { detailedActionName: "app.app-ping", accels: ["<Control>k"] },
+      ],
+      windowActions: (
+        <GSimpleAction
+          name="ping"
+          onActivate={() => windowActivated.push("win-ping")}
+        />
+      ),
+      windowControllers: (
+        <GtkShortcutController
+          shortcuts={
+            <GtkShortcut
+              trigger={Gtk.ShortcutTrigger.parseString("<Control>j")}
+              action={Gtk.CallbackAction.new(() => {
+                accelTriggered.push("ctrl-j")
+                return true
+              })}
+            />
+          }
+        />
+      ),
+      breakpoints: (
+        <AdwBreakpoint
+          condition={Adw.BreakpointCondition.parse("max-width: 2000px")}
+          onApply={() => {}}
+          onUnapply={() => {}}
+        />
+      ),
+    })
   })
 
   const findWindow = (): Gtk.Window | undefined =>
@@ -109,7 +114,11 @@ it("forwards actions, actionAccels, controllers and breakpoints to the running a
   expect(windowActivated).toEqual(["win-ping"])
 
   // windowControllers: a GtkShortcutController scoped to the window itself.
-  window!.present()
+  // present() maps the window natively — a poke outside any React event
+  // handler, same act() need as the runApplication call above.
+  await act(async () => {
+    window!.present()
+  })
   await waitFor(() => {
     expect(window!.getWidth()).toBeGreaterThan(0)
   })
