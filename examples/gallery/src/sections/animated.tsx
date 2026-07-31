@@ -1,7 +1,7 @@
 // Animated: timing/loop, spring, interpolate. Values bypass React —
-// listeners write directly to the widget (opacity) and to the parent GtkFixed
-// (translate). v1 limitation: Animated.View only animates
-// translateX/translateY and opacity; rotate/scale are not applied to widgets.
+// listeners write directly to the widget (opacity) and to the rect store the
+// parent's layout manager allocates from (transforms). translate is applied
+// positionally; rotate/scale go through the allocation's GskTransform.
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Animated,
@@ -55,6 +55,12 @@ const styles = StyleSheet.create({
   limitation: {
     color: "#f8e45c",
     fontSize: 12,
+  },
+  transformRow: {
+    height: 96,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
   },
 })
 
@@ -367,10 +373,103 @@ const DiagonalLoop = () => {
   )
 }
 
+// rotate and scale do not move the widget's box: they reach GTK as the
+// GskTransform of the child's allocation, so the square keeps the 40x40 Yoga
+// gave it and only its paint (and its hit area) turns and grows.
+const SpinAndPulse = () => {
+  const [progress] = useState(() => new Animated.Value(0))
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: 2400,
+        easing: Easing.linear,
+      }),
+    )
+    animation.start()
+    return () => animation.stop()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // interpolate's suffixed outputRange is what produces an angle: the numeric
+  // part is interpolated, "deg" is carried through.
+  const rotate = useMemo(
+    () =>
+      progress.interpolate({
+        inputRange: [0, 1],
+        outputRange: ["0deg", "360deg"],
+      }),
+    [progress],
+  )
+  const scale = useMemo(
+    () =>
+      progress.interpolate({
+        inputRange: [0, 0.5, 1],
+        outputRange: [1, 1.8, 1],
+      }),
+    [progress],
+  )
+
+  return (
+    <View style={styles.transformRow}>
+      <Animated.View
+        style={[
+          styles.square,
+          { backgroundColor: palette.accent, transform: [{ rotate }] },
+        ]}
+      />
+      <Animated.View
+        style={[
+          styles.square,
+          { backgroundColor: palette.green, transform: [{ scale }] },
+        ]}
+      />
+      <Animated.View
+        style={[
+          styles.square,
+          {
+            backgroundColor: palette.purple,
+            transform: [{ rotate }, { scale }],
+          },
+        ]}
+      />
+    </View>
+  )
+}
+
+// Nothing here is Animated: a transform in a plain style works on any
+// component that takes one, exactly like in RN.
+const StaticTransforms = () => (
+  <View style={styles.transformRow}>
+    <View
+      style={[
+        styles.square,
+        { backgroundColor: palette.orange, transform: [{ rotate: "45deg" }] },
+      ]}
+    />
+    <View
+      style={[
+        styles.square,
+        { backgroundColor: palette.yellow, transform: [{ scale: 1.6 }] },
+      ]}
+    />
+    <View
+      style={[
+        styles.square,
+        {
+          backgroundColor: palette.red,
+          transform: [{ rotate: "20deg" }, { scaleX: 2 }],
+        },
+      ]}
+    />
+  </View>
+)
+
 export const AnimatedSection = () => (
   <Section
     title="Animated"
-    subtitle="timing, spring, loop/sequence and interpolate; a direct path bypassing React: setOpacity on the widget and layout-manager offsets on top of the base rect."
+    subtitle="timing, spring, loop/sequence and interpolate; a direct path bypassing React: setOpacity on the widget, and the layout manager placing the base rect under the style's transform (translate positionally, rotate/scale as the allocation's GskTransform)."
   >
     <DemoCard
       title="Animated.timing + loop"
@@ -412,9 +511,23 @@ export const AnimatedSection = () => (
       hint="two interpolations of one value: X is linear, Y is a triangle wave — a zigzag"
     >
       <DiagonalLoop />
+    </DemoCard>
+
+    <DemoCard
+      title="rotate + scale"
+      hint="one value drives an angle (interpolate to a 'deg' outputRange) and a scale; the third square takes both — the array composes left to right, like in RN and CSS"
+    >
+      <SpinAndPulse />
+    </DemoCard>
+
+    <DemoCard
+      title="transforms in a plain style"
+      hint="no Animated involved: rotate 45deg, scale 1.6, and rotate+scaleX — the boxes still occupy their untransformed 40x40 in the layout"
+    >
+      <StaticTransforms />
       <Text style={styles.limitation}>
-        v1 limitation: Animated.View only animates translateX/translateY and
-        opacity; rotate/scale are not applied to GTK widgets.
+        Not supported: rotateX/rotateY/perspective (3D), skewX/skewY, matrix,
+        and transformOrigin — the origin is always the centre of the view.
       </Text>
     </DemoCard>
   </Section>

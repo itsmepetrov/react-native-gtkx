@@ -8,8 +8,9 @@
 // - line-height: supported since GTK 4.6 (we target 4.20+);
 // - text-align does NOT exist in GTK CSS — textAlign is applied by the Text
 //   component via widget properties (justify/xalign), so it is skipped here;
-// - transform is applied by the layout engine via Fixed.Child matrices,
-//   never through CSS, and is skipped here as well.
+// - transform does NOT exist as a widget property in GTK4 CSS either: it is
+//   composed into a matrix by ./transform.ts and applied as the GskTransform
+//   of the child's allocation, so it is skipped here as well.
 
 import type { VisualStyle } from "../contracts"
 import { parseColor } from "./colors"

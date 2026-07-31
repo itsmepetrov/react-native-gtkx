@@ -56,8 +56,8 @@ const LAYOUT_KEYS: Record<keyof LayoutStyle, true> = {
   width: true,
 }
 
-// Note: `transform` is visual by contract — it is applied by the layout
-// engine through Fixed.Child matrices, not through CSS, and is passed
+// Note: `transform` is visual by contract — it is applied as the
+// GskTransform of the child's allocation, not through CSS, and is passed
 // through here untouched.
 const VISUAL_KEYS: Record<keyof VisualStyle, true> = {
   backgroundColor: true,

@@ -67,13 +67,31 @@ export type LayoutStyle = Partial<{
   width: DimensionValue
 }>
 
+export type Angle = `${number}deg` | `${number}rad`
+
 export type TransformPart =
   | { translateX: number }
   | { translateY: number }
   | { scale: number }
   | { scaleX: number }
   | { scaleY: number }
-  | { rotate: `${number}deg` | `${number}rad` }
+  | { rotate: Angle }
+  // RN's 2D alias for `rotate` (rotation about the Z axis).
+  | { rotateZ: Angle }
+
+// A 2D affine transform in the component order GSK and cairo use:
+//   x' = xx * x + xy * y + dx
+//   y' = yx * x + yy * y + dy
+// This is exactly the argument order of gsk_transform_matrix2d(), so a
+// composed TransformPart[] reaches GTK in a single FFI call.
+export type Transform2D = {
+  xx: number
+  yx: number
+  xy: number
+  yy: number
+  dx: number
+  dy: number
+}
 
 // Visual props: classified by the style system, compiled into GTK CSS
 // classes via the bridge `css` helper. Text-specific props apply to <Text>.
@@ -117,8 +135,9 @@ export type VisualStyle = Partial<{
   // NOT emitted to CSS (no such GTK CSS property): the Text component applies
   // it via label props using the pure style/text-align helper.
   textAlign: "auto" | "left" | "right" | "center" | "justify"
-  // NOT emitted to CSS: applied by the engine through the layout manager
-  // layout-child transforms (Animated fast path).
+  // NOT emitted to CSS (GTK4 has no widget `transform` property): composed
+  // into a Transform2D by style/transform.ts and applied as the GskTransform
+  // of the child's allocation by the container's layout manager.
   transform: TransformPart[]
 }>
 

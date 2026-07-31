@@ -7,6 +7,7 @@ import type {
   MeasureFn,
   Rect,
   StyleProp,
+  TransformPart,
   VisualStyle,
 } from "../contracts"
 import {
@@ -31,6 +32,7 @@ import {
   getStoredOffset,
   getStoredRect,
   setStoredRect,
+  setStoredTransform,
 } from "./rect-store"
 
 export type LayoutEvent = {
@@ -92,6 +94,26 @@ export const useLayoutChild = (
   }, [node, layoutKey])
 
   const cssClass = defaultCssRegistry.getClassName(visual)
+
+  // RN transforms are visual only: the widget keeps the box Yoga gave it, so
+  // a transform never touches the shadow tree — it only asks the parent
+  // container to run its allocate hook again. Keyed on the serialized array
+  // so a re-render with the same transform costs nothing.
+  // (Animated.View owns its own transform and strips it from the static
+  // style before it gets here, so the two writers never race.)
+  const transformKey = JSON.stringify(visual.transform ?? null)
+  useLayoutEffect(() => {
+    const widget = widgetRef.current
+    if (!widget) {
+      return
+    }
+    setStoredTransform(widget, JSON.parse(transformKey) as TransformPart[])
+    const parentWidget = host.widgetRef.current
+    if (parentWidget) {
+      queueAllocate(parentWidget)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transformKey])
 
   useLayoutEffect(() => {
     const parent = host.node
@@ -291,6 +313,7 @@ export const useRnContainer = (
               rect.y + offset.dy,
               rect.width,
               rect.height,
+              offset.matrix,
             )
             children += 1
           }
