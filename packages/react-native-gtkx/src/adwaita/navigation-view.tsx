@@ -61,7 +61,7 @@ export type AdwNavigationPageProps = AdwPageProps & {
 }
 
 /**
- * One page of a {@link AdwNavigationView}.
+ * One page of an {@link AdwNavigationStack}.
  *
  * Children are passed to the widget untouched. To put React Native content
  * inside a page, wrap it in `PageContent` (see ./content) — the primitive
@@ -90,7 +90,7 @@ export const AdwNavigationPage = ({
 
 type AdwViewProps = ComponentProps<typeof RawAdwNavigationView>
 
-export type AdwNavigationViewProps = Omit<AdwViewProps, "onPopped" | "ref"> & {
+export type AdwNavigationStackProps = Omit<AdwViewProps, "onPopped" | "ref"> & {
   /**
    * The visible stack, root first, as page tags. Change it and the widget
    * animates to match: appended tags push, removed tags pop, a changed root
@@ -126,19 +126,19 @@ export type AdwNavigationViewProps = Omit<AdwViewProps, "onPopped" | "ref"> & {
  * ```tsx
  * const [stack, setStack] = useState(["home"])
  *
- * <AdwNavigationView
+ * <AdwNavigationStack
  *   stack={stack}
  *   onPopped={(tag) => setStack((s) => s.filter((t) => t !== tag))}
  * >
  *   <AdwNavigationPage tag="home" title="Home">…</AdwNavigationPage>
  *   <AdwNavigationPage tag="detail" title="Detail">…</AdwNavigationPage>
- * </AdwNavigationView>
+ * </AdwNavigationStack>
  * ```
  *
  * No router required. `react-native-gtkx/navigation` uses exactly this
  * component to back `createStackNavigator`.
  */
-export const AdwNavigationView = ({
+export const AdwNavigationStack = ({
   stack,
   children,
   onPopped,
@@ -148,7 +148,7 @@ export const AdwNavigationView = ({
   transitionDuration = DEFAULT_TRANSITION_MS,
   ref,
   ...rest
-}: AdwNavigationViewProps) => {
+}: AdwNavigationStackProps) => {
   const viewRef = useRef<Adw.NavigationView | null>(null)
   // Mirror of the widget's visible stack. Maintained by the sync effect and
   // by the popped handler; the two never race, because GTK signals run

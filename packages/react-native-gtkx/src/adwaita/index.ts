@@ -26,19 +26,19 @@ import { wrapReactNative } from "./widget"
 // exposes primitives, @react-navigation/native-stack binds them to a router.
 // Here, this subpath exposes primitives and react-native-gtkx/navigation
 // binds them to react-navigation. You can skip the binding entirely — drive
-// AdwNavigationView from useState, from your own router, from anything.
+// AdwNavigationStack from useState, from your own router, from anything.
 //
 // Prop pass-through is total by design: the widgets below are re-exported
 // straight from the gtkx bindings, so every GObject property and signal gtkx
 // generates is available, including ones added after this file was written.
-// The two components we do wrap (AdwNavigationView, AdwNavigationPage) inherit
+// The two components we do wrap (AdwNavigationStack, AdwNavigationPage) inherit
 // their props from the widget and only ADD to them.
 
 export {
   AdwNavigationPage,
-  AdwNavigationView,
+  AdwNavigationStack,
   type AdwNavigationPageProps,
-  type AdwNavigationViewProps,
+  type AdwNavigationStackProps,
 } from "./navigation-view"
 
 export {
@@ -63,6 +63,10 @@ export {
 export {
   AdwApplicationWindow,
   AdwHeaderBar,
+  // The raw, imperative widget: push/pop/popToTag by hand. AdwNavigationStack
+  // above is the declarative alternative, not a replacement — this one stays
+  // reachable because a different contract deserves a different name.
+  AdwNavigationView,
   AdwNavigationSplitView,
   AdwToolbarView,
 } from "../gtkx/bridge/index"

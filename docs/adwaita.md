@@ -39,10 +39,10 @@ your app
 These are the two components we wrap, because a raw `Adw.NavigationView` is
 imperative (`push`, `pop`, `pop_to_tag`) and React is not.
 
-| Export              | What it is                                             |
-| ------------------- | ------------------------------------------------------ |
-| `AdwNavigationView` | `Adw.NavigationView` driven by a `stack` array of tags |
-| `AdwNavigationPage` | one page of that stack, identified by `tag`            |
+| Export               | What it is                                             |
+| -------------------- | ------------------------------------------------------ |
+| `AdwNavigationStack` | `Adw.NavigationView` driven by a `stack` array of tags |
+| `AdwNavigationPage`  | one page of that stack, identified by `tag`            |
 
 They **inherit every prop of the underlying widget** and only add to it, so
 anything you could set on `Adw.NavigationPage` you can set on
@@ -120,7 +120,7 @@ import { Pressable, Text, View } from "react-native"
 import {
   AdwHeaderBar,
   AdwNavigationPage,
-  AdwNavigationView,
+  AdwNavigationStack,
   AdwToolbarView,
   PageContent,
 } from "react-native-gtkx/adwaita"
@@ -129,7 +129,7 @@ const App = () => {
   const [stack, setStack] = useState(["home"])
 
   return (
-    <AdwNavigationView
+    <AdwNavigationStack
       stack={stack}
       // The Adwaita back button, Escape, the back gesture and the
       // back-history menu all arrive here. Follow them in your own state.
@@ -158,7 +158,7 @@ const App = () => {
           </PageContent>
         </AdwToolbarView>
       </AdwNavigationPage>
-    </AdwNavigationView>
+    </AdwNavigationStack>
   )
 }
 ```
@@ -166,7 +166,7 @@ const App = () => {
 A runnable version is `examples/adwaita-primitives` — three levels deep, with
 React Native content in the header bar and a raw `GtkButton` beside it.
 
-### `AdwNavigationView` props
+### `AdwNavigationStack` props
 
 Everything `Adw.NavigationView` has, plus:
 
@@ -183,7 +183,7 @@ Pages not listed in `stack` are still accepted as children and simply are not
 shown, so a router may hand over all of its screens at once.
 
 **Exit animations are handled for you.** When a tag leaves `stack`, the widget
-still animates the page out for about 200 ms. `AdwNavigationView` keeps a
+still animates the page out for about 200 ms. `AdwNavigationStack` keeps a
 snapshot of that page until its `hidden` signal (with a timer fallback for
 compositors that never emit it), so you never have to keep rendering pages
 you already consider gone.
@@ -250,7 +250,7 @@ If something is missing, reach the widget directly:
 
 ```tsx
 const viewRef = useRef<Adw.NavigationView | null>(null)
-<AdwNavigationView ref={viewRef} stack={stack}>…</AdwNavigationView>
+<AdwNavigationStack ref={viewRef} stack={stack}>…</AdwNavigationStack>
 // viewRef.current is the real Adw.NavigationView
 ```
 

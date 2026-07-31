@@ -11,7 +11,7 @@ import { useEffect, useState } from "react"
 import { expect, it } from "vitest"
 import {
   AdwNavigationPage,
-  AdwNavigationView,
+  AdwNavigationStack,
   PageContent,
 } from "../../../src/adwaita"
 import type { Adw, Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
@@ -48,7 +48,7 @@ const Demo = () => {
     push = (tag) => setStack((current) => [...current, tag])
   }, [])
   return (
-    <AdwNavigationView
+    <AdwNavigationStack
       stack={stack}
       onPopped={(tag) => {
         popped.push(tag)
@@ -75,7 +75,7 @@ const Demo = () => {
           </View>
         </PageContent>
       </AdwNavigationPage>
-    </AdwNavigationView>
+    </AdwNavigationStack>
   )
 }
 
