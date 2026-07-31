@@ -293,6 +293,11 @@ it"**, where nothing can be assumed to be installed. They are not
 competing implementations: `--sea` is `--standalone` with a copy of Node
 wrapped around it, and that copy is the entire 97 MB between them.
 
+A tagged release of this repo publishes the `--sea` executable for
+`hn-app`, `zstd`-compressed, alongside the `.deb`s (`zstd -d` it and run
+it). The `.deb`s remain how you install these apps; the executable is
+there for the machine that has no Node to depend on.
+
 That copy is stripped of its debug symbols as part of the build, which is
 not a micro-optimisation: the `node` binary NodeSource distributes for
 Ubuntu ships `with debug_info, not stripped` — 117 MB, 98 MB after
