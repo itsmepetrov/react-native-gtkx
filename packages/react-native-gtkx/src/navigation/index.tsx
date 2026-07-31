@@ -22,9 +22,12 @@ import {
   useNavigationBuilder,
   usePreventRemoveContext,
   type NavigationProp,
+  type NavigatorTypeBagBase,
+  type NavigatorTypeBagFor,
   type ParamListBase,
   type RouteProp,
   type StackNavigationState,
+  type TypedNavigator,
 } from "@react-navigation/native"
 import { useEffect, type ComponentType, type ReactNode } from "react"
 import { getActiveChrome } from "../components/app-registry"
@@ -252,9 +255,17 @@ export {
 } from "@react-navigation/native"
 
 // ---- typed factory --------------------------------------------------------
-// The upstream createNavigatorFactory returns `any` — mirroring the typed
-// wrapper pattern of native-stack gives Screen configs, options and screen
-// props real types without changing runtime behavior.
+// React Navigation 8 ships a genuinely generic createNavigatorFactory
+// (NavigatorTypeBagBase + createNavigatorFactory<TypeBag>) — the manual
+// `stackFactory() as TypedStackNavigator<ParamList>` cast this file used to
+// need (upstream's factory returned `any`) is gone. The type bag below
+// wires our own state/options/navigator shape into their factory, so
+// Stack.Navigator and Stack.Screen come out correctly typed — including
+// catching a typo'd screen name or a mismatched param type at the JSX call
+// site, which the old cast could not. Runtime is unchanged either way:
+// createNavigatorFactory(Navigator) has always just returned
+// `{ Navigator, Screen, Group }` (Screen/Group are no-op marker
+// components); only the TYPES improved.
 
 export type StackNavigationHelpers<
   ParamList extends ParamListBase = ParamListBase,
@@ -262,7 +273,6 @@ export type StackNavigationHelpers<
 > = NavigationProp<
   ParamList,
   RouteName,
-  undefined,
   StackNavigationState<ParamList>,
   StackNavigationOptions
 >
@@ -289,16 +299,35 @@ export type StackScreenConfig<
   initialParams?: Partial<ParamList[RouteName]>
 }
 
-export type TypedStackNavigator<ParamList extends ParamListBase> = {
-  Navigator: ComponentType<StackNavigatorProps>
-  Screen: <RouteName extends keyof ParamList>(
-    props: StackScreenConfig<ParamList, RouteName>,
-  ) => null
+interface StackTypeBag extends NavigatorTypeBagBase {
+  ParamList: ParamListBase
+  State: StackNavigationState<ParamListBase>
+  ScreenOptions: StackNavigationOptions
+  EventMap: Record<string, unknown>
+  ActionHelpers: Record<string, () => void>
+  Navigator: typeof StackNavigator
 }
 
-const stackFactory = createNavigatorFactory(StackNavigator)
+const stackFactory = createNavigatorFactory<StackTypeBag>(StackNavigator)
+
+// The explicit return type is built from TypedNavigator + NavigatorTypeBagFor
+// (both public exports) rather than `ReturnType<typeof stackFactory<ParamList>>`
+// for two reasons found empirically:
+// - `TypedNavigatorFactory` has two overloaded call signatures (dynamic
+//   Navigator/Screen vs. static config). Resolving
+//   `typeof stackFactory<ParamList>` as a bare instantiation expression
+//   (as opposed to an actual call) picks the wrong one — the static-config
+//   overload — even though calling `stackFactory<ParamList>()` for real
+//   resolves correctly.
+// - Declaration emit (`tsc -p tsconfig.build.json`, i.e. `build:dist`)
+//   additionally rejects an inferred-only return type here with
+//   TS2742 ("cannot be named without a reference to .../utilities"),
+//   because it transitively touches a type `@react-navigation/core`
+//   does not export from its public entry point. Naming the return type
+//   through the two types this package DOES export sidesteps both.
+export type TypedStackNavigator<ParamList extends ParamListBase> =
+  TypedNavigator<NavigatorTypeBagFor<StackTypeBag, ParamList>, undefined>
 
 export const createStackNavigator = <
   ParamList extends ParamListBase = ParamListBase,
->(): TypedStackNavigator<ParamList> =>
-  stackFactory() as TypedStackNavigator<ParamList>
+>(): TypedStackNavigator<ParamList> => stackFactory<ParamList>()

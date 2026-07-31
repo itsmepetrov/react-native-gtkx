@@ -102,10 +102,10 @@ back button already shows a history menu.
 
 Compatible by construction: a real `@react-navigation/native` peer, the
 official `useNavigationBuilder` and routers, a real `NavigationContainer`.
-Anything we do not re-export is imported from `@react-navigation/native`
-directly — and after the v8 migration that will be everything, because the
-partial re-export we ship today only creates confusion about where a symbol
-comes from.
+Everything from react-navigation is imported from `@react-navigation/native`
+directly. We used to re-export a partial set from our navigation entry point
+and dropped it: the set was incomplete, so consumers ended up importing from
+both places and could not tell which symbol came from where.
 
 Mandatory changes: swap `createNativeStackNavigator` for our
 `createStackNavigator`; drop `react-native-screens`,

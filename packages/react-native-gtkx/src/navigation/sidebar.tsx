@@ -15,9 +15,12 @@ import {
   TabRouter,
   useNavigationBuilder,
   type NavigationProp,
+  type NavigatorTypeBagBase,
+  type NavigatorTypeBagFor,
   type ParamListBase,
   type RouteProp,
   type TabNavigationState,
+  type TypedNavigator,
 } from "@react-navigation/native"
 import { useEffect, useRef, type ComponentType, type ReactNode } from "react"
 import { getActiveChrome } from "../components/app-registry"
@@ -226,7 +229,6 @@ export type SidebarScreenProps<
   navigation: NavigationProp<
     ParamList,
     RouteName,
-    undefined,
     TabNavigationState<ParamList>,
     SidebarNavigationOptions
   >
@@ -242,16 +244,26 @@ export type SidebarScreenConfig<
   initialParams?: Partial<ParamList[RouteName]>
 }
 
-export type TypedSidebarNavigator<ParamList extends ParamListBase> = {
-  Navigator: ComponentType<SidebarNavigatorProps>
-  Screen: <RouteName extends keyof ParamList>(
-    props: SidebarScreenConfig<ParamList, RouteName>,
-  ) => null
+// See src/navigation/index.tsx's "typed factory" comment for why this
+// replaces a manual cast: createNavigatorFactory is genuinely generic in
+// React Navigation 8, runtime is unchanged.
+interface SidebarTypeBag extends NavigatorTypeBagBase {
+  ParamList: ParamListBase
+  State: TabNavigationState<ParamListBase>
+  ScreenOptions: SidebarNavigationOptions
+  EventMap: Record<string, unknown>
+  ActionHelpers: Record<string, () => void>
+  Navigator: typeof SidebarNavigator
 }
 
-const sidebarFactory = createNavigatorFactory(SidebarNavigator)
+const sidebarFactory = createNavigatorFactory<SidebarTypeBag>(SidebarNavigator)
+
+// See src/navigation/index.tsx's createStackNavigator for why the return
+// type is spelled out via TypedNavigator + NavigatorTypeBagFor rather than
+// `ReturnType<typeof sidebarFactory<ParamList>>`.
+export type TypedSidebarNavigator<ParamList extends ParamListBase> =
+  TypedNavigator<NavigatorTypeBagFor<SidebarTypeBag, ParamList>, undefined>
 
 export const createSidebarNavigator = <
   ParamList extends ParamListBase = ParamListBase,
->(): TypedSidebarNavigator<ParamList> =>
-  sidebarFactory() as TypedSidebarNavigator<ParamList>
+>(): TypedSidebarNavigator<ParamList> => sidebarFactory<ParamList>()
