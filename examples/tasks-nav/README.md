@@ -127,6 +127,18 @@ that example used successfully for its own live pass:
 - **Collapse**: launched at a width below `collapseWidth={500}` (400),
   the split view showed the sidebar alone, matching the automated GTK
   test's headless resize exactly (`tests/gtk/navigation/sidebar-collapse.gtk.test.tsx`).
+- **Collapsed selection and back** (the `collapse-nav` epic — the
+  maintainer-reported bug this fixed): launched already below
+  `collapseWidth` (420), confirmed sidebar-only, no content — matching the
+  "cold start defaults to the sidebar" finding in
+  `docs/research/navigation-extensibility.md`. Pressed Down twice
+  (keyboard, no mouse): the active screen changed to "Important" AND the
+  content pane opened with the native back chevron, live — this is the
+  `state.index` effect's `showContentIfCollapsed()` call, the actual fix
+  (a plain `navigate()` with no row click reveals content, where it
+  previously did not). Pressed Escape: back to the sidebar, "Important"
+  still the selected row — the split view's own back affordance, with
+  react-navigation state provably untouched. Both states screenshotted.
 
 **Not verified live in this pass**, for lack of a reliable pointer in this
 VM session rather than any known defect: opening a task's detail editor
@@ -136,7 +148,20 @@ is covered by
 `tests/gtk/navigation/sidebar-dynamic-header.gtk.test.tsx`, which drives
 the identical code path this screen uses — it asserts the header content
 itself changes, not just that the option was accepted — but that is a
-headless assertion, not a live one.
+headless assertion, not a live one. Re-activating the SAME already-selected
+row after going back (needs re-focusing the row first, which the keyboard
+sequence used for the collapse pass above did not do) is likewise only
+covered headlessly, by the pre-existing
+`tests/gtk/navigation/sidebar-collapse.gtk.test.tsx` test for it.
+
+**Found live, unrelated to collapse-nav, not fixed**: a small `+`-only
+control renders in its own thin strip above both the sidebar's and the
+content's own `AdwHeaderBar`s, under `chrome: "content"`. Present on the
+very first paint at the default width, before any collapsing or
+navigation, so it predates and is independent of the `collapseWidth`
+work — most likely a `chrome: "content"` window-chrome detail, not
+anything in `createSidebarNavigator` itself. Not investigated further;
+recorded here rather than silently left unmentioned.
 
 ## Attribution
 

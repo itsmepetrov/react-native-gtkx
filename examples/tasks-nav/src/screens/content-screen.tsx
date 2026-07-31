@@ -13,7 +13,6 @@
 // shapes come out of one screen component: a filter toggle group for a
 // list, a plain title for Trash, and a back/star/trash editor header for
 // an open task.
-import { useNavigation, useRoute } from "@react-navigation/native"
 import { useEffect, useState } from "react"
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native"
 import { AdwWindowTitle } from "react-native-gtkx/adw"
@@ -23,7 +22,10 @@ import {
   GtkCheckButton,
   GtkEntry,
 } from "react-native-gtkx/gtk"
-import type { SidebarNavigationOptions } from "react-native-gtkx/navigation"
+import type {
+  SidebarNavigationOptions,
+  SidebarScreenProps,
+} from "react-native-gtkx/navigation"
 import { useStore } from "../store"
 import type { Filter, Task } from "../types"
 
@@ -90,9 +92,16 @@ const styles = StyleSheet.create({
   empty: { padding: 24, alignItems: "center" },
 })
 
-export const ContentScreen = () => {
-  const route = useRoute()
-  const navigation = useNavigation()
+// `route`/`navigation` are read as PROPS, not via `useNavigation()`/
+// `useRoute()` — react-navigation passes both to any screen `component`
+// regardless, and going through `SidebarScreenProps` here is what gives
+// `navigation.addListener("sidebarShown", …)` below its real type (found
+// the hard way: `useNavigation<SidebarNavigationHelpers>()` — no type
+// arguments applied to the underlying route/param-list generics — resolves
+// to something unusable rather than the intended type; a pre-existing
+// quirk of this react-navigation alpha's generics, not new here, and not
+// worth chasing for this fix. Props sidestep it entirely.
+export const ContentScreen = ({ route, navigation }: SidebarScreenProps) => {
   const {
     lists,
     tasks,
@@ -105,6 +114,18 @@ export const ContentScreen = () => {
   } = useStore()
   const [filter, setFilter] = useState<Filter>("all")
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
+
+  // The split view's own back button/Escape/back gesture (narrow window)
+  // hides content and shows the sidebar again — a presentation change with
+  // no react-navigation state behind it, so `sidebarShown` is the only way
+  // this screen learns it happened (see docs/api.md). Reset the open task
+  // so re-selecting the SAME list from the sidebar lands back on the list,
+  // not straight back into whatever task was open — "back" should mean
+  // back, the same way a mobile master-detail app's own back button would.
+  useEffect(
+    () => navigation.addListener("sidebarShown", () => setOpenTaskId(null)),
+    [navigation],
+  )
 
   const selection = parseRoute(route.name)
   const isTrash = selection.kind === "smart" && selection.view === "trash"
