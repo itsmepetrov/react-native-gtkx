@@ -14,8 +14,6 @@ import { createRequire } from "node:module"
 import { basename, dirname, extname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
-const fromPackage = createRequire(import.meta.url)
-
 type CliConfig = { root: string }
 type RunLinuxArgs = {
   entryFile: string
@@ -58,28 +56,82 @@ const binOf = (
   return join(dirname(packageJsonPath), bin)
 }
 
-// RC2-WORKAROUND(codegen-cwd): see docs/gtkx-rc2-notes.md
-// The codegen store lives in the node_modules that hosts the @gtkx
-// packages — run the gtkx CLI from the project that OWNS that node_modules:
-// with cwd inside node_modules itself the CLI reports "bindings up to date"
-// without ever creating the store.
-const ensureCodegenStore = (): void => {
-  const hostingNodeModules = dirname(
-    dirname(dirname(fromPackage.resolve("@gtkx/react/package.json"))),
-  )
-  const gtkxRoot = dirname(hostingNodeModules)
+type PackageManifest = { version: string; exports?: Record<string, unknown> }
+
+/** The `@gtkx/react` subpath exports (its own `exports` map, minus `.` and `./package.json`). */
+const reactSubexportsOf = (manifest: PackageManifest): string[] =>
+  Object.keys(manifest.exports ?? {})
+    .filter((key) => key.startsWith("./") && key !== "./package.json")
+    .map((key) => key.slice(2))
+
+// @gtkx/cli is meant for apps: its `codegen` command resolves gtkx.config.ts
+// from a cwd and trusts a freshness stamp, which is what the RC2-WORKAROUND
+// this replaced was dodging (running from a reconstructed "project that owns
+// the hosting node_modules" purely to keep that cwd resolution honest — see
+// gtkx-org/gtkx#468, #470). A library generating bindings on a consumer's
+// behalf should use the programmatic @gtkx/codegen API instead: it takes the
+// GIR libraries and store paths directly, so there is no cwd to get wrong and
+// no stamp to misread — and it runs its own fingerprint-based freshness
+// check in-process, so a missing/pruned store is regenerated rather than
+// misreported as "up to date".
+//
+// `root` (the app's real project root, resolved by the react-native CLI, not
+// us) is the right place to resolve gtkx.config.ts from, but NOT necessarily
+// where @gtkx/* actually lives on disk: in a workspace, npm hoists them to an
+// ancestor's node_modules, so `root/node_modules` can be a directory with no
+// @gtkx/* in it at all (confirmed against this repo's own examples/, which
+// are workspace members with nothing hoisted locally). The store — and the
+// @gtkx/gi and @gtkx/jsx links every other @gtkx/* package resolves through
+// its OWN up-the-tree lookup — must live in whichever node_modules actually
+// hosts @gtkx/runtime, so that's resolved rather than assumed.
+const ensureCodegenStore = async (root: string): Promise<void> => {
   console.warn("[react-native-gtkx] ensuring gtkx codegen store…")
-  const status = run(
-    process.execPath,
-    [binOf(fromPackage, "@gtkx/cli", "gtkx"), "codegen"],
-    gtkxRoot,
-  )
-  if (status !== 0) {
+  try {
+    const [{ runCodegen, resolveGirPath, resolveLibraries }, { loadConfig }] =
+      await Promise.all([import("@gtkx/codegen"), import("@gtkx/config")])
+    const { config } = await loadConfig(root)
+    if (config.codegen === false) {
+      console.warn(
+        "[react-native-gtkx] codegen: disabled for this project (gtkx.config.ts)",
+      )
+      return
+    }
+    const girPath = resolveGirPath(config.girPath)
+    const libraries = resolveLibraries(config.libraries, girPath)
+    const appRequire = createRequire(join(root, "package.json"))
+    const runtimePackageJsonPath = appRequire.resolve(
+      "@gtkx/runtime/package.json",
+    )
+    const nodeModules = dirname(dirname(dirname(runtimePackageJsonPath)))
+    const runtime = appRequire(runtimePackageJsonPath) as PackageManifest
+    const react = appRequire("@gtkx/react/package.json") as PackageManifest
+    const result = await runCodegen({
+      libraries,
+      girPath,
+      gi: {
+        storeDir: join(nodeModules, ".gtkx", "gi"),
+        linkDir: join(nodeModules, "@gtkx", "gi"),
+        version: runtime.version,
+      },
+      jsx: {
+        storeDir: join(nodeModules, ".gtkx", "jsx"),
+        linkDir: join(nodeModules, "@gtkx", "jsx"),
+        version: react.version,
+      },
+      reactSubexports: reactSubexportsOf(react),
+    })
+    console.warn(
+      result.regenerated
+        ? "[react-native-gtkx] codegen: regenerated stale bindings"
+        : "[react-native-gtkx] codegen: bindings up to date",
+    )
+  } catch (error) {
     console.error(
       "[react-native-gtkx] gtkx codegen failed — are GTK4/libadwaita " +
         "development files installed?",
     )
-    process.exit(status)
+    console.error(error)
+    process.exit(1)
   }
 }
 
@@ -204,7 +256,7 @@ const runLinux = async (
   config: CliConfig,
   args: RunLinuxArgs,
 ): Promise<void> => {
-  ensureCodegenStore()
+  await ensureCodegenStore(config.root)
   if (args.dev) {
     await runLinuxDev(config, args)
     return
