@@ -85,13 +85,61 @@ API (`NavigatorTypeBagBase`, `createScreenFactory`); adopting it is the
 
 ## 3. Still open
 
-Meaningful on this platform and not done yet: `animation: "none"`
-(`animate-transitions`), toolbar top-bar style (the
-`headerTransparent`/`headerShadowVisible` analogue), `Adw.Dialog`
-presentation, search-bar options (`Gtk.SearchBar` /
-`headerSearchBarOptions` — note v8 renamed its `onChangeText` to
-`onChange`), sidebar row rendering, collapsed mode and breakpoints, and
-deep links (they parse, but nothing delivers a URL on the desktop yet).
+Meaningful on this platform and not done yet: toolbar top-bar style (the
+`headerTransparent`/`headerShadowVisible` analogue), search-bar options
+(`Gtk.SearchBar` / `headerSearchBarOptions` — note v8 renamed its
+`onChangeText` to `onChange`), `createSidebarNavigator`'s own row
+rendering and collapsed-mode wiring (see below), and deep links (they
+parse, but nothing delivers a URL on the desktop yet). `animation: "none"`
+is done (a screen option, see docs/api.md).
+
+**Resolved by building `examples/tasks-app` (the gtkx tutorial's Tasks app,
+ported), each with a small library change, not a workaround:**
+
+- _`Adw.Dialog` presentation_ — confirmed working. `AdwAboutDialog`/
+  `AdwAlertDialog`/`AdwPreferencesDialog`/`AdwShortcutsDialog` are already
+  `wrapReactNative`-wrapped; mounted with no Yoga ancestor anywhere in the
+  tree (this app has none — see the example's README), they hit
+  `wrapReactNative`'s "bare" branch and present correctly, verified live
+  with real screenshots (Preferences, Shortcuts). Nothing to fix here —
+  this item can be dropped from "still open" entirely.
+- _Breakpoints_ — a real `Adw.Breakpoint`, verified live collapsing the
+  window at a narrow width, but not through the navigator: through a new
+  `AppRegistry.runApplication({ breakpoints })` parameter instead (the
+  navigator itself still has no collapsed-mode concept — see below). Also
+  found and recorded: `AdwBreakpoint`'s `onApply`/`onUnapply` never fire
+  under the `@gtkx/vitest` headless-sway gtk test project, in any form
+  tried (JSX prop, imperative `Adw.Breakpoint`+`addBreakpoint`, a genuine
+  `swaymsg` resize) — but fire immediately in a real GNOME session. Treat
+  it as untestable headless today, not broken; see
+  `packages/react-native-gtkx/tests/gtk/bridge/auxiliary-elements.gtk.test.tsx`.
+- _Actions and menus_ were never on this list by name, but turned out to
+  be the same kind of gap: `AppRegistry.runApplication` had no way to
+  attach a `GSimpleAction`, `actionAccels` or a `GtkShortcutController` to
+  the app/window it builds — required for a `Gio.Notification` action
+  button to route anywhere at all. Closed the same way, with
+  `applicationActions`/`actionAccels`/`windowActions`/`windowControllers`.
+
+**Narrowed by the same port, still genuinely open:**
+
+- _Sidebar row rendering and collapsed mode_ — `createSidebarNavigator`'s
+  `SidebarNavigationOptions` is `{ title }` only: no per-row icon/color/
+  count, and no collapsed/breakpoint wiring of its own (an app has to
+  reach `AppRegistry`'s `breakpoints` directly and drive `collapsed`
+  itself, as `examples/tasks-app` does). A single static content header
+  shared by every screen was also too rigid for that app's content pane
+  (a filter toggle group vs. a back button, depending on selection). The
+  navigator was evaluated for that app and dropped in favor of building
+  directly on `AdwNavigationSplitView`/`AdwActionRow` — see the example's
+  README for the full reasoning.
+- _Toasts_ — no `AdwToastOverlay`/`Adw.Toast` convenience exists anywhere
+  in `react-native-gtkx` (upstream's own tutorial reaches for
+  `@gtkx/components/adw`'s `ToastProvider`/`useToast`, a package this repo
+  does not depend on). `examples/tasks-app/src/toast.tsx` is a local
+  stand-in; the toast's underlying state change works and is verified live,
+  but the toast's own visual appearance could not be confirmed on screen
+  in that session, for a reason not yet root-caused. Worth a real fix (or
+  at least a live confirmation) before another app leans on it.
 
 **Meaningless on desktop, skip forever:** status-bar and home-indicator
 options, large titles, blur effects, gesture direction, form sheets,
