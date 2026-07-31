@@ -369,7 +369,6 @@ export const GTK_WIDGETS = [
   { name: "GtkColumnView", subpath: "react-native-gtkx/gtk", wrapped: true },
   { name: "GtkComboBox", subpath: "react-native-gtkx/gtk", wrapped: true },
   { name: "GtkComboBoxText", subpath: "react-native-gtkx/gtk", wrapped: true },
-  { name: "GtkDragIcon", subpath: "react-native-gtkx/gtk", wrapped: true },
   { name: "GtkDrawingArea", subpath: "react-native-gtkx/gtk", wrapped: true },
   { name: "GtkDropDown", subpath: "react-native-gtkx/gtk", wrapped: true },
   { name: "GtkEditableLabel", subpath: "react-native-gtkx/gtk", wrapped: true },
@@ -484,43 +483,49 @@ export const GTK_WIDGETS = [
     name: "GtkAboutDialog",
     subpath: "react-native-gtkx/gtk",
     wrapped: false,
-    reason: "toplevel (derives Gtk.Window)",
+    reason: "toplevel (implements GtkRoot)",
   },
   {
     name: "GtkAppChooserDialog",
     subpath: "react-native-gtkx/gtk",
     wrapped: false,
-    reason: "toplevel (derives Gtk.Window)",
+    reason: "toplevel (implements GtkRoot)",
   },
   {
     name: "GtkApplicationWindow",
     subpath: "react-native-gtkx/gtk",
     wrapped: false,
-    reason: "toplevel (derives Gtk.Window)",
+    reason: "toplevel (implements GtkRoot)",
   },
   {
     name: "GtkAssistant",
     subpath: "react-native-gtkx/gtk",
     wrapped: false,
-    reason: "toplevel (derives Gtk.Window)",
+    reason: "toplevel (implements GtkRoot)",
   },
   {
     name: "GtkColorChooserDialog",
     subpath: "react-native-gtkx/gtk",
     wrapped: false,
-    reason: "toplevel (derives Gtk.Window)",
+    reason: "toplevel (implements GtkRoot)",
   },
   {
     name: "GtkDialog",
     subpath: "react-native-gtkx/gtk",
     wrapped: false,
-    reason: "toplevel (derives Gtk.Window)",
+    reason: "toplevel (implements GtkRoot)",
+  },
+  {
+    name: "GtkDragIcon",
+    subpath: "react-native-gtkx/gtk",
+    wrapped: false,
+    reason: "toplevel (implements GtkRoot)",
   },
   {
     name: "GtkFileChooserDialog",
     subpath: "react-native-gtkx/gtk",
     wrapped: false,
-    reason: "toplevel (derives Gtk.Window)",
+    reason: "toplevel (implements GtkRoot)",
   },
   {
     name: "GtkFlowBoxChild",
@@ -532,7 +537,7 @@ export const GTK_WIDGETS = [
     name: "GtkFontChooserDialog",
     subpath: "react-native-gtkx/gtk",
     wrapped: false,
-    reason: "toplevel (derives Gtk.Window)",
+    reason: "toplevel (implements GtkRoot)",
   },
   {
     name: "GtkListBoxRow",
@@ -544,31 +549,31 @@ export const GTK_WIDGETS = [
     name: "GtkMessageDialog",
     subpath: "react-native-gtkx/gtk",
     wrapped: false,
-    reason: "toplevel (derives Gtk.Window)",
+    reason: "toplevel (implements GtkRoot)",
   },
   {
     name: "GtkPageSetupUnixDialog",
     subpath: "react-native-gtkx/gtk",
     wrapped: false,
-    reason: "toplevel (derives Gtk.Window)",
+    reason: "toplevel (implements GtkRoot)",
   },
   {
     name: "GtkPrintUnixDialog",
     subpath: "react-native-gtkx/gtk",
     wrapped: false,
-    reason: "toplevel (derives Gtk.Window)",
+    reason: "toplevel (implements GtkRoot)",
   },
   {
     name: "GtkShortcutsWindow",
     subpath: "react-native-gtkx/gtk",
     wrapped: false,
-    reason: "toplevel (derives Gtk.Window)",
+    reason: "toplevel (implements GtkRoot)",
   },
   {
     name: "GtkWindow",
     subpath: "react-native-gtkx/gtk",
     wrapped: false,
-    reason: "toplevel (derives Gtk.Window)",
+    reason: "toplevel (implements GtkRoot)",
   },
 ] as const satisfies readonly WidgetRecord[]
 
@@ -679,7 +684,7 @@ export const ADW_WIDGETS = [
     name: "AdwAboutWindow",
     subpath: "react-native-gtkx/adw",
     wrapped: false,
-    reason: "toplevel (derives Gtk.Window)",
+    reason: "toplevel (implements GtkRoot)",
   },
   {
     name: "AdwActionRow",
@@ -691,7 +696,7 @@ export const ADW_WIDGETS = [
     name: "AdwApplicationWindow",
     subpath: "react-native-gtkx/adw",
     wrapped: false,
-    reason: "toplevel (derives Gtk.Window)",
+    reason: "toplevel (implements GtkRoot)",
   },
   {
     name: "AdwButtonRow",
@@ -721,7 +726,7 @@ export const ADW_WIDGETS = [
     name: "AdwMessageDialog",
     subpath: "react-native-gtkx/adw",
     wrapped: false,
-    reason: "toplevel (derives Gtk.Window)",
+    reason: "toplevel (implements GtkRoot)",
   },
   {
     name: "AdwNavigationPage",
@@ -751,7 +756,7 @@ export const ADW_WIDGETS = [
     name: "AdwPreferencesWindow",
     subpath: "react-native-gtkx/adw",
     wrapped: false,
-    reason: "toplevel (derives Gtk.Window)",
+    reason: "toplevel (implements GtkRoot)",
   },
   {
     name: "AdwSpinRow",
@@ -769,7 +774,7 @@ export const ADW_WIDGETS = [
     name: "AdwWindow",
     subpath: "react-native-gtkx/adw",
     wrapped: false,
-    reason: "toplevel (derives Gtk.Window)",
+    reason: "toplevel (implements GtkRoot)",
   },
 ] as const satisfies readonly WidgetRecord[]
 
@@ -822,12 +827,12 @@ export const DOC_CHUNKS = [
   {
     doc: "docs/platform-layer.md",
     heading: "GTK widgets, driven by React Native",
-    text: 'Every `GtkWidget` subclass gtkx binds — 87 of them at last count, from\n`GtkBox` and `GtkButton` to `GtkColumnView` and `GtkEmojiChooser`. The list is\ngenerated, not hand-picked: `scripts/generate-widget-surface.ts` classifies\ngtkx\'s full binding by real GObject inheritance (see\n`scripts/widget-surface/classification.json` for the exact list gtkx binds\ntoday) and `src/gtk/widgets.generated.ts` is the committed result. Re-run the\ngenerator after a gtkx upgrade to pick up new widgets — it diffs against its\nown previous output and prints what changed.\n\nThey keep **every prop gtkx binds** and gain `style` and `onLayout`. Position\nand appearance both come from the style prop, exactly like anywhere else in\nReact Native:\n\n```tsx\n<View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>\n  <GtkEntry\n    style={{ flex: 1 }}\n    placeholderText="Filter"\n  />\n  <GtkButton\n    style={{ width: 72, backgroundColor: "#3584e4", borderRadius: 6 }}\n    label="Go"\n  />\n</View>\n```\n\nThe entry flexes, the button takes its width and its colour. The layout half\nof the style drives Yoga; the visual half becomes a GTK CSS class **on the\nwidget itself**, so the button really is blue, not a blue box behind a button.\nSet no size and the widget\'s own natural size wins.\n\n**Outside React Native layout they step aside.** The same `GtkButton` dropped\ninto a `AdwHeaderBar`\'s `start` or a `AdwToolbarView`\'s `topBar` — where there is no\nYoga tree to join — renders as the bare widget. One symbol, both worlds, no\nflag to remember.',
+    text: 'Every `GtkWidget` subclass gtkx binds — 86 of them at last count, from\n`GtkBox` and `GtkButton` to `GtkColumnView` and `GtkEmojiChooser`. The list is\ngenerated, not hand-picked: `scripts/generate-widget-surface.ts` classifies\ngtkx\'s full binding by real GObject inheritance (see\n`scripts/widget-surface/classification.json` for the exact list gtkx binds\ntoday) and `src/gtk/widgets.generated.ts` is the committed result. Re-run the\ngenerator after a gtkx upgrade to pick up new widgets — it diffs against its\nown previous output and prints what changed.\n\nThey keep **every prop gtkx binds** and gain `style` and `onLayout`. Position\nand appearance both come from the style prop, exactly like anywhere else in\nReact Native:\n\n```tsx\n<View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>\n  <GtkEntry\n    style={{ flex: 1 }}\n    placeholderText="Filter"\n  />\n  <GtkButton\n    style={{ width: 72, backgroundColor: "#3584e4", borderRadius: 6 }}\n    label="Go"\n  />\n</View>\n```\n\nThe entry flexes, the button takes its width and its colour. The layout half\nof the style drives Yoga; the visual half becomes a GTK CSS class **on the\nwidget itself**, so the button really is blue, not a blue box behind a button.\nSet no size and the widget\'s own natural size wins.\n\n**Outside React Native layout they step aside.** The same `GtkButton` dropped\ninto a `AdwHeaderBar`\'s `start` or a `AdwToolbarView`\'s `topBar` — where there is no\nYoga tree to join — renders as the bare widget. One symbol, both worlds, no\nflag to remember.',
   },
   {
     doc: "docs/platform-layer.md",
     heading: "Unwrapped by necessity",
-    text: "Two families of widget are exported **raw** instead of wrapped, because a\nwrapper box around them would be invalid GTK rather than a convenience:\n\n- **toplevels** — `GtkWindow` and everything that derives it: every\n  `Gtk*Dialog`, `GtkApplicationWindow`, `GtkAssistant`, `GtkShortcutsWindow`,\n  and their Adwaita counterparts (`AdwWindow`, `AdwApplicationWindow`,\n  `AdwAboutWindow`, `AdwMessageDialog`, `AdwPreferencesWindow`). A wrapper box\n  around a window is not a layout, it is two windows.\n- **child-only widgets** — valid solely as the direct child of one specific\n  parent. `GtkListBoxRow` and `GtkFlowBoxChild` (plus everything that derives\n  them — every Adwaita preferences row, `AdwActionRow` included) are caught\n  mechanically, by real inheritance. `AdwNavigationPage` and\n  `AdwPreferencesPage` derive `Gtk.Widget` directly with no shared base to\n  catch them mechanically, so they are a two-entry, doc-verified denylist\n  instead — see `scripts/widget-surface/classify.ts` for the exact reasoning\n  behind each.\n\n`GtkGestureClick` is a third, simpler case: an event controller, not a\nwidget at all, so it was never a candidate for wrapping in the first place.\n\nNothing here is unreachable — every raw export above is still exported,\nby name, from `react-native-gtkx/gtk` or `/adw`, exactly as gtkx binds it.",
+    text: "Two families of widget are exported **raw** instead of wrapped, because a\nwrapper box around them would be invalid GTK rather than a convenience:\n\n- **toplevels** — everything that implements `GtkRoot`: `GtkWindow` and\n  everything that derives it (every `Gtk*Dialog`, `GtkApplicationWindow`,\n  `GtkAssistant`, `GtkShortcutsWindow`, and their Adwaita counterparts\n  `AdwWindow`, `AdwApplicationWindow`, `AdwAboutWindow`, `AdwMessageDialog`,\n  `AdwPreferencesWindow`) — plus `GtkDragIcon`, which derives `Gtk.Widget`\n  directly and is a toplevel all the same. A wrapper box around a window is\n  not a layout, it is two windows; and a drag icon inside one is a widget\n  GTK cannot present at all. The rule is written against `GtkRoot` (the\n  capability: owns its own surface, is presented, never parented) rather\n  than against `Gtk.Window` (one familiar instance of it) precisely because\n  `GtkDragIcon` is the case a class-shaped rule misses. `GtkPopover` sits on\n  the other side of the line — a `GtkNative` but not a `GtkRoot`, and gtkx\n  parents it with `gtk_popover_set_parent`, so it stays wrapped. Build a\n  drag icon the way GTK does, from the drag itself\n  (`Gtk.DragIcon.getForDrag(drag).setChild(…)`), not by mounting one.\n- **child-only widgets** — valid solely as the direct child of one specific\n  parent. `GtkListBoxRow` and `GtkFlowBoxChild` (plus everything that derives\n  them — every Adwaita preferences row, `AdwActionRow` included) are caught\n  mechanically, by real inheritance. `AdwNavigationPage` and\n  `AdwPreferencesPage` derive `Gtk.Widget` directly with no shared base to\n  catch them mechanically, so they are a two-entry, doc-verified denylist\n  instead — see `scripts/widget-surface/classify.ts` for the exact reasoning\n  behind each.\n\n`GtkGestureClick` is a third, simpler case: an event controller, not a\nwidget at all, so it was never a candidate for wrapping in the first place.\n\nNothing here is unreachable — every raw export above is still exported,\nby name, from `react-native-gtkx/gtk` or `/adw`, exactly as gtkx binds it.",
   },
   {
     doc: "docs/platform-layer.md",

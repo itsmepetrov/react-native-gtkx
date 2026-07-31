@@ -17,7 +17,6 @@
       "GtkColumnView",
       "GtkComboBox",
       "GtkComboBoxText",
-      "GtkDragIcon",
       "GtkDrawingArea",
       "GtkDropDown",
       "GtkEditableLabel",
@@ -92,31 +91,35 @@
     "raw": [
       {
         "name": "GtkAboutDialog",
-        "reason": "toplevel (derives Gtk.Window)"
+        "reason": "toplevel (implements GtkRoot)"
       },
       {
         "name": "GtkAppChooserDialog",
-        "reason": "toplevel (derives Gtk.Window)"
+        "reason": "toplevel (implements GtkRoot)"
       },
       {
         "name": "GtkApplicationWindow",
-        "reason": "toplevel (derives Gtk.Window)"
+        "reason": "toplevel (implements GtkRoot)"
       },
       {
         "name": "GtkAssistant",
-        "reason": "toplevel (derives Gtk.Window)"
+        "reason": "toplevel (implements GtkRoot)"
       },
       {
         "name": "GtkColorChooserDialog",
-        "reason": "toplevel (derives Gtk.Window)"
+        "reason": "toplevel (implements GtkRoot)"
       },
       {
         "name": "GtkDialog",
-        "reason": "toplevel (derives Gtk.Window)"
+        "reason": "toplevel (implements GtkRoot)"
+      },
+      {
+        "name": "GtkDragIcon",
+        "reason": "toplevel (implements GtkRoot)"
       },
       {
         "name": "GtkFileChooserDialog",
-        "reason": "toplevel (derives Gtk.Window)"
+        "reason": "toplevel (implements GtkRoot)"
       },
       {
         "name": "GtkFlowBoxChild",
@@ -124,7 +127,7 @@
       },
       {
         "name": "GtkFontChooserDialog",
-        "reason": "toplevel (derives Gtk.Window)"
+        "reason": "toplevel (implements GtkRoot)"
       },
       {
         "name": "GtkListBoxRow",
@@ -132,23 +135,23 @@
       },
       {
         "name": "GtkMessageDialog",
-        "reason": "toplevel (derives Gtk.Window)"
+        "reason": "toplevel (implements GtkRoot)"
       },
       {
         "name": "GtkPageSetupUnixDialog",
-        "reason": "toplevel (derives Gtk.Window)"
+        "reason": "toplevel (implements GtkRoot)"
       },
       {
         "name": "GtkPrintUnixDialog",
-        "reason": "toplevel (derives Gtk.Window)"
+        "reason": "toplevel (implements GtkRoot)"
       },
       {
         "name": "GtkShortcutsWindow",
-        "reason": "toplevel (derives Gtk.Window)"
+        "reason": "toplevel (implements GtkRoot)"
       },
       {
         "name": "GtkWindow",
-        "reason": "toplevel (derives Gtk.Window)"
+        "reason": "toplevel (implements GtkRoot)"
       }
     ],
     "notAWidget": [
@@ -349,7 +352,7 @@
     "raw": [
       {
         "name": "AdwAboutWindow",
-        "reason": "toplevel (derives Gtk.Window)"
+        "reason": "toplevel (implements GtkRoot)"
       },
       {
         "name": "AdwActionRow",
@@ -357,7 +360,7 @@
       },
       {
         "name": "AdwApplicationWindow",
-        "reason": "toplevel (derives Gtk.Window)"
+        "reason": "toplevel (implements GtkRoot)"
       },
       {
         "name": "AdwButtonRow",
@@ -377,7 +380,7 @@
       },
       {
         "name": "AdwMessageDialog",
-        "reason": "toplevel (derives Gtk.Window)"
+        "reason": "toplevel (implements GtkRoot)"
       },
       {
         "name": "AdwNavigationPage",
@@ -397,7 +400,7 @@
       },
       {
         "name": "AdwPreferencesWindow",
-        "reason": "toplevel (derives Gtk.Window)"
+        "reason": "toplevel (implements GtkRoot)"
       },
       {
         "name": "AdwSpinRow",
@@ -409,7 +412,7 @@
       },
       {
         "name": "AdwWindow",
-        "reason": "toplevel (derives Gtk.Window)"
+        "reason": "toplevel (implements GtkRoot)"
       }
     ],
     "notAWidget": [

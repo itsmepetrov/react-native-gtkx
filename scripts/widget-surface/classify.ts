@@ -6,7 +6,19 @@
 // reasoning):
 //   1. include only if X.prototype instanceof Gtk.Widget (drops event
 //      controllers, adjustments, models, animations, cell renderers, ...);
-//   2. exclude toplevels: X is/derives Gtk.Window;
+//   2. exclude toplevels: X implements GtkRoot. GtkRoot — not Gtk.Window —
+//      is the capability that makes a widget a toplevel: it owns its own
+//      surface (GtkNative is GtkRoot's prerequisite) and GTK presents it,
+//      it is never an ordinary child. Gtk.Window is the familiar instance of
+//      that capability but not the only one: Gtk.DragIcon is a GtkRoot that
+//      derives Gtk.Widget directly, so a rule written against Gtk.Window
+//      wrapped it as an RN layout child, and every mount of it made GTK say
+//      "Unable to present a to the layout manager unknown auxiliary child
+//      surface widget type GtkDragIcon". Gtk.Popover is the deliberate
+//      counter-example on the other side — GtkNative but NOT GtkRoot, and
+//      gtkx does parent it (gtk_popover_set_parent), so it stays wrapped;
+//      the Adwaita dialogs likewise (Adw.Dialog is a plain widget with its
+//      own adw_dialog_set_focus, not a GtkRoot);
 //   3. exclude child-only-by-inheritance: X is/derives Gtk.ListBoxRow or
 //      Gtk.FlowBoxChild (catches every Adwaita preferences row too, since
 //      Adw.PreferencesRow itself derives Gtk.ListBoxRow);
@@ -77,8 +89,12 @@ export const classify = ({
     if (!isWidget) {
       return { name, bucket: "not-a-widget" }
     }
-    if (isSelfOrInstance(cls, Gtk.Window as GObjectClass)) {
-      return { name, bucket: "raw", reason: "toplevel (derives Gtk.Window)" }
+    // GObject interfaces are ordinary constructors in the @gtkx/gi binding
+    // and take part in `instanceof` — verified against the real namespace:
+    // Gtk.Window and Gtk.DragIcon are GtkRoot, Gtk.Box and Gtk.Popover are
+    // not. Nothing else in the surface reports a GtkRoot today.
+    if (isSelfOrInstance(cls, Gtk.Root as GObjectClass)) {
+      return { name, bucket: "raw", reason: "toplevel (implements GtkRoot)" }
     }
     if (isSelfOrInstance(cls, Gtk.ListBoxRow as GObjectClass)) {
       return {

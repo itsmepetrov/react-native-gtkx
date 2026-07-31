@@ -143,13 +143,19 @@ export type VisualStyle = Partial<{
 
 // RN pointerEvents (also allowed in styles since RN 0.71); behavioral, so
 // it belongs to neither the layout nor the visual bucket — splitStyle
-// ignores it and View reads it from the flattened style.
+// consumes it without routing it and View reads it from the flattened style.
 export type PointerEventsValue = "auto" | "none" | "box-none" | "box-only"
 
-export type FlatStyle = LayoutStyle &
-  VisualStyle & {
-    pointerEvents?: PointerEventsValue
-  }
+// The third bucket, named rather than inlined into FlatStyle below: props
+// that are supported but consumed by the component that owns the behavior,
+// not by either half of the style pipeline. Having a name for it is what
+// lets splitStyle state which keys it deliberately routes nowhere, instead
+// of reporting them as unknown — the drift this type was born from.
+export type BehavioralStyle = Partial<{
+  pointerEvents: PointerEventsValue
+}>
+
+export type FlatStyle = LayoutStyle & VisualStyle & BehavioralStyle
 
 // Style prop as components accept it: single object, array (with falsy holes).
 export type StyleProp<T = FlatStyle> =
