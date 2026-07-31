@@ -1,5 +1,5 @@
 // GENERATED FILE — do not edit by hand.
-// Produced by scripts/generate-widget-surface.mjs. Re-run it inside the VM
+// Produced by scripts/generate-widget-surface.ts. Re-run it inside the VM
 // after `npm run codegen` picks up a gtkx update; see
 // scripts/widget-surface/classification.json for the full classification
 // and .claude/epics/widget-surface/ for the rules behind it.

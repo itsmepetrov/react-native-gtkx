@@ -65,7 +65,7 @@ anything you could set on `Adw.NavigationPage` you can set on
 
 Every `GtkWidget` subclass gtkx binds — 87 of them at last count, from
 `GtkBox` and `GtkButton` to `GtkColumnView` and `GtkEmojiChooser`. The list is
-generated, not hand-picked: `scripts/generate-widget-surface.mjs` classifies
+generated, not hand-picked: `scripts/generate-widget-surface.ts` classifies
 gtkx's full binding by real GObject inheritance (see
 `scripts/widget-surface/classification.json` for the exact list gtkx binds
 today) and `src/gtk/widgets.generated.ts` is the committed result. Re-run the
@@ -115,7 +115,7 @@ wrapper box around them would be invalid GTK rather than a convenience:
   mechanically, by real inheritance. `AdwNavigationPage` and
   `AdwPreferencesPage` derive `Gtk.Widget` directly with no shared base to
   catch them mechanically, so they are a two-entry, doc-verified denylist
-  instead — see `scripts/widget-surface/classify.mjs` for the exact reasoning
+  instead — see `scripts/widget-surface/classify.ts` for the exact reasoning
   behind each.
 
 `GtkGestureClick` is a third, simpler case: an event controller, not a

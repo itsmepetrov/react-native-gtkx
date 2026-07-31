@@ -381,7 +381,7 @@
       },
       {
         "name": "AdwNavigationPage",
-        "reason": "child-only (denylist — see scripts/widget-surface/classify.mjs)"
+        "reason": "child-only (denylist — see scripts/widget-surface/classify.ts)"
       },
       {
         "name": "AdwPasswordEntryRow",
@@ -389,7 +389,7 @@
       },
       {
         "name": "AdwPreferencesPage",
-        "reason": "child-only (denylist — see scripts/widget-surface/classify.mjs)"
+        "reason": "child-only (denylist — see scripts/widget-surface/classify.ts)"
       },
       {
         "name": "AdwPreferencesRow",

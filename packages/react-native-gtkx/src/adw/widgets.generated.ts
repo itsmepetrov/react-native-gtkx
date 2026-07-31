@@ -1,5 +1,5 @@
 // GENERATED FILE — do not edit by hand.
-// Produced by scripts/generate-widget-surface.mjs. Re-run it inside the VM
+// Produced by scripts/generate-widget-surface.ts. Re-run it inside the VM
 // after `npm run codegen` picks up a gtkx update; see
 // scripts/widget-surface/classification.json for the full classification
 // and .claude/epics/widget-surface/ for the rules behind it.
@@ -120,9 +120,9 @@ export {
   AdwEntryRow, // child-only (derives Gtk.ListBoxRow)
   AdwExpanderRow, // child-only (derives Gtk.ListBoxRow)
   AdwMessageDialog, // toplevel (derives Gtk.Window)
-  AdwNavigationPage, // child-only (denylist — see scripts/widget-surface/classify.mjs)
+  AdwNavigationPage, // child-only (denylist — see scripts/widget-surface/classify.ts)
   AdwPasswordEntryRow, // child-only (derives Gtk.ListBoxRow)
-  AdwPreferencesPage, // child-only (denylist — see scripts/widget-surface/classify.mjs)
+  AdwPreferencesPage, // child-only (denylist — see scripts/widget-surface/classify.ts)
   AdwPreferencesRow, // child-only (derives Gtk.ListBoxRow)
   AdwPreferencesWindow, // toplevel (derives Gtk.Window)
   AdwSpinRow, // child-only (derives Gtk.ListBoxRow)

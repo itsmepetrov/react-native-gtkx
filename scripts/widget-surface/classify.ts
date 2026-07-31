@@ -14,7 +14,7 @@
 //      against the real GIR documentation bundled in the .d.ts (see
 //      scripts/widget-surface/README or the epic task file for the
 //      research trail). Each entry names the exact reason.
-export const DENYLIST = {
+export const DENYLIST: Record<string, { reason: string }> = {
   AdwNavigationPage: {
     reason:
       'GIR doc: "A page within NavigationView or NavigationSplitView." ' +
@@ -32,40 +32,62 @@ export const DENYLIST = {
   },
 }
 
-const isSelfOrInstance = (cls, base) =>
+// The real @gtkx/gi classes have no single call signature in common (every
+// GObject class has its own constructor shape) — all we need here is
+// prototype-chain identity and `instanceof`, which any constructor supports.
+// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type -- see above
+export type GObjectClass = Function
+
+export type Bucket = "wrapped" | "raw" | "not-a-widget" | "unresolved"
+
+export interface ClassifyResult {
+  name: string
+  bucket: Bucket
+  reason?: string
+}
+
+const isSelfOrInstance = (cls: GObjectClass, base: GObjectClass): boolean =>
   cls === base || cls.prototype instanceof base
 
-/**
- * @param {object} args
- * @param {Record<string, unknown>} args.Gtk - the real @gtkx/gi/gtk namespace
- * @param {Record<string, unknown>} args.Adw - the real @gtkx/gi/adw namespace
- * @param {string[]} args.gtkComponentNames - "GtkFoo" names parsed from gtk.d.ts
- * @param {string[]} args.adwComponentNames - "AdwFoo" names parsed from adw.d.ts
- */
+export interface ClassifyArgs {
+  /** the real @gtkx/gi/gtk namespace */
+  Gtk: Record<string, GObjectClass | undefined>
+  /** the real @gtkx/gi/adw namespace */
+  Adw: Record<string, GObjectClass | undefined>
+  /** "GtkFoo" names parsed from gtk.d.ts */
+  gtkComponentNames: string[]
+  /** "AdwFoo" names parsed from adw.d.ts */
+  adwComponentNames: string[]
+}
+
 export const classify = ({
   Gtk,
   Adw,
   gtkComponentNames,
   adwComponentNames,
-}) => {
-  const resolve = (name, prefix, ns) => ns[name.slice(prefix.length)]
+}: ClassifyArgs): { gtk: ClassifyResult[]; adw: ClassifyResult[] } => {
+  const resolve = (
+    name: string,
+    prefix: string,
+    ns: Record<string, GObjectClass | undefined>,
+  ): GObjectClass | undefined => ns[name.slice(prefix.length)]
 
-  const classifyOne = (name, cls) => {
-    const isWidget = isSelfOrInstance(cls, Gtk.Widget)
+  const classifyOne = (name: string, cls: GObjectClass): ClassifyResult => {
+    const isWidget = isSelfOrInstance(cls, Gtk.Widget as GObjectClass)
     if (!isWidget) {
       return { name, bucket: "not-a-widget" }
     }
-    if (isSelfOrInstance(cls, Gtk.Window)) {
+    if (isSelfOrInstance(cls, Gtk.Window as GObjectClass)) {
       return { name, bucket: "raw", reason: "toplevel (derives Gtk.Window)" }
     }
-    if (isSelfOrInstance(cls, Gtk.ListBoxRow)) {
+    if (isSelfOrInstance(cls, Gtk.ListBoxRow as GObjectClass)) {
       return {
         name,
         bucket: "raw",
         reason: "child-only (derives Gtk.ListBoxRow)",
       }
     }
-    if (isSelfOrInstance(cls, Gtk.FlowBoxChild)) {
+    if (isSelfOrInstance(cls, Gtk.FlowBoxChild as GObjectClass)) {
       return {
         name,
         bucket: "raw",
@@ -77,20 +99,20 @@ export const classify = ({
         name,
         bucket: "raw",
         reason:
-          "child-only (denylist — see scripts/widget-surface/classify.mjs)",
+          "child-only (denylist — see scripts/widget-surface/classify.ts)",
       }
     }
     return { name, bucket: "wrapped" }
   }
 
-  const gtkResults = gtkComponentNames.map((name) => {
+  const gtkResults = gtkComponentNames.map((name): ClassifyResult => {
     const cls = resolve(name, "Gtk", Gtk)
     if (!cls) {
       return { name, bucket: "unresolved" }
     }
     return classifyOne(name, cls)
   })
-  const adwResults = adwComponentNames.map((name) => {
+  const adwResults = adwComponentNames.map((name): ClassifyResult => {
     const cls = resolve(name, "Adw", Adw)
     if (!cls) {
       return { name, bucket: "unresolved" }

@@ -1,6 +1,6 @@
 // The full GTK widget surface lives in a generated file: every Gtk.Widget
 // subclass gtkx binds, wrapped so React Native drives it. See
-// scripts/generate-widget-surface.mjs and
+// scripts/generate-widget-surface.ts and
 // scripts/widget-surface/classification.json for how the list is derived.
 export * from "./widgets.generated"
 

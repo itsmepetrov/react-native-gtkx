@@ -2,38 +2,46 @@
 // Generates the full GTK + Adwaita widget surface for react-native-gtkx/gtk
 // and react-native-gtkx/adw.
 //
-// MUST run on Linux, inside the VM (`bash scripts/vm.sh run "node
-// scripts/generate-widget-surface.mjs"`) — it imports the real @gtkx/gi
+// MUST run on Linux, inside the VM (`node scripts/vm.ts run "node
+// scripts/generate-widget-surface.ts"`) — it imports the real @gtkx/gi
 // classes to classify widgets by their actual prototype chain, which only
 // resolve where GTK itself is installed. Re-run after `npm run codegen`
 // picks up a gtkx update; the script diffs against its own previous output
 // and prints what changed.
 //
-// See scripts/widget-surface/classify.mjs for the classification rules and
+// See scripts/widget-surface/classify.ts for the classification rules and
 // .claude/epics/widget-surface/ for the research trail behind the denylist.
 import { execFileSync } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
-import { dirname, join } from "node:path"
-import { fileURLToPath } from "node:url"
+import { join } from "node:path"
 import * as Adw from "@gtkx/gi/adw"
 import * as Gtk from "@gtkx/gi/gtk"
-import { classify, DENYLIST } from "./widget-surface/classify.mjs"
-import { parseComponentNames } from "./widget-surface/parse-dts.mjs"
+import {
+  classify,
+  DENYLIST,
+  type ClassifyResult,
+  type GObjectClass,
+} from "./widget-surface/classify.ts"
+import { parseComponentNames } from "./widget-surface/parse-dts.ts"
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const ROOT = join(__dirname, "..")
+const ROOT = join(import.meta.dirname, "..")
 const PKG = join(ROOT, "packages/react-native-gtkx/src")
 
 const GTK_DTS = join(ROOT, "node_modules/.gtkx/jsx/gtk/gtk.d.ts")
 const ADW_DTS = join(ROOT, "node_modules/.gtkx/jsx/adw/adw.d.ts")
-const MANIFEST_PATH = join(__dirname, "widget-surface/classification.json")
+const MANIFEST_PATH = join(
+  import.meta.dirname,
+  "widget-surface/classification.json",
+)
 
 const BRIDGE_WIDGETS = join(PKG, "gtkx/bridge/widgets.generated.ts")
 const GTK_WIDGETS = join(PKG, "gtk/widgets.generated.ts")
 const ADW_WIDGETS = join(PKG, "adw/widgets.generated.ts")
 
-const GENERATED_HEADER = (purpose) => `// GENERATED FILE — do not edit by hand.
-// Produced by scripts/generate-widget-surface.mjs. Re-run it inside the VM
+const GENERATED_HEADER = (
+  purpose: string,
+): string => `// GENERATED FILE — do not edit by hand.
+// Produced by scripts/generate-widget-surface.ts. Re-run it inside the VM
 // after \`npm run codegen\` picks up a gtkx update; see
 // scripts/widget-surface/classification.json for the full classification
 // and .claude/epics/widget-surface/ for the rules behind it.
@@ -41,15 +49,34 @@ const GENERATED_HEADER = (purpose) => `// GENERATED FILE — do not edit by hand
 // ${purpose}
 `
 
+interface RawEntry {
+  name: string
+  reason: string
+}
+
+interface PlatformManifest {
+  wrapped: string[]
+  raw: RawEntry[]
+  notAWidget: string[]
+}
+
+interface Manifest {
+  gtk: PlatformManifest
+  adw: PlatformManifest
+}
+
 // ---------------------------------------------------------------------------
 // 1. Parse what gtkx binds, classify it against the real prototype chains.
 // ---------------------------------------------------------------------------
 const gtkParsed = parseComponentNames(GTK_DTS)
 const adwParsed = parseComponentNames(ADW_DTS)
 
+// The generated .d.ts and the real @gtkx/gi namespaces agree at runtime (that
+// is the whole premise of this script) but come from independent type
+// sources with no shared structural shape — bridging them needs a cast.
 const result = classify({
-  Gtk,
-  Adw,
+  Gtk: Gtk as unknown as Record<string, GObjectClass | undefined>,
+  Adw: Adw as unknown as Record<string, GObjectClass | undefined>,
   gtkComponentNames: gtkParsed.components,
   adwComponentNames: adwParsed.components,
 })
@@ -67,20 +94,26 @@ if (unresolved.length > 0) {
   process.exit(1)
 }
 
-const bucketOf = (results, bucket) =>
+const bucketOf = (
+  results: ClassifyResult[],
+  bucket: ClassifyResult["bucket"],
+): string[] =>
   results
     .filter((r) => r.bucket === bucket)
     .map((r) => r.name)
     .sort()
 
-const reasonOf = (results, name) => results.find((r) => r.name === name)?.reason
+const reasonOf = (
+  results: ClassifyResult[],
+  name: string,
+): string | undefined => results.find((r) => r.name === name)?.reason
 
-const manifest = {
+const manifest: Manifest = {
   gtk: {
     wrapped: bucketOf(result.gtk, "wrapped"),
     raw: bucketOf(result.gtk, "raw").map((name) => ({
       name,
-      reason: reasonOf(result.gtk, name),
+      reason: reasonOf(result.gtk, name) ?? "",
     })),
     notAWidget: bucketOf(result.gtk, "not-a-widget"),
   },
@@ -88,7 +121,7 @@ const manifest = {
     wrapped: bucketOf(result.adw, "wrapped"),
     raw: bucketOf(result.adw, "raw").map((name) => ({
       name,
-      reason: reasonOf(result.adw, name),
+      reason: reasonOf(result.adw, name) ?? "",
     })),
     notAWidget: bucketOf(result.adw, "not-a-widget"),
   },
@@ -97,8 +130,8 @@ const manifest = {
 // ---------------------------------------------------------------------------
 // 2. Diff against the previous run, so an upgrade says what changed.
 // ---------------------------------------------------------------------------
-const summarizeBuckets = (m) => {
-  const map = new Map()
+const summarizeBuckets = (m: Manifest): Map<string, string> => {
+  const map = new Map<string, string>()
   for (const name of m.gtk.wrapped) {
     map.set(name, "gtk:wrapped")
   }
@@ -122,7 +155,7 @@ const summarizeBuckets = (m) => {
 
 let changeReport = "first run — no previous classification.json to diff against"
 if (existsSync(MANIFEST_PATH)) {
-  const previous = JSON.parse(readFileSync(MANIFEST_PATH, "utf8"))
+  const previous = JSON.parse(readFileSync(MANIFEST_PATH, "utf8")) as Manifest
   const before = summarizeBuckets(previous)
   const after = summarizeBuckets(manifest)
   const added = [...after.keys()].filter((k) => !before.has(k))
@@ -130,7 +163,7 @@ if (existsSync(MANIFEST_PATH)) {
   const reclassified = [...after.keys()].filter(
     (k) => before.has(k) && before.get(k) !== after.get(k),
   )
-  const lines = []
+  const lines: string[] = []
   if (added.length) {
     lines.push(`  added (${added.length}): ${added.join(", ")}`)
   }
@@ -152,7 +185,7 @@ if (existsSync(MANIFEST_PATH)) {
 // ---------------------------------------------------------------------------
 // 3. Emit the generated source files.
 // ---------------------------------------------------------------------------
-const emitBridgeWidgets = () => {
+const emitBridgeWidgets = (): void => {
   const gtkNames = [
     ...manifest.gtk.wrapped,
     ...manifest.gtk.raw.map((r) => r.name),
@@ -178,13 +211,21 @@ const emitBridgeWidgets = () => {
   writeFileSync(BRIDGE_WIDGETS, body)
 }
 
+interface EmitPlatformWidgetsArgs {
+  path: string
+  prefix: string
+  wrapped: string[]
+  raw: RawEntry[]
+  wrapReactNativeFrom: string
+}
+
 const emitPlatformWidgets = ({
   path,
   prefix,
   wrapped,
   raw,
   wrapReactNativeFrom,
-}) => {
+}: EmitPlatformWidgetsArgs): void => {
   const rawNames = raw.map((r) => r.name).sort()
   const body =
     GENERATED_HEADER(
@@ -205,7 +246,9 @@ const emitPlatformWidgets = ({
     (rawNames.length > 0
       ? "export {\n" +
         rawNames
-          .map((n) => `  ${n}, // ${raw.find((r) => r.name === n).reason}`)
+          .map(
+            (n) => `  ${n}, // ${raw.find((r) => r.name === n)?.reason ?? ""}`,
+          )
           .join("\n") +
         '\n} from "../gtkx/bridge/widgets.generated"\n\n'
       : "") +
@@ -215,7 +258,7 @@ const emitPlatformWidgets = ({
   writeFileSync(path, body)
 }
 
-mkdirSync(dirname(MANIFEST_PATH), { recursive: true })
+mkdirSync(join(import.meta.dirname, "widget-surface"), { recursive: true })
 emitBridgeWidgets()
 emitPlatformWidgets({
   path: GTK_WIDGETS,
@@ -243,7 +286,10 @@ writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2) + "\n")
 execFileSync(
   "npx",
   ["prettier", "--write", BRIDGE_WIDGETS, GTK_WIDGETS, ADW_WIDGETS],
-  { cwd: ROOT, stdio: "inherit" },
+  {
+    cwd: ROOT,
+    stdio: "inherit",
+  },
 )
 
 // ---------------------------------------------------------------------------
