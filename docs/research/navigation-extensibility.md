@@ -181,6 +181,17 @@ presentation, search-bar options (`Gtk.SearchBar` /
 the desktop yet).
 >>>>>>> 367a114 (Record the sidebar gaps this epic closed in the research doc)
 
+Found while building `examples/tasks-nav` (navigation-depth-2 epic): the
+sidebar PANE's own chrome has no customization hook at all — its
+`AdwToolbarView`'s `AdwHeaderBar` is hard-coded
+(`src/navigation/sidebar.tsx`), so a navigator prop can set
+`sidebarTitle` (a string) and nothing else on it. Upstream's own Tasks
+tutorial puts an "add list" button in exactly that header; this example
+worked around it by using the navigator-level `headerButtons` prop on
+the CONTENT header instead (a reasonable, if not first-choice, place for
+a persistent global action). Not on the PRD's checklist, so not built —
+recorded here rather than left implicit in the workaround.
+
 **Meaningless on desktop, skip forever:** status-bar and home-indicator
 options, large titles, blur effects, gesture direction, form sheets,
 back-button labels. `headerBackButtonMenuEnabled` is free — libadwaita's

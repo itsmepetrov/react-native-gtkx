@@ -1,0 +1,21 @@
+{
+  "name": "tasks-nav-example",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "gtkx dev",
+    "build": "gtkx build",
+    "start": "node dist/bundle.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@react-navigation/native": "8.0.0-alpha.40",
+    "react": "^19.2.0",
+    "react-native-gtkx": "0.1.0-alpha.4"
+  },
+  "devDependencies": {
+    "@gtkx/cli": "1.0.0-rc.2",
+    "@gtkx/config": "1.0.0-rc.2"
+  }
+}
