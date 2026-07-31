@@ -45,3 +45,11 @@ export {
 // reason the namespaces above are: one subpath for the whole gtkx toolkit
 // surface, not just Gtk.Widget subclasses.
 export { css, cx, injectGlobal } from "../gtkx/bridge/index"
+
+// The window and application AppRegistry itself sits on: useParentWindow
+// reaches the Gtk.Window ancestor (for anything not modeled by a prop —
+// e.g. binding a GSettings key to its own defaultWidth/defaultHeight),
+// useApplication reaches the Adw.Application (e.g. to send a
+// Gio.Notification), quit tears the whole app down programmatically (the
+// same function AppRegistry wires to a window's own close button).
+export { quit, useApplication, useParentWindow } from "../gtkx/bridge/index"
