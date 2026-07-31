@@ -47,6 +47,10 @@ jobs:
           (cd examples/monitor && npm run build)
           (cd examples/gallery && npm run build)
           (cd examples/tasks-app && npm run build)
+          # The same app on the navigator, so a release ships both shapes:
+          # tasks-app builds its window by hand, tasks-nav gets it from
+          # createSidebarNavigator (see examples/tasks-nav/README.md).
+          (cd examples/tasks-nav && npm run build)
           # Metro path (react-native build-linux): produces dist/main.jsbundle,
           # not dist/bundle.js — build-deb.sh tells the two shapes apart.
           (cd examples/hn-app && npm run build)
@@ -56,6 +60,7 @@ jobs:
           node scripts/build-deb.ts monitor "System Monitor" "$VERSION" debs
           node scripts/build-deb.ts gallery "RN Gallery" "$VERSION" debs
           node scripts/build-deb.ts tasks-app "Tasks" "$VERSION" debs
+          node scripts/build-deb.ts tasks-nav "Tasks (nav)" "$VERSION" debs
           node scripts/build-deb.ts hn-app "Hacker News" "$VERSION" debs
           ls -la debs/
       - uses: actions/upload-artifact@v7
