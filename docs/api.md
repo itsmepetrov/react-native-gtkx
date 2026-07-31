@@ -111,10 +111,14 @@ const App = () => (
 - Screen `options`: `title` (HeaderBar title, defaults to the route name),
   `headerShown` (default true).
 - `createSidebarNavigator` — the desktop drawer equivalent on
-  `Adw.NavigationSplitView`: a persistent native sidebar (GtkListBox with
-  Adwaita `navigation-sidebar` styling) selects between parallel screens
-  (TabRouter semantics). Navigator prop `sidebarTitle`; screen `options`:
-  `title`. Run the app with `chrome: "content"` so the split view's
+  `Adw.NavigationSplitView`: a persistent native sidebar (`AdwActionRow`
+  per screen, in a GtkListBox with Adwaita `navigation-sidebar` styling)
+  selects between parallel screens (TabRouter semantics). Navigator prop
+  `sidebarTitle`; screen `options`: `title`, `icon` (Adwaita symbolic icon
+  name for the row's prefix), `color` (a CSS color for a colored-dot
+  prefix instead of `icon` — the two are mutually exclusive per row,
+  `color` wins if both are set), `count` (a badge suffix, hidden when 0 or
+  unset). Run the app with `chrome: "content"` so the split view's
   HeaderBars are the window chrome (`examples/gallery` is built on it).
   Navigator prop `headerButtons` packs declarative native buttons into the
   content HeaderBar end (`{id, icon, tooltip, onPress}`, `icon` is an

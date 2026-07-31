@@ -27,6 +27,7 @@ import { getActiveChrome } from "../components/app-registry"
 // Widgets come from the public subpaths, the same ones an app would use —
 // the adapter has no privileged access to gtkx.
 import {
+  AdwActionRow,
   AdwHeaderBar,
   AdwNavigationPage,
   AdwNavigationSplitView,
@@ -34,21 +35,50 @@ import {
 } from "../adw"
 import { SlotContent } from "../common"
 import {
+  css,
   Gtk,
+  GtkBox,
   GtkButton,
+  GtkImage,
   GtkLabel,
   GtkListBox,
-  GtkListBoxRow,
   GtkScrolledWindow,
 } from "../gtk"
 import { warnIgnoredOptions } from "./option-warnings"
 
-const SIDEBAR_OPTION_KEYS: ReadonlySet<string> = new Set(["title"])
+const SIDEBAR_OPTION_KEYS: ReadonlySet<string> = new Set([
+  "title",
+  "icon",
+  "color",
+  "count",
+])
 
 export type SidebarNavigationOptions = {
   /** Sidebar row and content AdwHeaderBar title; defaults to the route name. */
   title?: string
+  /** Adwaita symbolic icon name for the sidebar row's prefix (e.g.
+   *  "view-list-symbolic"). Ignored when `color` is also set — a row shows
+   *  a colored dot OR an icon, never both (the same rule tasks-app's own
+   *  hand-rolled sidebar followed). */
+  icon?: string
+  /** A CSS color for a colored dot prefix, replacing `icon` on this row —
+   *  the way a user-created list is told apart from a smart view. */
+  color?: string
+  /** Badge shown as the row's suffix. Hidden when 0 or undefined — an
+   *  empty view shows no badge, not a "0". */
+  count?: number
 }
+
+// A one-off CSS class for a colored dot prefix — the same mechanism
+// tasks-app's own sidebar used (react-native-gtkx/gtk's `css` tag, kept
+// private here since it is a rendering detail of this navigator, not a
+// public primitive).
+const listDot = (color: string): string => css`
+  min-width: 12px;
+  min-height: 12px;
+  border-radius: 9999px;
+  background: ${color};
+`
 
 // A declarative AdwHeaderBar button: the RN-facing API stays GTK-free — the
 // navigator renders the native button itself. `icon` is an Adwaita symbolic
@@ -149,9 +179,10 @@ const SidebarNavigator = ({
   const active = state.routes[state.index]!
   const activeDescriptor = descriptors[active.key] as
     SidebarDescriptor | undefined
+  const optionsOf = (routeKey: string): SidebarNavigationOptions =>
+    (descriptors[routeKey] as SidebarDescriptor | undefined)?.options ?? {}
   const titleOf = (routeKey: string, fallback: string): string =>
-    (descriptors[routeKey] as SidebarDescriptor | undefined)?.options.title ??
-    fallback
+    optionsOf(routeKey).title ?? fallback
 
   return (
     <NavigationContent>
@@ -186,18 +217,36 @@ const SidebarNavigator = ({
                     }
                   }}
                 >
-                  {state.routes.map((route) => (
-                    <GtkListBoxRow key={route.key}>
-                      <GtkLabel
-                        label={titleOf(route.key, route.name)}
-                        xalign={0}
-                        marginTop={8}
-                        marginBottom={8}
-                        marginStart={6}
-                        marginEnd={6}
+                  {state.routes.map((route) => {
+                    const options = optionsOf(route.key)
+                    return (
+                      <AdwActionRow
+                        key={route.key}
+                        title={titleOf(route.key, route.name)}
+                        prefix={
+                          options.color ? (
+                            <GtkBox
+                              valign={Gtk.Align.CENTER}
+                              cssClasses={[listDot(options.color)]}
+                              accessibleRole={Gtk.AccessibleRole.PRESENTATION}
+                            />
+                          ) : options.icon ? (
+                            <GtkImage iconName={options.icon} />
+                          ) : undefined
+                        }
+                        suffix={
+                          options.count && options.count > 0 ? (
+                            <GtkLabel
+                              valign={Gtk.Align.CENTER}
+                              cssClasses={["dimmed", "numeric"]}
+                            >
+                              {String(options.count)}
+                            </GtkLabel>
+                          ) : undefined
+                        }
                       />
-                    </GtkListBoxRow>
-                  ))}
+                    )
+                  })}
                 </GtkListBox>
               </GtkScrolledWindow>
             </AdwToolbarView>
