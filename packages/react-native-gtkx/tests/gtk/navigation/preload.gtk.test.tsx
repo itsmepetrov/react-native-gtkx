@@ -6,7 +6,7 @@
 // (`state.routes.slice(0, state.index + 1)`), or a preloaded screen would
 // get pushed onto the widget as if the user had actually navigated to it.
 // See src/navigation/index.tsx and updates/002/progress.md.
-import { render, screen, waitFor } from "@gtkx/testing"
+import { act, render, screen, waitFor } from "@gtkx/testing"
 import {
   NavigationContainer,
   useNavigationContainerRef,
@@ -105,10 +105,14 @@ it("a preloaded route sits in state.routes but never appears as a pushed page", 
 
   // PRELOAD (dispatched directly — there is no typed StackActions.preload
   // helper upstream, see StackRouter's PRELOAD case) adds "Details" to
-  // state.routes exactly like the v8 change this test guards against.
-  navRef.dispatch({
-    type: "PRELOAD",
-    payload: { name: "Details" },
+  // state.routes exactly like the v8 change this test guards against. A
+  // ref-based dispatch runs outside any React event handler, so it needs
+  // act() to flush before asserting on it.
+  await act(async () => {
+    navRef.dispatch({
+      type: "PRELOAD",
+      payload: { name: "Details" },
+    })
   })
   await waitFor(() => {
     expect(navRef.getRootState()?.routes).toHaveLength(2)
@@ -121,9 +125,11 @@ it("a preloaded route sits in state.routes but never appears as a pushed page", 
 
   // A real PUSH of the same route afterwards still works — preloading must
   // not have poisoned the tag or left the widget out of sync.
-  navRef.dispatch({
-    type: "PUSH",
-    payload: { name: "Details" },
+  await act(async () => {
+    navRef.dispatch({
+      type: "PUSH",
+      payload: { name: "Details" },
+    })
   })
   await waitFor(() => {
     expect(screen.getByText("details screen")).toBeTruthy()

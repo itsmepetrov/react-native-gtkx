@@ -6,7 +6,7 @@
 //
 // If this file ever needs a react-navigation import to pass, the layering has
 // leaked and the primitive is no longer standalone.
-import { render, waitFor } from "@gtkx/testing"
+import { act, render, waitFor } from "@gtkx/testing"
 import { useEffect, useState } from "react"
 import { expect, it } from "vitest"
 import {
@@ -87,15 +87,22 @@ it("pushes from plain state and reports a native pop back", async () => {
   expect(view).not.toBeNull()
   expect(view!.getVisiblePage()?.getTag()).toBe("home")
 
-  // State drives the widget: appending a tag pushes the page.
-  push("detail")
+  // State drives the widget: appending a tag pushes the page. `push` is a
+  // setState captured straight off Demo (not through a React event handler),
+  // so it needs act() to flush before asserting on the widget it drives.
+  await act(async () => {
+    push("detail")
+  })
   await waitFor(() => {
     expect(view!.getVisiblePage()?.getTag()).toBe("detail")
   })
 
   // The widget pops on its own — this is what the Adwaita back button,
-  // Escape and the back gesture all end up calling.
-  view!.pop()
+  // Escape and the back gesture all end up calling. The native pop fires
+  // onPopped synchronously, which calls setState on Demo — same act() need.
+  await act(async () => {
+    view!.pop()
+  })
   await waitFor(() => {
     expect(popped).toContain("detail")
   })

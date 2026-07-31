@@ -3,7 +3,7 @@
 // The scroll handler travels to GTK through a signal connection made once, so
 // a handler frozen at mount silently windows against count=0 and empties the
 // list on the first scroll — see gtkx/bridge/use-signal.ts.
-import { render, screen, waitFor } from "@gtkx/testing"
+import { act, render, screen, waitFor } from "@gtkx/testing"
 import { useEffect, useState } from "react"
 import { expect, it } from "vitest"
 import {
@@ -61,7 +61,12 @@ it("keeps the window after a scroll when the rows arrived after mount", async ()
   })
 
   // 100px rows: offset 800 puts rows 8..11 in the 400px viewport.
-  handle!.scrollToOffset({ offset: 800, animated: false })
+  // act(): scrollToOffset writes the GTK adjustment, whose value-changed
+  // signal runs the list's own scroll handler and setRange() synchronously
+  // in this same call stack — a state update React does not know it caused.
+  await act(async () => {
+    handle!.scrollToOffset({ offset: 800, animated: false })
+  })
 
   await waitFor(() => {
     expect(screen.queryByText("late-row-8")).not.toBeNull()

@@ -1,7 +1,7 @@
 // Intrinsic-size leaves: GtkEntry must measure through the theme and the
 // engine must reserve that height (regression for the flex-collapse hunt).
 // Plus the multiline branch: GtkTextView with RN semantics.
-import { render, screen, waitFor } from "@gtkx/testing"
+import { act, render, screen, waitFor } from "@gtkx/testing"
 import { createRef } from "react"
 import { expect, it, vi } from "vitest"
 import {
@@ -24,14 +24,18 @@ it("reports GtkEntry natural sizes", async () => {
 
 it("TextInput gets a measured height in the engine", async () => {
   const onLayout = vi.fn()
-  await render(
-    <Root
-      width={400}
-      height={300}
-    >
-      <TextInput onLayout={onLayout} />
-    </Root>,
-  )
+  // render()'s own layout settling (@gtkx/testing's flushLayout) runs after
+  // its internal act() wrap closes, so the whole call needs act() too.
+  await act(async () => {
+    await render(
+      <Root
+        width={400}
+        height={300}
+      >
+        <TextInput onLayout={onLayout} />
+      </Root>,
+    )
+  })
   await waitFor(() => expect(onLayout).toHaveBeenCalled())
   const layout = onLayout.mock.calls.at(-1)![0].nativeEvent.layout
   expect(layout.height).toBeGreaterThan(0)
@@ -90,24 +94,30 @@ it("multiline placeholder shows while empty and hides under a value", async () =
 
 it("multiline fires onChangeText from buffer edits, without echo", async () => {
   const onChangeText = vi.fn()
-  await render(
-    <Root
-      width={400}
-      height={300}
-    >
-      <TextInput
-        multiline
-        defaultValue="start"
-        onChangeText={onChangeText}
-        style={{ height: 100 }}
-        testID="ml-view"
-      />
-    </Root>,
-  )
+  await act(async () => {
+    await render(
+      <Root
+        width={400}
+        height={300}
+      >
+        <TextInput
+          multiline
+          defaultValue="start"
+          onChangeText={onChangeText}
+          style={{ height: 100 }}
+          testID="ml-view"
+        />
+      </Root>,
+    )
+  })
   // The initial defaultValue set must NOT fire onChangeText (no echo).
   expect(onChangeText).not.toHaveBeenCalled()
   const view = screen.getByName("ml-view") as unknown as Gtk.TextView
-  view.getBuffer().setText("typed by hand", -1)
+  // setText fires the buffer's "changed" signal synchronously, which calls
+  // onChangeText — a native poke outside any React event handler.
+  await act(async () => {
+    view.getBuffer().setText("typed by hand", -1)
+  })
   await waitFor(() => {
     expect(onChangeText).toHaveBeenCalledWith("typed by hand")
   })

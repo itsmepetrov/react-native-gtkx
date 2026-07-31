@@ -7,7 +7,7 @@
 // BEHAVIOUR: the navigator still owns selection and routing, so a custom
 // row cannot drift out of sync with navigation state. That is what this
 // pins down — the appearance is the app's problem by design.
-import { render, screen, waitFor } from "@gtkx/testing"
+import { act, render, screen, waitFor } from "@gtkx/testing"
 import { NavigationContainer } from "@react-navigation/native"
 import { expect, it } from "vitest"
 import { type Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
@@ -77,7 +77,12 @@ it("renders a custom row and still routes selection through it", async () => {
     screen.getByText("custom-second") as unknown as GtkNs.Widget,
   )
   expect(list).not.toBeNull()
-  list!.selectRow(list!.getRowAtIndex(1))
+  // selectRow fires GTK's row-selected signal synchronously, which
+  // dispatches into react-navigation state outside any React event
+  // handler — same act() need as the other sidebar tests in this suite.
+  await act(async () => {
+    list!.selectRow(list!.getRowAtIndex(1))
+  })
   await waitFor(() => {
     expect(screen.getByText("second-body")).toBeTruthy()
   })

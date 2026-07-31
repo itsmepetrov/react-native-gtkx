@@ -2,7 +2,7 @@
 // via Appearance.setColorScheme flips notify::dark, which must reach both the
 // listener API and the useColorScheme hook without a restart.
 
-import { renderHook, waitFor } from "@gtkx/testing"
+import { act, renderHook, waitFor } from "@gtkx/testing"
 import { afterEach, expect, it } from "vitest"
 import { Appearance, useColorScheme } from "../../../src/apis/index"
 import { styleManager } from "../../../src/gtkx/bridge/index"
@@ -40,11 +40,19 @@ it("setColorScheme forces the scheme and notifies listeners", async () => {
 })
 
 it("useColorScheme follows theme changes without a restart", async () => {
+  // setColorScheme sets AdwStyleManager's property directly, which fires
+  // notify::dark synchronously into the hook's listener — before the hook
+  // even mounts here, so nothing to flush yet.
   Appearance.setColorScheme("light")
   const { result, unmount } = await renderHook(() => useColorScheme())
   await waitFor(() => expect(result.current).toBe("light"))
 
-  Appearance.setColorScheme("dark")
+  // Same native property write, now with the hook mounted and listening —
+  // a poke outside any React event handler, so it needs act() to flush the
+  // resulting setState before the read below.
+  await act(async () => {
+    Appearance.setColorScheme("dark")
+  })
   await waitFor(() => expect(result.current).toBe("dark"))
   await unmount()
 })

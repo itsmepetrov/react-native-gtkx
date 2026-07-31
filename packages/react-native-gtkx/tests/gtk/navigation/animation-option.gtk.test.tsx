@@ -4,7 +4,7 @@
 // value still animates, with the standard Adwaita transition, and a
 // specific requested type warns once in development. See docs/api.md and
 // the primitive's `animateTransitions` prop (src/common/navigation-stack.tsx).
-import { render, screen, waitFor } from "@gtkx/testing"
+import { act, render, screen, waitFor } from "@gtkx/testing"
 import {
   CommonActions,
   NavigationContainer,
@@ -146,7 +146,11 @@ it("re-enables animate-transitions when the active screen has no override", asyn
   const view = findNavigationView(container as Gtk.Window)!
   expect(view.getAnimateTransitions()).toBe(false)
 
-  navRef.dispatch(CommonActions.navigate("Details"))
+  // A ref-based dispatch runs outside any React event handler; the resulting
+  // react-navigation state update must be flushed under act() first.
+  await act(async () => {
+    navRef.dispatch(CommonActions.navigate("Details"))
+  })
   await waitFor(() => {
     expect(screen.getByText("details body")).toBeTruthy()
   })
@@ -170,7 +174,9 @@ it("a specific requested type still animates, and warns once in development", as
   })
   expect(console.warn).not.toHaveBeenCalled()
 
-  navRef.dispatch(CommonActions.navigate("Details"))
+  await act(async () => {
+    navRef.dispatch(CommonActions.navigate("Details"))
+  })
   await waitFor(() => {
     expect(screen.getByText("details body")).toBeTruthy()
   })
@@ -190,11 +196,15 @@ it("a specific requested type still animates, and warns once in development", as
   // Once per navigator per key, same contract as every other ignored
   // option — a second screen requesting a (different) specific type does
   // not warn again.
-  navRef.dispatch(CommonActions.goBack())
+  await act(async () => {
+    navRef.dispatch(CommonActions.goBack())
+  })
   await waitFor(() => {
     expect(screen.getByText("home body")).toBeTruthy()
   })
-  navRef.dispatch(CommonActions.navigate("Details"))
+  await act(async () => {
+    navRef.dispatch(CommonActions.navigate("Details"))
+  })
   await waitFor(() => {
     expect(screen.getByText("details body")).toBeTruthy()
   })

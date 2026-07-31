@@ -2,7 +2,7 @@
 // parallel screens (TabRouter). Both sync directions are covered: selecting
 // a row natively switches the screen, and programmatic navigation moves the
 // native selection.
-import { fireEvent, render, screen, waitFor } from "@gtkx/testing"
+import { act, fireEvent, render, screen, waitFor } from "@gtkx/testing"
 import {
   CommonActions,
   NavigationContainer,
@@ -114,15 +114,22 @@ it("native row selection and programmatic navigation stay in sync", async () => 
   expect(screen.getAllByText("Second").length).toBeGreaterThan(0)
 
   // Native selection (what a sidebar click does) → the screen switches and
-  // the previous one unmounts.
-  list!.selectRow(list!.getRowAtIndex(1))
+  // the previous one unmounts. selectRow fires GTK's row-selected signal
+  // synchronously, which dispatches into react-navigation state outside any
+  // React event handler, so it needs act() to flush before asserting.
+  await act(async () => {
+    list!.selectRow(list!.getRowAtIndex(1))
+  })
   await waitFor(() => {
     expect(screen.getByText("second section body")).toBeTruthy()
     expect(screen.queryByText("first section body")).toBeNull()
   })
 
-  // Programmatic navigation → the native selection follows.
-  navRef.dispatch(CommonActions.navigate("first"))
+  // Programmatic navigation → the native selection follows. Same act() need
+  // as above: a ref-based dispatch runs outside any React event handler.
+  await act(async () => {
+    navRef.dispatch(CommonActions.navigate("first"))
+  })
   await waitFor(() => {
     expect(screen.getByText("first section body")).toBeTruthy()
     expect(list!.getSelectedRow()?.getIndex()).toBe(0)
