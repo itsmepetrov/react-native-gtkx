@@ -136,6 +136,9 @@ export default typescriptEslint.config(
       "**/gtkx.config.ts",
       "vitest.config.ts",
       "spike/**",
+      // Classifies the real @gtkx/gi widget prototype chain — the one place
+      // outside the bridge itself allowed to see gtkx's actual exports.
+      "scripts/generate-widget-surface.ts",
     ],
     rules: {
       "no-restricted-imports": "off",
@@ -146,6 +149,13 @@ export default typescriptEslint.config(
     rules: {
       "no-console": "off",
       "react-hooks/refs": "off",
+    },
+  },
+  {
+    // Scripts are CLI tools — printing to stdout/stderr is the whole point.
+    files: ["scripts/**"],
+    rules: {
+      "no-console": "off",
     },
   },
   {

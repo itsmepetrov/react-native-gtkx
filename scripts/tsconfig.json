@@ -1,0 +1,28 @@
+{
+  // Typechecks the repository's own tooling: scripts run directly by Node
+  // (`node scripts/foo.ts`, no build step, no tsx/jiti). That constrains the
+  // options below, unlike the app/package tsconfigs elsewhere in the repo:
+  //
+  // - erasableSyntaxOnly: Node's type-stripping ERASES types, it does not
+  //   compile them — enum, namespace (with a value), and constructor
+  //   parameter properties have no erasable form. This flag makes tsc
+  //   reject them instead of Node failing at runtime.
+  // - allowImportingTsExtensions + module/moduleResolution nodenext: Node
+  //   resolves relative specifiers exactly as written, so a script that
+  //   imports "./util.ts" must say ".ts", not the bundler-style extension-
+  //   less or ".js" specifier used in packages/examples.
+  // - verbatimModuleSyntax: forces `import type` to be written explicitly,
+  //   so a type-only import can't be silently stripped into a dangling
+  //   runtime import of a name that was never a value.
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["**/*.ts"]
+}
