@@ -2,15 +2,15 @@
 // intrinsic-size root: the content's Yoga size becomes the chrome slot size
 // (a zero-minimum root would collapse — the pre-006 wall).
 import { render, screen, waitFor } from "@gtkx/testing"
+import {
+  NavigationContainer,
+  useNavigationContainerRef,
+} from "@react-navigation/native"
 import { useEffect } from "react"
 import { expect, it } from "vitest"
 import type { Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
 import { Text, View } from "../../../src/index"
-import {
-  createStackNavigator,
-  NavigationContainer,
-  useNavigationContainerRef,
-} from "../../../src/navigation/index"
+import { createStackNavigator } from "../../../src/navigation/index"
 
 const Stack = createStackNavigator()
 

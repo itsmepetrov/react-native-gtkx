@@ -3,16 +3,16 @@
 // a row natively switches the screen, and programmatic navigation moves the
 // native selection.
 import { fireEvent, render, screen, waitFor } from "@gtkx/testing"
+import {
+  CommonActions,
+  NavigationContainer,
+  useNavigationContainerRef,
+} from "@react-navigation/native"
 import { useEffect } from "react"
 import { expect, it, vi } from "vitest"
 import { Gtk, type Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
 import { Text, View } from "../../../src/index"
-import {
-  CommonActions,
-  createSidebarNavigator,
-  NavigationContainer,
-  useNavigationContainerRef,
-} from "../../../src/navigation/index"
+import { createSidebarNavigator } from "../../../src/navigation/index"
 
 const Sidebar = createSidebarNavigator()
 

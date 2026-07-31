@@ -251,19 +251,17 @@ export {
   type TypedSidebarNavigator,
 } from "./sidebar"
 
-// The rest of the react-navigation surface apps need, so a linux app can
-// import everything from one place.
-export {
-  CommonActions,
-  NavigationContainer,
-  StackActions,
-  useFocusEffect,
-  useIsFocused,
-  useNavigation,
-  useNavigationContainerRef,
-  usePreventRemove,
-  useRoute,
-} from "@react-navigation/native"
+// BREAKING CHANGE: this file used to re-export CommonActions,
+// NavigationContainer, StackActions, useFocusEffect, useIsFocused,
+// useNavigation, useNavigationContainerRef, usePreventRemove and useRoute
+// from @react-navigation/native, so an app could import the whole surface
+// from one place. Removed: the set was never complete (apps still had to
+// go to @react-navigation/native directly for anything else — dispatch
+// helpers, linking types, the rest of the hooks), so re-exporting a subset
+// was only a second place to look, not a convenience. Import these names
+// from @react-navigation/native directly; this package exports only what
+// is genuinely its own (createStackNavigator, createSidebarNavigator, and
+// the option/prop types around them).
 
 // ---- typed factory --------------------------------------------------------
 // React Navigation 8 ships a genuinely generic createNavigatorFactory

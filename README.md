@@ -49,10 +49,8 @@ Verified live: `examples/hn-app` (a Hacker News reader on the Metro path), `exam
 ## Navigation is native, not redrawn
 
 ```tsx
-import {
-  createStackNavigator,
-  NavigationContainer,
-} from "react-native-gtkx/navigation"
+import { NavigationContainer } from "@react-navigation/native"
+import { createStackNavigator } from "react-native-gtkx/navigation"
 ```
 
 Screens are real `Adw.NavigationPage`s inside an `Adw.NavigationView`, and
