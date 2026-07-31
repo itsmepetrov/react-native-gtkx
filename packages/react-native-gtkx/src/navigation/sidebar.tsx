@@ -21,21 +21,23 @@ import {
 } from "@react-navigation/native"
 import { useEffect, useRef, type ComponentType, type ReactNode } from "react"
 import { getActiveChrome } from "../components/app-registry"
-// Widgets come from the adwaita subpath, the same public primitives an app
-// would use — the adapter has no privileged access to gtkx.
+// Widgets come from the public subpaths, the same ones an app would use —
+// the adapter has no privileged access to gtkx.
 import {
   AdwHeaderBar,
   AdwNavigationPage,
   AdwNavigationSplitView,
   AdwToolbarView,
+} from "../adw"
+import {
   Gtk,
   GtkButton,
   GtkLabel,
   GtkListBox,
   GtkListBoxRow,
   GtkScrolledWindow,
-  PageContent,
-} from "../adwaita"
+  SlotContent,
+} from "../gtk"
 import { warnIgnoredOptions } from "./option-warnings"
 
 const SIDEBAR_OPTION_KEYS: ReadonlySet<string> = new Set(["title"])
@@ -205,10 +207,10 @@ const SidebarNavigator = ({
             }
           >
             {/* Keyed by route: switching sections swaps the whole screen —
-                a fresh PageContent per section, the previous one disposes. */}
-            <PageContent key={active.key}>
+                a fresh SlotContent per section, the previous one disposes. */}
+            <SlotContent key={active.key}>
               {activeDescriptor?.render()}
-            </PageContent>
+            </SlotContent>
           </AdwToolbarView>
         </AdwNavigationPage>
       </AdwNavigationSplitView>

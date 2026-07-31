@@ -9,11 +9,8 @@
 import { render, waitFor } from "@gtkx/testing"
 import { useEffect, useState } from "react"
 import { expect, it } from "vitest"
-import {
-  NavigationStack,
-  NavigationStackPage,
-  PageContent,
-} from "../../../src/adwaita"
+import { NavigationStack, NavigationStackPage } from "../../../src/adw"
+import { SlotContent } from "../../../src/gtk"
 import type { Adw, Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
 import { Text, View } from "../../../src/index"
 
@@ -59,21 +56,21 @@ const Demo = () => {
         tag="home"
         title="Home"
       >
-        <PageContent>
+        <SlotContent>
           <View style={{ flex: 1 }}>
             <Text>home body</Text>
           </View>
-        </PageContent>
+        </SlotContent>
       </NavigationStackPage>
       <NavigationStackPage
         tag="detail"
         title="Detail"
       >
-        <PageContent>
+        <SlotContent>
           <View style={{ flex: 1 }}>
             <Text>detail body</Text>
           </View>
-        </PageContent>
+        </SlotContent>
       </NavigationStackPage>
     </NavigationStack>
   )

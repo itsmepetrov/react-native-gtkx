@@ -7,7 +7,7 @@
 //   - declarative stack: change the array, the widget animates;
 //   - native pops: the Adwaita back button, Escape and the back gesture all
 //     report through onPopped, and the app follows in its own state;
-//   - React Native content inside a page (PageContent);
+//   - React Native content inside a page (SlotContent);
 //   - React Native content inside an AdwHeaderBar slot (IntrinsicContent);
 //   - a raw GTK widget in the header, because nothing is filtered;
 //   - the escape hatch: a ref to the Adw.NavigationView itself.
@@ -17,13 +17,15 @@ import {
   Adw,
   AdwHeaderBar,
   AdwToolbarView,
+  NavigationStack,
+  NavigationStackPage,
+} from "react-native-gtkx/adw"
+import {
   GtkButton,
   GtkEntry,
   IntrinsicContent,
-  NavigationStack,
-  NavigationStackPage,
-  PageContent,
-} from "react-native-gtkx/adwaita"
+  SlotContent,
+} from "react-native-gtkx/gtk"
 
 const ARTICLES = [
   { tag: "wayland", title: "Wayland", body: "The display protocol." },
@@ -88,7 +90,7 @@ const App = () => {
             />
           }
         >
-          <PageContent>
+          <SlotContent>
             <View style={styles.screen}>
               {/* GTK widgets laid out BY React Native: the entry flexes, the
                   button takes a width and a colour, both from `style`. */}
@@ -116,7 +118,7 @@ const App = () => {
                 </Pressable>
               ))}
             </View>
-          </PageContent>
+          </SlotContent>
         </AdwToolbarView>
       </NavigationStackPage>
 
@@ -127,7 +129,7 @@ const App = () => {
           title={article.title}
         >
           <AdwToolbarView topBar={<AdwHeaderBar />}>
-            <PageContent>
+            <SlotContent>
               <View style={styles.screen}>
                 <Text style={styles.body}>{article.body}</Text>
                 <Pressable
@@ -137,7 +139,7 @@ const App = () => {
                   <Text style={styles.title}>Push one more</Text>
                 </Pressable>
               </View>
-            </PageContent>
+            </SlotContent>
           </AdwToolbarView>
         </NavigationStackPage>
       ))}
@@ -147,14 +149,14 @@ const App = () => {
         title="Deeper"
       >
         <AdwToolbarView topBar={<AdwHeaderBar />}>
-          <PageContent>
+          <SlotContent>
             <View style={styles.screen}>
               <Text style={styles.body}>
                 Three levels deep, no router involved. Press Escape or use the
                 back gesture: the widget pops and the app follows.
               </Text>
             </View>
-          </PageContent>
+          </SlotContent>
         </AdwToolbarView>
       </NavigationStackPage>
     </NavigationStack>

@@ -31,11 +31,10 @@ import { getActiveChrome } from "../components/app-registry"
 import {
   AdwHeaderBar,
   AdwToolbarView,
-  IntrinsicContent,
   NavigationStack,
   NavigationStackPage,
-  PageContent,
-} from "../adwaita"
+} from "../adw"
+import { IntrinsicContent, SlotContent } from "../gtk"
 import { GtkButton } from "../gtkx/bridge/index"
 import { warnIgnoredOptions } from "./option-warnings"
 import type { HeaderButton } from "./sidebar"
@@ -176,7 +175,7 @@ const StackView = ({ routeKeys, descriptors, onPopped }: StackViewProps) => {
         const canPop =
           options.gestureEnabled !== false &&
           !preventedRoutes[key]?.preventRemove
-        const content = <PageContent>{descriptor.render()}</PageContent>
+        const content = <SlotContent>{descriptor.render()}</SlotContent>
         return (
           <NavigationStackPage
             key={key}

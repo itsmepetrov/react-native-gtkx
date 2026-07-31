@@ -20,14 +20,14 @@ import {
  *
  * ```tsx
  * <NavigationStackPage tag="home" title="Home">
- *   <PageContent>
+ *   <SlotContent>
  *     <View style={{ flex: 1 }}>…</View>
- *   </PageContent>
+ *   </SlotContent>
  * </NavigationStackPage>
  * ```
  */
-export const PageContent = NestedRoot
-export type PageContentProps = NestedRootProps
+export const SlotContent = NestedRoot
+export type SlotContentProps = NestedRootProps
 
 /**
  * React Native content SIZED BY ITSELF.

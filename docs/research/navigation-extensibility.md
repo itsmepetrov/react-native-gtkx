@@ -16,7 +16,7 @@ your app
    └── react-native-gtkx/adwaita       GTK widgets and primitives
 ```
 
-**`react-native-gtkx/adwaita`** owns the widget: diffing a requested stack
+**`react-native-gtkx/gtk` and `react-native-gtkx/adw`** owns the widget: diffing a requested stack
 of tags into `pushByTag` / `popToTag` / `replaceWithTags`, holding a popped
 page alive until its exit animation ends, bracketing transitions, reporting
 native pops. It imports nothing from `@react-navigation/*`. `NavigationStack`
@@ -38,7 +38,7 @@ The consequence that matters: **the ceiling of react-navigation's model is
 now only in the adapter, never in the primitive.** A GTK capability with no
 counterpart in React Native does not have to be squeezed into someone
 else's abstraction — it lives in the primitive layer and is reachable
-directly. See [../adwaita.md](../adwaita.md).
+directly. See [../platform-layer.md](../platform-layer.md).
 
 ## 2. What an app can reach today
 
