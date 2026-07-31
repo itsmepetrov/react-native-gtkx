@@ -30,11 +30,17 @@ export const DEFAULT_EXTENSIONS: readonly string[] = ["tsx", "ts", "jsx", "js"]
 
 const REACT_NATIVE = "react-native"
 const REACT_NATIVE_GTKX = "react-native-gtkx"
+const REACT_NATIVE_SVG = "react-native-svg"
+const REACT_NATIVE_GTKX_SVG = "react-native-gtkx/svg"
 
 /**
- * Maps `react-native` (and its subpaths) to `react-native-gtkx`.
- * Returns null for every other specifier, including `react-native-gtkx`
- * itself and lookalikes such as `react-native-web`.
+ * Maps `react-native` (and its subpaths) to `react-native-gtkx`, and
+ * `react-native-svg` (and its subpaths) to the `react-native-gtkx/svg`
+ * compat subpath (see src/svg-compat/index.ts) — same rationale, same exact-
+ * match-or-slash-prefix guard so a lookalike package name (`react-native-
+ * svg-icons`, the same shape of trap `react-native-web` is for the plain
+ * `react-native` case below) is never aliased by accident. Returns null for
+ * every other specifier, including `react-native-gtkx` itself.
  */
 export const rewriteReactNativeImport = (source: string): string | null => {
   if (source === REACT_NATIVE) {
@@ -42,6 +48,12 @@ export const rewriteReactNativeImport = (source: string): string | null => {
   }
   if (source.startsWith(`${REACT_NATIVE}/`)) {
     return `${REACT_NATIVE_GTKX}${source.slice(REACT_NATIVE.length)}`
+  }
+  if (source === REACT_NATIVE_SVG) {
+    return REACT_NATIVE_GTKX_SVG
+  }
+  if (source.startsWith(`${REACT_NATIVE_SVG}/`)) {
+    return `${REACT_NATIVE_GTKX_SVG}${source.slice(REACT_NATIVE_SVG.length)}`
   }
   return null
 }

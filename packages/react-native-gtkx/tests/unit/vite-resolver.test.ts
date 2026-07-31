@@ -42,6 +42,23 @@ describe("rewriteReactNativeImport", () => {
     expect(rewriteReactNativeImport("@react-native/assets")).toBeNull()
     expect(rewriteReactNativeImport("./react-native")).toBeNull()
   })
+
+  test("rewrites the bare react-native-svg specifier to the compat subpath", () => {
+    expect(rewriteReactNativeImport("react-native-svg")).toBe(
+      "react-native-gtkx/svg",
+    )
+  })
+
+  test("rewrites react-native-svg subpaths", () => {
+    expect(rewriteReactNativeImport("react-native-svg/lib/extract/types")).toBe(
+      "react-native-gtkx/svg/lib/extract/types",
+    )
+  })
+
+  test("ignores react-native-svg lookalikes", () => {
+    expect(rewriteReactNativeImport("react-native-svg-icons")).toBeNull()
+    expect(rewriteReactNativeImport("react-native-svg-transformer")).toBeNull()
+  })
 })
 
 describe("splitQuery", () => {
