@@ -44,6 +44,30 @@ export const runCheck = async (
 ): Promise<boolean> => (await runQuiet(command, args, options)) === 0
 
 /**
+ * Runs a command to completion and returns its exit code plus captured
+ * stdout (stderr stays inherited, so failures are still visible on the
+ * caller's terminal). Used for polling/listing over ssh (dev-loop.ts),
+ * where `run`'s inherited stdout would just spam the terminal every attempt.
+ */
+export const capture = (
+  command: string,
+  args: string[] = [],
+  options: RunOptions = {},
+): Promise<{ code: number; stdout: string }> =>
+  new Promise((resolve) => {
+    const child = spawn(command, args, {
+      stdio: ["ignore", "pipe", "inherit"],
+      ...options,
+    })
+    let stdout = ""
+    child.stdout?.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf8")
+    })
+    child.on("error", () => resolve({ code: 1, stdout }))
+    child.on("close", (code) => resolve({ code: code ?? 1, stdout }))
+  })
+
+/**
  * Starts a detached background process with its output redirected to a log
  * file, and does not wait for it to exit — the caller is responsible for
  * killing it later (e.g. `pkill ydotoold`).
