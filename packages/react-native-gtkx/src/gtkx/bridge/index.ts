@@ -11,18 +11,43 @@ import * as Adw from "@gtkx/gi/adw"
 import * as Gdk from "@gtkx/gi/gdk"
 import * as Gio from "@gtkx/gi/gio"
 import * as GLib from "@gtkx/gi/glib"
+import * as GObject from "@gtkx/gi/gobject"
 import * as Graphene from "@gtkx/gi/graphene"
 import * as Gsk from "@gtkx/gi/gsk"
 import * as Gtk from "@gtkx/gi/gtk"
 import * as Pango from "@gtkx/gi/pango"
 
-export { Adw, Gdk, Gio, GLib, Graphene, Gsk, Gtk, Pango }
+export { Adw, Gdk, Gio, GLib, GObject, Graphene, Gsk, Gtk, Pango }
 
 // GtkApplication and GtkGestureClick are not Gtk.Widget subclasses (an
 // application object and an event controller, respectively), so the widget
 // surface generator never sees them — kept here by hand, same as before it
 // existed.
 export { GtkApplication, GtkGestureClick } from "@gtkx/jsx/gtk"
+
+// Auxiliary gtkx JSX elements that are not Gtk.Widget/Adw.Widget subclasses
+// either, same reason as the pair above — scripts/generate-widget-surface.mjs
+// only classifies widgets, so these fall into its "notAWidget" bucket
+// (see scripts/widget-surface/classification.json) and are otherwise
+// unreachable through react-native-gtkx/gtk or /adw. Every one of these is a
+// real, necessary building block for a real app: actions and menus (Gio),
+// a responsive breakpoint (Adw), a text buffer and an adjustment (the model
+// objects GtkTextView/GtkSpinRow etc. bind to), keyboard shortcuts, and the
+// two drag-and-drop controllers.
+export { GMenu, GSimpleAction } from "@gtkx/jsx/gio"
+export {
+  AdwBreakpoint,
+  AdwShortcutsItem,
+  AdwShortcutsSection,
+} from "@gtkx/jsx/adw"
+export {
+  GtkAdjustment,
+  GtkDragSource,
+  GtkDropTarget,
+  GtkShortcut,
+  GtkShortcutController,
+  GtkTextBuffer,
+} from "@gtkx/jsx/gtk"
 
 // The full widget surface — every GTK/Adwaita class gtkx binds that derives
 // Gtk.Widget, raw. src/gtk/widgets.generated and src/adw/widgets.generated
@@ -36,10 +61,17 @@ export {
   createPortal,
   createRoot,
   quit,
+  rootElement,
   useApplication,
+  useBindSetting,
   useParentWindow,
   useProperty,
+  useSetting,
   type Root,
+  type RootElement,
+  type SettingsSchema,
+  type SettingsSchemaKeys,
+  type SettingValue,
 } from "@gtkx/react"
 
 // useSignal comes from ./use-signal, not @gtkx/react — see the workaround note
