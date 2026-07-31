@@ -235,31 +235,6 @@ const appBinaryName = (root: string): string => {
   }
 }
 
-/**
- * `--sea` bundles with esbuild, which is an OPTIONAL peer dependency —
- * every app pays for `build-linux`, only SEA builds pay for esbuild. Fail
- * here with the install command rather than letting a bare
- * ERR_MODULE_NOT_FOUND surface from inside ../sea/bundle.ts.
- */
-const ensureSeaToolchain = (root: string): void => {
-  const appRequire = createRequire(join(root, "package.json"))
-  try {
-    appRequire.resolve("esbuild")
-    return
-  } catch {
-    /* fall through to this package's own resolution */
-  }
-  try {
-    fromPackage.resolve("esbuild")
-  } catch {
-    console.error(
-      "[react-native-gtkx] --sea needs esbuild to bundle with: " +
-        "npm install --save-dev esbuild",
-    )
-    process.exit(1)
-  }
-}
-
 // The android/ios counterpart to run-linux's dev-only bundling: bundle for
 // distribution and stop, the way a release APK/IPA build does not launch
 // the app it produces. Deliberately skips ensureCodegenStore() — codegen
@@ -278,7 +253,6 @@ const buildLinux = async (
   args: BuildLinuxArgs,
 ): Promise<void> => {
   if (args.sea) {
-    ensureSeaToolchain(config.root)
     ensureCodegenStore()
   }
   const output = args.bundleOutput ?? join(config.root, "dist", "main.jsbundle")

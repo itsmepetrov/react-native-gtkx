@@ -267,24 +267,27 @@ next to it: no `node_modules`, no system Node required to run it. Where it
 goes is `--sea-output <path>`; the default is `dist/<package name>` with
 any npm scope stripped.
 
-Two things `--sea` needs that a plain `build-linux` does not:
+Nothing extra to install to bundle it. That work is done by **rolldown**,
+which is vite's own engine — vite 8 depends on it outright, `@gtkx/cli`
+depends on vite, and this package depends on `@gtkx/cli`, so it is already
+in every install. (esbuild, which gtkx's tutorial uses for the same job,
+would have been the one genuinely new bundler in the tree: vite 8 lists it
+as an _optional_ peer and does not install it.)
 
-- **esbuild**, an optional peer dependency (`npm install --save-dev
-esbuild`). Every app would otherwise pay an installed bundler for a
-  build mode most apps never use.
-- **The gtkx codegen store**, and therefore GTK development headers on the
-  build machine. A plain `build-linux` deliberately needs neither — Metro
-  externalizes every GTK module — but the SEA inlines
-  `virtual:gtkx-config`, which re-exports `@gtkx/jsx/metadata`, a codegen
-  product. `build-linux --sea` runs `gtkx codegen` itself; it just can't
-  do so on a machine without the headers.
+One thing `--sea` does need that a plain `build-linux` does not: **the
+gtkx codegen store**, and therefore GTK development headers on the build
+machine. A plain `build-linux` deliberately needs neither — Metro
+externalizes every GTK module — but the SEA inlines `virtual:gtkx-config`,
+which re-exports `@gtkx/jsx/metadata`, a codegen product. `build-linux
+--sea` runs `gtkx codegen` itself; it just can't do so on a machine
+without the headers.
 
 `postject` is fetched through `npx` at build time, so the first run needs
 network access.
 
 This follows gtkx's own tutorial (`gtkx-org/gtkx examples/tutorial`:
-esbuild-bundle to CJS, `node --experimental-sea-config`, postject injects
-the blob into a copy of the `node` binary) for the SEA/postject mechanics.
+bundle to CJS, `node --experimental-sea-config`, postject injects the blob
+into a copy of the `node` binary) for the SEA/postject mechanics.
 It diverges on the two hard parts specific to this project — full
 reasoning, including everything found empirically while building it (not
 just designed on paper), lives in
@@ -335,8 +338,8 @@ a run from the source tree.
 **vite path — not done here.** Investigated, and it does not generalize
 the same way: the vite bundle loads the native addon through
 `createRequire(import.meta.url)("./gtkx.node")` — a dynamically obtained
-`require`, not a literal `require(...)` call — which esbuild does not
-intercept the way it intercepts a static import (verified: the `onResolve`
+`require`, not a literal `require(...)` call — which a bundler does not
+intercept the way it intercepts a static import (verified: the resolve
 hook never fires for it in a real rebuild of `dist/bundle.js`). The vite
 bundle also has its own top-level await, incompatible with the CJS format
 a Node SEA main script requires. Both are fixable in principle (a

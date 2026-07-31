@@ -7,9 +7,14 @@
 // (gtkx-org/gtkx examples/tutorial/scripts/bundle.ts and
 // bundle-postject.ts — read before any of this was written):
 //
-// - Bundling mechanics (esbuild → CJS, minified, target node24) and the
+// - Bundling mechanics (bundle → single minified CJS file) and the
 //   SEA/postject pipeline itself (./assemble.ts) follow the tutorial
-//   closely.
+//   closely. The bundler is rolldown rather than the tutorial's esbuild —
+//   NOT a preference: rolldown is vite's own engine (vite 8 depends on it
+//   outright, esbuild is only an optional peer there), and vite is a hard
+//   dependency of @gtkx/cli, which is a hard dependency of this package.
+//   So rolldown is already installed for every consumer, and esbuild would
+//   have been the one genuinely new bundler in the tree.
 // - Native addon: the tutorial's shim assumes the addon file sits BESIDE
 //   the built executable (require resolved from
 //   dirname(process.execPath)). That is two files, not one — the actual
@@ -35,15 +40,15 @@
 // same technique — see docs/getting-started.md's "Shipping an app"
 // section for the concrete blocker found empirically while building this:
 // the vite bundle loads the native addon through a DYNAMICALLY obtained
-// require (`createRequire(import.meta.url)("./gtkx.node")`), which esbuild
-// does not intercept the way it intercepts a static import (verified: the
-// onResolve hook never fires for it), and which is unlikely to resolve at
-// all once running from inside a real SEA blob, where import.meta.url no
-// longer points at a file with real siblings on disk.
+// require (`createRequire(import.meta.url)("./gtkx.node")`), which a
+// bundler does not intercept the way it intercepts a static import
+// (verified: the resolve hook never fires for it), and which is unlikely
+// to resolve at all once running from inside a real SEA blob, where
+// import.meta.url no longer points at a file with real siblings on disk.
 import { mkdirSync, readdirSync, readFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { dirname, join } from "node:path"
-import * as esbuild from "esbuild"
+import { rolldown } from "rolldown"
 import { HOST_MODULE_EXTERNALS } from "../metro/index.js"
 import {
   buildGtkxConfigModule,
@@ -112,9 +117,9 @@ export const resolveNativeAddon = (appRoot: string): NativeAddonAsset => {
  * Dynamic import, not static, throughout: a Node SEA's main script is
  * CommonJS only — confirmed empirically, Node 24 executes the embedded
  * main as CJS regardless of a "type": "module" field in sea-config.json
- * or an .mjs extension — and top-level await is a hard error under esbuild
- * format "cjs" REGARDLESS of whether the module is reached via a static or
- * dynamic import (esbuild's restriction is format-wide, not per-module —
+ * or an .mjs extension — and top-level await is a hard error under a "cjs"
+ * output format REGARDLESS of whether the module is reached via a static
+ * or dynamic import (the restriction is format-wide, not per-module —
  * verified: switching yoga-layout's static import to a dynamic one alone
  * did not clear the error). yoga-layout's own entry point has exactly this
  * top-level await (it loads its WASM binary asynchronously — see
@@ -178,25 +183,40 @@ export const bundleMetroSea = async (
 
   mkdirSync(dirname(outFile), { recursive: true })
 
-  await esbuild.build({
-    stdin: {
-      contents: entrySource,
-      resolveDir: appRoot,
-      loader: "js",
-      sourcefile: "gtkx-sea-entry.js",
-    },
-    bundle: true,
+  // The entry is given a path inside appRoot that does not exist on disk,
+  // rather than a `\0`-prefixed virtual id: every bare specifier it
+  // imports (react, @gtkx/*, yoga-layout) must resolve from the app's own
+  // node_modules, and a real directory is what makes that happen.
+  const entryId = join(appRoot, "__gtkx-sea-entry.js")
+
+  const bundle = await rolldown({
+    input: entryId,
+    cwd: appRoot,
     platform: "node",
-    format: "cjs",
-    target: "node24",
-    outfile: outFile,
-    minify: true,
     plugins: [
+      {
+        name: "gtkx-sea-entry",
+        resolveId: (source) => (source === entryId ? entryId : null),
+        load: (id) => (id === entryId ? entrySource : null),
+      },
       reactAnchorPlugin(appRoot),
-      nativeAddonShimPlugin("@gtkx/native", nativeAddon.key),
+      nativeAddonShimPlugin("@gtkx/native", appRoot, nativeAddon.key),
       virtualConfigModulePlugin(configModuleSource, appRoot),
     ],
   })
+  try {
+    await bundle.write({
+      file: outFile,
+      format: "cjs",
+      minify: true,
+      // Every HOST_MODULE_EXTERNALS name is reached through a dynamic
+      // import; without this each one becomes its own chunk and the
+      // "single file" the whole build exists to produce is a directory.
+      codeSplitting: false,
+    })
+  } finally {
+    await bundle.close()
+  }
 
   return nativeAddon
 }

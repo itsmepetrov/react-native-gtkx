@@ -14,8 +14,9 @@
 // this is a third twin, for the same reason (host.ts must keep resolving
 // its config at runtime for ordinary `run-linux`/installed-app use; this
 // one resolves it once, at bundle time, for the SEA artifact only).
+import { join } from "node:path"
 import { createConfigLoader } from "@gtkx/config/internal"
-import type { Plugin } from "esbuild"
+import type { Plugin } from "rolldown"
 
 export const CONFIG_REQUIRED =
   "gtkx.config.ts with an applicationId is required in the app root " +
@@ -58,25 +59,22 @@ export const buildGtkxConfigModule = async (
 
 /**
  * Resolves the bare "virtual:gtkx-config" specifier @gtkx/react imports to
- * the module source built by {@link buildGtkxConfigModule}, so esbuild can
- * inline it like any other static import — no runtime loader hook needed.
+ * the module source built by {@link buildGtkxConfigModule}, so the bundler
+ * can inline it like any other static import — no runtime loader hook
+ * needed.
+ *
+ * The module is given an id inside `appRoot` rather than a `\0`-prefixed
+ * virtual one because it re-exports "@gtkx/jsx/metadata": that bare
+ * specifier needs a real directory to resolve from.
  */
 export const virtualConfigModulePlugin = (
   moduleSource: string,
-  resolveDir: string,
-): Plugin => ({
-  name: "gtkx-virtual-config",
-  setup(build) {
-    build.onResolve({ filter: /^virtual:gtkx-config$/ }, (args) => ({
-      path: args.path,
-      namespace: "gtkx-virtual-config",
-    }))
-    build.onLoad({ filter: /.*/, namespace: "gtkx-virtual-config" }, () => ({
-      contents: moduleSource,
-      loader: "js",
-      // The module re-exports "@gtkx/jsx/metadata" — esbuild needs a real
-      // directory to resolve that bare specifier from.
-      resolveDir,
-    }))
-  },
-})
+  appRoot: string,
+): Plugin => {
+  const configId = join(appRoot, "__gtkx-sea-config.js")
+  return {
+    name: "gtkx-virtual-config",
+    resolveId: (source) => (source === "virtual:gtkx-config" ? configId : null),
+    load: (id) => (id === configId ? moduleSource : null),
+  }
+}

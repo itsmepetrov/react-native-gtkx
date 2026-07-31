@@ -21,12 +21,10 @@
 // executable (dist/gtkx.node next to dist/app) — a real divergence, not an
 // oversight: that keeps two files, which is exactly what this epic set
 // out to stop doing.
-import type { Plugin } from "esbuild"
+import { join } from "node:path"
+import type { Plugin } from "rolldown"
 
 export const NATIVE_ASSET_KEY = "gtkx-native.node"
-
-const escapeForExactMatch = (specifier: string): string =>
-  specifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
 const shimSource = (assetKey: string): string => `
 const { getAsset } = require("node:sea");
@@ -93,25 +91,26 @@ module.exports = nativeModule.exports;
 `
 
 /**
- * Intercepts every static import/require of `specifier` (an exact bare
- * module specifier, e.g. "@gtkx/native") and replaces it with the
- * extraction shim above. The real module never reaches the bundle graph —
- * only its re-exported surface, loaded from the extracted file at runtime.
+ * Intercepts every import/require of `specifier` (an exact bare module
+ * specifier, e.g. "@gtkx/native") and replaces it with the extraction shim
+ * above. The real module never reaches the bundle graph — only its
+ * re-exported surface, loaded from the extracted file at runtime.
+ *
+ * The shim is given an id inside `appRoot` with a `.cjs` extension rather
+ * than a `\0`-prefixed virtual one: the shim IS CommonJS (it assigns
+ * `module.exports` so consumers' NAMED imports of the addon still resolve
+ * through the bundler's interop), and a real directory is what lets any
+ * specifier inside it resolve normally.
  */
 export const nativeAddonShimPlugin = (
   specifier: string,
+  appRoot: string,
   assetKey: string = NATIVE_ASSET_KEY,
-): Plugin => ({
-  name: "gtkx-native-addon-shim",
-  setup(build) {
-    const filter = new RegExp(`^${escapeForExactMatch(specifier)}$`)
-    build.onResolve({ filter }, (args) => ({
-      path: args.path,
-      namespace: "gtkx-native-shim",
-    }))
-    build.onLoad({ filter: /.*/, namespace: "gtkx-native-shim" }, () => ({
-      contents: shimSource(assetKey),
-      loader: "js",
-    }))
-  },
-})
+): Plugin => {
+  const shimId = join(appRoot, "__gtkx-sea-native-shim.cjs")
+  return {
+    name: "gtkx-native-addon-shim",
+    resolveId: (source) => (source === specifier ? shimId : null),
+    load: (id) => (id === shimId ? shimSource(assetKey) : null),
+  }
+}

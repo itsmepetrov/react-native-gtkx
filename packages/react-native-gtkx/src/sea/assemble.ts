@@ -10,9 +10,9 @@
 // build-sea.sh) for these mechanics; ./bundle.ts's header documents where
 // the bundling half deliberately diverges.
 //
-// Kept out of ../runner/index.ts and reached through a dynamic import: it
-// pulls in esbuild, which is an OPTIONAL peer here — an app that never
-// builds a SEA must not need it installed to run `build-linux`.
+// Kept out of ../runner/index.ts and reached through a dynamic import so
+// the bundler is only loaded when a SEA is actually asked for; the
+// ordinary `build-linux` path never touches it.
 import { spawnSync } from "node:child_process"
 import {
   chmodSync,
