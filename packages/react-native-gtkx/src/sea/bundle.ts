@@ -8,8 +8,8 @@
 // bundle-postject.ts — read before any of this was written):
 //
 // - Bundling mechanics (esbuild → CJS, minified, target node24) and the
-//   SEA/postject pipeline itself (scripts/build-sea.sh) follow the
-//   tutorial closely.
+//   SEA/postject pipeline itself (./assemble.ts) follow the tutorial
+//   closely.
 // - Native addon: the tutorial's shim assumes the addon file sits BESIDE
 //   the built executable (require resolved from
 //   dirname(process.execPath)). That is two files, not one — the actual

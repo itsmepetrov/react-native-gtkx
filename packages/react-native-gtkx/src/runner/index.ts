@@ -27,6 +27,8 @@ type RunLinuxArgs = {
 type BuildLinuxArgs = {
   entryFile: string
   bundleOutput?: string
+  sea?: boolean
+  seaOutput?: string
 }
 
 /** Exit code host-dev.ts uses to request a supervisor restart. */
@@ -217,6 +219,47 @@ const runLinux = async (
   process.exit(status)
 }
 
+/**
+ * The executable name a `--sea` build defaults to: the app's package name
+ * without its scope, so the artifact is `dist/hn-app`, not `dist/app`.
+ */
+const appBinaryName = (root: string): string => {
+  try {
+    const manifest = createRequire(join(root, "package.json"))(
+      "./package.json",
+    ) as { name?: string }
+    const name = manifest.name?.split("/").pop()
+    return name && /^[\w.-]+$/.test(name) ? name : "app"
+  } catch {
+    return "app"
+  }
+}
+
+/**
+ * `--sea` bundles with esbuild, which is an OPTIONAL peer dependency —
+ * every app pays for `build-linux`, only SEA builds pay for esbuild. Fail
+ * here with the install command rather than letting a bare
+ * ERR_MODULE_NOT_FOUND surface from inside ../sea/bundle.ts.
+ */
+const ensureSeaToolchain = (root: string): void => {
+  const appRequire = createRequire(join(root, "package.json"))
+  try {
+    appRequire.resolve("esbuild")
+    return
+  } catch {
+    /* fall through to this package's own resolution */
+  }
+  try {
+    fromPackage.resolve("esbuild")
+  } catch {
+    console.error(
+      "[react-native-gtkx] --sea needs esbuild to bundle with: " +
+        "npm install --save-dev esbuild",
+    )
+    process.exit(1)
+  }
+}
+
 // The android/ios counterpart to run-linux's dev-only bundling: bundle for
 // distribution and stop, the way a release APK/IPA build does not launch
 // the app it produces. Deliberately skips ensureCodegenStore() — codegen
@@ -225,15 +268,41 @@ const runLinux = async (
 // the GTK/react/yoga modules are proxied rather than imported — see
 // ../metro's HOST_MODULE_EXTERNALS). A machine that only builds never needs
 // GTK dev headers installed.
+//
+// --sea is the exception: it inlines "virtual:gtkx-config", which re-exports
+// @gtkx/jsx/metadata — a codegen product — so a SEA build DOES need the
+// store, and therefore GTK dev headers. Only that path ensures it.
 const buildLinux = async (
   _argv: string[],
   config: CliConfig,
   args: BuildLinuxArgs,
 ): Promise<void> => {
+  if (args.sea) {
+    ensureSeaToolchain(config.root)
+    ensureCodegenStore()
+  }
   const output = args.bundleOutput ?? join(config.root, "dist", "main.jsbundle")
   mkdirSync(dirname(output), { recursive: true })
   bundle(config.root, args.entryFile, output)
   console.warn(`[react-native-gtkx] wrote the release bundle to ${output}`)
+  if (!args.sea) {
+    return
+  }
+  const seaOutput =
+    args.seaOutput ?? join(config.root, "dist", appBinaryName(config.root))
+  // Dynamically imported so the esbuild dependency is never loaded — nor
+  // required to exist — on the ordinary jsbundle path.
+  const { assembleSea } = await import("../sea/assemble.js")
+  const bytes = await assembleSea({
+    appRoot: config.root,
+    jsbundlePath: output,
+    outFile: seaOutput,
+  })
+  const megabytes = (bytes / 1024 / 1024).toFixed(0)
+  console.warn(
+    `[react-native-gtkx] wrote the single executable to ${seaOutput} ` +
+      `(${megabytes} MB — Node itself is most of it)`,
+  )
 }
 
 /** Commands contributed to the RN CLI by the package's react-native.config.js. */
@@ -283,6 +352,18 @@ export const commands = [
         name: "--bundle-output <path>",
         description:
           "Where to write the release jsbundle (default: dist/main.jsbundle)",
+      },
+      {
+        name: "--sea",
+        description:
+          "Also produce a single executable (Node SEA): one file that runs " +
+          "with no node_modules and no system Node — at the cost of " +
+          "carrying a whole Node binary (~120 MB)",
+      },
+      {
+        name: "--sea-output <path>",
+        description:
+          "Where to write the --sea executable (default: dist/<package name>)",
       },
     ],
     func: buildLinux,
