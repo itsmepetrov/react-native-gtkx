@@ -906,6 +906,11 @@ export const DOC_CHUNKS = [
   },
   {
     doc: "docs/getting-started.md",
+    heading: "MCP server for agents",
+    text: 'An agent working inside a project that depends on react-native-gtkx can\nask the library about itself instead of guessing: `react-native-gtkx-mcp`\nis a [Model Context Protocol](https://modelcontextprotocol.io) server that\nships as a `bin` on this package. Register it in `.mcp.json` (Claude\nCode, project-level) or the equivalent config of any MCP-compatible\nclient:\n\n```json\n{\n  "mcpServers": {\n    "react-native-gtkx": { "command": "npx", "args": ["react-native-gtkx-mcp"] }\n  }\n}\n```\n\nRunning it as `npx react-native-gtkx-mcp` from the project root resolves\nthe locally installed `node_modules/.bin` entry — no separate install,\nand it always answers for the exact react-native-gtkx version the\nproject actually has.\n\nThree tools:\n\n- `rn_gtkx_list_surface` — browse the surface without knowing a name\n  first (portable components/APIs, gtk/adw widgets, common) with counts;\n- `rn_gtkx_describe_component` — the one to reach for first: does a\n  component/widget exist, which subpath it is exported from, what GTK\n  widget backs it, what differs from React Native, whether a gtk/adw\n  widget is wrapped (takes `style`/`onLayout`) or raw;\n- `rn_gtkx_search_docs` — free-text fallback for symptoms and known-issue\n  questions the other two cannot answer by name.\n\nIt works without GTK installed — plain Node, no `@gtkx/*` import\nanywhere in it, reading only the package\'s own bundled docs/manifest data.\nThat matters in practice: the agent is often reading the project from a\nMac, with no GTK toolchain around at all.',
+  },
+  {
+    doc: "docs/getting-started.md",
     heading: "Next steps",
     text: "- [docs/api.md](api.md) — the entire v1 surface and differences from RN;\n- [CONTRIBUTING.md](../CONTRIBUTING.md) — developing the library itself (from macOS — via the UTM VM);\n- [docs/gtkx-rc2-notes.md](gtkx-rc2-notes.md) — the gtkx rc.2 baseline: workarounds, what it fixed, quirks that stay.",
   },
