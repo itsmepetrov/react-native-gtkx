@@ -27,12 +27,9 @@ reportedly worse maximized.
   stickies there), but a real latent bug.
 - **The "maximized is worse" half did not reproduce headless** — it
   reproduced REVERSED (fullscreen had 3–6× fewer late frames),
-  consistently. Our own work is flat or lower at 1600 px. The remaining
-  overage is compositor/paint cost invisible to JS instrumentation;
-  pixman (headless) and the session's llvmpipe/EGL-Zink path evidently
-  scale differently with area. Verification path: run
-  `examples/perf-probe` with `GTKX_PERF=1` in the real session while
-  resizing, diff `frame.late`/`frame.max` against the headless numbers.
+  consistently. Our own work is flat or lower at 1600 px. It DOES
+  reproduce in the real session; see "Round three" below, which settles
+  where the cost lives.
 
 ## Fix backlog (ccpm: perf epic)
 
@@ -154,3 +151,57 @@ snapshot.
   grace window (the scrolled window's kinetic tick can run after ours). During
   motion it still queues on ~49 of every 50 frames; the pinned header renders
   pixel-identically before and after at the same offset.
+
+## Round three: the session settles "maximized is worse"
+
+Headless said fullscreen was _better_, the user said it was worse. Since
+headless renders through pixman and the session through llvmpipe/EGL-Zink,
+only the session can answer. `scripts/perf/run-probe-session.sh` runs the
+same probe under the real GNOME session, optionally sending the maximize
+keybinding once the window has settled.
+
+Same build, same probe parameters (`windowSize` 11, 500 rows), one run each,
+windowed 560×760 against maximized.
+
+**The symptom is real in the session, and large.** Per-second, by phase:
+
+| Phase                    | `frame.veryLate` win → max | `frame.avg` ms win → max |
+| ------------------------ | -------------------------: | -----------------------: |
+| `idle` (nothing moving)  |                      0 → 0 |              16.9 → 16.9 |
+| `down1` (steady scroll)  |                  0.25 → 22 |              13.9 → 45.7 |
+| `down2` (over warm rows) |                  0.13 → 22 |              15.7 → 40.4 |
+| `flick1` / `flick2`      |                      1 → 7 |              17.1 → 28.1 |
+
+Maximized, a scrolling second spends essentially EVERY frame over 34 ms —
+about 22 fps against the windowed 60.
+
+**And it is not our work.** The viewport roughly doubled, which the
+instrumentation confirms independently: live Yoga nodes went 445 → 801 while
+scrolling, so the maximize keystroke did land and the comparison is valid.
+Yet over the same phase our attributable costs are flat or LOWER:
+
+| `down2`, per second | windowed | maximized |
+| ------------------- | -------: | --------: |
+| `gtk.allocTop.ms`   |     7.42 |      7.78 |
+| `engine.flush.ms`   |    10.10 |      8.52 |
+| `vl.cellMount`      |     9.25 |      8.00 |
+
+Twice the tree, the same layout cost — which is the dirty-set commit from
+round two doing its job — and 2.6× the frame time. The gap is paint, not
+layout: cost that scales with pixel area and is invisible to JS
+instrumentation.
+
+`idle` is the control: unchanged (late frames even fell, 6 → 1.3), so this is
+not a constant tax on a big window. It appears only while pixels change.
+
+**What this means.** Nothing in the virtualization or layout path explains
+the maximized symptom, and there is no fix for it on our side of the
+boundary. The rig has no GPU acceleration — llvmpipe is software rendering —
+so the honest scope of the finding is _this VM_. On accelerated hardware the
+same measurement is the obvious next question, and it needs real hardware
+rather than another probe run.
+
+Caveats: one run per configuration, and frame maxima are noisy on this rig
+(±30 ms). The `veryLate` swing (0.13/s → 22/s) is two orders of magnitude
+past that noise, which is why one run is reported as settling the question
+where a 10% difference would not have been.
