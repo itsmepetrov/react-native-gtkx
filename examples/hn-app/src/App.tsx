@@ -4,6 +4,7 @@
 // state surviving the round trip come from the navigator — pages below the
 // stack top stay mounted. Everything else is plain React Native; the data
 // layer (src/api.ts) is just Node fetch.
+import { NavigationContainer } from "@react-navigation/native"
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
   ActivityIndicator,
@@ -17,7 +18,6 @@ import {
 } from "react-native"
 import {
   createStackNavigator,
-  NavigationContainer,
   type StackScreenProps,
 } from "react-native-gtkx/navigation"
 import { fetchTopStories, searchStories, type Story } from "./api"

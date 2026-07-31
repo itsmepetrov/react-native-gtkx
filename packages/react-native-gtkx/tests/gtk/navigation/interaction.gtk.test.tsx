@@ -2,6 +2,11 @@
 // duration: runAfterInteractions work scheduled by the pushed screen waits
 // until the transition finishes (the fix for content loading mid-animation).
 import { render, screen, waitFor } from "@gtkx/testing"
+import {
+  CommonActions,
+  NavigationContainer,
+  useNavigationContainerRef,
+} from "@react-navigation/native"
 import { useEffect } from "react"
 import { afterEach, expect, it, vi } from "vitest"
 import {
@@ -9,12 +14,7 @@ import {
   resetInteractionManager,
 } from "../../../src/apis/interaction-manager"
 import { Text, View } from "../../../src/index"
-import {
-  CommonActions,
-  createStackNavigator,
-  NavigationContainer,
-  useNavigationContainerRef,
-} from "../../../src/navigation/index"
+import { createStackNavigator } from "../../../src/navigation/index"
 
 const Stack = createStackNavigator()
 

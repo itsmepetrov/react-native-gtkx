@@ -3,6 +3,7 @@
 // are compared against golden images. Components come from "react-native";
 // the chrome is the package's own sidebar navigator: a native Adwaita
 // NavigationSplitView with the sections in a real GtkListBox sidebar.
+import { NavigationContainer } from "@react-navigation/native"
 import {
   Appearance,
   AppRegistry,
@@ -11,10 +12,7 @@ import {
   useColorScheme,
   View,
 } from "react-native"
-import {
-  createSidebarNavigator,
-  NavigationContainer,
-} from "react-native-gtkx/navigation"
+import { createSidebarNavigator } from "react-native-gtkx/navigation"
 import { AnimatedSection } from "./sections/animated"
 import { ApisSection } from "./sections/apis"
 import { ButtonsSection } from "./sections/buttons"

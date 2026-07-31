@@ -3,18 +3,18 @@
 // button — simulated here by calling pop() on the widget, exactly what the
 // button does) flow back into react-navigation state.
 import { render, screen, waitFor } from "@gtkx/testing"
-import { useEffect } from "react"
-import { expect, it } from "vitest"
-import type { Adw, Gtk } from "../../../src/gtkx/bridge/index"
-import { Text, View } from "../../../src/index"
 import {
   CommonActions,
-  createStackNavigator,
   NavigationContainer,
   useNavigation,
   useNavigationContainerRef,
   useRoute,
-} from "../../../src/navigation/index"
+} from "@react-navigation/native"
+import { useEffect } from "react"
+import { expect, it } from "vitest"
+import type { Adw, Gtk } from "../../../src/gtkx/bridge/index"
+import { Text, View } from "../../../src/index"
+import { createStackNavigator } from "../../../src/navigation/index"
 
 const Stack = createStackNavigator()
 

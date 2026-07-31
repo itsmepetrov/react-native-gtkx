@@ -100,7 +100,7 @@ back button already shows a history menu.
 
 ## 4. Porting an existing react-navigation app
 
-Compatible by construction: a real `@react-navigation/native` peer, the
+Compatible by construction: a real `@react-navigation/native` v8 peer, the
 official `useNavigationBuilder` and routers, a real `NavigationContainer`.
 Everything from react-navigation is imported from `@react-navigation/native`
 directly. We used to re-export a partial set from our navigation entry point

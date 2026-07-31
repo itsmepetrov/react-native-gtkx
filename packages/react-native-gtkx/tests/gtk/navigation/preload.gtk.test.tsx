@@ -7,15 +7,15 @@
 // get pushed onto the widget as if the user had actually navigated to it.
 // See src/navigation/index.tsx and updates/002/progress.md.
 import { render, screen, waitFor } from "@gtkx/testing"
+import {
+  NavigationContainer,
+  useNavigationContainerRef,
+} from "@react-navigation/native"
 import { useEffect } from "react"
 import { expect, it } from "vitest"
 import type { Adw, Gtk } from "../../../src/gtkx/bridge/index"
 import { Text, View } from "../../../src/index"
-import {
-  createStackNavigator,
-  NavigationContainer,
-  useNavigationContainerRef,
-} from "../../../src/navigation/index"
+import { createStackNavigator } from "../../../src/navigation/index"
 
 const Stack = createStackNavigator()
 

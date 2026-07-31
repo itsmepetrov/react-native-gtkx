@@ -69,13 +69,11 @@ A [react-navigation](https://reactnavigation.org) stack navigator backed by
 `Adw.NavigationView` — native Adwaita page transitions, the HeaderBar back
 button and back gestures stay in sync with react-navigation state (the
 react-native-windows / native-stack model). Requires the optional peer
-`@react-navigation/native` (v7).
+`@react-navigation/native` (v8).
 
 ```tsx
-import {
-  createStackNavigator,
-  NavigationContainer,
-} from "react-native-gtkx/navigation"
+import { NavigationContainer } from "@react-navigation/native"
+import { createStackNavigator } from "react-native-gtkx/navigation"
 
 // Run the app with chrome: "content" — the navigator's HeaderBars ARE the
 // window chrome (the default system chrome would add a second titlebar):
@@ -125,9 +123,17 @@ const App = () => (
 - The factories are typed: `createStackNavigator<ParamList>()` gives
   typed `Screen` configs and `StackScreenProps<ParamList, Route>` for
   screen components (`SidebarScreenProps` likewise).
-- `useNavigation`, `useRoute`, `useFocusEffect`, `useIsFocused`,
-  `useNavigationContainerRef`, `CommonActions`, `StackActions` and
-  `NavigationContainer` are re-exported — one import site for linux apps.
+- The rest of the react-navigation surface — `useNavigation`, `useRoute`,
+  `useFocusEffect`, `useIsFocused`, `useNavigationContainerRef`,
+  `CommonActions`, `StackActions`, `usePreventRemove`, `NavigationContainer`
+  and everything else — comes from `@react-navigation/native` directly, not
+  from this package. **Breaking change**: earlier versions re-exported a
+  subset of these names from `react-native-gtkx/navigation`; the re-export
+  was removed because it was never complete (anything beyond the subset
+  still required importing from `@react-navigation/native`, so it was one
+  more place to look rather than a convenience). This package's navigation
+  entry point now exports exactly its own surface: `createStackNavigator`,
+  `createSidebarNavigator`, and the option/prop types around them.
 - Each screen mounts its own layout root inside the page: the page's
   content allocation is that screen's viewport.
 - Differences from `@react-navigation/native-stack`: `headerRight`/custom

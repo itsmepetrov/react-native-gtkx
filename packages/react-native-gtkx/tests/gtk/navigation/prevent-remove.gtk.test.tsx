@@ -4,17 +4,17 @@
 // race react-navigation state. A programmatic goBack still pops once the
 // prevention is lifted.
 import { render, screen, waitFor } from "@gtkx/testing"
+import {
+  CommonActions,
+  NavigationContainer,
+  useNavigationContainerRef,
+  usePreventRemove,
+} from "@react-navigation/native"
 import { useEffect, useState } from "react"
 import { expect, it } from "vitest"
 import type { Adw, Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
 import { Text, View } from "../../../src/index"
-import {
-  CommonActions,
-  createStackNavigator,
-  NavigationContainer,
-  useNavigationContainerRef,
-  usePreventRemove,
-} from "../../../src/navigation/index"
+import { createStackNavigator } from "../../../src/navigation/index"
 
 const Stack = createStackNavigator()
 
