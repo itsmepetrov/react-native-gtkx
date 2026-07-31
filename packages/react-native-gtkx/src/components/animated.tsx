@@ -3,7 +3,7 @@ import { createAnimated, type FrameScheduler } from "../animated/index"
 import type { FlatStyle, StyleProp, TransformPart } from "../contracts"
 import { GLib, GtkBox, queueAllocate, type Gtk } from "../gtkx/bridge/index"
 import { HostNodeContext } from "./host-node"
-import { setStoredOffset } from "./rect-store"
+import { setStoredTransform } from "./rect-store"
 import {
   useLayoutChild,
   useRnContainer,
@@ -32,10 +32,15 @@ const glibScheduler: FrameScheduler = {
 
 const api = createAnimated(glibScheduler)
 
+// Interpolations produce suffixed strings ("45deg"), so a driven value is
+// not necessarily a number — `rotate` is normally an interpolate() with a
+// deg outputRange.
+type AnimatedValue = number | string
+
 type AnimatedNode = {
-  addListener(callback: (state: { value: number }) => void): string
+  addListener(callback: (state: { value: AnimatedValue }) => void): string
   removeListener(id: string): void
-  __getValue(): number
+  __getValue(): AnimatedValue
 }
 
 const isAnimatedNode = (value: unknown): value is AnimatedNode =>
@@ -46,16 +51,35 @@ const isAnimatedNode = (value: unknown): value is AnimatedNode =>
 
 type AnimatedTransformPart = { [key: string]: number | string | AnimatedNode }
 
+// One entry of the style's transform array, kept in source order. The array
+// order IS the composition order in RN, so an animated entry updates its own
+// slot in place instead of being lifted out of the list — that is what makes
+// [{rotate}, {translateX}] compose differently from the reverse, as in RN.
+type TransformSlot = {
+  key: string
+  node: AnimatedNode | null
+  value: AnimatedValue
+}
+
+// Stable per-node identity for the effect's dependency key: Animated nodes
+// are objects, and the bindings must be rebuilt when the node behind a slot
+// changes — not on every render that rebuilds an equal-looking array.
+let nextNodeId = 1
+const nodeIds = new WeakMap<object, number>()
+const nodeId = (value: object): number => {
+  let id = nodeIds.get(value)
+  if (id === undefined) {
+    id = nextNodeId++
+    nodeIds.set(value, id)
+  }
+  return id
+}
+
 // Omit, not plain intersection: intersecting would AND the animated transform
 // with FlatStyle's numeric one, rejecting Animated.Value entries.
 export type AnimatedViewStyle = Omit<FlatStyle, "opacity" | "transform"> & {
   opacity?: number | AnimatedNode
   transform?: (TransformPart | AnimatedTransformPart)[]
-}
-
-type Binding = {
-  node: AnimatedNode
-  apply: (value: number) => void
 }
 
 export type AnimatedViewProps = {
@@ -70,8 +94,7 @@ const splitAnimated = (
 ): {
   staticStyle: StyleProp
   opacity: AnimatedNode | null
-  translateX: AnimatedNode | null
-  translateY: AnimatedNode | null
+  slots: TransformSlot[]
 } => {
   const flat: Record<string, unknown> = {}
   const collect = (entry: AnimatedViewProps["style"]): void => {
@@ -87,38 +110,37 @@ const splitAnimated = (
   collect(style)
 
   let opacity: AnimatedNode | null = null
-  let translateX: AnimatedNode | null = null
-  let translateY: AnimatedNode | null = null
+  const slots: TransformSlot[] = []
 
   if (isAnimatedNode(flat.opacity)) {
     opacity = flat.opacity
     delete flat.opacity
   }
   if (Array.isArray(flat.transform)) {
-    const staticParts: TransformPart[] = []
     for (const part of flat.transform as AnimatedTransformPart[]) {
       const key = Object.keys(part)[0]
-      const value = part[key!]
-      if (key === "translateX" && isAnimatedNode(value)) {
-        translateX = value
-      } else if (key === "translateY" && isAnimatedNode(value)) {
-        translateY = value
-      } else if (!isAnimatedNode(value)) {
-        staticParts.push(part as TransformPart)
+      if (key === undefined) {
+        continue
       }
+      const value = part[key]
+      slots.push(
+        isAnimatedNode(value)
+          ? { key, node: value, value: value.__getValue() }
+          : { key, node: null, value: value as AnimatedValue },
+      )
     }
-    if (staticParts.length > 0) {
-      flat.transform = staticParts
-    } else {
-      delete flat.transform
-    }
+    // The whole array is owned here from now on, static entries included:
+    // leaving them in the style would make useLayoutChild write the same
+    // rect-store slot from the other side, and the two would overwrite
+    // each other every render.
+    delete flat.transform
   }
 
-  return { staticStyle: flat as StyleProp, opacity, translateX, translateY }
+  return { staticStyle: flat as StyleProp, opacity, slots }
 }
 
 // Animated values bypass React entirely: listeners write straight to the
-// widget (opacity) and to the rect store (translate offsets applied by the
+// widget (opacity) and to the rect store (the transform applied by the
 // parent's allocate), on top of the engine-committed base rect — the fast
 // path measured in the spike. Animation frames never touch Yoga.
 const AnimatedView = ({
@@ -128,7 +150,7 @@ const AnimatedView = ({
   testID,
 }: AnimatedViewProps) => {
   const widgetRef = useRef<Gtk.Box | null>(null)
-  const { staticStyle, opacity, translateX, translateY } = splitAnimated(style)
+  const { staticStyle, opacity, slots } = splitAnimated(style)
 
   const { host, node, cssClass } = useLayoutChild(widgetRef, {
     style: staticStyle,
@@ -136,66 +158,88 @@ const AnimatedView = ({
   })
   useRnContainer(widgetRef, node)
 
-  const offsets = useRef({ x: 0, y: 0 })
+  // The effect reads the slots of the render that (re)armed it; the values
+  // inside are then owned by the listeners.
+  const slotsRef = useRef<TransformSlot[]>(slots)
+  slotsRef.current = slots
+
+  // Rebind on a change of shape (which transforms, in which order), of the
+  // node behind an animated entry, or of a static entry's value — not on
+  // every render that rebuilds an equal-looking array.
+  const bindingKey =
+    (opacity ? `opacity#${nodeId(opacity)}` : "") +
+    slots
+      .map((slot) =>
+        slot.node
+          ? `|${slot.key}#${nodeId(slot.node)}`
+          : `|${slot.key}=${String(slot.value)}`,
+      )
+      .join("")
 
   useLayoutEffect(() => {
-    // RN transform semantics: translate is paint-only. The offset goes to
-    // the rect store unclamped — the parent's measure ignores children, so an
-    // out-of-bounds child draws past the boundary over its neighbors without
+    const widget = widgetRef.current
+    if (!widget) {
+      return
+    }
+
+    // The live transform array, mutated in place: an Animated write must
+    // stay one numeric store plus one queued allocation — no React render,
+    // no Yoga pass, no allocation per frame beyond the composed matrix.
+    //
+    // RN transform semantics: this is paint-only. The result goes to the
+    // rect store unclamped — the parent's measure ignores children, so a
+    // transformed child draws past the boundary over its neighbors without
     // moving a single ancestor.
-    const applyTranslate = (): void => {
-      const widget = widgetRef.current
+    const parts = slotsRef.current.map(
+      (slot) => ({ [slot.key]: slot.value }) as Record<string, AnimatedValue>,
+    )
+
+    const flush = (): void => {
+      setStoredTransform(widget, parts as unknown as TransformPart[])
       const parentWidget = host.widgetRef.current
-      if (!widget || !parentWidget) {
+      if (parentWidget) {
+        queueAllocate(parentWidget)
+      }
+    }
+
+    const subscriptions: { node: AnimatedNode; id: string }[] = []
+    slotsRef.current.forEach((slot, index) => {
+      if (!slot.node) {
         return
       }
-      setStoredOffset(widget, offsets.current.x, offsets.current.y)
-      queueAllocate(parentWidget)
-    }
+      const part = parts[index]!
+      subscriptions.push({
+        node: slot.node,
+        id: slot.node.addListener(({ value }) => {
+          part[slot.key] = value
+          flush()
+        }),
+      })
+    })
 
-    const bindings: Binding[] = []
     if (opacity) {
-      bindings.push({
+      const applyOpacity = (value: AnimatedValue): void => {
+        const numeric = typeof value === "number" ? value : parseFloat(value)
+        widgetRef.current?.setOpacity(Math.min(1, Math.max(0, numeric)))
+      }
+      subscriptions.push({
         node: opacity,
-        apply: (value) => {
-          widgetRef.current?.setOpacity(Math.min(1, Math.max(0, value)))
-        },
+        id: opacity.addListener(({ value }) => {
+          applyOpacity(value)
+        }),
       })
-    }
-    if (translateX) {
-      bindings.push({
-        node: translateX,
-        apply: (value) => {
-          offsets.current.x = value
-          applyTranslate()
-        },
-      })
-    }
-    if (translateY) {
-      bindings.push({
-        node: translateY,
-        apply: (value) => {
-          offsets.current.y = value
-          applyTranslate()
-        },
-      })
+      applyOpacity(opacity.__getValue())
     }
 
-    const subscriptions = bindings.map((binding) => ({
-      binding,
-      id: binding.node.addListener(({ value }) => binding.apply(value)),
-    }))
-    for (const { binding } of subscriptions) {
-      binding.apply(binding.node.__getValue())
-    }
+    flush()
+
     return () => {
-      for (const { binding, id } of subscriptions) {
-        binding.node.removeListener(id)
+      for (const { node: animated, id } of subscriptions) {
+        animated.removeListener(id)
       }
     }
-    // Re-bind when the animated node identities change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opacity, translateX, translateY, node])
+  }, [bindingKey, node])
 
   return (
     <GtkBox

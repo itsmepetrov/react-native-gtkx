@@ -23,4 +23,11 @@ export {
   type LabelAlignProps,
   type TextAlign,
 } from "./text-align"
+export {
+  composeTransform,
+  IDENTITY_TRANSFORM,
+  isIdentityTransform,
+  isTranslationOnly,
+  parseAngle,
+} from "./transform"
 export { visualStyleToCss } from "./visual-css"
