@@ -5,7 +5,7 @@
 // and .claude/epics/widget-surface/ for the rules behind it.
 //
 // Wrapped: RN layout + a GTK CSS class from the style prop, steps aside and
-// renders bare outside RN layout (see wrapReactNative in ./widget).
+// renders bare outside RN layout (see wrapReactNative in ../common/widget).
 // Raw: toplevels and child-only widgets, where a wrapper box would be
 // invalid GTK rather than a convenience — exported as gtkx binds them, same
 // as the hand-picked ones were before this file existed.

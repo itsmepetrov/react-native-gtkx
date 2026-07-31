@@ -273,7 +273,7 @@ emitPlatformWidgets({
   wrapped: manifest.adw.wrapped,
   raw: manifest.adw.raw,
   // wrapReactNative is toolkit-level, not Adwaita-specific — it lives in
-  // src/gtk/widget.tsx, and src/adw only ever re-exports it (see
+  // src/common/widget.tsx, and src/adw only ever re-exports it (see
   // src/adw/index.ts), it never redefines it.
   wrapReactNativeFrom: "../common/widget",
 })
