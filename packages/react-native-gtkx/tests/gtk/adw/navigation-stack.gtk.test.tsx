@@ -9,8 +9,11 @@
 import { render, waitFor } from "@gtkx/testing"
 import { useEffect, useState } from "react"
 import { expect, it } from "vitest"
-import { NavigationStack, NavigationStackPage } from "../../../src/adw"
-import { SlotContent } from "../../../src/gtk"
+import {
+  NavigationStack,
+  NavigationStackPage,
+  SlotContent,
+} from "../../../src/common"
 import type { Adw, Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
 import { Text, View } from "../../../src/index"
 

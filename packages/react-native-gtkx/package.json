@@ -55,6 +55,10 @@
       "types": "./dist/adw/index.d.ts",
       "default": "./dist/adw/index.js"
     },
+    "./common": {
+      "types": "./dist/common/index.d.ts",
+      "default": "./dist/common/index.js"
+    },
     "./vite": {
       "types": "./dist/vite/index.d.ts",
       "default": "./dist/vite/index.js"

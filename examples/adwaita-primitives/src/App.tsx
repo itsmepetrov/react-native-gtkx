@@ -13,19 +13,14 @@
 //   - the escape hatch: a ref to the Adw.NavigationView itself.
 import { useRef, useState } from "react"
 import { Pressable, StyleSheet, Text, View } from "react-native"
+import { Adw, AdwHeaderBar, AdwToolbarView } from "react-native-gtkx/adw"
 import {
-  Adw,
-  AdwHeaderBar,
-  AdwToolbarView,
+  IntrinsicContent,
   NavigationStack,
   NavigationStackPage,
-} from "react-native-gtkx/adw"
-import {
-  GtkButton,
-  GtkEntry,
-  IntrinsicContent,
   SlotContent,
-} from "react-native-gtkx/gtk"
+} from "react-native-gtkx/common"
+import { GtkButton, GtkEntry } from "react-native-gtkx/gtk"
 
 const ARTICLES = [
   { tag: "wayland", title: "Wayland", body: "The display protocol." },
