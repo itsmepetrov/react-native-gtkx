@@ -44,7 +44,7 @@ And the portability proof — `examples/profile` renders ONE source file with bo
 - [x] **Fast Refresh on both toolchains**: `run-linux --dev` (Metro dev server + HMR in the GTK host, state preserved) and `gtkx dev` (vite)
 - [x] **Navigation on real Adwaita widgets**: react-navigation navigators backed by `Adw.NavigationView` and `Adw.NavigationSplitView` — see below
 
-Verified live: `examples/hn-app` (a Hacker News reader on the Metro path), `examples/gallery` (the whole surface) and the interactive `examples/playground` — 448 tests (unit + component tests under headless Wayland).
+Verified live: `examples/hn-app` (a Hacker News reader on the Metro path), `examples/gallery` (the whole surface) and the interactive `examples/playground` — 449 tests (unit + component tests under headless Wayland).
 
 ## Navigation is native, not redrawn
 
@@ -74,8 +74,13 @@ to the JS drawer; react-native-macos is not supported by it at all, because
 AppKit has no navigation-stack primitive to bind to. GTK4/libadwaita does have
 one, so the model here is the iOS `native-stack` one:
 [docs/research/navigation-extensibility.md](docs/research/navigation-extensibility.md)
-maps every native-stack option against what we support, what is coming, and
-what is meaningless on a desktop.
+lays out the split, what an app can reach, and what is meaningless on a
+desktop.
+
+Underneath it, [`react-native-gtkx/adwaita`](docs/adwaita.md) exposes the
+widgets themselves — including a navigation stack that needs no router at
+all, and GTK widgets that take a React Native `style` for position and
+appearance. react-navigation is a convenience here, not the ceiling.
 
 ## Performance architecture
 
@@ -100,7 +105,7 @@ docs/research/layout-manager.md).
 - [Getting Started](docs/getting-started.md) — a new project in a minute, and adding Linux to an existing RN app;
 - [API v1](docs/api.md) — the full surface and differences from RN;
 - [The GTK layer](docs/adwaita.md) — `react-native-gtkx/adwaita`: Adwaita and GTK widgets as React components, driven by React Native style, usable with your own router or none at all;
-- [Navigation research](docs/research/navigation-extensibility.md) — every native-stack option mapped, how an existing react-navigation app ports, and why the other desktop RN platforms never got native navigation;
+- [Navigation research](docs/research/navigation-extensibility.md) — the two layers, how an existing react-navigation app ports, and why the other desktop RN platforms never got native navigation;
 - [What we need from gtkx](docs/upstream-gtkx.md) — the standing upstream agenda (bugs with repros, API asks, workarounds we want to delete);
 - [CONTRIBUTING](CONTRIBUTING.md) — developing the library (from macOS — via the UTM VM).
 
