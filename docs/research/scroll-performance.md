@@ -295,252 +295,58 @@ If this is ever revisited, the shape that avoids the trap is a frozen
 estimate: average the first handful of measured rows, then stop updating it,
 so the content extent settles instead of drifting.
 
-## Round four: hover latency, and separating our cost from native's
+## Round five: the sticky-header amplifier, still unsolved
 
-A different symptom, reported against a native reference rather than felt in
-isolation: hover lags during fast scrolling (worse than a native file
-manager, but native lags too — not necessarily ours to fix), and hover along
-a sidebar-style list reacts visibly slower than a native sidebar (fully
-ours, or so the hypothesis went). Two hypotheses, and they turned out to
-both be right, one per case:
+Round three's unchanged-rect fix closed the "maximized is worse" gap but left
+a narrower, still-real bug. Maximized, a sticky list costs 44.0 ms per frame
+against 17.3 ms for the same list without stickiness (`down2`), while OUR
+measured costs are flat or LOWER in the sticky case — the same signature as
+round three, at the child-count scale instead of the window-area scale.
 
-- Every row boundary crossing runs `onHoverIn`/`onHoverOut` → `setState` →
-  React render → Yoga → allocation → repaint — a full framework cycle to
-  swap a background color, where a native `GtkListBox` swaps a CSS class
-  and does nothing else.
-- During scrolling, frames are already busy with scroll work, and pointer
-  motion is handled on the same loop — hover would queue behind it with no
-  separate mechanism at fault.
+The mechanism is not in doubt: the pin-correction tick (`scroll-view.tsx`
+~441) calls `queueAllocate(content)` on nearly every frame of motion, and
+`content`'s `allocate()` (`use-layout-child.ts` ~274) then unconditionally
+`sizeAllocate`s every child — about 1268 a second — to move one pinned
+widget. Skipping the children whose rect had not changed proved the cost is
+real: 44.0 ms down to 19.8. It also broke five test files, both times it was
+tried, in the naive form and in a corrected form that additionally tracked
+which widgets we had queued work for.
 
-### Method
+**What is NOT the cause.** The corrected attempt was diagnosed as a
+wrapper-identity problem: `GtkScrolledWindow` wraps a non-scrollable child in
+an internal `GtkViewport`, and the theory was that `getParent()` through that
+never-explicitly-referenced widget returns a different JS object than the
+React ref to the same `ScrolledWindow`, so a `WeakSet` of ancestors silently
+misses. **Measured, and it is false.** A probe comparing a traversed widget
+against the React ref for the same object returns true through the viewport
+hop, and repeated traversals return the same object:
 
-`examples/hover-probe` renders the SAME row list two ways, so the method is
-identical for both: `HOVER_MODE=pressable` is a FlatList of `Pressable` rows
-with `style={({ hovered }) => ...}` — the exact pattern hn-app, the gallery
-and adwaita-primitives already use for row hover. `HOVER_MODE=native` is a
-plain `Gtk.ListBox`/`Gtk.ListBoxRow` built with the raw GI classes (not
-JSX — see the file for why: a `wrapReactNative` component nested inside
-another one resolves its Yoga node against the wrong parent and never gets
-allocated), relying entirely on GTK's own prelight/`:hover` handling — no
-Pressable, no FlatList, no Yoga on the rows at all. Both arms fill a
-maximized window, so `scripts/perf/run-hover-probe-session.sh` can drive a
-REAL pointer with ydotool (relative moves, clamped to a screen corner first
-so the starting position never has to be known) without needing the
-window's on-screen coordinates.
+| Comparison                                       | Result |
+| ------------------------------------------------ | ------ |
+| `box.getParent().getParent() === scrolledRef`    | true   |
+| `sw.getFirstChild().getParent() === scrolledRef` | true   |
+| `sw.getFirstChild().getFirstChild() === boxRef`  | true   |
 
-Latency is measured as signal-to-applied, not felt: `pressable.hoverApply`
-(in `components/pressable.tsx`, `GTKX_PERF=1`) times from the native
-enter/leave signal to the resulting CSS class actually landing on the
-widget — synchronously for the direct-swap path, after the commit for the
-setState path. The native arm has no such hook by design (that is the
-point), so the probe adds one of its own, `native.hoverApply`, timing from
-the same `enter` signal to GTK's own `state-flags-changed` reporting
-PRELIGHT — both driven by the identical pointer-motion signal, so the two
-numbers are comparable despite coming from different code paths.
+So gtkx does intern wrappers by pointer, including for widgets it creates
+itself. Whatever breaks the skip, it is not identity. That conclusion was
+nearly filed upstream as a gtkx bug; verifying it first is the only reason it
+was not.
 
-### Case 2 (sidebar hover) confirmed, by about 500x
+**The other candidate**, moving the pinned header into its own small
+container, was rejected on review rather than measurement, for two
+independent reasons in our own code: `use-layout-child.ts` computes a child's
+Yoga index from its GTK sibling position, which assumes the GTK parent and
+the Yoga parent are the same container — reparenting breaks that for any
+sibling mounting while the header is pinned, which is the normal case in a
+live list. And Yoga resolves `position: absolute` against the immediate
+parent, while `FlatList` positions every cell that way relative to the list
+start — exactly the configuration the perf bar measures.
 
-Real session, maximized window, 60-row list, continuous ydotool sweep, no
-scrolling — `pressable.hoverEvent` and `pressable.hoverFullCycle` were
-equal, every single one of 283 crossings over 7s ran the full cycle:
-
-| metric (idle, at rest)   |     `pressable` (before) |     `native` |
-| ------------------------ | ------------------------: | -----------: |
-| crossings                |                       283 |     (n/a, continuous) |
-| apply, average            |                    4.85 ms |       0.01 ms |
-| apply, worst              |                   80.91 ms |       0.13 ms |
-
-Average latency is ~485x native's; the worst crossing is ~620x. Both numbers
-are the same physical event (a `GtkBox`'s `EventControllerMotion` firing
-"enter") measured to the same kind of outcome (the highlight is now applied)
-— the gap is entirely the setState-render-Yoga-allocate cycle standing
-between them, exactly hypothesis 2's shape.
-
-### Case 1 (hover during scroll): the scroll work dominates, not hover
-
-Same probe, `down`-style bouncing scroll running underneath the same
-pointer sweep. Two things are true at once here, and they point the same
-way:
-
-| metric (scroll phase)     | `pressable` (before) | `pressable` (after) |
-| -------------------------- | ---------------------: | ---------------------: |
-| `frame.avg`                |                30.29 ms |               30.95 ms |
-| `frame.veryLate`/s          |                   12.33 |                   15.92 |
-| hover apply, average        |                 6.25 ms |                0.017 ms |
-| hover apply, worst          |                11.72 ms |                 0.17 ms |
-
-Fixing hover's own cost moved the hover numbers by two orders of magnitude
-and left `frame.avg`/`frame.veryLate` unchanged (within this rig's noise —
-the whole doc's running theme). That is the signature of hypothesis 1: the
-frame budget during a scroll is already spent on scroll work, hover's own
-cost was never the dominant term there, and it needs no separate fix — it
-improves incidentally alongside whatever 006 does to the scroll loop itself,
-exactly as the task predicted. What this task's fix DOES contribute to case
-1 is one less thing competing for that budget, which is real but not the
-story; the honest read is "measured, and it's the scroll loop" for the
-scroll-phase frame cost, same as rounds one through three found for scroll
-performance generally.
-
-One caveat on the native arm's OWN scroll-phase numbers, in the interest of
-not overclaiming: `examples/hover-probe`'s native mode drives its
-`GtkAdjustment` with `setValue()` on a 16ms JS timer (there is no native
-kinetic-scroll input to synthesize headlessly), which is not necessarily
-representative of a real scrollbar drag or touchpad flick — its own
-`frame.avg` degrades similarly during that phase. That is why the case-1
-comparison above uses the `pressable` arm's before/after, not a
-pressable-vs-native comparison: the scroll-mechanics comparison is
-`scroll-perf`'s job (rounds one through three, and 006 in progress), this
-task's job was isolating hover's own cost, and the native arm answers that
-cleanly at rest (no scrolling involved) in the case-2 numbers above.
-
-### The fix
-
-`components/pressable.tsx`: hover stopped being React state. `hoveredRef`
-(a ref, not `useState`) is the single source of truth, read directly during
-render — safe here specifically because this component already mutates
-`handlersRef.current` in the render body for the press gestures, so render
-was never React-DOM-pure to begin with. Each render precomputes the CSS
-class for BOTH hover values (current and hypothetical-other) whenever
-`style` is a function and `children` is not; the native enter/leave
-handlers then swap between the two directly with `widget.addCssClass` /
-`removeCssClass`, no `setState`, no render, no Yoga, no allocation.
-
-Two cases fall back to the ordinary `setState`-driven render (a small
-`forceRender` via `useReducer`, since `hovered` is no longer state):
-`children` reading `hovered` (content, not just style, may differ — no way
-to precompute that generically), and a hover style that resolves to a
-DIFFERENT layout (padding, size, position) rather than only paint — checked
-by comparing the Yoga-relevant half of the flattened style between the two
-hover values and bailing to a real render if they differ, since a CSS class
-alone cannot reflow anything. Both are exercised by
-`tests/gtk/components/pressable-hover.gtk.test.tsx`, along with the
-common-case fast path and the "nothing reads `hovered`" no-op case.
-
-This is the same shape the round-two/three fixes took: the win comes from
-recognizing a whole category of work (React's render pipeline) is
-unreachable-by-construction for the common case, not from making that
-pipeline faster.
-## Round four: the sticky-header amplifier — two candidates, both disproven
-
-Round three's unchanged-rect fix closed the "maximized is worse" gap, but left
-a narrower, still-real bug: maximized, sticky headers cost 44.0 ms/frame
-against 17.3 ms without stickiness on the same list (`down2`), while OUR
-measured costs (`gtk.allocTop.ms`, `engine.flush.ms`) are flat or LOWER in the
-sticky case. The mechanism: the pin-correction tick
-(`scroll-view.tsx` ~441) calls `queueAllocate(content)` on ~49 of every 50
-frames of motion, and `content`'s `allocate()` (`use-layout-child.ts` ~274)
-unconditionally `sizeAllocate`s every child — ~1268 a second — to move one
-pinned widget. The cost lands in paint, invisible to our own timers, matching
-round three's signature exactly but at the child-count scale instead of the
-window-area scale.
-
-Two directions were on the table. Both were implemented (or fully designed)
-and both are unsound in this codebase, for reasons specific to this gtkx
-rc.2 binding and to how this layer separates the Yoga tree from the GTK
-widget tree — not for lack of trying harder on the same idea.
-
-### Candidate: skip children whose target rect+offset did not change
-
-The original round-three-adjacent experiment (see the 006 progress log) tried
-this naively — skip `allocateChild` when the rect handed down matches the
-last one — and broke 5 test files, because a child can have ITS OWN pending
-reallocation (something changed several levels below it) while the rect ITS
-PARENT computes for it is unchanged; GTK exposes no public `needs_allocate`
-to tell the two cases apart.
-
-A corrected version was built: a per-child cache of the rect+offset last
-actually handed to `allocateChild` (not just the Yoga-committed rect, so an
-Animated/sticky offset-only change is caught too), plus a `WeakSet<Gtk.Widget>`
-fed by every `queueAllocate`/`queueResize` call in the codebase, marking the
-target widget and walking `.getParent()` up to the root so an intermediate
-container is never wrongly skipped while a descendant still has a pending
-request — mirroring GTK's own alloc-needed-on-child propagation.
-
-**It still broke the same test files, with the same signature.** Diagnosis
-this time was conclusive, via a `WeakMap<object, number>` debug-id tag logged
-at both the marking site and the loop that later reads it:
-`GtkScrolledWindow` transparently wraps its non-scrollable `content` child in
-an internal `GtkViewport` that our code never references directly. Walking
-`content.getParent()` yields the `Viewport`; walking one step further does
-**not** yield the same JS object as `outerRef.current` (the `ScrolledWindow`
-our own React ref holds) — confirmed by comparing debug ids, not by
-inspection. Two adjacent relationships — `Root.getFirstChild() ===
-outerRef.current` and `stickyChild.getParent() === contentRef.current` —
-matched reliably; only the hop through the never-explicitly-referenced
-`Viewport` fails to intern.
-
-The consequence is not "occasionally stale," it is permanent: the first time
-Root's loop skips `ScrolledWindow` (because our WeakSet lookup misses),
-GTK's own `size_allocate()` on Root has already run and cleared Root's own
-alloc-needed bookkeeping. `ScrolledWindow`/`content`'s flags are never
-serviced (nobody called `sizeAllocate` on them), and GTK's own propagation
-optimization — "an ancestor already marked needs no further notification" —
-means every SUBSEQUENT `content.queueAllocate()` call from the sticky tick
-stops propagating at the same broken hop. Observed directly: after the very
-first skip, `content`'s `allocate()` vfunc never ran again for the rest of
-the test, no matter how many more times the tick fired. `stickyHeaderIndices
-pins the real header and restores it` times out waiting for a scroll-triggered
-reposition that GTK now believes is already handled.
-
-This is a property of the environment, not a bug in the tracking logic: a
-`WeakMap`/`WeakSet` keyed by a widget obtained via `.getParent()` through an
-auto-inserted, never-JS-referenced widget cannot be trusted to match a lookup
-keyed the same conceptual widget obtained another way. Filed upstream:
-`docs/upstream-gtkx.md` bug 3.
-
-### Candidate: move the pinned header into its own small container
-
-Round two's "translate the real child, no duplicate widget" constraint does
-**not** categorically block this — reparenting the SAME widget instance to a
-different GTK container while it is pinned is not a duplicate. That part of
-the caveat is cleared.
-
-What blocks it instead, found on design review before writing throwaway
-code this time: this layer keeps the Yoga node tree and the GTK widget tree
-in lockstep everywhere except where a component explicitly decouples them,
-and two places rely on that lockstep holding for exactly the children a
-"shrink the touched set" container would need to move:
-
-1. **Mount-order index computation.** `use-layout-child.ts`'s mount effect
-   walks `parentWidget.getFirstChild()`/`getNextSibling()` to translate "GTK
-   sibling position" into "Yoga insertion index," on the assumption that a
-   node's GTK parent and Yoga parent are the same container
-   (`react-hooks/exhaustive-deps`-disabled effect, ~line 96). Any design that
-   reparents a widget to a GTK container different from its Yoga parent (the
-   whole point — so the container whose `allocate()` runs every scroll tick
-   has few children) breaks this translation for any sibling that mounts
-   while something is reparented out. For a live, scrolling, windowed list
-   this is not an edge case — new cells mount continuously while scrolling,
-   which is exactly when a header would be pinned.
-2. **Absolute positioning is parent-relative, not list-relative, in Yoga.**
-   `FlatList`/`SectionList` (`virtualized-list.tsx`) position every cell —
-   sticky or not — via Yoga `position: absolute` with `top`/`left` computed
-   as `cellStart(index)`, an offset from the LIST'S start. Yoga (confirmed
-   against `layout/apply-style.ts` and `layout/yoga.ts`, which call Facebook
-   Yoga's `setPositionType` directly) resolves `position: absolute` against
-   the node's DIRECT PARENT only — there is no CSS-style "nearest positioned
-   ancestor" search. Wrapping a run of cells in an intermediate container to
-   shrink `content`'s child count would silently re-base every wrapped
-   cell's `top`/`left` to the wrapper's origin instead of the list's, and
-   this is exactly the configuration the perf bar is measured against
-   (`PERF_STICKY=1` on the windowed perf-probe).
-
-Restricting the container-shrinking trick to the plain `<ScrollView><View>`
-case sidesteps only the second problem, not the first, and does not touch
-the windowed-list configuration the task's own bar measures. Implementing and
-then rigorously validating a reparenting design against both problems (plus
-`section-sticky.gtk.test.tsx`'s multi-header handoff, which shares this exact
-mechanism) was judged a substantially larger and riskier change than "a small
-container above the ScrollView" suggests, and was not attempted as code.
-
-### Where this leaves it
-
-Neither candidate is safe to ship in this codebase as currently architected.
-No code changed as a result of this round — `use-layout-child.ts`,
-`scroll-view.tsx`, `rect-store.ts` and the bridge are exactly as round three
-left them (verified: 65 files / 449 passed + 1 expected fail, unchanged).
-A future attempt should start from one of: an upstream fix for widget-wrapper
-identity (making candidate two's tracking trustworthy), or a deliberate,
-scoped rewrite of `VirtualizedList`'s absolute positioning to be
-container-relative instead of list-relative (a separate project, not a
-006-sized task).
+**Where it stands.** The amplifier is understood and reproducible, the cost
+is quantified, and no safe fix has been found. Skipping allocations needs a
+reliable "does this widget still need allocating" signal, which GTK4 does not
+expose publicly and which our own bookkeeping has now failed to reconstruct
+twice — for a reason still unknown, since the identity theory is dead. The
+next honest step is to find out what actually breaks under the skip, with the
+same instrument-first discipline that settled rounds three and four, rather
+than to try a third variant.

@@ -56,55 +56,9 @@ running the CLI from the project that owns that `node_modules`
 - Ask: validate the store's existence, not just the stamp; and either
   make an in-node_modules cwd work or fail loudly.
 
-### 3. `Gtk.Widget.getParent()` does not return an identity-stable wrapper through native auto-wrapped children
-
-We tried to make our container's `RnGtkxLayout.allocate()` skip
-re-`sizeAllocate`-ing children whose rect is byte-identical to what they
-were last given (`docs/research/scroll-performance.md`, "Round four" —
-this is what forced the container to re-place every child on every
-scroll tick just to move one pinned header). The design tracked, per
-widget, whether _we_ had queued a resize/allocate for it since its last
-actual placement, by walking `widget.getParent()` up to the root at every
-`queueAllocate`/`queueResize` call and marking each ancestor in a
-`WeakSet<Gtk.Widget>`.
-
-This is unreliable specifically through widgets our own code never holds
-a JS reference to. `GtkScrolledWindow` transparently wraps a
-non-scrollable child in an internal `GtkViewport` — nothing we do creates
-or refs that `GtkViewport`, we only ever see the `ScrolledWindow` (via
-our own ref) and its `content` child (via ours). Walking
-`content.getParent()` reports a `Viewport` instance, and walking one step
-further (`Viewport.getParent()`) reports an object that is **not**
-`===` the `ScrolledWindow` wrapper our own ref holds — confirmed with a
-per-object debug id (a `WeakMap<object, number>` tag) logged at both call
-sites: the ancestor walk and the loop that later reads
-`Root.getFirstChild()` disagree about which JS object "the ScrolledWindow"
-is. Two other relationships we checked the same way — `Root.getFirstChild()
-=== ourScrolledWindowRef.current` and `stickyChild.getParent() ===
-ourContentBoxRef.current` — matched reliably; the failure is specific to
-the hop through the auto-inserted, never-explicitly-referenced `Viewport`.
-
-Practical consequence: any `WeakMap`/`WeakSet` keyed by a widget obtained
-via `.getParent()` through such a hop will never match a lookup keyed by
-the same conceptual widget obtained another way (a stored ref, or
-`getFirstChild()`/`getNextSibling()` traversal — both of which _did_
-intern consistently in our testing). We could not find a public way to
-either (a) get a canonical/interned wrapper for a widget regardless of
-how it was reached, or (b) ask GTK directly whether a widget has a
-pending `size_allocate` need, which would have let us skip the ancestor
-walk entirely.
-
-- Repro: `Gtk.ScrolledWindow` with a plain (non-`Gtk.Scrollable`) child;
-  compare `child.getParent().getParent()` against a ref to the
-  `ScrolledWindow` held from JS at construction time.
-- Ask: either intern widget wrappers by native pointer globally (so
-  `.getParent()`/`.getFirstChild()`/a stored ref always yield `===` for
-  the same underlying widget), or document which accessors are safe to
-  use as `WeakMap` keys and which are not.
-
 ## API asks
 
-### 4. A layout-manager contract for embedders
+### 3. A layout-manager contract for embedders
 
 We subclass `GtkLayoutManager` (`RnGtkxLayout`) to place children at
 Yoga-computed rects, and `GtkWidget.contains()` (via `registerClass`) to
@@ -117,7 +71,7 @@ undocumented as an embedding surface.
   `allocate()`; or expose a first-class "custom layout" entry point.
   We would contribute the docs/tests for it.
 
-### 5. Config registration for embedders
+### 4. Config registration for embedders
 
 Our runner hosts execute a plain Node bundle, so they synthesize the
 `virtual:gtkx-config` module themselves. rc.2 added two required exports
@@ -130,7 +84,7 @@ until we mirrored `renderConfigModule` through
   `renderConfigModule` public. Depending on `/internal` is a standing
   liability for both sides.
 
-### 6. Keep the user-event signal table extensible and documented
+### 5. Keep the user-event signal table extensible and documented
 
 rc.2 inverted commit-time signal suppression (an allowlist became a
 built-in per-type table plus `userEventSignals`). The change was correct
@@ -160,7 +114,7 @@ list, which today has to be repeated by every consumer of our vite preset.
 ## What we are happy to give back
 
 - The reproduction tests above, upstreamed as gtkx's own.
-- Documentation for the embedding surfaces in asks 4–6, written from the
+- Documentation for the embedding surfaces in asks 3–5, written from the
   perspective of a consumer that got them wrong first.
 - Real-world pressure data: our suite drives ~450 GTK component tests
   under headless Wayland on every commit, plus perf probes that measure
