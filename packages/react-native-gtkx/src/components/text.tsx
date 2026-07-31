@@ -66,11 +66,20 @@ export const Text = ({
 
   const measure = useMemo<MeasureFn>(() => {
     return (width, widthMode) => {
-      const natural = measureWidget(probe, "horizontal").natural
+      const { minimum, natural } = measureWidget(probe, "horizontal")
+      // Floor at the probe's own minimum width, not at 1: gtk_widget_measure()
+      // clamps a height-for-width query up to the widget's minimum before
+      // computing regardless of what we pass (logging "Trying to measure
+      // GtkLabel for width of N, but it needs at least M" while doing it), so
+      // asking for anything below `minimum` was never honored — the height
+      // below was already being computed at `minimum`, not at our `used`.
+      // Clamping here ourselves gets the same height GTK would give us
+      // anyway, keeps the returned width consistent with it, and drops the
+      // warning as a side effect rather than the goal.
       const used =
         widthMode === "undefined"
           ? natural
-          : Math.min(natural, Math.max(1, Math.floor(width)))
+          : Math.min(natural, Math.max(minimum, Math.floor(width)))
       const height = measureWidget(probe, "vertical", used).natural
       const singleLine = measureWidget(probe, "vertical", natural).natural
       measuredLines.current =

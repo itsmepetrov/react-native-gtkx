@@ -190,11 +190,15 @@ export const useLayoutChild = (
       if (!widget) {
         return { width: 0, height: 0 }
       }
-      const natural = measureWidget(widget, "horizontal").natural
+      const { minimum, natural } = measureWidget(widget, "horizontal")
+      // Floor at the widget's own minimum width, not at 1 — see the same
+      // clamp in text.tsx's measure for why: gtk_widget_measure() enforces
+      // this floor internally regardless of what we request (warning while
+      // it does), so anything below `minimum` was never actually honored.
       const used =
         widthMode === "undefined"
           ? natural
-          : Math.min(natural, Math.max(1, Math.floor(width)))
+          : Math.min(natural, Math.max(minimum, Math.floor(width)))
       return {
         width: used,
         height: measureWidget(widget, "vertical", used).natural,

@@ -496,7 +496,23 @@ const SidebarNavigator = ({
         // A breakpoint's setters may only target widgets INSIDE the bin
         // they're attached to, never the bin itself (Adwaita's own
         // restriction) — so the split view must be the bin's child.
+        //
+        // widthRequest/heightRequest: Adwaita's own contract for
+        // AdwBreakpointBin — adding a breakpoint makes it report NO minimum
+        // size, and its docs say these properties "must always be set" in
+        // that case (otherwise it warns on every use: "does not have a
+        // minimum size, set the 'width-request' and 'height-request'
+        // properties to specify it"). This bin's actual size always comes
+        // from our own Yoga layout (wrapReactNative allocates it the
+        // engine-computed rect regardless of GTK's own size negotiation), so
+        // there is no separate GTK-side minimum to declare and any value
+        // satisfies the contract — 1, not 0: the current @gtkx property
+        // diffing treats 0 as "unset" for numeric props (falsy skip) and
+        // never issues the native call, which would silently defeat the
+        // point. 1px is functionally identical to 0 here either way.
         <AdwBreakpointBin
+          widthRequest={1}
+          heightRequest={1}
           breakpoints={
             <AdwBreakpoint
               ref={breakpointRef}
