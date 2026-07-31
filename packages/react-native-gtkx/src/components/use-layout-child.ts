@@ -120,6 +120,28 @@ export const useLayoutChild = (
         return
       }
       const previous = getStoredRect(widget)
+      // A commit does not imply a change. The engine filters unchanged nodes
+      // out of the walk, EXCEPT nodes carrying a measure function — every
+      // Text leaf, every intrinsic widget — which it must still visit. Those
+      // then arrive here with the rect they already have, and queueing an
+      // allocation for them makes GTK re-allocate and re-snapshot the whole
+      // container for nothing.
+      //
+      // The cost of that is not academic: it scales with children × painted
+      // area. Measured on a 500-row list, maximized, windowSize 11 — 801
+      // live nodes — the frame average was 40.4 ms against 15.7 ms windowed,
+      // while neither 777 nodes in a small window nor 205 nodes maximized
+      // cost anything. Only the product hurts, and this is where we inflate
+      // the first factor.
+      if (
+        previous &&
+        previous.x === rect.x &&
+        previous.y === rect.y &&
+        previous.width === rect.width &&
+        previous.height === rect.height
+      ) {
+        return
+      }
       setStoredRect(widget, rect)
       const sizeChanged =
         !previous ||

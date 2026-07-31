@@ -194,41 +194,57 @@ instrumentation.
 `idle` is the control: unchanged (late frames even fell, 6 → 1.3), so this is
 not a constant tax on a big window. It appears only while pixels change.
 
-**What this means — corrected by the control run.** The first reading of
-this data was "paint scales with area, nothing on our side". A control run
-disproved it: the same probe in `PERF_MODE=scrollview`, where all 500 rows
-are mounted and scrolling is a pure native adjustment translation, is
-**identical maximized and windowed** — `frame.avg` 16.4 vs 17.0 ms,
-`frame.veryLate` under 1/s, at full screen area.
+**What this means — corrected twice, and then fixed.** The first reading was
+"paint scales with area, nothing on our side". A control run disproved it:
+the same probe in `PERF_MODE=scrollview`, where all 500 rows are mounted and
+scrolling is a pure native adjustment translation, is **identical maximized
+and windowed** (16.4 vs 17.0 ms), at full screen area. Area alone costs
+nothing.
 
-| Maximized, scrolling | `frame.avg` | `frame.veryLate`/s |
-| -------------------- | ----------: | -----------------: |
-| ScrollView           |     16.4 ms |                0.6 |
-| FlatList             |     40.4 ms |               22.1 |
+Nor does the tree. Separating the two variables:
 
-So area alone costs nothing. A full-screen window scrolling 500 mounted
-rows holds 60 fps. The cost appears only when the virtualized list is
-driving, and only then does it scale with area.
+| Configuration              | Live nodes | `frame.avg` | `frame.veryLate`/s |
+| -------------------------- | ---------: | ----------: | -----------------: |
+| windowed, `windowSize` 11  |        445 |     15.7 ms |                0.1 |
+| windowed, `windowSize` 23  |        777 |     16.7 ms |                0.6 |
+| maximized, `windowSize` 5  |        205 |     16.3 ms |                0.7 |
+| maximized, `windowSize` 11 |        801 |     40.4 ms |               22.1 |
 
-The mechanism is not proven yet, and the leading hypothesis is ours:
-during motion the list queues an allocation on nearly every frame, and a
-queued allocation on a large widget plausibly drags a relayout and repaint
-proportional to its area. ScrollView never queues, which is exactly why it
-does not care how big the window is. If that holds, the fix is on our side —
-queue only when something actually changed, and invalidate the affected
-region rather than the container.
+777 widgets in a small window: free. A full-screen window holding 205: free.
+Only the PRODUCT hurts. That is the signature of re-allocating and
+re-snapshotting N widgets over an area A, and it says the lever is ours:
+shrink N per frame.
 
-What the numbers do rule out: it is not our measured Yoga, commit or
-allocate time, all of which stayed flat while frames got 2.6× longer. The
-cost lives in what those queues trigger, not in what we spend computing
-them.
+### The cause: unchanged nodes were committing
 
-Scope: this rig has no GPU, so the repaint is software-rendered and its
-area-scaling is at its most visible here. On accelerated hardware the same
-trigger may be cheap enough to disappear — which makes it a question for
-real hardware, not for another probe run.
+`LayoutEngine.collectChange()` already drops nodes whose rect did not move —
+except nodes carrying a measure function, which the walk must still visit.
+Every `Text` leaf is one, and a card list is mostly Text. Those arrived at
+the commit callback with the rect they already had, and the callback queued
+an allocation anyway. GTK dedupes the queue, so the pass COUNT looked
+innocent (~1 per frame); what it hid is that each pass re-allocated the whole
+container and every child in it, ~1200 child allocations per second, then
+repainted an area that is four times larger maximized.
 
-Caveats: one run per configuration, and frame maxima are noisy on this rig
-(±30 ms). The `veryLate` swing (0.13/s → 22/s) is two orders of magnitude
-past that noise, and the ScrollView control reproduces flat across both
-sizes, which is why these are reported as findings rather than impressions.
+The fix is four lines in `use-layout-child.ts`: if the committed rect equals
+the stored one, return before queueing.
+
+| Maximized, `windowSize` 11 |  before |   after |
+| -------------------------- | ------: | ------: |
+| `frame.avg`, steady scroll | 40.4 ms | 17.3 ms |
+| `frame.veryLate`/s         |    22.1 |     0.8 |
+| `frame.avg`, flick         | 28.1 ms | 17.3 ms |
+| `frame.veryLate`/s, flick  |     7.0 |     0.3 |
+
+About 22 fps to about 58. Windowed is unchanged (15.7 → 16.8 ms, inside this
+rig's noise), which is expected: with a small area the wasted work was cheap
+enough not to show. The flick there still got quieter — child allocations
+−41%, commits −33%.
+
+`allocPass` per second went UP maximized (48 → 65) because the frames got
+faster and there are simply more of them per second; per frame it is the
+same one pass.
+
+Scope: this rig has no GPU, so the wasted repaint was at its most expensive
+here and the win is at its most visible. The waste was real everywhere
+though — it is work that produced no pixel change on any renderer.
