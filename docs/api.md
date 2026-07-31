@@ -174,6 +174,19 @@ const App = () => (
   place. A screen that flips between shapes must give every one of these
   four keys an explicit value (`undefined` counts as a real overwrite; an
   absent key does not) on every call, not just the ones currently in use.
+- Sidebar screen option `sidebarRow`: `() => ReactNode` — draw the row
+  yourself instead of letting `title`/`icon`/`color`/`count` compose one.
+  Those four are a convenience, not the ceiling: they build an
+  `AdwActionRow`, which brings Adwaita's own row metrics with it, so an app
+  wanting a different shape, density or height had nothing to reach for.
+  Return anything a `GtkListBoxRow` can hold — React Native content, GTK
+  widgets, a differently-configured Adwaita row. The navigator keeps owning
+  row BEHAVIOUR (selection, click → `jumpTo`, staying in step with
+  navigation state, the collapsed reveal), so a custom row cannot drift out
+  of sync with the router; only what is drawn changes. A screen that passes
+  none of `icon`/`color`/`count` gets a compact `GtkListBoxRow` + label
+  automatically — `AdwActionRow`'s height is right when there IS a prefix
+  and a count to lay out and pure cost when there is not.
 - Sidebar screen option `contentLayout`: `"react-native"` (default) or
   `"widget"` — what the screen's body IS. The default mounts it in a Yoga
   layout root that fills the pane, so `<View style={{ flex: 1 }}>` behaves

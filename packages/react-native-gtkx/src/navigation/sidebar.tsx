@@ -62,7 +62,12 @@ import {
   AdwNavigationSplitView,
   AdwToolbarView,
 } from "../adw"
-import { HeaderSlotContent, SlotContent, WidgetContent } from "../common"
+import {
+  HeaderSlotContent,
+  IntrinsicContent,
+  SlotContent,
+  WidgetContent,
+} from "../common"
 import {
   css,
   GObject,
@@ -72,6 +77,7 @@ import {
   GtkImage,
   GtkLabel,
   GtkListBox,
+  GtkListBoxRow,
   GtkScrolledWindow,
 } from "../gtk"
 import { warnIgnoredOptions } from "./option-warnings"
@@ -86,6 +92,7 @@ const SIDEBAR_OPTION_KEYS: ReadonlySet<string> = new Set([
   "headerTitle",
   "headerButtons",
   "contentLayout",
+  "sidebarRow",
 ])
 
 export type SidebarNavigationOptions = {
@@ -136,6 +143,22 @@ export type SidebarNavigationOptions = {
    *  React Native content somewhere inside it wraps that part in
    *  `SlotContent` (or `IntrinsicContent`) itself. */
   contentLayout?: "react-native" | "widget"
+  /** Renders this screen's sidebar row yourself, instead of letting
+   *  `title`/`icon`/`color`/`count` compose one.
+   *
+   *  Those four are a convenience, not the ceiling. They compose an
+   *  `AdwActionRow`, which brings Adwaita's own row metrics with it — so
+   *  an app wanting a different shape, a different density, or simply a
+   *  row height of its own had nothing to reach for, and every app paid
+   *  for the richest case whether it used it or not. This is that reach:
+   *  return anything a `GtkListBoxRow` can hold — React Native content,
+   *  GTK widgets, a differently-configured Adwaita row.
+   *
+   *  The navigator still owns row BEHAVIOUR — selection, click →
+   *  `jumpTo`, keeping the list in step with navigation state, the
+   *  collapsed reveal — so a custom row cannot fall out of sync with the
+   *  router. Only what is drawn changes. */
+  sidebarRow?: () => ReactNode
   /** Overrides the navigator-level `headerButtons` prop for this screen
    *  specifically (replaces it entirely when set, same as the stack
    *  navigator's per-screen option override). */
@@ -435,6 +458,43 @@ const SidebarNavigator = ({
               >
                 {state.routes.map((route) => {
                   const options = optionsOf(route.key)
+                  if (options.sidebarRow) {
+                    // A plain GtkListBoxRow, so the list keeps handing the
+                    // row its selection and activation; everything inside
+                    // is the app's. IntrinsicContent — the size-to-content
+                    // layout root — because a row is sized by what it
+                    // holds, and React Native content (the common case for
+                    // a custom row) needs a real root to render at all.
+                    return (
+                      <GtkListBoxRow key={route.key}>
+                        <IntrinsicContent>
+                          {options.sidebarRow()}
+                        </IntrinsicContent>
+                      </GtkListBoxRow>
+                    )
+                  }
+                  // Nothing but a title: the compact row this navigator
+                  // used before rows gained an icon, a dot and a count
+                  // (GtkListBoxRow + GtkLabel, ~40px). AdwActionRow brings
+                  // Adwaita's own row metrics — around 2.5x the height —
+                  // which is right when there IS a prefix and a count to
+                  // lay out, and pure cost when there is not.
+                  // examples/gallery passes only titles and had been
+                  // paying it since.
+                  if (!options.icon && !options.color && !options.count) {
+                    return (
+                      <GtkListBoxRow key={route.key}>
+                        <GtkLabel
+                          label={titleOf(route.key, route.name)}
+                          xalign={0}
+                          marginTop={8}
+                          marginBottom={8}
+                          marginStart={6}
+                          marginEnd={6}
+                        />
+                      </GtkListBoxRow>
+                    )
+                  }
                   return (
                     <AdwActionRow
                       key={route.key}
