@@ -295,128 +295,58 @@ If this is ever revisited, the shape that avoids the trap is a frozen
 estimate: average the first handful of measured rows, then stop updating it,
 so the content extent settles instead of drifting.
 
-## Round four: hover latency, and separating our cost from native's
+## Round five: the sticky-header amplifier, still unsolved
 
-A different symptom, reported against a native reference rather than felt in
-isolation: hover lags during fast scrolling (worse than a native file
-manager, but native lags too — not necessarily ours to fix), and hover along
-a sidebar-style list reacts visibly slower than a native sidebar (fully
-ours, or so the hypothesis went). Two hypotheses, and they turned out to
-both be right, one per case:
+Round three's unchanged-rect fix closed the "maximized is worse" gap but left
+a narrower, still-real bug. Maximized, a sticky list costs 44.0 ms per frame
+against 17.3 ms for the same list without stickiness (`down2`), while OUR
+measured costs are flat or LOWER in the sticky case — the same signature as
+round three, at the child-count scale instead of the window-area scale.
 
-- Every row boundary crossing runs `onHoverIn`/`onHoverOut` → `setState` →
-  React render → Yoga → allocation → repaint — a full framework cycle to
-  swap a background color, where a native `GtkListBox` swaps a CSS class
-  and does nothing else.
-- During scrolling, frames are already busy with scroll work, and pointer
-  motion is handled on the same loop — hover would queue behind it with no
-  separate mechanism at fault.
+The mechanism is not in doubt: the pin-correction tick (`scroll-view.tsx`
+~441) calls `queueAllocate(content)` on nearly every frame of motion, and
+`content`'s `allocate()` (`use-layout-child.ts` ~274) then unconditionally
+`sizeAllocate`s every child — about 1268 a second — to move one pinned
+widget. Skipping the children whose rect had not changed proved the cost is
+real: 44.0 ms down to 19.8. It also broke five test files, both times it was
+tried, in the naive form and in a corrected form that additionally tracked
+which widgets we had queued work for.
 
-### Method
+**What is NOT the cause.** The corrected attempt was diagnosed as a
+wrapper-identity problem: `GtkScrolledWindow` wraps a non-scrollable child in
+an internal `GtkViewport`, and the theory was that `getParent()` through that
+never-explicitly-referenced widget returns a different JS object than the
+React ref to the same `ScrolledWindow`, so a `WeakSet` of ancestors silently
+misses. **Measured, and it is false.** A probe comparing a traversed widget
+against the React ref for the same object returns true through the viewport
+hop, and repeated traversals return the same object:
 
-`examples/hover-probe` renders the SAME row list two ways, so the method is
-identical for both: `HOVER_MODE=pressable` is a FlatList of `Pressable` rows
-with `style={({ hovered }) => ...}` — the exact pattern hn-app, the gallery
-and adwaita-primitives already use for row hover. `HOVER_MODE=native` is a
-plain `Gtk.ListBox`/`Gtk.ListBoxRow` built with the raw GI classes (not
-JSX — see the file for why: a `wrapReactNative` component nested inside
-another one resolves its Yoga node against the wrong parent and never gets
-allocated), relying entirely on GTK's own prelight/`:hover` handling — no
-Pressable, no FlatList, no Yoga on the rows at all. Both arms fill a
-maximized window, so `scripts/perf/run-hover-probe-session.sh` can drive a
-REAL pointer with ydotool (relative moves, clamped to a screen corner first
-so the starting position never has to be known) without needing the
-window's on-screen coordinates.
+| Comparison                                       | Result |
+| ------------------------------------------------ | ------ |
+| `box.getParent().getParent() === scrolledRef`    | true   |
+| `sw.getFirstChild().getParent() === scrolledRef` | true   |
+| `sw.getFirstChild().getFirstChild() === boxRef`  | true   |
 
-Latency is measured as signal-to-applied, not felt: `pressable.hoverApply`
-(in `components/pressable.tsx`, `GTKX_PERF=1`) times from the native
-enter/leave signal to the resulting CSS class actually landing on the
-widget — synchronously for the direct-swap path, after the commit for the
-setState path. The native arm has no such hook by design (that is the
-point), so the probe adds one of its own, `native.hoverApply`, timing from
-the same `enter` signal to GTK's own `state-flags-changed` reporting
-PRELIGHT — both driven by the identical pointer-motion signal, so the two
-numbers are comparable despite coming from different code paths.
+So gtkx does intern wrappers by pointer, including for widgets it creates
+itself. Whatever breaks the skip, it is not identity. That conclusion was
+nearly filed upstream as a gtkx bug; verifying it first is the only reason it
+was not.
 
-### Case 2 (sidebar hover) confirmed, by about 500x
+**The other candidate**, moving the pinned header into its own small
+container, was rejected on review rather than measurement, for two
+independent reasons in our own code: `use-layout-child.ts` computes a child's
+Yoga index from its GTK sibling position, which assumes the GTK parent and
+the Yoga parent are the same container — reparenting breaks that for any
+sibling mounting while the header is pinned, which is the normal case in a
+live list. And Yoga resolves `position: absolute` against the immediate
+parent, while `FlatList` positions every cell that way relative to the list
+start — exactly the configuration the perf bar measures.
 
-Real session, maximized window, 60-row list, continuous ydotool sweep, no
-scrolling — `pressable.hoverEvent` and `pressable.hoverFullCycle` were
-equal, every single one of 283 crossings over 7s ran the full cycle:
-
-| metric (idle, at rest)   |     `pressable` (before) |     `native` |
-| ------------------------ | ------------------------: | -----------: |
-| crossings                |                       283 |     (n/a, continuous) |
-| apply, average            |                    4.85 ms |       0.01 ms |
-| apply, worst              |                   80.91 ms |       0.13 ms |
-
-Average latency is ~485x native's; the worst crossing is ~620x. Both numbers
-are the same physical event (a `GtkBox`'s `EventControllerMotion` firing
-"enter") measured to the same kind of outcome (the highlight is now applied)
-— the gap is entirely the setState-render-Yoga-allocate cycle standing
-between them, exactly hypothesis 2's shape.
-
-### Case 1 (hover during scroll): the scroll work dominates, not hover
-
-Same probe, `down`-style bouncing scroll running underneath the same
-pointer sweep. Two things are true at once here, and they point the same
-way:
-
-| metric (scroll phase)     | `pressable` (before) | `pressable` (after) |
-| -------------------------- | ---------------------: | ---------------------: |
-| `frame.avg`                |                30.29 ms |               30.95 ms |
-| `frame.veryLate`/s          |                   12.33 |                   15.92 |
-| hover apply, average        |                 6.25 ms |                0.017 ms |
-| hover apply, worst          |                11.72 ms |                 0.17 ms |
-
-Fixing hover's own cost moved the hover numbers by two orders of magnitude
-and left `frame.avg`/`frame.veryLate` unchanged (within this rig's noise —
-the whole doc's running theme). That is the signature of hypothesis 1: the
-frame budget during a scroll is already spent on scroll work, hover's own
-cost was never the dominant term there, and it needs no separate fix — it
-improves incidentally alongside whatever 006 does to the scroll loop itself,
-exactly as the task predicted. What this task's fix DOES contribute to case
-1 is one less thing competing for that budget, which is real but not the
-story; the honest read is "measured, and it's the scroll loop" for the
-scroll-phase frame cost, same as rounds one through three found for scroll
-performance generally.
-
-One caveat on the native arm's OWN scroll-phase numbers, in the interest of
-not overclaiming: `examples/hover-probe`'s native mode drives its
-`GtkAdjustment` with `setValue()` on a 16ms JS timer (there is no native
-kinetic-scroll input to synthesize headlessly), which is not necessarily
-representative of a real scrollbar drag or touchpad flick — its own
-`frame.avg` degrades similarly during that phase. That is why the case-1
-comparison above uses the `pressable` arm's before/after, not a
-pressable-vs-native comparison: the scroll-mechanics comparison is
-`scroll-perf`'s job (rounds one through three, and 006 in progress), this
-task's job was isolating hover's own cost, and the native arm answers that
-cleanly at rest (no scrolling involved) in the case-2 numbers above.
-
-### The fix
-
-`components/pressable.tsx`: hover stopped being React state. `hoveredRef`
-(a ref, not `useState`) is the single source of truth, read directly during
-render — safe here specifically because this component already mutates
-`handlersRef.current` in the render body for the press gestures, so render
-was never React-DOM-pure to begin with. Each render precomputes the CSS
-class for BOTH hover values (current and hypothetical-other) whenever
-`style` is a function and `children` is not; the native enter/leave
-handlers then swap between the two directly with `widget.addCssClass` /
-`removeCssClass`, no `setState`, no render, no Yoga, no allocation.
-
-Two cases fall back to the ordinary `setState`-driven render (a small
-`forceRender` via `useReducer`, since `hovered` is no longer state):
-`children` reading `hovered` (content, not just style, may differ — no way
-to precompute that generically), and a hover style that resolves to a
-DIFFERENT layout (padding, size, position) rather than only paint — checked
-by comparing the Yoga-relevant half of the flattened style between the two
-hover values and bailing to a real render if they differ, since a CSS class
-alone cannot reflow anything. Both are exercised by
-`tests/gtk/components/pressable-hover.gtk.test.tsx`, along with the
-common-case fast path and the "nothing reads `hovered`" no-op case.
-
-This is the same shape the round-two/three fixes took: the win comes from
-recognizing a whole category of work (React's render pipeline) is
-unreachable-by-construction for the common case, not from making that
-pipeline faster.
+**Where it stands.** The amplifier is understood and reproducible, the cost
+is quantified, and no safe fix has been found. Skipping allocations needs a
+reliable "does this widget still need allocating" signal, which GTK4 does not
+expose publicly and which our own bookkeeping has now failed to reconstruct
+twice — for a reason still unknown, since the identity theory is dead. The
+next honest step is to find out what actually breaks under the skip, with the
+same instrument-first discipline that settled rounds three and four, rather
+than to try a third variant.

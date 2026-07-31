@@ -68,7 +68,7 @@ const Harness = ({
   homeOptions,
   detailsOptions,
 }: {
-  onRef: (ref: ReturnType<typeof useNavigationContainerRef>) => void
+  onRef: (ref: ReturnType<typeof useNavigationContainerRef<ParamList>>) => void
   homeOptions?: StackNavigationOptions
   detailsOptions?: StackNavigationOptions
 }) => {
@@ -131,7 +131,7 @@ it("does not warn for animation: none — it is a fully supported value", async 
 })
 
 it("re-enables animate-transitions when the active screen has no override", async () => {
-  let navRef!: ReturnType<typeof useNavigationContainerRef>
+  let navRef!: ReturnType<typeof useNavigationContainerRef<ParamList>>
   const { container } = await render(
     <Harness
       onRef={(ref) => {
@@ -156,7 +156,7 @@ it("re-enables animate-transitions when the active screen has no override", asyn
 })
 
 it("a specific requested type still animates, and warns once in development", async () => {
-  let navRef!: ReturnType<typeof useNavigationContainerRef>
+  let navRef!: ReturnType<typeof useNavigationContainerRef<ParamList>>
   const { container } = await render(
     <Harness
       onRef={(ref) => {
