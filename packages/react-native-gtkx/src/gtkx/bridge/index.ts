@@ -18,32 +18,19 @@ import * as Pango from "@gtkx/gi/pango"
 
 export { Adw, Gdk, Gio, GLib, Graphene, Gsk, Gtk, Pango }
 
-export {
-  AdwApplicationWindow,
-  AdwHeaderBar,
-  AdwNavigationPage,
-  AdwNavigationSplitView,
-  AdwNavigationView,
-  AdwToolbarView,
-} from "@gtkx/jsx/adw"
+// GtkApplication and GtkGestureClick are not Gtk.Widget subclasses (an
+// application object and an event controller, respectively), so the widget
+// surface generator never sees them — kept here by hand, same as before it
+// existed.
+export { GtkApplication, GtkGestureClick } from "@gtkx/jsx/gtk"
 
-export {
-  GtkApplication,
-  GtkApplicationWindow,
-  GtkBox,
-  GtkButton,
-  GtkEntry,
-  GtkGestureClick,
-  GtkLabel,
-  GtkListBox,
-  GtkListBoxRow,
-  GtkPicture,
-  GtkScrolledWindow,
-  GtkSpinner,
-  GtkSwitch,
-  GtkTextView,
-  GtkWindow,
-} from "@gtkx/jsx/gtk"
+// The full widget surface — every GTK/Adwaita class gtkx binds that derives
+// Gtk.Widget, raw. src/gtk/widgets.generated and src/adw/widgets.generated
+// wrap most of them with wrapReactNative; this file is where @gtkx/jsx is
+// still allowed to be imported directly (see the eslint carve-out for
+// src/gtkx/bridge/**), so they pull the raw widgets from here rather than
+// from @gtkx/jsx themselves.
+export * from "./widgets.generated"
 
 export {
   createPortal,
