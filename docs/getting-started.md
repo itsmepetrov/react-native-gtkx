@@ -1,6 +1,6 @@
 # Getting Started
 
-react-native-gtkx lets you write native Linux (GTK4/Adwaita) applications with the React Native API. No `@gtkx/*` imports in your code — only `react-native`.
+react-native-gtkx lets you write native Linux (GTK4/Adwaita) applications with the React Native API. Portable code only needs `react-native`; reach for `react-native-gtkx/gtk` and `react-native-gtkx/adw` for a GTK/Adwaita widget the portable API has no concept of — a real `GtkListBox` row, an `AdwHeaderBar`, an `Adw.NavigationView` stack (see [platform-layer.md](platform-layer.md)). Raw `@gtkx/*` imports are the last resort for the handful of things neither subpath re-exports.
 
 ## Requirements
 
