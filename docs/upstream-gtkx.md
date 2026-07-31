@@ -13,14 +13,20 @@ would like. Bugs first, then API asks, then the workaround receipts.
 
 ## Bugs
 
-### 1. `useSignal` freezes the handler for components deep in the tree
+### 1. `useEffectEvent` never refreshes inside `forwardRef`/`memo` (`case 11`/`case 15` fall through)
 
-**rc.2 regression.** `useSignal` routes the handler through React's
-`useEffectEvent`; under the gtkx reconciler that event ref stops
-refreshing for components deep in the tree. Instrumented case: a
-ScrollView at its 8th render still ran the closure from its first render
-(`closure_render=1, effectEvent_render=1, ref_render=8`). Simple, shallow
-components refresh correctly, which is why this survives casual testing.
+**Resolved upstream — recorded here for the receipt.** We originally read
+this as a `useSignal` bug that worsened with tree depth. It is neither:
+`react-reconciler@0.33.0` refreshes `useEffectEvent` in
+`commitBeforeMutationEffects` only for `case 0` (FunctionComponent) —
+`case 11` (ForwardRef) and `case 15` (SimpleMemoComponent) fall through
+unrefreshed, so any `useEffectEvent` inside a `memo` or `forwardRef`
+component is pinned to its mount closure permanently. It has nothing to do
+with `useSignal`: plain `useEffectEvent` called only from inside an Effect
+fails identically. It reproduced for us because our `ScrollView` is
+`forwardRef<ScrollViewHandle, ScrollViewProps>` (`scroll-view.tsx:136`)
+with the `useSignal` calls inside it — tree depth was coincidental, not
+the trigger (confirmed by @eugeniodepalo, gtkx-org/gtkx#467).
 
 Impact for us: a frozen scroll handler windows a virtualized list against
 a stale `count = 0`, so the first scroll unmounts every row — any list fed
@@ -29,32 +35,45 @@ by an async fetch comes up blank. This contradicts the documented contract
 as a bug rather than a semantics change.
 
 - Repro: `packages/react-native-gtkx/tests/gtk/components/list-late-data.gtk.test.tsx`
-  (fails without our wrapper).
+  (fails without our wrapper); `tests/gtk/bridge/use-signal-upstream.gtk.test.tsx`
+  reproduces the underlying `useEffectEvent` defect directly (wrapping the
+  subscriber in `memo` is what triggers it, not an async parent update).
 - Our workaround: `src/gtkx/bridge/use-signal.ts`, tagged
   `RC2-WORKAROUND(use-signal-stale-handler)` — latest handler in a ref
   refreshed by an insertion effect, stable wrapper handed to gtkx.
-- Ask: fix the refresh under the reconciler, or drop `useEffectEvent`
-  from `useSignal` until it behaves. Note the hazard is wider than
-  `useSignal`: any future hook built on `useEffectEvent` inherits it.
-- Not root-caused by us to the exact React-internals trigger — happy to
-  bisect further with a hint about where to look.
+- Status: React fixed the refresh on the 19.3 line (the refresh moved into
+  `commitMutationEffectsOnFiber` under `case 0: case 11: case 14: case 15:`,
+  ahead of child traversal). There is no stable gtkx `0.34.x` yet — the
+  canaries pin an exact React prerelease peer — so our ref wrapper stays
+  until a stable React 19.3 ships. Note the hazard is wider than
+  `useSignal`: any future hook built on `useEffectEvent` inherits it until
+  then.
 
 ### 2. `gtkx codegen` reports "up to date" when the store is missing
 
-`npm install` prunes `node_modules/.gtkx` (npm considers `@gtkx/gi` and
-`@gtkx/jsx` extraneous). After that, `gtkx codegen` from the project root
-prints _"bindings up to date"_ while the store is genuinely absent, and
-the next `gtkx dev` regenerates from scratch mid-startup. `rm -rf
-node_modules/.gtkx` before codegen is the reliable fix, so the freshness
-check appears to trust a stamp that outlives the store.
+**Resolved upstream (gtkx-org/gtkx#470).** `npm install` prunes
+`node_modules/.gtkx` (npm considers `@gtkx/gi` and `@gtkx/jsx` extraneous).
+After that, `gtkx codegen` from the project root used to print _"bindings
+up to date"_ while the store was genuinely absent — `isReactStoreStale`
+checked the jsx self-link but not the manifest, and checked neither for
+gi, so a store missing an entry point still read as fresh. A second facet:
+running with the cwd _inside_ `node_modules` reported success without ever
+creating a store, because `ensureGenerated`'s "no config resolves" fallback
+(meant for the `dev`/`build` preflight) was also read by the `codegen`
+command as "up to date". PR #470 checks both entry points for both stores,
+and gives `codegen` a `requireProject` option so a command explicitly asked
+to generate bindings fails instead of silently reporting success.
 
-A second facet: run with the cwd _inside_ `node_modules` and codegen
-reports success without ever creating the store. We work around it by
-running the CLI from the project that owns that `node_modules`
-(`src/runner/index.ts`).
-
-- Ask: validate the store's existence, not just the stamp; and either
-  make an in-node_modules cwd work or fail loudly.
+On our side: `@gtkx/cli` is meant for apps, not libraries (confirmed by
+@eugeniodepalo) — a library generating bindings on a consumer's behalf
+should use the programmatic `@gtkx/codegen` API instead, which takes the
+GIR libraries and store paths directly. We switched `src/runner/index.ts`'s
+`run-linux` codegen step to it, which removed our own cwd-reconstruction
+workaround entirely rather than needing it fixed: there is no cwd for a
+library call to get wrong, and `@gtkx/codegen`'s own fingerprint check
+(unaffected by the bug above, which lived only in `@gtkx/cli`'s separate
+freshness layer) regenerates a missing/pruned store rather than
+misreporting it.
 
 ### 3. Writing a boxed struct into another boxed struct's field crashes
 
@@ -144,7 +163,6 @@ Kept only until upstream changes; each has a row in
 | Workaround                                    | Why it exists                                                                                           |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `resolve.dedupe` over `@gtkx/*` in our preset | two copies of the runtime abort GLib (`g_log_set_writer_func` twice)                                    |
-| codegen cwd juggling                          | see bug 2                                                                                               |
 | `use-signal` wrapper                          | see bug 1                                                                                               |
 | `renderHook` window wrapper in tests          | `renderHook` mounts into a bare `Gtk.Box`, so window-dependent APIs (`Dimensions`) have nothing to read |
 | `ColorStop` construction wrapped in try/catch | see bug 3 — a broken gradient stop degrades to "no paint" instead of crashing                           |
