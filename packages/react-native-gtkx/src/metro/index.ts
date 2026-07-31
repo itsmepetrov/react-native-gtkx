@@ -165,6 +165,20 @@ export const withLinuxPlatform = <T extends MetroLikeConfig>(
         platform,
       )
     }
+    // Same alias, same guard shape, for the SVG compat subpath (see
+    // src/svg-compat/index.ts and the vite preset's rewriteReactNativeImport
+    // — kept in sync deliberately rather than sharing code, Metro and vite
+    // resolvers have never shared an implementation in this package).
+    if (
+      moduleName === "react-native-svg" ||
+      moduleName.startsWith("react-native-svg/")
+    ) {
+      return fallback(
+        context,
+        moduleName.replace(/^react-native-svg/, "react-native-gtkx/svg"),
+        platform,
+      )
+    }
     return fallback(context, moduleName, platform)
   }
 

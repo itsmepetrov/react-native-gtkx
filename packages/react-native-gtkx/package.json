@@ -47,6 +47,10 @@
       "types": "./dist/navigation/index.d.ts",
       "default": "./dist/navigation/index.js"
     },
+    "./svg": {
+      "types": "./dist/svg-compat/index.d.ts",
+      "default": "./dist/svg-compat/index.js"
+    },
     "./gtk": {
       "types": "./dist/gtk/index.d.ts",
       "default": "./dist/gtk/index.js"

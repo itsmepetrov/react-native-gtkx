@@ -55,6 +55,19 @@ test("redirects react-native (and subpaths) to react-native-gtkx on linux", () =
   ])
 })
 
+test("redirects react-native-svg (and subpaths) to the compat subpath on linux", () => {
+  const { context, calls } = makeContext()
+  resolve(context, "react-native-svg", "linux")
+  resolve(context, "react-native-svg/lib/index", "linux")
+  resolve(context, "react-native-svg-icons", "linux")
+  expect(calls).toEqual([
+    ["react-native-gtkx/svg", "linux"],
+    ["react-native-gtkx/svg/lib/index", "linux"],
+    // lookalike: left untouched.
+    ["react-native-svg-icons", "linux"],
+  ])
+})
+
 test("externals resolve to __hostModules proxies", () => {
   const { context } = makeContext()
   for (const name of ["@gtkx/react", "react", "yoga-layout"]) {
