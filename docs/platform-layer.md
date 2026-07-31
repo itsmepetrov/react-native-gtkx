@@ -176,23 +176,25 @@ React Native content in the header bar and a raw `GtkButton` beside it.
 
 Everything `Adw.NavigationView` has, plus:
 
-| Prop                                        | Meaning                                                                         |
-| ------------------------------------------- | ------------------------------------------------------------------------------- |
-| `stack`                                     | ordered page tags, root first. This is the navigation state                     |
-| `onPopped(tag)`                             | the WIDGET popped by itself. Not called for pops you caused by changing `stack` |
-| `onPageClosed(tag)`                         | a closing page finished animating out and left the tree                         |
-| `onTransitionStart()` / `onTransitionEnd()` | a push/pop/replace began / finished                                             |
-| `transitionDuration`                        | ms, default 400 — used for retention and the callbacks                          |
-| `ref`                                       | the `Adw.NavigationView` itself, for anything not modelled here                 |
+| Prop                                        | Meaning                                                                                                                                                                                 |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stack`                                     | ordered page tags, root first. This is the navigation state                                                                                                                             |
+| `animateTransitions`                        | forwarded straight to `Adw.NavigationView`'s own property. Default true — GTK has one transition style, so this is only ever on/off                                                     |
+| `onPopped(tag)`                             | the WIDGET popped by itself. Not called for pops you caused by changing `stack`                                                                                                         |
+| `onPageClosed(tag)`                         | a closing page finished animating out and left the tree                                                                                                                                 |
+| `onTransitionStart()` / `onTransitionEnd()` | a push/pop/replace began / finished, the latter driven by the transitioning page's own `shown`/`hidden` signal                                                                          |
+| `transitionDuration`                        | ms, default 400 — a fallback window for retention and the callbacks above, used only when a page's own transition signal never arrives; not a measurement of the real transition length |
+| `ref`                                       | the `Adw.NavigationView` itself, for anything not modelled here                                                                                                                         |
 
 Pages not listed in `stack` are still accepted as children and simply are not
 shown, so a router may hand over all of its screens at once.
 
 **Exit animations are handled for you.** When a tag leaves `stack`, the widget
-still animates the page out for about 200 ms. `NavigationStack` keeps a
-snapshot of that page until its `hidden` signal (with a timer fallback for
-compositors that never emit it), so you never have to keep rendering pages
-you already consider gone.
+still animates the page out. `NavigationStack` keeps a snapshot of that page
+until its `hidden` signal (with a timer fallback for two cases where that
+signal never arrives on its own: compositors that never emit it, and a page
+skipped over entirely by a multi-hop pop — see `transitionDuration` above),
+so you never have to keep rendering pages you already consider gone.
 
 ### React Native content in native chrome
 

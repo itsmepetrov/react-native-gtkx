@@ -49,6 +49,7 @@ const STACK_OPTION_KEYS: ReadonlySet<string> = new Set([
   "headerLeft",
   "headerRight",
   "gestureEnabled",
+  "animation",
 ])
 
 export type StackNavigationOptions = {
@@ -68,6 +69,18 @@ export type StackNavigationOptions = {
    *  for this screen (the page's Adwaita can-pop). Programmatic goBack
    *  still works. Also the mechanism behind usePreventRemove. */
   gestureEnabled?: boolean
+  /**
+   * `"none"` turns transitions off; any other value (including the
+   * `@react-navigation/native-stack` style names like `"slide_from_bottom"`
+   * or `"fade"`) turns them on. GTK has exactly one transition style, so a
+   * specific requested type cannot be honored — only whether to animate at
+   * all can be. Requesting a specific (non-`"default"`) type still animates,
+   * with the standard Adwaita transition, and warns once in development.
+   * Read from whichever screen is currently on top of the visible stack, so
+   * setting it uniformly via `screenOptions` is the reliable way to use it —
+   * see docs/api.md.
+   */
+  animation?: string
 }
 
 // Matches @react-navigation/stack's and @react-navigation/native-stack's
@@ -83,11 +96,12 @@ export type StackNavigationEventMap = {
   /** Fires when a push/pop/replace transition starts, once per involved
    *  route (not once per gesture or user tap). */
   transitionStart: { data: { closing: boolean } }
-  /** Fires when the transition settles. Timer-based (see docs/api.md):
-   *  Adwaita has no real transition-end signal, so this is Adwaita's
-   *  documented transition length after the start, not observed
-   *  completion. Native pops (back button, Escape, back gesture) do not
-   *  fire this at all today — see docs/api.md. */
+  /** Fires when the transition settles, driven by the page's own real
+   *  `shown`/`hidden` AdwNavigationPage signal (see docs/api.md and the
+   *  primitive's beginTransition) — not a timer, except as a fallback for
+   *  the rare cases where neither signal arrives. Native pops (back
+   *  button, Escape, back gesture) do not fire this at all today — see
+   *  docs/api.md. */
   transitionEnd: { data: { closing: boolean } }
 }
 
@@ -134,6 +148,20 @@ const StackNavigator = ({
   const visibleRoutes = state.routes.slice(0, state.index + 1)
   const visibleKeys = visibleRoutes.map((route) => route.key)
 
+  // GTK has exactly one transition style and one animate-transitions switch
+  // for the whole view — there is no per-route knob to hand it. The screen
+  // actually being navigated TO is the natural read of "the currently
+  // relevant animation option": for a push, that is the new top of stack;
+  // for a pop, the screen the pop reveals. An app that sets `animation`
+  // uniformly through `screenOptions` (the common case for "turn animation
+  // off entirely") gets the same value everywhere, so this only matters
+  // when different screens genuinely disagree.
+  const activeRouteKey = visibleKeys[visibleKeys.length - 1]
+  const activeDescriptor = activeRouteKey
+    ? (descriptors[activeRouteKey] as StackDescriptor | undefined)
+    : undefined
+  const animateTransitions = activeDescriptor?.options.animation !== "none"
+
   useEffect(() => {
     for (const route of state.routes) {
       const descriptor = descriptors[route.key] as StackDescriptor | undefined
@@ -143,6 +171,20 @@ const StackNavigator = ({
           descriptor.options,
           STACK_OPTION_KEYS,
         )
+        const { animation } = descriptor.options
+        // "animation" itself is in STACK_OPTION_KEYS above (it IS honored,
+        // collapsed to a boolean), so the call above never flags it. A
+        // specific requested type — anything but "none" (handled) or
+        // "default" (not a specific request) — is a separate, narrower
+        // complaint, forced through the same verdict lookup and the same
+        // once-per-navigator-per-key dedupe with an empty supported set.
+        if (
+          animation !== undefined &&
+          animation !== "none" &&
+          animation !== "default"
+        ) {
+          warnIgnoredOptions("createStackNavigator", { animation }, new Set())
+        }
       }
     }
   }, [state, descriptors])
@@ -185,11 +227,12 @@ const StackNavigator = ({
   //   view-level "a transition just began" signal with no per-route
   //   identity — the adapter supplies that identity itself by diffing
   //   visibleKeys against the previous render's visible keys.
-  // - transitionEnd for an OPENING route also rides the view-level,
-  //   timer-based onTransitionEnd (Adwaita has no real transition-end
-  //   signal — see docs/api.md): the pushed screen stays mounted
-  //   indefinitely once it is the active page, so nothing about waiting
-  //   out the fixed transitionDuration is unsafe here.
+  // - transitionEnd for an OPENING route also rides the view-level
+  //   onTransitionEnd, itself driven by the pushed page's own real "shown"
+  //   signal (transitionDuration only as a fallback — see docs/api.md and
+  //   the primitive's beginTransition): the pushed screen stays mounted
+  //   indefinitely once it is the active page, so nothing about that is
+  //   unsafe here either way.
   // - transitionEnd for a CLOSING route rides onPageClosed instead, fired
   //   PER TAG when that page's exit actually finishes (a real GTK
   //   "hidden" signal when available, the primitive's own timer as
@@ -296,6 +339,7 @@ const StackNavigator = ({
       <StackView
         routeKeys={visibleKeys}
         descriptors={descriptors}
+        animateTransitions={animateTransitions}
         onPopped={handlePopped}
         onTransitionStart={handleTransitionStart}
         onTransitionEnd={handleTransitionEnd}
@@ -308,6 +352,7 @@ const StackNavigator = ({
 type StackViewProps = {
   routeKeys: string[]
   descriptors: Record<string, unknown>
+  animateTransitions: boolean
   onPopped: (tag: string) => void
   onTransitionStart: () => void
   onTransitionEnd: () => void
@@ -325,6 +370,7 @@ type StackViewProps = {
 const StackView = ({
   routeKeys,
   descriptors,
+  animateTransitions,
   onPopped,
   onTransitionStart,
   onTransitionEnd,
@@ -334,6 +380,7 @@ const StackView = ({
   return (
     <NavigationStack
       stack={routeKeys}
+      animateTransitions={animateTransitions}
       onPopped={onPopped}
       onTransitionStart={onTransitionStart}
       onTransitionEnd={onTransitionEnd}

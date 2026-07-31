@@ -104,3 +104,39 @@ it("pushes from plain state and reports a native pop back", async () => {
     expect(view!.getVisiblePage()?.getTag()).toBe("home")
   })
 })
+
+it("forwards animateTransitions straight to Adw.NavigationView's own property", async () => {
+  const Static = ({ animate }: { animate: boolean }) => (
+    <NavigationStack
+      stack={["home"]}
+      animateTransitions={animate}
+    >
+      <NavigationStackPage
+        tag="home"
+        title="Home"
+      >
+        <SlotContent>
+          <View style={{ flex: 1 }}>
+            <Text>home body</Text>
+          </View>
+        </SlotContent>
+      </NavigationStackPage>
+    </NavigationStack>
+  )
+
+  const off = await render(<Static animate={false} />)
+  const offView = findNavigationView(off.container)!
+  expect(offView.getAnimateTransitions()).toBe(false)
+
+  const on = await render(<Static animate={true} />)
+  const onView = findNavigationView(on.container)!
+  expect(onView.getAnimateTransitions()).toBe(true)
+
+  // The prop is not just applied at mount — it is a live GObject property,
+  // reactive like any other prop this primitive forwards.
+  const { rerender, container } = await render(<Static animate={true} />)
+  const liveView = findNavigationView(container)!
+  expect(liveView.getAnimateTransitions()).toBe(true)
+  await rerender(<Static animate={false} />)
+  expect(liveView.getAnimateTransitions()).toBe(false)
+})
