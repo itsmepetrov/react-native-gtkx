@@ -265,3 +265,32 @@ virtio-gpu is display-only for Linux guests. Getting GL would mean rebuilding
 the VM on UTM's QEMU backend with `virtio-gpu-gl`. Worth knowing before
 chasing renderer settings — and worth remembering that the software renderer
 is what made the wasted allocations above expensive enough to notice.
+
+### The cold-row estimate: a lead that closed itself
+
+Round two left one open item: cold rows (never measured, so `estimatedItemSize`
+off by ~30 px) cost roughly double, 46 version bumps and 40 ms/s of
+Yoga+commit against none and 20 ms/s warm. The obvious fix was a running
+average of measured sizes instead of the fixed estimate. It was tried and
+reverted, for two separate reasons, both worth keeping.
+
+**The lead was already gone.** Those numbers predate the unchanged-rect fix
+above. Measured after it, on the same probe, a cold flick and a warm flick
+over the same rows are indistinguishable — 17.26 against 17.68 ms per frame.
+The version bumps still happen on the cold pass; they simply no longer cost
+frames, because the re-render they trigger no longer drags a full container
+re-allocation behind it.
+
+**And the fix was worse than the problem.** The running average did what it
+was meant to — version bumps on the cold flick went 17.7/s to zero — while
+frame time went the wrong way, 17.3 to 51.3 ms on steady scroll, worse than
+before any of today's work. The reason is structural: a fixed estimate is
+wrong per row, but a running average is wrong for EVERY unmeasured row at
+once. With 500 rows, a tenth of a pixel of drift in the average moves the
+content extent by ~50 px, so each measurement re-lays-out the entire list
+instead of one row. Trading a handful of local corrections for continuous
+global churn is a bad trade at any list length.
+
+If this is ever revisited, the shape that avoids the trap is a frozen
+estimate: average the first handful of measured rows, then stop updating it,
+so the content extent settles instead of drifting.
