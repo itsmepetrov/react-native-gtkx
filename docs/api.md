@@ -130,13 +130,30 @@ const App = () => (
   to react to size"); the property flip happens inside GTK's own
   allocation pass, costing no React render for the resize itself. Unset by
   default — no `AdwBreakpointBin` is mounted at all, so existing consumers
-  see no behavior change. Selecting a row while collapsed reveals content
-  (`AdwNavigationSplitView.showContent`, also a plain native property
-  write, not React state); the native back button that then appears
+  see no behavior change. Any route becoming active while collapsed
+  reveals content (`AdwNavigationSplitView.showContent`, a plain native
+  property write, not React state) — a row click OR a programmatic
+  `navigate()`/`jumpTo()`; the native back button that then appears
   reverses it. Re-selecting the same, already-active row after that also
   reveals content again — GTK's `row-selected` does not refire for a
   re-click with no selection change, so this is driven by `row-activated`
-  (fires on every click) in addition.
+  (fires on every click) in addition. The reverse direction — the split
+  view's own back button, Escape or back gesture hiding content again — is
+  observed too: it fires a `sidebarShown` event
+  (`navigation.addListener("sidebarShown", …)`) on the currently active
+  route, the same event-map protocol `createStackNavigator`'s
+  `transitionStart`/`transitionEnd` use. Nothing in react-navigation state
+  changes when this fires — TabRouter has no "closed" concept, the same
+  route stays focused, only the pane did — so it exists purely for an app
+  that wants to react (`examples/tasks-nav`'s `ContentScreen` resets its
+  own in-screen "open task" state on it). Never fired for content being
+  revealed (that direction is already an ordinary state change) or when
+  `collapseWidth` is unset. Resizing back above `collapseWidth` and then
+  back below it again does NOT reset `showContent` or the selection —
+  confirmed empirically, not assumed — both simply persist across the
+  round trip, the same size-class behavior a mobile master-detail app
+  relies on; see docs/research/navigation-extensibility.md for the
+  evidence.
 - Sidebar screen options `headerLeft` / `headerRight` / `headerTitle`:
   `() => ReactNode` — the content HeaderBar's own start/end/title, per
   screen, on top of the one navigator-wide default. This is what lets one
@@ -215,6 +232,16 @@ const App = () => (
     there is nothing to hook a `transitionStart` into. Only
     programmatic navigation (`navigate`, `goBack`, `dispatch`, …) fires
     `transitionStart`/`transitionEnd`.
+- The sidebar navigator emits `sidebarShown` (`{ data: undefined }`) on a
+  screen's `navigation` object — the collapsed-mode counterpart of a native
+  pop, and the one case where a native, user-driven interaction (the split
+  view's own back button, Escape, the back gesture) DOES get an event: the
+  widget-level property that changes (`showContent`) has no
+  react-navigation state behind it at all, so there is no state change for
+  an app to observe any other way. Fired on the active route only when
+  `showContent` goes from shown back to hidden, and only while
+  `collapseWidth` is set; never fired for content being revealed (that
+  already shows up as an ordinary focused-route change).
 - The rest of the react-navigation surface — `useNavigation`, `useRoute`,
   `useFocusEffect`, `useIsFocused`, `useNavigationContainerRef`,
   `CommonActions`, `StackActions`, `usePreventRemove`, `NavigationContainer`

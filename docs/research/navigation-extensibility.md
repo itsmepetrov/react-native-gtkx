@@ -164,6 +164,64 @@ closing exactly what the tasks-app port above found still narrow:**
 through `createSidebarNavigator` instead of directly on
 `AdwNavigationSplitView`/`AdwActionRow`.
 
+**Resolved by `collapse-nav` (a live bug report on `examples/tasks-nav`),
+one property lower than `collapseWidth` itself:** `collapseWidth` flips
+`AdwNavigationSplitView.collapsed` correctly, but `showContent` — WHICH
+pane is visible while collapsed — was only half-wired: a row click already
+revealed content, but nothing observed the split view's own back
+affordance putting it back, and a plain programmatic `navigate()` (no row
+click) did not reveal content at all. On read, this looked like it might
+be the same "the breakpoint effect sets only `collapsed`" gap all over
+again; it mostly was not — see `sidebar.tsx`'s own file header for what was
+already there. Three questions were settled empirically, with a throwaway
+GTK test written BEFORE any implementation code, rather than assumed from
+libadwaita's docs:
+
+- _Does a cold-started, already-collapsed window default to content or the
+  sidebar?_ Sidebar — `showContent` defaults to `false`, confirmed by
+  mounting a window already narrower than `collapseWidth` and reading the
+  property on first layout, before any code (ours or the app's) ever wrote
+  to it. No fix needed.
+- _Does resizing back above `collapseWidth` and back below it need to
+  reset `showContent` or the selection?_ No — both persist across the
+  round trip, confirmed the same way (resize wide, resize narrow again,
+  read the property). This is deliberate, not an oversight: it is the same
+  size-class persistence a mobile master-detail app relies on (open an
+  item, rotate to landscape and back, still on that item), which is
+  exactly the "the way a mobile app does" behavior the bug report asked
+  for. Resetting it would have fought the platform's own default for no
+  benefit.
+- _Does an app need to observe or control the collapsed pane at all?_ One
+  direction, yes: going back. TabRouter's `state` never changes when the
+  user backs out of collapsed content (nothing is removed, the same route
+  stays focused), so there is no existing react-navigation mechanism for
+  an app to notice it happened — unlike a stack pop, which state itself
+  already reveals through the route array shrinking. A new event,
+  `sidebarShown` (`SidebarNavigationEventMap`, the same `navigation.emit`/
+  `addListener` protocol `StackNavigationEventMap`'s `transitionStart`/
+  `transitionEnd` already established — not a second protocol), fires on
+  the active route for exactly this. The forward direction (content being
+  revealed) got no event: it is already an ordinary state change an app
+  can observe the normal way, so an event there would be pure duplication.
+
+The echo risk this raises — state → widget and widget → state both touch
+the same property, could they retrigger each other? — resolved the same
+way the stack navigator's own doc warns about it: by a value asymmetry, not
+a flag. State → widget only ever WRITES `true`; widget → state only ever
+REACTS to `false`. Two disjoint values, so neither side can mistake the
+other's write for the other direction.
+
+Fixed: `sidebar.tsx`'s `state.index` effect now also calls
+`showContentIfCollapsed()` (previously only `onRowActivated` did, so a
+click worked but a programmatic navigation left the user stranded on the
+sidebar exactly like the report — a real, reproducible gap, not merely a
+theoretical one); `onNotifyShowContent` is observed and re-emitted as
+`sidebarShown`. `examples/gallery` (no `collapseWidth`) is untouched by
+construction — every changed path checks `getCollapsed()` /
+`collapseWidth !== undefined` live first. See
+`tests/gtk/navigation/sidebar-collapse.gtk.test.tsx` for the automated
+version of all four findings above, and docs/api.md for the public shape.
+
 **Found while building `examples/tasks-nav`, narrower, still open:**
 
 - _The sidebar PANE's own chrome has no customization hook_ — its

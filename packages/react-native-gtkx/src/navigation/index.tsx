@@ -452,6 +452,8 @@ const StackView = ({
 export {
   createSidebarNavigator,
   type HeaderButton,
+  type SidebarNavigationEventMap,
+  type SidebarNavigationHelpers,
   type SidebarNavigationOptions,
   type SidebarScreenConfig,
   type SidebarScreenProps,

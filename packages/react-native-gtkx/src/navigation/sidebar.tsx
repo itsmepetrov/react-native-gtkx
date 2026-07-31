@@ -9,6 +9,32 @@
 // row-selected signal dispatches jumpTo only when it disagrees with state,
 // and an effect re-selects the row when state changes programmatically —
 // the guard on both sides breaks the echo loop.
+//
+// Collapsed-pane sync is the same two-way protocol, one property lower:
+// `AdwNavigationSplitView.showContent` decides which pane is visible while
+// collapsed, the same role `NavigationStack`'s tag stack plays for the
+// stack navigator.
+// - state → widget: any route becoming active — a row click OR a
+//   programmatic navigate()/jumpTo() — reveals content. Re-activating the
+//   ALREADY-active row (state does not change) still needs to reveal
+//   content too, which is why this rides BOTH the state.index effect and
+//   row-activated (GTK's row-selected does not refire without an actual
+//   selection change).
+// - widget → state: the split view's own back affordance (back button,
+//   Escape, back gesture) flips `showContent` to false with no
+//   react-navigation involvement at all — the counterpart to the stack
+//   navigator's native pop. Unlike a stack pop, nothing is removed from
+//   TabRouter's state (the same route stays focused, only the pane
+//   changed), so there is nothing to dispatch; this is purely observed and
+//   re-emitted as `SidebarNavigationEventMap`'s `sidebarShown`, for an app
+//   that wants to react (see docs/research/navigation-extensibility.md).
+// - the echo guard: the state → widget side only ever WRITES `true`, and
+//   the widget → state side only ever REACTS to `false` — two disjoint
+//   values, so neither direction can mistake the other's write for a
+//   widget-initiated back and re-trigger it. See docs/api.md for the
+//   evidence on window-resize behavior (selection and pane both survive an
+//   expand/re-collapse round trip unchanged, by the widget's own design,
+//   not by any code here).
 import {
   createNavigatorFactory,
   TabActions,
@@ -118,6 +144,33 @@ export type HeaderButton = {
   onPress: () => void
 }
 
+// Matches the shape of StackNavigationEventMap (src/navigation/index.tsx):
+// a real react-navigation event, not a bespoke navigator prop, so it is
+// consumed the standard way (`navigation.addListener` / `options.listeners`)
+// with no second protocol for an app to learn.
+export type SidebarNavigationEventMap = {
+  /**
+   * The split view's own back affordance (back button, Escape, the back
+   * gesture) hid the content pane while collapsed, returning to the
+   * sidebar — `AdwNavigationSplitView`'s `showContent` going false, the
+   * counterpart to the stack navigator's native pop. Unlike a stack pop,
+   * TabRouter's state does NOT change: nothing was removed, the same route
+   * stays focused, only the pane did. Fired on the currently active route,
+   * so an app that wants to react — e.g. resetting an in-screen "item
+   * open" state that only makes sense while content is visible, the way
+   * `examples/tasks-nav`'s `ContentScreen` does — can listen without
+   * polling the split view itself.
+   *
+   * Never fired when `collapseWidth` is unset (uncollapsed behavior is
+   * unchanged), and never fired for content being REVEALED — that
+   * direction already shows up as an ordinary state change (the newly
+   * focused route re-rendering), so it needs no event of its own. See
+   * docs/research/navigation-extensibility.md for why no event exists for
+   * the forward direction.
+   */
+  sidebarShown: { data: undefined }
+}
+
 type SidebarDescriptor = {
   options: SidebarNavigationOptions
   render: () => ReactNode
@@ -157,7 +210,7 @@ const SidebarNavigator = ({
       Record<string, unknown>,
       Record<string, () => void>,
       SidebarNavigationOptions,
-      Record<string, unknown>
+      SidebarNavigationEventMap
     >(TabRouter, {
       initialRouteName,
       screenOptions,
@@ -215,6 +268,18 @@ const SidebarNavigator = ({
     }
   }, [])
 
+  // Selecting a sidebar row while collapsed must reveal the content page —
+  // AdwNavigationSplitView already defines the mini push/pop for that
+  // (`showContent`), so this is a plain native property write through the
+  // ref, not React state. Reads `getCollapsed()` live: when collapseWidth
+  // is unset the split view never collapses, so this is always a no-op.
+  const showContentIfCollapsed = (): void => {
+    const splitView = splitViewRef.current
+    if (splitView?.getCollapsed()) {
+      splitView.setShowContent(true)
+    }
+  }
+
   // State → native selection (initial mount and programmatic navigation).
   useEffect(() => {
     const list = listRef.current
@@ -225,6 +290,16 @@ const SidebarNavigator = ({
     if (row && list.getSelectedRow() !== row) {
       list.selectRow(row)
     }
+    // Every route becoming active reveals content while collapsed, not
+    // just a row CLICK — found empirically (see updates/001/progress.md):
+    // a plain programmatic navigate()/jumpTo() (no row involved at all)
+    // changed state and re-selected the row above, but nothing told the
+    // split view to show it, leaving the user stranded on the sidebar
+    // exactly like the reported bug, just without a click in the loop.
+    // Re-clicking the row already at this index does NOT come through
+    // here (state.index does not change), which is exactly why
+    // onRowActivated below still needs its own call.
+    showContentIfCollapsed()
   }, [state.index])
 
   // Unlike the stack navigator (see src/navigation/index.tsx), `state.routes`
@@ -260,21 +335,31 @@ const SidebarNavigator = ({
   const activeOptions = optionsOf(active.key)
   const activeButtons = activeOptions.headerButtons ?? headerButtons
 
-  // Selecting a sidebar row while collapsed must reveal the content page —
-  // AdwNavigationSplitView already defines the mini push/pop for that
-  // (`showContent`), so this is a plain native property write through the
-  // ref, not React state. Reads `getCollapsed()` live: when collapseWidth
-  // is unset the split view never collapses, so this is always a no-op.
-  const showContentIfCollapsed = (): void => {
-    const splitView = splitViewRef.current
-    if (splitView?.getCollapsed()) {
-      splitView.setShowContent(true)
+  // Widget → state: AdwNavigationSplitView's `showContent` notifies on
+  // EVERY change, including the ones showContentIfCollapsed above just
+  // made (value: true) — filtered out here, since this code only ever
+  // WRITES `true` itself, so a `false` can only originate from the split
+  // view's own back affordance (back button, Escape, back gesture). No
+  // react-navigation state changes as a result (see
+  // SidebarNavigationEventMap's doc for why there is nothing TO change),
+  // only an event an app may listen for. This asymmetry — forward writes
+  // filtered by value on this side, backward reads never touching
+  // state.index on the other — is what keeps the two directions from ever
+  // triggering each other.
+  const handleShowContentChanged = (value: boolean | null): void => {
+    if (value !== false || collapseWidth === undefined) {
+      return
     }
+    navigation.emit({
+      type: "sidebarShown",
+      target: state.routes[state.index]!.key,
+    })
   }
 
   const splitView = (
     <AdwNavigationSplitView
       ref={splitViewRef}
+      onNotifyShowContent={handleShowContentChanged}
       sidebar={
         <AdwNavigationPage
           title={sidebarTitle}
@@ -430,17 +515,29 @@ const SidebarNavigator = ({
   )
 }
 
+// Mirrors src/navigation/index.tsx's StackNavigationHelpers: a screen that
+// reaches its navigation prop through `useNavigation()` rather than
+// `SidebarScreenProps` (e.g. one `component` shared across several routes,
+// as `examples/tasks-nav`'s `ContentScreen` is) still needs a typed handle
+// on `sidebarShown` — `useNavigation<SidebarNavigationHelpers>()` gives it
+// one without spelling out the full `NavigationProp` generic list.
+export type SidebarNavigationHelpers<
+  ParamList extends ParamListBase = ParamListBase,
+  RouteName extends keyof ParamList = keyof ParamList,
+> = NavigationProp<
+  ParamList,
+  RouteName,
+  TabNavigationState<ParamList>,
+  SidebarNavigationOptions,
+  SidebarNavigationEventMap
+>
+
 export type SidebarScreenProps<
   ParamList extends ParamListBase = ParamListBase,
   RouteName extends keyof ParamList = keyof ParamList,
 > = {
   route: RouteProp<ParamList, RouteName>
-  navigation: NavigationProp<
-    ParamList,
-    RouteName,
-    TabNavigationState<ParamList>,
-    SidebarNavigationOptions
-  >
+  navigation: SidebarNavigationHelpers<ParamList, RouteName>
 }
 
 export type SidebarScreenConfig<
@@ -460,7 +557,7 @@ interface SidebarTypeBag extends NavigatorTypeBagBase {
   ParamList: ParamListBase
   State: TabNavigationState<ParamListBase>
   ScreenOptions: SidebarNavigationOptions
-  EventMap: Record<string, unknown>
+  EventMap: SidebarNavigationEventMap
   ActionHelpers: Record<string, () => void>
   Navigator: typeof SidebarNavigator
 }
