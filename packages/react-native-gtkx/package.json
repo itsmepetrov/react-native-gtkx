@@ -94,12 +94,16 @@
   },
   "peerDependencies": {
     "@react-navigation/native": "^8.0.0-alpha.40 || ^8.0.0",
+    "esbuild": "^0.25.0 || ^0.26.0 || ^0.27.0 || ^0.28.0",
     "react": "^19.2",
     "vite": "^7.0.0 || ^8.0.0",
     "vitest": ">=4"
   },
   "peerDependenciesMeta": {
     "@react-navigation/native": {
+      "optional": true
+    },
+    "esbuild": {
       "optional": true
     },
     "vite": {

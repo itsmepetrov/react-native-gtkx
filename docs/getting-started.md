@@ -245,7 +245,7 @@ node node_modules/react-native-gtkx/dist/runner/host.js dist/main.jsbundle
 current directory, exactly like `run-linux` itself). Any ordinary
 `npm install` of the app already has that `node_modules`; the difference
 from the vite path only matters when packaging for a machine that never
-ran one — see `scripts/build-deb.sh`'s Metro branch, which builds that
+ran one — see `scripts/build-deb.ts`'s Metro branch, which builds that
 closure itself: a fresh, isolated install of the locally-packed
 `react-native-gtkx` plus `gtkx codegen`, never a copy of a monorepo's own
 hoisted `node_modules` (which would prove nothing about what a real install
@@ -255,17 +255,32 @@ needs).
 
 The Metro artifact above is the worse of the two — a jsbundle plus a
 runtime `node_modules` tree — so it's the one that got a true
-single-executable build: `scripts/build-sea.sh <example> <out-dir>` (needs
-`npm run build:dist` and `react-native build-linux` run first) produces
-`<out-dir>/app`, one file, no `node_modules`, no system Node required to
-run it:
+single-executable build. Ask `build-linux` for it with `--sea`:
 
 ```bash
-npm run build:dist                            # react-native-gtkx itself
-(cd examples/hn-app && npx react-native build-linux)
-bash scripts/build-sea.sh examples/hn-app /tmp/sea-out
-/tmp/sea-out/app                              # runs standalone
+npx react-native build-linux --sea            # in the app root
+./dist/<your-package-name>                    # one file, runs standalone
 ```
+
+That produces the jsbundle exactly as before, then one additional file
+next to it: no `node_modules`, no system Node required to run it. Where it
+goes is `--sea-output <path>`; the default is `dist/<package name>` with
+any npm scope stripped.
+
+Two things `--sea` needs that a plain `build-linux` does not:
+
+- **esbuild**, an optional peer dependency (`npm install --save-dev
+esbuild`). Every app would otherwise pay an installed bundler for a
+  build mode most apps never use.
+- **The gtkx codegen store**, and therefore GTK development headers on the
+  build machine. A plain `build-linux` deliberately needs neither — Metro
+  externalizes every GTK module — but the SEA inlines
+  `virtual:gtkx-config`, which re-exports `@gtkx/jsx/metadata`, a codegen
+  product. `build-linux --sea` runs `gtkx codegen` itself; it just can't
+  do so on a machine without the headers.
+
+`postject` is fetched through `npx` at build time, so the first run needs
+network access.
 
 This follows gtkx's own tutorial (`gtkx-org/gtkx examples/tutorial`:
 esbuild-bundle to CJS, `node --experimental-sea-config`, postject injects
@@ -310,7 +325,7 @@ Node binary. Still likely the right trade for "download and run with
 nothing preinstalled" — but the maintainer should decide that knowing the
 number, not be surprised by it.
 
-**Proof, not just a build**: copied `dist/app` alone (no `node_modules`,
+**Proof, not just a build**: copied the executable alone (no `node_modules`,
 no source tree) to an isolated directory on the VM, removed `/usr/bin/node`
 from the system (confirmed `command -v node` found nothing), launched the
 binary under a headless Wayland compositor, and screenshotted a live,
