@@ -19,11 +19,11 @@ import {
  * widget hands out a rectangle and the RN tree should lay out inside it.
  *
  * ```tsx
- * <AdwNavigationPage tag="home" title="Home">
+ * <NavigationStackPage tag="home" title="Home">
  *   <PageContent>
  *     <View style={{ flex: 1 }}>…</View>
  *   </PageContent>
- * </AdwNavigationPage>
+ * </NavigationStackPage>
  * ```
  */
 export const PageContent = NestedRoot

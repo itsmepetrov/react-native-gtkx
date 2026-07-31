@@ -16,12 +16,12 @@ import { Pressable, StyleSheet, Text, View } from "react-native"
 import {
   Adw,
   AdwHeaderBar,
-  AdwNavigationPage,
-  AdwNavigationStack,
   AdwToolbarView,
   GtkButton,
   GtkEntry,
   IntrinsicContent,
+  NavigationStack,
+  NavigationStackPage,
   PageContent,
 } from "react-native-gtkx/adwaita"
 
@@ -52,7 +52,7 @@ const App = () => {
     setStack((current) => current.slice(0, current.indexOf(tag) + 1))
 
   return (
-    <AdwNavigationStack
+    <NavigationStack
       ref={viewRef}
       stack={stack}
       // The widget popped by itself: the back button, Escape, the back
@@ -61,7 +61,7 @@ const App = () => {
         setStack((current) => current.filter((entry) => entry !== tag))
       }
     >
-      <AdwNavigationPage
+      <NavigationStackPage
         tag="index"
         title="Articles"
       >
@@ -118,10 +118,10 @@ const App = () => {
             </View>
           </PageContent>
         </AdwToolbarView>
-      </AdwNavigationPage>
+      </NavigationStackPage>
 
       {ARTICLES.map((article) => (
-        <AdwNavigationPage
+        <NavigationStackPage
           key={article.tag}
           tag={article.tag}
           title={article.title}
@@ -139,10 +139,10 @@ const App = () => {
               </View>
             </PageContent>
           </AdwToolbarView>
-        </AdwNavigationPage>
+        </NavigationStackPage>
       ))}
 
-      <AdwNavigationPage
+      <NavigationStackPage
         tag="about"
         title="Deeper"
       >
@@ -156,8 +156,8 @@ const App = () => {
             </View>
           </PageContent>
         </AdwToolbarView>
-      </AdwNavigationPage>
-    </AdwNavigationStack>
+      </NavigationStackPage>
+    </NavigationStack>
   )
 }
 
