@@ -53,6 +53,39 @@ const run = (command: string, args: string[]): void => {
 }
 
 /**
+ * Drops the debug symbols from the copied Node binary. Worth a step of its
+ * own because the saving is not marginal: the `node` binary distributed by
+ * NodeSource for Ubuntu ships `with debug_info, not stripped` — measured at
+ * 117 MB, and 98 MB after `strip --strip-all`. Nothing in a SEA needs those
+ * symbols; the only cost is that a crash inside Node's own C++ produces an
+ * unsymbolicated backtrace.
+ *
+ * Runs BEFORE postject, never after: `--strip-all` removes non-allocated
+ * sections, which is exactly what the injected NODE_SEA_BLOB is.
+ *
+ * Best-effort — a build machine without binutils still produces a working
+ * (larger) executable rather than failing, so this cannot become a new
+ * install requirement for a build that worked yesterday.
+ */
+const stripSymbols = (file: string): void => {
+  const before = statSync(file).size
+  const result = spawnSync("strip", ["--strip-all", file], {
+    stdio: ["ignore", "ignore", "pipe"],
+  })
+  if (result.error || result.status !== 0) {
+    console.warn(
+      "[react-native-gtkx] skipped stripping symbols (no usable `strip`) — " +
+        "the executable will be tens of MB larger than it needs to be",
+    )
+    return
+  }
+  const saved = (before - statSync(file).size) / 1024 / 1024
+  console.warn(
+    `[react-native-gtkx] stripped debug symbols (-${saved.toFixed(0)} MB)`,
+  )
+}
+
+/**
  * Produces the middle artifact: one self-contained CJS file with the app,
  * its whole node_modules closure and the native addon inlined, run by a
  * system `node`. Everything the SEA is except the embedded Node runtime —
@@ -123,6 +156,7 @@ export const assembleSea = async (
     // is injected; macOS refuses to exec it until the signature is gone.
     run("codesign", ["--remove-signature", outFile])
   }
+  stripSymbols(outFile)
 
   console.warn("[react-native-gtkx] injecting the SEA blob…")
   run("npx", [

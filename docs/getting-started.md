@@ -268,7 +268,7 @@ app:
 | -------------- | -------------------------- | ---------------------------------- | ---------------------------- |
 | _(none)_       | `dist/main.jsbundle`       | a `node_modules` tree **and** Node | 0.4 MB + the tree            |
 | `--standalone` | `dist/<name>.cjs`          | Node only (`Depends: nodejs`)      | 6.9 MB                       |
-| `--sea`        | `dist/<name>` (executable) | nothing at all                     | 122 MB                       |
+| `--sea`        | `dist/<name>` (executable) | nothing at all                     | 104 MB (30 MB compressed)    |
 
 ```bash
 npx react-native build-linux --standalone     # in the app root
@@ -291,7 +291,19 @@ counts: the plain jsbundle looks smaller only because its `node_modules`
 tree is not weighed. **Pick `--sea` for "download this one file and run
 it"**, where nothing can be assumed to be installed. They are not
 competing implementations: `--sea` is `--standalone` with a copy of Node
-wrapped around it, and that copy is the entire 115 MB between them.
+wrapped around it, and that copy is the entire 97 MB between them.
+
+That copy is stripped of its debug symbols as part of the build, which is
+not a micro-optimisation: the `node` binary NodeSource distributes for
+Ubuntu ships `with debug_info, not stripped` — 117 MB, 98 MB after
+`strip --strip-all` — so 19 MB of every unstripped SEA is debug
+information for Node's own C++, which nothing in a shipped app can use.
+The step is best-effort: a build machine without binutils gets a warning
+and a larger executable, not a failed build. It also runs strictly before
+postject, since `--strip-all` removes exactly the kind of non-allocated
+section the injected blob is. What remains after that is Node itself, and
+it does not compress away either — but it does compress: 30 MB with
+`zstd -19`, which is what a download actually costs.
 
 The native addon (`@gtkx/native-*.node`, a real `dlopen`ed library) cannot
 be JavaScript, so both artifacts carry it as bytes — a SEA asset in the
@@ -352,13 +364,12 @@ short version:
   has no "app root" to read a config file from at runtime.
 
 Size, measured on the one platform this was built and proven on
-(linux-arm64): **123 MB** for `hn-app`. Node itself is ~116 MB of that —
-the bundled app code plus the embedded native addon is under 7 MB. Worth
-saying plainly: that is a heavy download for what a Hacker News reader
-needs, and it will not shrink much as long as the artifact carries a full
-Node binary. Still likely the right trade for "download and run with
-nothing preinstalled" — but the maintainer should decide that knowing the
-number, not be surprised by it.
+(linux-arm64): **104 MB** for `hn-app`, 30 MB compressed. Stripped Node is
+~98 MB of that — the bundled app code plus the embedded native addon is
+under 7 MB. Worth saying plainly: that is still a heavy download for what
+a Hacker News reader needs, and it will not shrink further while the
+artifact carries a full Node binary. That is the trade `--sea` exists to
+make, and `--standalone` is the answer whenever it isn't worth it.
 
 **Proof, not just a build**: copied the executable alone (no `node_modules`,
 no source tree) to an isolated directory on the VM, removed `/usr/bin/node`
