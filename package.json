@@ -20,7 +20,15 @@
     "mcp:check-data": "node scripts/generate-mcp-data.mjs --check",
     "build:dist": "npm run build:dist -w react-native-gtkx",
     "watch:dist": "npm run watch:dist -w react-native-gtkx",
-    "check:package": "npm run build:dist && attw --pack packages/react-native-gtkx --profile esm-only --ignore-rules internal-resolution-error"
+    "check:package": "npm run build:dist && attw --pack packages/react-native-gtkx --profile esm-only --ignore-rules internal-resolution-error",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{js,mjs,cjs,ts,tsx}": [
+      "prettier --write",
+      "eslint --fix"
+    ],
+    "*.{json,md,yml,yaml}": "prettier --write"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
@@ -37,7 +45,9 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.8.0",
+    "husky": "^9.1.7",
     "jiti": "^2.7.0",
+    "lint-staged": "^17.3.0",
     "prettier": "^3.9.6",
     "typescript": "^5.9.0",
     "typescript-eslint": "^8.65.0",

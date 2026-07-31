@@ -55,6 +55,20 @@ The helper is `scripts/vm.ts`. The VM address is machine-specific: export `VM_HO
 
 After `sync`, run `npm install && npm run codegen && npm run build:dist` once in the VM (dist folders are not synced; build:dist emits the whole package including the metro/runner/vite subpaths). GL rendering in the Apple backend is software (llvmpipe) — EGL/ZINK warnings at startup are normal.
 
+## Pre-commit hooks
+
+`npm install` sets up husky hooks under `.husky/` via the `prepare` script. On every commit, `.husky/pre-commit` runs two things, in order:
+
+1. **lint-staged** — `prettier --write` on every staged file prettier supports (`js`/`mjs`/`cjs`/`ts`/`tsx`/`json`/`md`/`yml`/`yaml`), then `eslint --fix` on staged `js`/`ts`/`tsx`. Only staged files are touched, so it never reformats the rest of the tree as a side effect. It deliberately does NOT run `typecheck` or the test suite — this repo's tests need GTK and only run in the Linux VM (see above), and a hook that cannot pass on a macOS dev machine is worse than no hook at all. Run `npm run typecheck && npm test` yourself (or on the VM, or let CI do it) before pushing.
+
+2. **MCP data regeneration** (`scripts/check-mcp-data-staged.ts`) — `packages/react-native-gtkx/src/mcp/data/generated.ts` is generated from `docs/api.md`, `docs/platform-layer.md`, `docs/getting-started.md`, `docs/gtkx-rc2-notes.md`, `docs/research/navigation-extensibility.md` and `scripts/widget-surface/classification.json` by `scripts/generate-mcp-data.mjs`. Three PRs in a row edited one of those inputs, forgot to re-run the generator, and only found out a full CI cycle later when `npm run mcp:check-data` failed. If a commit touches one of the inputs and the committed `generated.ts` is stale, this hook regenerates it and stages the result for you — the regeneration is deterministic, so there is nothing for a human to decide — and prints one line (`pre-commit: regenerated and staged ...`) so the extra file in your commit isn't a surprise. A commit that doesn't touch any input skips this step after a single fast `git diff` call.
+
+Hooks are installed by `prepare` whenever you `npm install`; CI skips installing them (`HUSKY: 0` in the workflow env) since CI never commits and the check has nothing to do there.
+
+### Bypassing a hook
+
+`git commit --no-verify` skips `pre-commit` entirely. Legitimate reasons: a WIP commit on a private branch you intend to squash or rebase before it's shared, or lint-staged/eslint flagging something you've confirmed is a false positive that you'll address before the branch merges. Do not use it to skip past a real formatting or lint failure, and there is no legitimate reason to bypass the mcp-data step specifically — it is silent and free when there's nothing to do, so if it's firing when it shouldn't, that's a bug in `scripts/check-mcp-data-staged.ts` to fix, not something to routinely route around.
+
 ## Multi-root architecture
 
 One `LayoutEngine` per layout root. The window path (`AppRegistry`) mounts

@@ -13,6 +13,10 @@ jobs:
     container: ubuntu:26.04
     env:
       DEBIAN_FRONTEND: noninteractive
+      # husky's prepare script would otherwise set core.hooksPath here too —
+      # harmless (CI never commits), but pointless, and CI is the one place
+      # a hook is guaranteed not to run against a developer's own changes.
+      HUSKY: 0
     steps:
       - name: System dependencies (GTK4 + introspection + headless Wayland)
         run: |
