@@ -8,6 +8,7 @@ import { expect, it } from "vitest"
 import type { Adw, Gtk } from "../../../src/gtkx/bridge/index"
 import { Text, View } from "../../../src/index"
 import {
+  CommonActions,
   createStackNavigator,
   NavigationContainer,
   useNavigation,
@@ -113,7 +114,7 @@ it("navigate/goBack drive the NavigationView and a native pop drives state", asy
 
   // navigate → the view pushes the Details page; the page carries the
   // options title and the route key tag.
-  navRef.navigate("Details" as never)
+  navRef.dispatch(CommonActions.navigate("Details"))
   await waitFor(() => {
     expect(screen.getByText("details screen (route Details)")).toBeTruthy()
     const visible = view!.getVisiblePage()
@@ -130,7 +131,7 @@ it("navigate/goBack drive the NavigationView and a native pop drives state", asy
 
   // Push again, then pop NATIVELY (what the HeaderBar back button does):
   // react-navigation state must follow — the Details route unmounts.
-  navRef.navigate("Details" as never)
+  navRef.dispatch(CommonActions.navigate("Details"))
   await waitFor(() => {
     expect(view!.getVisiblePage()?.getTitle()).toBe("Details page")
   })

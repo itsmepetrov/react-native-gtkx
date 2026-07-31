@@ -9,6 +9,7 @@ import { expect, it } from "vitest"
 import type { Adw, Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
 import { Text, View } from "../../../src/index"
 import {
+  CommonActions,
   createStackNavigator,
   NavigationContainer,
   useNavigationContainerRef,
@@ -100,7 +101,7 @@ it("a prevented route reports canPop false, then pops once the guard lifts", asy
   })
   const view = findNavigationView(window.getChild())!
 
-  navRef.navigate("Guarded" as never)
+  navRef.dispatch(CommonActions.navigate("Guarded"))
   await waitFor(() => {
     expect(screen.getByText("guarded body")).toBeTruthy()
   })

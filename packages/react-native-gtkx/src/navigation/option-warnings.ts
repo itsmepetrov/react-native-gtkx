@@ -34,7 +34,14 @@ const VERDICTS: Record<string, string> = {
   navigationBarHidden: "no Android navigation bar on desktop",
   orientation: "window orientation is the compositor's business",
   autoHideHomeIndicator: "no home indicator on desktop",
+  // detachInactiveScreens/freezeOnBlur (native-stack v7) collapsed into
+  // inactiveBehavior (v8, 'pause' | 'unmount' | 'none'). All three are
+  // flagged the same way: our stack always keeps pushed pages mounted —
+  // there is no unmount/freeze knob to offer.
+  detachInactiveScreens: "screens below the stack top already stay mounted",
   freezeOnBlur: "screens below the stack top already stay mounted",
+  inactiveBehavior:
+    "screens below the stack top already stay mounted; there is no unmount/freeze knob",
   contentStyle: "style a wrapper View inside the screen instead",
 }
 
