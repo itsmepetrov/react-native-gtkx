@@ -124,6 +124,75 @@ widget at all, so it was never a candidate for wrapping in the first place.
 Nothing here is unreachable — every raw export above is still exported,
 by name, from `react-native-gtkx/gtk` or `/adw`, exactly as gtkx binds it.
 
+### Auxiliary objects, not widgets at all
+
+A further set of real JSX elements gtkx provides are not `Gtk.Widget` or
+`Adw.Widget` subclasses either, so `scripts/generate-widget-surface.mjs`
+never sees them at all — same reason `GtkGestureClick` above is hand-kept
+rather than generated, just a wider set: actions and menus (`GSimpleAction`,
+`GMenu`), a responsive breakpoint (`AdwBreakpoint`) and the two leaf
+elements an `AdwShortcutsDialog` is built from (`AdwShortcutsSection`,
+`AdwShortcutsItem`), a text buffer and an adjustment — the model objects
+`GtkTextView`/spin- and scale-style widgets bind to (`GtkTextBuffer`,
+`GtkAdjustment`), keyboard shortcuts (`GtkShortcut`,
+`GtkShortcutController`), and the two drag-and-drop controllers
+(`GtkDragSource`, `GtkDropTarget`). All of them are exported, by name, from
+`react-native-gtkx/gtk` or `/adw`, next to `GtkApplication` and
+`GtkGestureClick`.
+
+```tsx
+<GtkApplicationWindow
+  actions={
+    <GSimpleAction
+      name="new"
+      onActivate={onNew}
+    />
+  }
+  breakpoints={
+    <AdwBreakpoint
+      condition={Adw.BreakpointCondition.parse("max-width: 500sp")}
+      onApply={() => setCollapsed(true)}
+      onUnapply={() => setCollapsed(false)}
+    />
+  }
+/>
+```
+
+**One caveat found while building `examples/tasks-app`, worth knowing before
+you rely on it in a test:** `AdwBreakpoint`'s `onApply`/`onUnapply` never
+fired in the `@gtkx/vitest` headless-sway gtk test project, even with a
+genuine `swaymsg` resize past the condition's threshold (see
+`packages/react-native-gtkx/tests/gtk/bridge/auxiliary-elements.gtk.test.tsx`)
+— but it works exactly as documented in a real GNOME session (verified with
+a throwaway app launched via `scripts/vm.sh app`). Treat it as untestable
+under headless sway today, not as broken.
+
+### GSettings
+
+`useSetting` and `useBindSetting` come straight from `@gtkx/react`, re-
+exported from `react-native-gtkx/gtk` next to the `Gio` namespace they read
+and write through:
+
+```tsx
+const [value, setValue] = useSetting(schema, "color-scheme")
+useBindSetting({
+  schema,
+  key: "window-width",
+  object: windowRef,
+  property: "defaultWidth",
+})
+```
+
+Turning a `.gschema.xml` file into the `SettingsSchema` object these hooks
+expect (`{ id, path, keys }`) is a build-time concern, not something this
+subpath does — `#data/your-schema.gschema.xml` resolves for free on the
+`gtkx dev`/`gtkx build` toolchain (the `gtkx:settings` vite plugin ships
+inside `@gtkx/cli` itself), the same way `examples/tasks-app` uses it. It is
+not wired into the Metro toolchain (`react-native run-linux`) at all — an
+app on that path has to construct the `SettingsSchema` object by hand
+(`{ id, path, keys: { "key-name": "s" } }`, matching the schema's own type
+strings) or add its own build step.
+
 ### Adwaita structure
 
 Every `Adw.Widget` subclass gtkx binds — 46 wrapped the same way as the GTK

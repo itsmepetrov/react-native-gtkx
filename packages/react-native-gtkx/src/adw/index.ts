@@ -30,3 +30,15 @@ export * from "./widgets.generated"
 // Exported as a value: it carries both the enums you need at runtime and the
 // types you need for refs — `useRef<Adw.NavigationView | null>(null)`.
 export { Adw } from "../gtkx/bridge/index"
+
+// Auxiliary JSX elements that are not Adw.Widget subclasses, so the
+// generated widget surface above never sees them: a responsive breakpoint
+// (the `breakpoints` prop of AdwApplicationWindow/AdwBreakpointBin/AdwDialog
+// takes one of these as a child) and the two leaf elements a
+// AdwShortcutsDialog's AdwShortcutsSection is built from. See
+// docs/platform-layer.md "Unwrapped by necessity".
+export {
+  AdwBreakpoint,
+  AdwShortcutsItem,
+  AdwShortcutsSection,
+} from "../gtkx/bridge/index"
