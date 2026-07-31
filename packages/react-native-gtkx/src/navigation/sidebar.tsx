@@ -133,6 +133,19 @@ const SidebarNavigator = ({
     }
   }, [state.index])
 
+  // Unlike the stack navigator (see src/navigation/index.tsx), `state.routes`
+  // here does NOT need slicing for React Navigation 8's preloaded-routes
+  // change: TabRouter sits on SwitchRouter, whose `getInitialState` puts
+  // every declared screen name into `routes` unconditionally, from the very
+  // first render — that's how switch/tab-style routers have always worked,
+  // v7 and v8 alike, since they show one of N statically known screens
+  // rather than a dynamically growing stack. `preloadedRouteKeys` in v8 is
+  // bookkeeping over those already-present routes (which of them have been
+  // pre-warmed via `navigation.preload()`); it does not add entries to
+  // `state.routes` that weren't already there. Rendering every route as a
+  // sidebar row (below) is correct both before and after v8 — confirmed by
+  // reading node_modules/@react-navigation/routers' SwitchRouter source,
+  // see updates/001/progress.md.
   const active = state.routes[state.index]!
   const activeDescriptor = descriptors[active.key] as
     SidebarDescriptor | undefined

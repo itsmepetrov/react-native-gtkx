@@ -136,10 +136,21 @@ const StackNavigator = ({
     // reporting the animation we asked for. Nothing to do.
   }
 
+  // React Navigation 8: `state.routes` is no longer just the visible stack —
+  // it is active routes followed by retained routes (closing, kept mounted
+  // for `inactiveBehavior`) and preloaded routes (`navigation.preload()`,
+  // not yet navigated to), all concatenated, with the focused/visible tail
+  // ending at `state.index` (see StackRouter's `getStateWithRoutes`: `routes:
+  // activeRoutes.concat(retainedRoutes, preloadedRoutes)`, `index:
+  // activeRoutes.length - 1`). Handing the whole array to NavigationStack
+  // would push a preloaded screen onto the widget as if it were a real page
+  // the user navigated to. Only the active slice is the visible stack.
+  const visibleRoutes = state.routes.slice(0, state.index + 1)
+
   return (
     <NavigationContent>
       <StackView
-        routeKeys={state.routes.map((route) => route.key)}
+        routeKeys={visibleRoutes.map((route) => route.key)}
         descriptors={descriptors}
         onPopped={handlePopped}
       />
