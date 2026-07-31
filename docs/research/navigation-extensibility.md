@@ -73,36 +73,11 @@ still instructive:
 - _Screen props and options had to be hand-rolled._ Fixed:
   `createStackNavigator<ParamList>()` types `Stack.Screen`, its options and
   the screen props (`examples/hn-app` relies on it).
-- _`SidebarNavigationOptions` was `{ title }` only — no per-row icon,
-  colored dot or count._ This was `examples/tasks-app`'s (PR #18) exact
-  complaint, and the reason it built its own sidebar directly on
-  `AdwActionRow` instead of the navigator. Fixed: `icon`, `color`
-  (mutually exclusive, `color` wins if both are set) and `count` (hidden
-  at 0), rendered as `AdwActionRow` — the same widget that example's
-  hand-rolled sidebar used. `examples/tasks-nav` (navigation-depth-2
-  epic) is the same navigational shape, now through the navigator.
-- _No collapse at narrow widths._ Also from tasks-app's README. Fixed
-  through a native `Adw.Breakpoint`, not a `useWindowDimensions`
-  conditional — a new opt-in `collapseWidth` prop wraps the split view in
-  an `AdwBreakpointBin` and registers a setter on `collapsed` directly
-  through GObject, inside GTK's own allocation pass; a resize costs no
-  React render. See [../platform-layer.md](../platform-layer.md), "Two
-  ways to react to size", for the general mechanism and why no
-  `useBreakpoint` hook exists.
-- _One static content header shared by the whole navigator._ Tasks-app's
-  third complaint, and the one the navigation-depth-2 PRD explicitly
-  allowed turning out to be a structural gap. It wasn't: descriptor
-  options already merge navigator-level `screenOptions` with a screen's
-  own `options` and re-resolve on `navigation.setOptions()` — core
-  react-navigation behavior. `SidebarNavigationOptions` gained
-  `headerLeft`/`headerRight`/`headerTitle`, mirroring the stack
-  navigator's own `headerLeft`/`headerRight`; a screen that toggles local
-  state and calls `setOptions` in an effect gets a header that changes
-  shape with its own selection, with no stack involved — confirming
-  tasks-app's own conclusion that a stack was never the right tool for
-  the "open an item" case. Caveat found while testing this: `setOptions`
-  merges into the previously resolved options rather than replacing them
-  (see docs/api.md).
+
+`createSidebarNavigator`'s own gaps — sidebar row rendering, collapsed
+mode and the static content header — are covered in §3 below, alongside
+the `examples/tasks-app`/`examples/tasks-nav` narrative that found and
+then closed them.
 
 On typing, one clarification worth recording, since it was raised publicly.
 The complaint was never that custom navigators cannot be typed — the docs
@@ -115,14 +90,12 @@ API (`NavigatorTypeBagBase`, `createScreenFactory`); adopting it is the
 
 ## 3. Still open
 
-<<<<<<< HEAD
 Meaningful on this platform and not done yet: toolbar top-bar style (the
 `headerTransparent`/`headerShadowVisible` analogue), search-bar options
 (`Gtk.SearchBar` / `headerSearchBarOptions` — note v8 renamed its
-`onChangeText` to `onChange`), `createSidebarNavigator`'s own row
-rendering and collapsed-mode wiring (see below), and deep links (they
-parse, but nothing delivers a URL on the desktop yet). `animation: "none"`
-is done (a screen option, see docs/api.md).
+`onChangeText` to `onChange`), and deep links (they parse, but nothing
+delivers a URL on the desktop yet). `animation: "none"` is done (a screen
+option, see docs/api.md).
 
 **Resolved by building `examples/tasks-app` (the gtkx tutorial's Tasks app,
 ported), each with a small library change, not a workaround:**
@@ -137,13 +110,18 @@ ported), each with a small library change, not a workaround:**
 - _Breakpoints_ — a real `Adw.Breakpoint`, verified live collapsing the
   window at a narrow width, but not through the navigator: through a new
   `AppRegistry.runApplication({ breakpoints })` parameter instead (the
-  navigator itself still has no collapsed-mode concept — see below). Also
-  found and recorded: `AdwBreakpoint`'s `onApply`/`onUnapply` never fire
-  under the `@gtkx/vitest` headless-sway gtk test project, in any form
-  tried (JSX prop, imperative `Adw.Breakpoint`+`addBreakpoint`, a genuine
-  `swaymsg` resize) — but fire immediately in a real GNOME session. Treat
-  it as untestable headless today, not broken; see
+  navigator itself still had no collapsed-mode concept at the time —
+  closed by `navigation-depth-2`, see below). Also found and recorded:
+  `AdwBreakpoint`'s `onApply`/`onUnapply` never fire under the
+  `@gtkx/vitest` headless-sway gtk test project, in any form tried (JSX
+  prop, imperative `Adw.Breakpoint`+`addBreakpoint`, a genuine `swaymsg`
+  resize) — but fire immediately in a real GNOME session. Treat it as
+  untestable headless today, not broken; see
   `packages/react-native-gtkx/tests/gtk/bridge/auxiliary-elements.gtk.test.tsx`.
+  (`navigation-depth-2`'s own `collapseWidth`, below, sidesteps this
+  entirely — it drives `Adw.Breakpoint.addSetter` rather than
+  `onApply`/`onUnapply`, and that IS testable headless, see
+  `tests/gtk/adw/breakpoint.gtk.test.tsx`.)
 - _Actions and menus_ were never on this list by name, but turned out to
   be the same kind of gap: `AppRegistry.runApplication` had no way to
   attach a `GSimpleAction`, `actionAccels` or a `GtkShortcutController` to
@@ -151,18 +129,51 @@ ported), each with a small library change, not a workaround:**
   button to route anywhere at all. Closed the same way, with
   `applicationActions`/`actionAccels`/`windowActions`/`windowControllers`.
 
-**Narrowed by the same port, still genuinely open:**
+**Resolved by building `examples/tasks-nav` (`navigation-depth-2` epic),
+closing exactly what the tasks-app port above found still narrow:**
 
 - _Sidebar row rendering and collapsed mode_ — `createSidebarNavigator`'s
-  `SidebarNavigationOptions` is `{ title }` only: no per-row icon/color/
-  count, and no collapsed/breakpoint wiring of its own (an app has to
+  `SidebarNavigationOptions` was `{ title }` only: no per-row icon/color/
+  count, and no collapsed/breakpoint wiring of its own (tasks-app had to
   reach `AppRegistry`'s `breakpoints` directly and drive `collapsed`
-  itself, as `examples/tasks-app` does). A single static content header
-  shared by every screen was also too rigid for that app's content pane
-  (a filter toggle group vs. a back button, depending on selection). The
-  navigator was evaluated for that app and dropped in favor of building
-  directly on `AdwNavigationSplitView`/`AdwActionRow` — see the example's
-  README for the full reasoning.
+  itself). Fixed: `icon`/`color`/`count` (rendered as `AdwActionRow`, the
+  same widget tasks-app's own hand-rolled sidebar used) and an opt-in
+  `collapseWidth` prop, driving collapse through the navigator itself via
+  a native `Adw.Breakpoint` — not a `useWindowDimensions` conditional; see
+  [../platform-layer.md](../platform-layer.md), "Two ways to react to
+  size", for the mechanism and why no `useBreakpoint` hook exists.
+- _One static content header shared by the whole navigator_ — the same
+  port's other finding: a filter toggle group vs. a back button,
+  depending on selection, did not fit one static header. The
+  `navigation-depth-2` PRD explicitly allowed this turning out to be a
+  structural gap; it wasn't — descriptor options already merge
+  navigator-level `screenOptions` with a screen's own `options` and
+  re-resolve on `navigation.setOptions()`, core react-navigation behavior.
+  `SidebarNavigationOptions` gained `headerLeft`/`headerRight`/
+  `headerTitle`, mirroring the stack navigator's own `headerLeft`/
+  `headerRight`; a screen that toggles local state and calls
+  `setOptions` in an effect gets a header that changes shape with its own
+  selection, no stack involved — confirming tasks-app's own conclusion
+  that a stack was never the right tool for the "open an item" case.
+  Caveat found while testing this: `setOptions` merges into the
+  previously resolved options rather than replacing them (see
+  docs/api.md).
+
+`examples/tasks-nav` is the same navigational shape as `examples/tasks-app`
+— smart views, colored user lists, an open-item editor — now written
+through `createSidebarNavigator` instead of directly on
+`AdwNavigationSplitView`/`AdwActionRow`.
+
+**Found while building `examples/tasks-nav`, narrower, still open:**
+
+- _The sidebar PANE's own chrome has no customization hook_ — its
+  `AdwToolbarView`'s `AdwHeaderBar` is hard-coded
+  (`src/navigation/sidebar.tsx`); a navigator consumer can set
+  `sidebarTitle` (a string) on it and nothing else. `examples/tasks-nav`'s
+  "New List" action wanted to live there (matching tasks-app's own
+  `SidebarHeader` component) but had to go on the content header instead,
+  via the navigator-level `headerButtons` prop. Not on the PRD's
+  checklist, so not built.
 - _Toasts_ — no `AdwToastOverlay`/`Adw.Toast` convenience exists anywhere
   in `react-native-gtkx` (upstream's own tutorial reaches for
   `@gtkx/components/adw`'s `ToastProvider`/`useToast`, a package this repo
@@ -171,26 +182,6 @@ ported), each with a small library change, not a workaround:**
   but the toast's own visual appearance could not be confirmed on screen
   in that session, for a reason not yet root-caused. Worth a real fix (or
   at least a live confirmation) before another app leans on it.
-=======
-Meaningful on this platform and not done yet: `animation: "none"`
-(`animate-transitions`), toolbar top-bar style (the
-`headerTransparent`/`headerShadowVisible` analogue), `Adw.Dialog`
-presentation, search-bar options (`Gtk.SearchBar` /
-`headerSearchBarOptions` — note v8 renamed its `onChangeText` to
-`onChange`), and deep links (they parse, but nothing delivers a URL on
-the desktop yet).
->>>>>>> 367a114 (Record the sidebar gaps this epic closed in the research doc)
-
-Found while building `examples/tasks-nav` (navigation-depth-2 epic): the
-sidebar PANE's own chrome has no customization hook at all — its
-`AdwToolbarView`'s `AdwHeaderBar` is hard-coded
-(`src/navigation/sidebar.tsx`), so a navigator prop can set
-`sidebarTitle` (a string) and nothing else on it. Upstream's own Tasks
-tutorial puts an "add list" button in exactly that header; this example
-worked around it by using the navigator-level `headerButtons` prop on
-the CONTENT header instead (a reasonable, if not first-choice, place for
-a persistent global action). Not on the PRD's checklist, so not built —
-recorded here rather than left implicit in the workaround.
 
 **Meaningless on desktop, skip forever:** status-bar and home-indicator
 options, large titles, blur effects, gesture direction, form sheets,
