@@ -11,10 +11,14 @@
 import { render, screen, userEvent, waitFor } from "@gtkx/testing"
 import { createRef } from "react"
 import { expect, it } from "vitest"
-import { AdwBreakpointBin } from "../../../src/adw/widgets.generated"
+import {
+  AdwBreakpointBin,
+  AdwToggleGroup,
+} from "../../../src/adw/widgets.generated"
 import {
   Adw,
   AdwBreakpoint,
+  AdwToggle,
   Gdk,
   GMenu,
   GObject,
@@ -250,4 +254,32 @@ it("carries a drag from a GtkDragSource to a GtkDropTarget", async () => {
   await userEvent.dragAndDrop(sourceRef.current!, targetRef.current!, "payload")
 
   expect(dropped).toBe("payload")
+})
+
+it("switches AdwToggleGroup's active option through its AdwToggle children", async () => {
+  const groupRef = createRef<Adw.ToggleGroup | null>()
+  const seen: (string | null)[] = []
+
+  await render(
+    <AdwToggleGroup
+      ref={groupRef}
+      activeName="all"
+      onNotifyActiveName={(name) => seen.push(name ?? null)}
+    >
+      <AdwToggle
+        name="all"
+        label="All"
+      />
+      <AdwToggle
+        name="open"
+        label="Open"
+      />
+    </AdwToggleGroup>,
+  )
+
+  groupRef.current!.setActiveName("open")
+
+  // onNotifyActiveName also fires once for the initial value on mount —
+  // only the last emission reflects the programmatic change above.
+  expect(seen.at(-1)).toBe("open")
 })

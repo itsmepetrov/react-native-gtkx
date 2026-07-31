@@ -41,4 +41,5 @@ export {
   AdwBreakpoint,
   AdwShortcutsItem,
   AdwShortcutsSection,
+  AdwToggle,
 } from "../gtkx/bridge/index"

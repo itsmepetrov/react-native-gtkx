@@ -39,6 +39,7 @@ export {
   AdwBreakpoint,
   AdwShortcutsItem,
   AdwShortcutsSection,
+  AdwToggle,
 } from "@gtkx/jsx/adw"
 export {
   GtkAdjustment,
