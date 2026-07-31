@@ -6,7 +6,7 @@
 // `closing: true`; a route whose visibility never changes — the screen
 // covered by a push, or the screen revealed by a pop — gets neither event,
 // matching upstream's per-card behavior exactly.
-import { render, screen, waitFor } from "@gtkx/testing"
+import { act, render, screen, waitFor } from "@gtkx/testing"
 import {
   CommonActions,
   NavigationContainer,
@@ -144,7 +144,12 @@ it("emits transitionStart/transitionEnd with react-navigation's own payload shap
   // animated push).
   expect(homeEvents).toHaveLength(0)
 
-  navRef.dispatch(CommonActions.navigate("Details"))
+  // A ref-based dispatch runs outside any React event handler; the resulting
+  // react-navigation state update must be flushed under act() before
+  // asserting on it.
+  await act(async () => {
+    navRef.dispatch(CommonActions.navigate("Details"))
+  })
   await waitFor(() => {
     expect(screen.getByText("details body")).toBeTruthy()
   })
@@ -162,7 +167,9 @@ it("emits transitionStart/transitionEnd with react-navigation's own payload shap
   )
   expect(homeEvents).toHaveLength(0)
 
-  navRef.goBack()
+  await act(async () => {
+    navRef.goBack()
+  })
   await waitFor(() => {
     expect(screen.getByText("home body")).toBeTruthy()
     expect(screen.queryByText("details body")).toBeNull()
@@ -200,7 +207,9 @@ it("fires neither event for a native pop — documented limitation, not a stray 
   const view = findNavigationView(window.getChild())!
 
   // A real push, same as the other test — Details gets its normal pair.
-  navRef.dispatch(CommonActions.navigate("Details"))
+  await act(async () => {
+    navRef.dispatch(CommonActions.navigate("Details"))
+  })
   await waitFor(
     () => {
       expect(detailsEvents).toEqual([
@@ -220,7 +229,11 @@ it("fires neither event for a native pop — documented limitation, not a stray 
   // syncedRef, so the sync effect that re-examines `stack` afterward finds
   // nothing left to push or pop) — so neither transitionStart nor
   // transitionEnd should fire, on either screen, at any point.
-  view.pop()
+  // A native pop, like the ref.dispatch() above, drives react-navigation
+  // state from outside React's knowledge — same act() requirement.
+  await act(async () => {
+    view.pop()
+  })
   await waitFor(() => {
     expect(screen.getByText("home body")).toBeTruthy()
     expect(screen.queryByText("details body")).toBeNull()

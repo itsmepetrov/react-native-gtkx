@@ -16,7 +16,7 @@
 // gathered from and src/navigation/sidebar.tsx's file header for the
 // protocol.
 import * as Adw from "@gtkx/gi/adw"
-import { fireEvent, render, screen, waitFor } from "@gtkx/testing"
+import { act, fireEvent, render, screen, waitFor } from "@gtkx/testing"
 import {
   CommonActions,
   createNavigationContainerRef,
@@ -393,7 +393,11 @@ it("reveals content for a programmatic navigate() too, not just a row click", as
   })
   expect(splitView!.getShowContent()).toBe(false)
 
-  navigationRef.current?.dispatch(CommonActions.navigate("second"))
+  // A ref-based dispatch runs outside any React event handler — react-
+  // navigation's state update needs act() same as a native poke would.
+  await act(async () => {
+    navigationRef.current?.dispatch(CommonActions.navigate("second"))
+  })
   await waitFor(() => {
     expect(screen.getByText("second section body")).toBeTruthy()
   })
@@ -469,7 +473,13 @@ it("emits sidebarShown for the native back affordance, without moving react-navi
   // row-activated fireEvent — actually moves the widget's own selection,
   // which the assertion below on getSelectedRow() depends on.
   const secondRow = list!.getRowAtIndex(1)!
-  list!.selectRow(secondRow)
+  // selectRow fires GTK's row-selected signal synchronously, which
+  // dispatches straight into react-navigation state (sidebar.tsx's
+  // onRowSelected) — outside any React event handler, so it needs act()
+  // like the ref.dispatch()/native pokes elsewhere in this file.
+  await act(async () => {
+    list!.selectRow(secondRow)
+  })
   await fireEvent(list!, "row-activated", secondRow)
   await waitFor(() => {
     expect(splitView!.getShowContent()).toBe(true)
@@ -518,7 +528,11 @@ it("keeps the pane and the selection across an expand/re-collapse round trip", a
   expect(splitView!.getShowContent()).toBe(false)
 
   const secondRow = list!.getRowAtIndex(1)!
-  list!.selectRow(secondRow)
+  // Same act() need as the other tests above: selectRow's row-selected
+  // signal dispatches into react-navigation state outside React's knowledge.
+  await act(async () => {
+    list!.selectRow(secondRow)
+  })
   await fireEvent(list!, "row-activated", secondRow)
   await waitFor(() => {
     expect(splitView!.getShowContent()).toBe(true)

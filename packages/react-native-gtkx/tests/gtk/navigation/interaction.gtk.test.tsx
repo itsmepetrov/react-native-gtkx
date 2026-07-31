@@ -1,7 +1,7 @@
 // A stack push registers an InteractionManager interaction for the slide's
 // duration: runAfterInteractions work scheduled by the pushed screen waits
 // until the transition finishes (the fix for content loading mid-animation).
-import { render, screen, waitFor } from "@gtkx/testing"
+import { act, render, screen, waitFor } from "@gtkx/testing"
 import {
   CommonActions,
   NavigationContainer,
@@ -87,7 +87,12 @@ it("defers runAfterInteractions work until the push transition ends, closing on 
   InteractionManager.addListener("interactionComplete", completed)
 
   const dispatchedAt = performance.now()
-  navRef.dispatch(CommonActions.navigate("Details"))
+  // A ref-based dispatch runs outside any React event handler; the resulting
+  // react-navigation state update must be flushed under act() before
+  // asserting on it.
+  await act(async () => {
+    navRef.dispatch(CommonActions.navigate("Details"))
+  })
 
   // The pushed screen mounts...
   await waitFor(() => {

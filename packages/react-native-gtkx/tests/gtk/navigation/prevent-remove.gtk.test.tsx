@@ -3,7 +3,7 @@
 // Adwaita back affordances are off), which is why a native pop can never
 // race react-navigation state. A programmatic goBack still pops once the
 // prevention is lifted.
-import { render, screen, waitFor } from "@gtkx/testing"
+import { act, render, screen, waitFor } from "@gtkx/testing"
 import {
   CommonActions,
   NavigationContainer,
@@ -101,7 +101,11 @@ it("a prevented route reports canPop false, then pops once the guard lifts", asy
   })
   const view = findNavigationView(window.getChild())!
 
-  navRef.dispatch(CommonActions.navigate("Guarded"))
+  // A ref-based dispatch runs outside any React event handler; the resulting
+  // react-navigation state update must be flushed under act() first.
+  await act(async () => {
+    navRef.dispatch(CommonActions.navigate("Guarded"))
+  })
   await waitFor(() => {
     expect(screen.getByText("guarded body")).toBeTruthy()
   })
@@ -110,12 +114,18 @@ it("a prevented route reports canPop false, then pops once the guard lifts", asy
     expect(view.getVisiblePage()?.getCanPop()).toBe(false)
   })
 
-  // Lift the guard → canPop returns → a programmatic goBack pops.
-  setGuard(false)
+  // Lift the guard → canPop returns → a programmatic goBack pops. setGuard
+  // is a setState captured straight off the component (not through a React
+  // event), so it needs the same act() flush as the ref.dispatch() above.
+  await act(async () => {
+    setGuard(false)
+  })
   await waitFor(() => {
     expect(view.getVisiblePage()?.getCanPop()).toBe(true)
   })
-  navRef.goBack()
+  await act(async () => {
+    navRef.goBack()
+  })
   await waitFor(() => {
     expect(view.getVisiblePage()?.getTitle()).toBe("Home")
     expect(screen.queryByText("guarded body")).toBeNull()

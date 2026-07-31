@@ -2,7 +2,7 @@
 // state drives Adw.NavigationView pages, and NATIVE pops (the Adwaita back
 // button — simulated here by calling pop() on the widget, exactly what the
 // button does) flow back into react-navigation state.
-import { render, screen, waitFor } from "@gtkx/testing"
+import { act, render, screen, waitFor } from "@gtkx/testing"
 import {
   CommonActions,
   NavigationContainer,
@@ -113,8 +113,12 @@ it("navigate/goBack drive the NavigationView and a native pop drives state", asy
   expect(view).not.toBeNull()
 
   // navigate → the view pushes the Details page; the page carries the
-  // options title and the route key tag.
-  navRef.dispatch(CommonActions.navigate("Details"))
+  // options title and the route key tag. A ref-based dispatch runs outside
+  // any React event handler, so the state update needs act() to flush
+  // before asserting on it.
+  await act(async () => {
+    navRef.dispatch(CommonActions.navigate("Details"))
+  })
   await waitFor(() => {
     expect(screen.getByText("details screen (route Details)")).toBeTruthy()
     const visible = view!.getVisiblePage()
@@ -122,7 +126,9 @@ it("navigate/goBack drive the NavigationView and a native pop drives state", asy
   })
 
   // goBack → the view pops back to Home; Details unmounts with its route.
-  navRef.goBack()
+  await act(async () => {
+    navRef.goBack()
+  })
   await waitFor(() => {
     const visible = view!.getVisiblePage()
     expect(visible?.getTitle()).toBe("Home")
@@ -131,11 +137,17 @@ it("navigate/goBack drive the NavigationView and a native pop drives state", asy
 
   // Push again, then pop NATIVELY (what the HeaderBar back button does):
   // react-navigation state must follow — the Details route unmounts.
-  navRef.dispatch(CommonActions.navigate("Details"))
+  await act(async () => {
+    navRef.dispatch(CommonActions.navigate("Details"))
+  })
   await waitFor(() => {
     expect(view!.getVisiblePage()?.getTitle()).toBe("Details page")
   })
-  view!.pop()
+  // The native pop drives react-navigation state from outside React's
+  // knowledge, same act() requirement as the ref-based calls above.
+  await act(async () => {
+    view!.pop()
+  })
   await waitFor(() => {
     expect(view!.getVisiblePage()?.getTitle()).toBe("Home")
     expect(screen.queryByText("details screen (route Details)")).toBeNull()
@@ -156,24 +168,32 @@ it("push stacks duplicate routes and pops unwind them one by one", async () => {
     expect(screen.getByText("home screen (route Home)")).toBeTruthy()
   })
 
-  navRef.dispatch({
-    type: "PUSH",
-    payload: { name: "Details" },
-  })
-  navRef.dispatch({
-    type: "PUSH",
-    payload: { name: "Details" },
+  // Both PUSH dispatches run outside any React event handler, back to back
+  // with no assertion between them — one act() flush covers both.
+  await act(async () => {
+    navRef.dispatch({
+      type: "PUSH",
+      payload: { name: "Details" },
+    })
+    navRef.dispatch({
+      type: "PUSH",
+      payload: { name: "Details" },
+    })
   })
   await waitFor(() => {
     expect(navRef.getRootState()?.routes).toHaveLength(3)
   })
 
-  navRef.goBack()
+  await act(async () => {
+    navRef.goBack()
+  })
   await waitFor(() => {
     expect(navRef.getRootState()?.routes).toHaveLength(2)
     expect(screen.getByText("details screen (route Details)")).toBeTruthy()
   })
-  navRef.goBack()
+  await act(async () => {
+    navRef.goBack()
+  })
   await waitFor(() => {
     expect(navRef.getRootState()?.routes).toHaveLength(1)
     expect(screen.queryByText("details screen (route Details)")).toBeNull()
