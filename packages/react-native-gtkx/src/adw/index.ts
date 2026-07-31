@@ -20,14 +20,12 @@
 // AdwNavigationView and AdwNavigationPage are the imperative originals:
 // NavigationStack above is a declarative alternative, NOT a replacement, and
 // a standard widget must never become unreachable because we wrapped it.
-export {
-  AdwApplicationWindow,
-  AdwHeaderBar,
-  AdwNavigationPage,
-  AdwNavigationSplitView,
-  AdwNavigationView,
-  AdwToolbarView,
-} from "../gtkx/bridge/index"
+// The full Adwaita widget surface lives in a generated file: every
+// Adw.Widget subclass gtkx binds, wrapped so React Native drives it. The raw
+// AdwNavigationView and AdwNavigationPage are in there too — NavigationStack
+// in react-native-gtkx/common is a declarative alternative, never a
+// replacement, and a standard widget must stay reachable.
+export * from "./widgets.generated"
 
 // Exported as a value: it carries both the enums you need at runtime and the
 // types you need for refs — `useRef<Adw.NavigationView | null>(null)`.
