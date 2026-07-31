@@ -7,7 +7,7 @@ export * from "./widgets.generated"
 // The GTK namespaces themselves, exported as values because they carry both
 // the enums you need at runtime — `hscrollbarPolicy={Gtk.PolicyType.NEVER}` —
 // and the types you need for refs.
-export { Gdk, Gio, GObject, Gtk, Pango } from "../gtkx/bridge/index"
+export { Gdk, Gio, GLib, GObject, Gtk, Pango } from "../gtkx/bridge/index"
 
 // Auxiliary JSX elements that are not Gtk.Widget subclasses, so the
 // generated widget surface above never sees them — real building blocks a
@@ -38,3 +38,10 @@ export {
   type SettingsSchemaKeys,
   type SettingValue,
 } from "../gtkx/bridge/index"
+
+// @gtkx/css — a real GTK CSS class from a tagged template, the same
+// mechanism the style prop's visual half uses under the hood. Re-exported
+// here rather than left to a direct @gtkx/css dependency for the same
+// reason the namespaces above are: one subpath for the whole gtkx toolkit
+// surface, not just Gtk.Widget subclasses.
+export { css, cx, injectGlobal } from "../gtkx/bridge/index"
