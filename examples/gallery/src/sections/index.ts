@@ -14,6 +14,7 @@ export const SECTION_IDS = [
   "lists",
   "toggles",
   "media",
+  "svg",
   "animated",
   "modal",
   "apis",

@@ -22,6 +22,7 @@ import { LayoutSection } from "./sections/layout"
 import { ListsSection } from "./sections/lists"
 import { MediaSection } from "./sections/media"
 import { ModalSection } from "./sections/modal"
+import { SvgSection } from "./sections/svg"
 import { TextSection } from "./sections/text"
 import { TogglesSection } from "./sections/toggles"
 import { ViewsSection } from "./sections/views"
@@ -43,6 +44,7 @@ const SECTION_DEFS: Record<SectionId, SectionDef> = {
   lists: { title: "Lists", Component: ListsSection },
   toggles: { title: "Toggles", Component: TogglesSection },
   media: { title: "Media", Component: MediaSection },
+  svg: { title: "Svg", Component: SvgSection },
   animated: { title: "Animated", Component: AnimatedSection },
   modal: { title: "Modal", Component: ModalSection },
   apis: { title: "APIs", Component: ApisSection },
