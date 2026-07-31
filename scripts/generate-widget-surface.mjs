@@ -222,7 +222,7 @@ emitPlatformWidgets({
   prefix: "gtk",
   wrapped: manifest.gtk.wrapped,
   raw: manifest.gtk.raw,
-  wrapReactNativeFrom: "./widget",
+  wrapReactNativeFrom: "../common/widget",
 })
 emitPlatformWidgets({
   path: ADW_WIDGETS,
@@ -232,7 +232,7 @@ emitPlatformWidgets({
   // wrapReactNative is toolkit-level, not Adwaita-specific — it lives in
   // src/gtk/widget.tsx, and src/adw only ever re-exports it (see
   // src/adw/index.ts), it never redefines it.
-  wrapReactNativeFrom: "../gtk/widget",
+  wrapReactNativeFrom: "../common/widget",
 })
 writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2) + "\n")
 
