@@ -24,7 +24,16 @@
 // usage: build-deb.ts <example> <app-title> <version> <out-dir>
 //   e.g. build-deb.ts monitor "System Monitor" 0.1.0-alpha.1 /tmp/debs
 import { execFileSync } from "node:child_process"
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -39,7 +48,9 @@ const ROOT = join(import.meta.dirname, "..")
 const DIST = join(ROOT, "examples", example, "dist")
 
 const PKG = `react-native-gtkx-${example}`
-const ARCH = execFileSync("dpkg", ["--print-architecture"], { encoding: "utf8" }).trim()
+const ARCH = execFileSync("dpkg", ["--print-architecture"], {
+  encoding: "utf8",
+}).trim()
 // Debian versions use ~ for prereleases (sorts before the release).
 const DEB_VERSION = version.replaceAll("-", "~")
 const STAGE = mkdtempSync(join(tmpdir(), "build-deb-stage-"))
@@ -59,7 +70,10 @@ try {
     join(STAGE, "usr/share/applications"),
     join(STAGE, "usr/share/icons/hicolor/scalable/apps"),
   ])
-  copyFileSync(join(ROOT, "docs/icon.svg"), join(STAGE, "usr/share/icons/hicolor/scalable/apps", `${PKG}.svg`))
+  copyFileSync(
+    join(ROOT, "docs/icon.svg"),
+    join(STAGE, "usr/share/icons/hicolor/scalable/apps", `${PKG}.svg`),
+  )
 
   const launcherPath = join(STAGE, "usr/bin", PKG)
   let descriptionBody = ""
@@ -76,7 +90,10 @@ try {
       copyFileSync(gschemas, join(STAGE, "opt", PKG, "gschemas.compiled"))
     }
 
-    writeFileSync(launcherPath, `#!/bin/sh\nexec node "/opt/${PKG}/bundle.js" "$@"\n`)
+    writeFileSync(
+      launcherPath,
+      `#!/bin/sh\nexec node "/opt/${PKG}/bundle.js" "$@"\n`,
+    )
 
     descriptionBody = ` An application written against the React Native API and rendered as native
  GTK4/Adwaita widgets by react-native-gtkx. Ships as a single Node bundle
@@ -98,13 +115,28 @@ try {
     // Glob the result rather than parse npm pack's stdout: the package's own
     // prepack script (README sync) prints a notice line first, so the
     // tarball filename is not reliably "the whole output".
-    execFileSync("npm", ["pack", "-w", "react-native-gtkx", "--pack-destination", SCRATCH, "--silent"], {
-      cwd: ROOT,
-      stdio: ["ignore", "ignore", "inherit"],
-    })
-    const tarballName = readdirSync(SCRATCH).find((name) => name.startsWith("react-native-gtkx-") && name.endsWith(".tgz"))
+    execFileSync(
+      "npm",
+      [
+        "pack",
+        "-w",
+        "react-native-gtkx",
+        "--pack-destination",
+        SCRATCH,
+        "--silent",
+      ],
+      {
+        cwd: ROOT,
+        stdio: ["ignore", "ignore", "inherit"],
+      },
+    )
+    const tarballName = readdirSync(SCRATCH).find(
+      (name) => name.startsWith("react-native-gtkx-") && name.endsWith(".tgz"),
+    )
     if (!tarballName) {
-      throw new Error(`npm pack did not produce a react-native-gtkx-*.tgz in ${SCRATCH}`)
+      throw new Error(
+        `npm pack did not produce a react-native-gtkx-*.tgz in ${SCRATCH}`,
+      )
     }
     const tarball = join(SCRATCH, tarballName)
 
@@ -164,7 +196,9 @@ try {
  widgets by react-native-gtkx. Ships its Metro release bundle alongside the
  runtime packages it does not inline (react-native-gtkx, react, yoga-layout).`
   } else {
-    console.error(`missing ${DIST}/bundle.js or ${DIST}/main.jsbundle — build the example first`)
+    console.error(
+      `missing ${DIST}/bundle.js or ${DIST}/main.jsbundle — build the example first`,
+    )
     process.exit(1)
   }
 
@@ -183,7 +217,9 @@ Categories=Utility;Development;
 `,
   )
 
-  const installedSize = execFileSync("du", ["-sk", STAGE, "--exclude=DEBIAN"], { encoding: "utf8" })
+  const installedSize = execFileSync("du", ["-sk", STAGE, "--exclude=DEBIAN"], {
+    encoding: "utf8",
+  })
     .split("\t")[0]
     ?.trim()
 
@@ -204,9 +240,18 @@ ${descriptionBody}
   )
 
   mkdirSync(out, { recursive: true })
-  execFileSync("dpkg-deb", ["--build", "--root-owner-group", STAGE, join(out, `${PKG}_${DEB_VERSION}_${ARCH}.deb`)], {
-    stdio: "inherit",
-  })
+  execFileSync(
+    "dpkg-deb",
+    [
+      "--build",
+      "--root-owner-group",
+      STAGE,
+      join(out, `${PKG}_${DEB_VERSION}_${ARCH}.deb`),
+    ],
+    {
+      stdio: "inherit",
+    },
+  )
 } finally {
   rmSync(STAGE, { recursive: true, force: true })
   rmSync(SCRATCH, { recursive: true, force: true })
