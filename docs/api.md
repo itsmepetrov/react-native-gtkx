@@ -174,6 +174,21 @@ const App = () => (
   place. A screen that flips between shapes must give every one of these
   four keys an explicit value (`undefined` counts as a real overwrite; an
   absent key does not) on every call, not just the ones currently in use.
+- Sidebar navigator prop `sidebarContent`:
+  `(props: SidebarContentProps) => ReactNode` — replaces the ENTIRE sidebar
+  pane's body, for a sidebar that needs sections, a search field, a footer,
+  or anything a flat list of rows cannot express. The sidebar's children
+  stop being "one row per screen": you draw what you like, and navigation
+  is just the `jumpTo` you were handed. `SidebarContentProps` carries
+  `routes` (key, name, resolved options, title, `focused`), `focusedIndex`
+  and `jumpTo(name)` — use those rather than dispatching yourself, so
+  selection cannot drift from navigation state. The pane's AdwHeaderBar and
+  `sidebarTitle` still belong to the navigator: this is the body under it,
+  not the chrome. Mounted as React Native content (a layout root filling
+  the pane); a sidebar built from GTK widgets wraps its own tree in
+  `WidgetContent`, the same escape hatch `contentLayout: "widget"` is for a
+  screen body. Reach for `sidebarRow` first if you only want a different
+  ROW — it keeps the navigator's list and everything attached to it.
 - Sidebar screen option `sidebarRow`: `() => ReactNode` — draw the row
   yourself instead of letting `title`/`icon`/`color`/`count` compose one.
   Those four are a convenience, not the ceiling: they build an

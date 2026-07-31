@@ -48,7 +48,13 @@ import {
   type TabNavigationState,
   type TypedNavigator,
 } from "@react-navigation/native"
-import { useEffect, useRef, type ComponentType, type ReactNode } from "react"
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  type ComponentType,
+  type ReactNode,
+} from "react"
 import { getActiveChrome } from "../components/app-registry"
 // Widgets come from the public subpaths, the same ones an app would use —
 // the adapter has no privileged access to gtkx.
@@ -218,6 +224,27 @@ type SidebarDescriptor = {
   render: () => ReactNode
 }
 
+/** What a custom sidebar needs to be able to navigate — the routing
+ *  surface the composed list uses internally, handed over so a replacement
+ *  is a real sidebar and not a decoration that cannot select anything. */
+export type SidebarContentProps = {
+  /** Every screen, in declaration order, with its resolved options. */
+  routes: {
+    key: string
+    name: string
+    options: SidebarNavigationOptions
+    /** Resolved title: `options.title`, falling back to the route name. */
+    title: string
+    /** Whether this route is the one currently showing in the content pane. */
+    focused: boolean
+  }[]
+  /** Index of the focused route in `routes`. */
+  focusedIndex: number
+  /** Focus a route by name — the same dispatch a sidebar row click makes,
+   *  including revealing the content pane when collapsed. */
+  jumpTo: (name: string) => void
+}
+
 type SidebarNavigatorProps = {
   initialRouteName?: string
   screenOptions?: SidebarNavigationOptions
@@ -235,6 +262,25 @@ type SidebarNavigatorProps = {
    * (`examples/gallery`) see no behavior change.
    */
   collapseWidth?: number
+  /**
+   * Replaces the ENTIRE sidebar pane's body — for a sidebar that needs
+   * sections, a search field, a footer, or anything a flat list of rows
+   * cannot express.
+   *
+   * The rung below this is `sidebarRow` (a screen option), which keeps the
+   * navigator's list and replaces one row; reach for that first. This one
+   * hands over the whole pane, so it also hands over the routing: use the
+   * {@link SidebarContentProps} passed in rather than trying to dispatch
+   * yourself, and selection stays consistent with navigation state.
+   *
+   * The pane's AdwHeaderBar (and `sidebarTitle`) still belong to the
+   * navigator — this is the body under it, not the chrome.
+   *
+   * Mounted as React Native content (a layout root filling the pane). A
+   * sidebar built from GTK widgets wraps its own tree in `WidgetContent`,
+   * the same escape hatch `contentLayout: "widget"` is for a screen body.
+   */
+  sidebarContent?: (props: SidebarContentProps) => ReactNode
   children: ReactNode
 }
 
@@ -244,6 +290,7 @@ const SidebarNavigator = ({
   sidebarTitle = "Sidebar",
   headerButtons,
   collapseWidth,
+  sidebarContent,
   children,
 }: SidebarNavigatorProps) => {
   const { state, descriptors, navigation, NavigationContent } =
@@ -377,6 +424,34 @@ const SidebarNavigator = ({
   const activeOptions = optionsOf(active.key)
   const activeButtons = activeOptions.headerButtons ?? headerButtons
 
+  // Dispatch only — revealing the content pane while collapsed is already
+  // the job of the state.index effect above, which fires for ANY route
+  // becoming active, programmatic ones included. Doing it here too would
+  // duplicate that, and reading splitViewRef while building the props
+  // object below would be a ref access during render.
+  const jumpTo = useCallback(
+    (name: string) => {
+      navigation.dispatch({ ...TabActions.jumpTo(name), target: state.key })
+    },
+    [navigation, state.key],
+  )
+
+  // The routing surface a custom sidebar gets (see SidebarContentProps).
+  // jumpTo goes through the SAME dispatch + reveal a row click does, so a
+  // replacement pane cannot end up selecting without showing, or showing
+  // without selecting.
+  const sidebarContentProps: SidebarContentProps = {
+    routes: state.routes.map((route, index) => ({
+      key: route.key,
+      name: route.name,
+      options: optionsOf(route.key),
+      title: titleOf(route.key, route.name),
+      focused: index === state.index,
+    })),
+    focusedIndex: state.index,
+    jumpTo,
+  }
+
   // Widget → state: AdwNavigationSplitView's `showContent` notifies on
   // EVERY change, including the ones showContentIfCollapsed above just
   // made (value: true) — filtered out here, since this code only ever
@@ -413,7 +488,17 @@ const SidebarNavigator = ({
           tag="sidebar"
         >
           <AdwToolbarView topBar={<AdwHeaderBar />}>
-            {/* The list must not dictate the window minimum: the sidebar
+            {sidebarContent ? (
+              // The whole pane is the app's, mounted the way a page body
+              // is: a layout root that FILLS the pane, so React Native
+              // content — the common case — behaves as it does anywhere
+              // else. A sidebar built from GTK widgets instead wraps
+              // itself in WidgetContent, the same escape hatch
+              // contentLayout: "widget" is for a screen body.
+              <SlotContent>{sidebarContent(sidebarContentProps)}</SlotContent>
+            ) : (
+              <>
+                {/* The list must not dictate the window minimum: the sidebar
                 scrolls when the window is shorter than its rows — the
                 Adwaita sidebar pattern (and RN semantics: scrolling is
                 explicit, never the window's).
@@ -428,103 +513,105 @@ const SidebarNavigator = ({
                 the sidebar itself — see minSidebarWidth/maxSidebarWidth
                 below — which is the Adwaita answer and leaves long titles to
                 ellipsize instead of pushing the window around. */}
-            <GtkScrolledWindow hscrollbarPolicy={Gtk.PolicyType.NEVER}>
-              <GtkListBox
-                ref={listRef}
-                cssClasses={["navigation-sidebar"]}
-                onRowSelected={(row) => {
-                  if (!row) {
-                    return
-                  }
-                  const route = state.routes[row.getIndex()]
-                  if (route && route.key !== active.key) {
-                    navigation.dispatch({
-                      ...TabActions.jumpTo(route.name),
-                      target: state.key,
-                    })
-                  }
-                }}
-                // row-selected does not refire for a re-click on the
-                // ALREADY-selected row (GTK only emits it on a selection
-                // CHANGE) — found while testing the collapsed back-button
-                // path: without this, re-clicking the same row after the
-                // native back button hid content left the user stranded
-                // on the sidebar. row-activated fires on every click
-                // regardless, so it carries only the showContent side —
-                // the dispatch above already covers an actual selection
-                // change, and calling it twice for one click would be a
-                // harmless but pointless duplicate dispatch.
-                onRowActivated={showContentIfCollapsed}
-              >
-                {state.routes.map((route) => {
-                  const options = optionsOf(route.key)
-                  if (options.sidebarRow) {
-                    // A plain GtkListBoxRow, so the list keeps handing the
-                    // row its selection and activation; everything inside
-                    // is the app's. IntrinsicContent — the size-to-content
-                    // layout root — because a row is sized by what it
-                    // holds, and React Native content (the common case for
-                    // a custom row) needs a real root to render at all.
-                    return (
-                      <GtkListBoxRow key={route.key}>
-                        <IntrinsicContent>
-                          {options.sidebarRow()}
-                        </IntrinsicContent>
-                      </GtkListBoxRow>
-                    )
-                  }
-                  // Nothing but a title: the compact row this navigator
-                  // used before rows gained an icon, a dot and a count
-                  // (GtkListBoxRow + GtkLabel, ~40px). AdwActionRow brings
-                  // Adwaita's own row metrics — around 2.5x the height —
-                  // which is right when there IS a prefix and a count to
-                  // lay out, and pure cost when there is not.
-                  // examples/gallery passes only titles and had been
-                  // paying it since.
-                  if (!options.icon && !options.color && !options.count) {
-                    return (
-                      <GtkListBoxRow key={route.key}>
-                        <GtkLabel
-                          label={titleOf(route.key, route.name)}
-                          xalign={0}
-                          marginTop={8}
-                          marginBottom={8}
-                          marginStart={6}
-                          marginEnd={6}
+                <GtkScrolledWindow hscrollbarPolicy={Gtk.PolicyType.NEVER}>
+                  <GtkListBox
+                    ref={listRef}
+                    cssClasses={["navigation-sidebar"]}
+                    onRowSelected={(row) => {
+                      if (!row) {
+                        return
+                      }
+                      const route = state.routes[row.getIndex()]
+                      if (route && route.key !== active.key) {
+                        navigation.dispatch({
+                          ...TabActions.jumpTo(route.name),
+                          target: state.key,
+                        })
+                      }
+                    }}
+                    // row-selected does not refire for a re-click on the
+                    // ALREADY-selected row (GTK only emits it on a selection
+                    // CHANGE) — found while testing the collapsed back-button
+                    // path: without this, re-clicking the same row after the
+                    // native back button hid content left the user stranded
+                    // on the sidebar. row-activated fires on every click
+                    // regardless, so it carries only the showContent side —
+                    // the dispatch above already covers an actual selection
+                    // change, and calling it twice for one click would be a
+                    // harmless but pointless duplicate dispatch.
+                    onRowActivated={showContentIfCollapsed}
+                  >
+                    {state.routes.map((route) => {
+                      const options = optionsOf(route.key)
+                      if (options.sidebarRow) {
+                        // A plain GtkListBoxRow, so the list keeps handing the
+                        // row its selection and activation; everything inside
+                        // is the app's. IntrinsicContent — the size-to-content
+                        // layout root — because a row is sized by what it
+                        // holds, and React Native content (the common case for
+                        // a custom row) needs a real root to render at all.
+                        return (
+                          <GtkListBoxRow key={route.key}>
+                            <IntrinsicContent>
+                              {options.sidebarRow()}
+                            </IntrinsicContent>
+                          </GtkListBoxRow>
+                        )
+                      }
+                      // Nothing but a title: the compact row this navigator
+                      // used before rows gained an icon, a dot and a count
+                      // (GtkListBoxRow + GtkLabel, ~40px). AdwActionRow brings
+                      // Adwaita's own row metrics — around 2.5x the height —
+                      // which is right when there IS a prefix and a count to
+                      // lay out, and pure cost when there is not.
+                      // examples/gallery passes only titles and had been
+                      // paying it since.
+                      if (!options.icon && !options.color && !options.count) {
+                        return (
+                          <GtkListBoxRow key={route.key}>
+                            <GtkLabel
+                              label={titleOf(route.key, route.name)}
+                              xalign={0}
+                              marginTop={8}
+                              marginBottom={8}
+                              marginStart={6}
+                              marginEnd={6}
+                            />
+                          </GtkListBoxRow>
+                        )
+                      }
+                      return (
+                        <AdwActionRow
+                          key={route.key}
+                          title={titleOf(route.key, route.name)}
+                          prefix={
+                            options.color ? (
+                              <GtkBox
+                                valign={Gtk.Align.CENTER}
+                                cssClasses={[listDot(options.color)]}
+                                accessibleRole={Gtk.AccessibleRole.PRESENTATION}
+                              />
+                            ) : options.icon ? (
+                              <GtkImage iconName={options.icon} />
+                            ) : undefined
+                          }
+                          suffix={
+                            options.count && options.count > 0 ? (
+                              <GtkLabel
+                                valign={Gtk.Align.CENTER}
+                                cssClasses={["dimmed", "numeric"]}
+                              >
+                                {String(options.count)}
+                              </GtkLabel>
+                            ) : undefined
+                          }
                         />
-                      </GtkListBoxRow>
-                    )
-                  }
-                  return (
-                    <AdwActionRow
-                      key={route.key}
-                      title={titleOf(route.key, route.name)}
-                      prefix={
-                        options.color ? (
-                          <GtkBox
-                            valign={Gtk.Align.CENTER}
-                            cssClasses={[listDot(options.color)]}
-                            accessibleRole={Gtk.AccessibleRole.PRESENTATION}
-                          />
-                        ) : options.icon ? (
-                          <GtkImage iconName={options.icon} />
-                        ) : undefined
-                      }
-                      suffix={
-                        options.count && options.count > 0 ? (
-                          <GtkLabel
-                            valign={Gtk.Align.CENTER}
-                            cssClasses={["dimmed", "numeric"]}
-                          >
-                            {String(options.count)}
-                          </GtkLabel>
-                        ) : undefined
-                      }
-                    />
-                  )
-                })}
-              </GtkListBox>
-            </GtkScrolledWindow>
+                      )
+                    })}
+                  </GtkListBox>
+                </GtkScrolledWindow>
+              </>
+            )}
           </AdwToolbarView>
         </AdwNavigationPage>
       }
