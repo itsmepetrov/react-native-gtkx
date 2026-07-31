@@ -34,6 +34,18 @@ export { GtkApplication, GtkGestureClick } from "@gtkx/jsx/gtk"
 // a responsive breakpoint (Adw), a text buffer and an adjustment (the model
 // objects GtkTextView/GtkSpinRow etc. bind to), keyboard shortcuts, and the
 // two drag-and-drop controllers.
+//
+// Adw.Breakpoint specifically: independently verified
+// (`Adw.Breakpoint.prototype instanceof Gtk.Widget === false`, prototype
+// chain bottoms out at plain GObject.Object) — it draws nothing and has no
+// size, it is a declaration (a condition plus a set of property setters)
+// attached to a Window/ApplicationWindow/Dialog/BreakpointBin. Running it
+// through wrapReactNative would give it a Yoga node for a widget that
+// occupies no space: a layout bug, not a convenience. Adw.BreakpointBin (a
+// real widget, the container that scopes breakpoints to a subtree) is
+// wrapped normally in ./widgets.generated instead, and is what
+// createSidebarNavigator's own collapse pairs AdwBreakpoint with (see
+// docs/platform-layer.md, "Two ways to react to size").
 export { GMenu, GSimpleAction } from "@gtkx/jsx/gio"
 export {
   AdwBreakpoint,
