@@ -1,0 +1,95 @@
+// The task list — ported from the gtkx tutorial
+// (examples/tutorial/src/components/task-list.tsx).
+import { AdwClamp, AdwEntryRow, AdwStatusPage } from "react-native-gtkx/adw"
+import {
+  Gtk,
+  GtkBox,
+  GtkListBox,
+  GtkScrolledWindow,
+  GtkSearchBar,
+  GtkSearchEntry,
+} from "react-native-gtkx/gtk"
+import { useSortOrder } from "../hooks/use-sort-order"
+import { useStore } from "../store/index"
+import { addListId, emptyState, visibleTasks } from "../store/selectors"
+import { TaskRow } from "./task-row"
+
+export const TaskList = () => {
+  const tasks = useStore((state) => state.tasks)
+  const lists = useStore((state) => state.lists)
+  const selection = useStore((state) => state.selection)
+  const filter = useStore((state) => state.filter)
+  const searchMode = useStore((state) => state.searchMode)
+  const searchQuery = useStore((state) => state.searchQuery)
+  const setSearchMode = useStore((state) => state.setSearchMode)
+  const setSearchQuery = useStore((state) => state.setSearchQuery)
+  const addTask = useStore((state) => state.addTask)
+  const [sortOrder] = useSortOrder()
+
+  const visible = visibleTasks(tasks, selection, {
+    query: searchQuery,
+    filter,
+    sortOrder,
+  })
+  const empty = emptyState(selection, searchQuery)
+  const listId = addListId(selection, lists)
+
+  return (
+    <GtkBox
+      orientation={Gtk.Orientation.VERTICAL}
+      vexpand
+    >
+      <GtkSearchBar
+        searchModeEnabled={searchMode}
+        onNotifySearchModeEnabled={(enabled) => setSearchMode(enabled ?? false)}
+      >
+        <GtkSearchEntry
+          placeholderText="Search tasks…"
+          text={searchQuery}
+          onSearchChanged={(self) => setSearchQuery(self.text)}
+        />
+      </GtkSearchBar>
+      <GtkScrolledWindow vexpand>
+        <AdwClamp
+          maximumSize={640}
+          marginTop={12}
+          marginBottom={12}
+          marginStart={12}
+          marginEnd={12}
+        >
+          <GtkBox
+            orientation={Gtk.Orientation.VERTICAL}
+            spacing={12}
+          >
+            <GtkListBox
+              selectionMode={Gtk.SelectionMode.NONE}
+              cssClasses={["boxed-list"]}
+            >
+              <AdwEntryRow
+                title="Add a task…"
+                onEntryActivated={(self) => {
+                  addTask(listId, self.text)
+                  self.text = ""
+                }}
+              />
+              {visible.map((task) => (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                />
+              ))}
+            </GtkListBox>
+            {visible.length === 0 ? (
+              <AdwStatusPage
+                cssClasses={["compact"]}
+                iconName={empty.icon}
+                title={empty.title}
+                description={empty.description}
+              />
+            ) : null}
+          </GtkBox>
+        </AdwClamp>
+      </GtkScrolledWindow>
+    </GtkBox>
+  )
+}

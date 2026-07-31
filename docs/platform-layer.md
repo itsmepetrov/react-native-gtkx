@@ -130,14 +130,15 @@ A further set of real JSX elements gtkx provides are not `Gtk.Widget` or
 `Adw.Widget` subclasses either, so `scripts/generate-widget-surface.mjs`
 never sees them at all — same reason `GtkGestureClick` above is hand-kept
 rather than generated, just a wider set: actions and menus (`GSimpleAction`,
-`GMenu`), a responsive breakpoint (`AdwBreakpoint`) and the two leaf
-elements an `AdwShortcutsDialog` is built from (`AdwShortcutsSection`,
-`AdwShortcutsItem`), a text buffer and an adjustment — the model objects
-`GtkTextView`/spin- and scale-style widgets bind to (`GtkTextBuffer`,
-`GtkAdjustment`), keyboard shortcuts (`GtkShortcut`,
-`GtkShortcutController`), and the two drag-and-drop controllers
-(`GtkDragSource`, `GtkDropTarget`). All of them are exported, by name, from
-`react-native-gtkx/gtk` or `/adw`, next to `GtkApplication` and
+`GMenu`), a responsive breakpoint (`AdwBreakpoint`), one option of an
+`AdwToggleGroup` (`AdwToggle` — a segmented-control entry, not a widget of
+its own) and the two leaf elements an `AdwShortcutsDialog` is built from
+(`AdwShortcutsSection`, `AdwShortcutsItem`), a text buffer and an
+adjustment — the model objects `GtkTextView`/spin- and scale-style widgets
+bind to (`GtkTextBuffer`, `GtkAdjustment`), keyboard shortcuts
+(`GtkShortcut`, `GtkShortcutController`), and the two drag-and-drop
+controllers (`GtkDragSource`, `GtkDropTarget`). All of them are exported, by
+name, from `react-native-gtkx/gtk` or `/adw`, next to `GtkApplication` and
 `GtkGestureClick`.
 
 ```tsx
