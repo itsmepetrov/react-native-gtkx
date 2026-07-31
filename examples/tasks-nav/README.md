@@ -96,7 +96,7 @@ here because it was not on the PRD's checklist and a workaround existed.
 ## Verified live
 
 Built and launched in the VM's real GNOME session
-(`bash scripts/vm.sh app examples/tasks-nav`), not just headless tests —
+(`node scripts/vm.ts app examples/tasks-nav`), not just headless tests —
 and it caught a real bug headless tests did not: the first live screenshot
 showed every row's task title missing, only the list-name badge visible.
 Root cause: `ScrollView`'s content defaults to `alignItems: "flex-start"`,

@@ -127,7 +127,7 @@ by name, from `react-native-gtkx/gtk` or `/adw`, exactly as gtkx binds it.
 ### Auxiliary objects, not widgets at all
 
 A further set of real JSX elements gtkx provides are not `Gtk.Widget` or
-`Adw.Widget` subclasses either, so `scripts/generate-widget-surface.mjs`
+`Adw.Widget` subclasses either, so `scripts/generate-widget-surface.ts`
 never sees them at all — same reason `GtkGestureClick` above is hand-kept
 rather than generated, just a wider set: actions and menus (`GSimpleAction`,
 `GMenu`), a responsive breakpoint (`AdwBreakpoint`), one option of an
@@ -165,7 +165,7 @@ fired in the `@gtkx/vitest` headless-sway gtk test project, even with a
 genuine `swaymsg` resize past the condition's threshold (see
 `packages/react-native-gtkx/tests/gtk/bridge/auxiliary-elements.gtk.test.tsx`)
 — but it works exactly as documented in a real GNOME session (verified with
-a throwaway app launched via `scripts/vm.sh app`). Treat it as untestable
+a throwaway app launched via `node scripts/vm.ts app`). Treat it as untestable
 under headless sway today, not as broken.
 
 ### The window and application AppRegistry built

@@ -26,7 +26,7 @@ export { Adw, Gdk, Gio, GLib, GObject, Graphene, Gsk, Gtk, Pango }
 export { GtkApplication, GtkGestureClick } from "@gtkx/jsx/gtk"
 
 // Auxiliary gtkx JSX elements that are not Gtk.Widget/Adw.Widget subclasses
-// either, same reason as the pair above — scripts/generate-widget-surface.mjs
+// either, same reason as the pair above — scripts/generate-widget-surface.ts
 // only classifies widgets, so these fall into its "notAWidget" bucket
 // (see scripts/widget-surface/classification.json) and are otherwise
 // unreachable through react-native-gtkx/gtk or /adw. Every one of these is a

@@ -139,7 +139,7 @@ neither is the "small, clean" kind of fix the tasks above were:
   reimplementing the general helper — verified live (Preferences' Theme
   and Sort order rows both open and select correctly).
 
-Verified live in the VM session (`bash scripts/vm.sh app examples/tasks-app`),
+Verified live in the VM session (`node scripts/vm.ts app examples/tasks-app`),
 not just compiled: the sidebar (icons, colored dots, live counts), adding a
 task via `Ctrl+N` (opens the editor), deleting a task via `Delete` (moves
 it to Trash, updates every affected count), the breakpoint collapse at a
