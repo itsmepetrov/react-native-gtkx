@@ -420,3 +420,127 @@ This is the same shape the round-two/three fixes took: the win comes from
 recognizing a whole category of work (React's render pipeline) is
 unreachable-by-construction for the common case, not from making that
 pipeline faster.
+## Round four: the sticky-header amplifier — two candidates, both disproven
+
+Round three's unchanged-rect fix closed the "maximized is worse" gap, but left
+a narrower, still-real bug: maximized, sticky headers cost 44.0 ms/frame
+against 17.3 ms without stickiness on the same list (`down2`), while OUR
+measured costs (`gtk.allocTop.ms`, `engine.flush.ms`) are flat or LOWER in the
+sticky case. The mechanism: the pin-correction tick
+(`scroll-view.tsx` ~441) calls `queueAllocate(content)` on ~49 of every 50
+frames of motion, and `content`'s `allocate()` (`use-layout-child.ts` ~274)
+unconditionally `sizeAllocate`s every child — ~1268 a second — to move one
+pinned widget. The cost lands in paint, invisible to our own timers, matching
+round three's signature exactly but at the child-count scale instead of the
+window-area scale.
+
+Two directions were on the table. Both were implemented (or fully designed)
+and both are unsound in this codebase, for reasons specific to this gtkx
+rc.2 binding and to how this layer separates the Yoga tree from the GTK
+widget tree — not for lack of trying harder on the same idea.
+
+### Candidate: skip children whose target rect+offset did not change
+
+The original round-three-adjacent experiment (see the 006 progress log) tried
+this naively — skip `allocateChild` when the rect handed down matches the
+last one — and broke 5 test files, because a child can have ITS OWN pending
+reallocation (something changed several levels below it) while the rect ITS
+PARENT computes for it is unchanged; GTK exposes no public `needs_allocate`
+to tell the two cases apart.
+
+A corrected version was built: a per-child cache of the rect+offset last
+actually handed to `allocateChild` (not just the Yoga-committed rect, so an
+Animated/sticky offset-only change is caught too), plus a `WeakSet<Gtk.Widget>`
+fed by every `queueAllocate`/`queueResize` call in the codebase, marking the
+target widget and walking `.getParent()` up to the root so an intermediate
+container is never wrongly skipped while a descendant still has a pending
+request — mirroring GTK's own alloc-needed-on-child propagation.
+
+**It still broke the same test files, with the same signature.** Diagnosis
+this time was conclusive, via a `WeakMap<object, number>` debug-id tag logged
+at both the marking site and the loop that later reads it:
+`GtkScrolledWindow` transparently wraps its non-scrollable `content` child in
+an internal `GtkViewport` that our code never references directly. Walking
+`content.getParent()` yields the `Viewport`; walking one step further does
+**not** yield the same JS object as `outerRef.current` (the `ScrolledWindow`
+our own React ref holds) — confirmed by comparing debug ids, not by
+inspection. Two adjacent relationships — `Root.getFirstChild() ===
+outerRef.current` and `stickyChild.getParent() === contentRef.current` —
+matched reliably; only the hop through the never-explicitly-referenced
+`Viewport` fails to intern.
+
+The consequence is not "occasionally stale," it is permanent: the first time
+Root's loop skips `ScrolledWindow` (because our WeakSet lookup misses),
+GTK's own `size_allocate()` on Root has already run and cleared Root's own
+alloc-needed bookkeeping. `ScrolledWindow`/`content`'s flags are never
+serviced (nobody called `sizeAllocate` on them), and GTK's own propagation
+optimization — "an ancestor already marked needs no further notification" —
+means every SUBSEQUENT `content.queueAllocate()` call from the sticky tick
+stops propagating at the same broken hop. Observed directly: after the very
+first skip, `content`'s `allocate()` vfunc never ran again for the rest of
+the test, no matter how many more times the tick fired. `stickyHeaderIndices
+pins the real header and restores it` times out waiting for a scroll-triggered
+reposition that GTK now believes is already handled.
+
+This is a property of the environment, not a bug in the tracking logic: a
+`WeakMap`/`WeakSet` keyed by a widget obtained via `.getParent()` through an
+auto-inserted, never-JS-referenced widget cannot be trusted to match a lookup
+keyed the same conceptual widget obtained another way. Filed upstream:
+`docs/upstream-gtkx.md` bug 3.
+
+### Candidate: move the pinned header into its own small container
+
+Round two's "translate the real child, no duplicate widget" constraint does
+**not** categorically block this — reparenting the SAME widget instance to a
+different GTK container while it is pinned is not a duplicate. That part of
+the caveat is cleared.
+
+What blocks it instead, found on design review before writing throwaway
+code this time: this layer keeps the Yoga node tree and the GTK widget tree
+in lockstep everywhere except where a component explicitly decouples them,
+and two places rely on that lockstep holding for exactly the children a
+"shrink the touched set" container would need to move:
+
+1. **Mount-order index computation.** `use-layout-child.ts`'s mount effect
+   walks `parentWidget.getFirstChild()`/`getNextSibling()` to translate "GTK
+   sibling position" into "Yoga insertion index," on the assumption that a
+   node's GTK parent and Yoga parent are the same container
+   (`react-hooks/exhaustive-deps`-disabled effect, ~line 96). Any design that
+   reparents a widget to a GTK container different from its Yoga parent (the
+   whole point — so the container whose `allocate()` runs every scroll tick
+   has few children) breaks this translation for any sibling that mounts
+   while something is reparented out. For a live, scrolling, windowed list
+   this is not an edge case — new cells mount continuously while scrolling,
+   which is exactly when a header would be pinned.
+2. **Absolute positioning is parent-relative, not list-relative, in Yoga.**
+   `FlatList`/`SectionList` (`virtualized-list.tsx`) position every cell —
+   sticky or not — via Yoga `position: absolute` with `top`/`left` computed
+   as `cellStart(index)`, an offset from the LIST'S start. Yoga (confirmed
+   against `layout/apply-style.ts` and `layout/yoga.ts`, which call Facebook
+   Yoga's `setPositionType` directly) resolves `position: absolute` against
+   the node's DIRECT PARENT only — there is no CSS-style "nearest positioned
+   ancestor" search. Wrapping a run of cells in an intermediate container to
+   shrink `content`'s child count would silently re-base every wrapped
+   cell's `top`/`left` to the wrapper's origin instead of the list's, and
+   this is exactly the configuration the perf bar is measured against
+   (`PERF_STICKY=1` on the windowed perf-probe).
+
+Restricting the container-shrinking trick to the plain `<ScrollView><View>`
+case sidesteps only the second problem, not the first, and does not touch
+the windowed-list configuration the task's own bar measures. Implementing and
+then rigorously validating a reparenting design against both problems (plus
+`section-sticky.gtk.test.tsx`'s multi-header handoff, which shares this exact
+mechanism) was judged a substantially larger and riskier change than "a small
+container above the ScrollView" suggests, and was not attempted as code.
+
+### Where this leaves it
+
+Neither candidate is safe to ship in this codebase as currently architected.
+No code changed as a result of this round — `use-layout-child.ts`,
+`scroll-view.tsx`, `rect-store.ts` and the bridge are exactly as round three
+left them (verified: 65 files / 449 passed + 1 expected fail, unchanged).
+A future attempt should start from one of: an upstream fix for widget-wrapper
+identity (making candidate two's tracking trustworthy), or a deliberate,
+scoped rewrite of `VirtualizedList`'s absolute positioning to be
+container-relative instead of list-relative (a separate project, not a
+006-sized task).
