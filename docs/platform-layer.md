@@ -63,8 +63,14 @@ anything you could set on `Adw.NavigationPage` you can set on
 
 ### GTK widgets, driven by React Native
 
-`GtkBox`, `GtkButton`, `GtkEntry`, `GtkLabel`, `GtkListBox`, `GtkPicture`,
-`GtkScrolledWindow`, `GtkSpinner`, `GtkSwitch`, `GtkTextView`.
+Every `GtkWidget` subclass gtkx binds — 87 of them at last count, from
+`GtkBox` and `GtkButton` to `GtkColumnView` and `GtkEmojiChooser`. The list is
+generated, not hand-picked: `scripts/generate-widget-surface.mjs` classifies
+gtkx's full binding by real GObject inheritance (see
+`scripts/widget-surface/classification.json` for the exact list gtkx binds
+today) and `src/gtk/widgets.generated.ts` is the committed result. Re-run the
+generator after a gtkx upgrade to pick up new widgets — it diffs against its
+own previous output and prints what changed.
 
 They keep **every prop gtkx binds** and gain `style` and `onLayout`. Position
 and appearance both come from the style prop, exactly like anywhere else in
@@ -95,16 +101,55 @@ flag to remember.
 
 ### Unwrapped by necessity
 
-`GtkGestureClick` (an event controller, not a widget), `GtkListBoxRow` (valid
-only as a direct child of a `GtkListBox`) and `GtkWindow` (a toplevel) are
-exported raw: a wrapper around them would be invalid GTK rather than a
-convenience.
+Two families of widget are exported **raw** instead of wrapped, because a
+wrapper box around them would be invalid GTK rather than a convenience:
+
+- **toplevels** — `GtkWindow` and everything that derives it: every
+  `Gtk*Dialog`, `GtkApplicationWindow`, `GtkAssistant`, `GtkShortcutsWindow`,
+  and their Adwaita counterparts (`AdwWindow`, `AdwApplicationWindow`,
+  `AdwAboutWindow`, `AdwMessageDialog`, `AdwPreferencesWindow`). A wrapper box
+  around a window is not a layout, it is two windows.
+- **child-only widgets** — valid solely as the direct child of one specific
+  parent. `GtkListBoxRow` and `GtkFlowBoxChild` (plus everything that derives
+  them — every Adwaita preferences row, `AdwActionRow` included) are caught
+  mechanically, by real inheritance. `AdwNavigationPage` and
+  `AdwPreferencesPage` derive `Gtk.Widget` directly with no shared base to
+  catch them mechanically, so they are a two-entry, doc-verified denylist
+  instead — see `scripts/widget-surface/classify.mjs` for the exact reasoning
+  behind each.
+
+`GtkGestureClick` is a third, simpler case: an event controller, not a
+widget at all, so it was never a candidate for wrapping in the first place.
+
+Nothing here is unreachable — every raw export above is still exported,
+by name, from `react-native-gtkx/gtk` or `/adw`, exactly as gtkx binds it.
 
 ### Adwaita structure
 
-`AdwApplicationWindow`, `AdwHeaderBar`, `AdwNavigationSplitView`, `AdwToolbarView` —
-re-exported verbatim. These are chrome you build the window out of, not
-children of a flex row, so they take no `style`.
+Every `Adw.Widget` subclass gtkx binds — 46 wrapped the same way as the GTK
+widgets above, from `AdwAvatar` and `AdwCarousel` to `AdwToolbarView` and
+`AdwViewSwitcher`. `AdwHeaderBar` and `AdwToolbarView` now take `style` too,
+and still step aside into the bare widget in a slot that has no Yoga tree —
+`AdwToolbarView`'s own `topBar` is exactly that kind of slot:
+
+```tsx
+<View style={{ flex: 1 }}>
+  <AdwToolbarView
+    style={{ flex: 1 }}
+    topBar={<AdwHeaderBar showTitle={false} />}
+  >
+    <SlotContent>{/* … */}</SlotContent>
+  </AdwToolbarView>
+</View>
+```
+
+`AdwNavigationView` and `AdwNavigationSplitView` are wrapped the same way;
+`NavigationStack` above is a declarative layer on top of the former, not a
+replacement for it — the raw widget is always one import away.
+
+`AdwApplicationWindow` (a toplevel) and `AdwNavigationPage` (valid only as a
+direct child of `AdwNavigationView`/`AdwNavigationSplitView`) are exported
+raw — see "Unwrapped by necessity" above.
 
 ### Namespaces
 
@@ -233,9 +278,14 @@ warns with the screen and option name rather than swallowing them silently.
 
 ## Wrapping a widget we do not export
 
-gtkx binds far more of GTK than this subpath re-exports. `wrapReactNative`
-turns any of it into a React Native citizen, and it is generic, so the
-widget's own props keep their types:
+The generated surface above covers every current `Gtk.Widget`/`Adw.Widget`
+subclass gtkx binds, but "current" is doing work in that sentence: a gtkx
+release can add a widget before this package's generator has been re-run for
+it, and non-widget GI classes (an event controller, a filter, an adjustment)
+were never candidates for the widget surface in the first place even though
+a handful of them are occasionally worth putting inside RN layout too.
+`wrapReactNative` is how you reach either without waiting on us — it is
+generic, so the widget's own props keep their types:
 
 ```tsx
 import { GtkPopover } from "@gtkx/jsx/gtk"
@@ -244,6 +294,11 @@ import { wrapReactNative } from "react-native-gtkx/gtk` and `react-native-gtkx/a
 const Popover = wrapReactNative(GtkPopover)
 // <Popover style={{ width: 240 }} autohide … /> — `autohide` still typed
 ```
+
+(`GtkPopover` here is already part of the generated surface — this is the
+same mechanism `src/gtk/widgets.generated.ts` uses under the hood, just
+applied by hand. It stays useful the day gtkx binds something this package
+has not regenerated for yet.)
 
 Two lower-level forms exist for cases the wrapper does not fit:
 
