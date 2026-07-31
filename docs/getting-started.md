@@ -148,6 +148,50 @@ react-navigation state. See [docs/api.md](api.md#navigation-react-native-gtkxnav
 for porting an existing react-navigation app (which options carry over,
 which are silently ignored today, and what the desktop cannot mean).
 
+## Svg
+
+`<Svg>`/`<Path>`/`<Circle>` and the rest of the vector-graphics API come from
+`react-native-svg`, not from `react-native-gtkx` itself — matching every
+other platform, where `react-native-svg` is a separate package too (RN has
+no built-in `Svg`). See [docs/api.md](api.md#svg) for the component set and
+[the compat-subpath section](api.md#react-native-svg-compatibility-react-native-gtkxsvg)
+for how both presets alias the bare `react-native-svg` import to it.
+
+That alias is a bundler-level rewrite, so TypeScript still needs its own
+answer for the specifier `"react-native-svg"` — an unresolved import in the
+editor even though the build works fine. Which fix applies depends on what
+the project targets:
+
+- **Also ships to iOS/Android/web**: install the real `react-native-svg` —
+  the app needs it on those platforms regardless. `react-native-svg` ships
+  its own `.d.ts` (no separate `@types` package exists or is needed), so
+  TypeScript resolves real, complete types for the specifier; the Linux
+  build never actually executes that package's code — the preset rewrites
+  the import to `react-native-gtkx/svg` before it reaches Node. Nothing
+  react-native-gtkx-specific to configure.
+- **Linux-only project** (the template, or an app with no mobile target):
+  add `react-native-svg` as a **devDependency purely for its types** —
+  `npm install -D react-native-svg`. This is the ordinary fix for a
+  bundler-alias setup once the aliased name has no real package installed —
+  the same shape as react-native-web's own TypeScript guidance (install a
+  real, type-bearing package alongside the alias rather than fabricate
+  one). Side benefit: if this package's compat surface ever drifts from
+  upstream `react-native-svg`'s props (see the "Deliberate gaps" note in
+  `packages/react-native-gtkx/src/svg-compat/index.ts`), the mismatch shows
+  up as a type error instead of compiling silently.
+
+We deliberately did not ship an ambient `declare module "react-native-svg"`
+— the trick `react-native-gtkx/types` uses to teach the stock `react-native`
+types about the `linux` platform. That works there because it only
+_augments_ an already-resolved module (interfaces merge). Here the module
+does not resolve at all without one of the two installs above, so the shim
+would have to declare the whole module unconditionally to help — and a
+project that installs the real `react-native-svg` later (adding a mobile
+target) would then carry two declarations of the same module, the shim and
+the real package's own, colliding. Installing the real package, even only
+as a devDependency, never has that problem: there is only ever one
+declaration of `"react-native-svg"` in play.
+
 ## Metro or vite?
 
 - **Adding Linux to an existing RN app** (ios/android + Metro): the
