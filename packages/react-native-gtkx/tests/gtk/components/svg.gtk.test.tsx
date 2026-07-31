@@ -7,13 +7,6 @@
 import { render, screen, waitFor } from "@gtkx/testing"
 import { describe, expect, it, vi } from "vitest"
 import {
-  getSvgNodeDescriptor,
-  Gsk,
-  Gtk,
-  type Gdk,
-} from "../../../src/gtkx/bridge/index"
-import {
-  Animated,
   Circle,
   Defs,
   Ellipse,
@@ -25,10 +18,16 @@ import {
   Polyline,
   RadialGradient,
   Rect,
-  Root,
   Stop,
   Svg,
-} from "../../../src/index"
+} from "../../../src/components/svg/index"
+import {
+  getSvgNodeDescriptor,
+  Gsk,
+  Gtk,
+  type Gdk,
+} from "../../../src/gtkx/bridge/index"
+import { Animated, Root } from "../../../src/index"
 
 type WidgetWithSnapshot = Gtk.Widget & {
   snapshot(snapshot: Gtk.Snapshot): void
