@@ -52,10 +52,10 @@ jobs:
       - name: Build debs
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          bash scripts/build-deb.sh monitor "System Monitor" "$VERSION" debs
-          bash scripts/build-deb.sh gallery "RN Gallery" "$VERSION" debs
-          bash scripts/build-deb.sh tasks-app "Tasks" "$VERSION" debs
-          bash scripts/build-deb.sh hn-app "Hacker News" "$VERSION" debs
+          node scripts/build-deb.ts monitor "System Monitor" "$VERSION" debs
+          node scripts/build-deb.ts gallery "RN Gallery" "$VERSION" debs
+          node scripts/build-deb.ts tasks-app "Tasks" "$VERSION" debs
+          node scripts/build-deb.ts hn-app "Hacker News" "$VERSION" debs
           ls -la debs/
       - uses: actions/upload-artifact@v7
         with:

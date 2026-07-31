@@ -88,7 +88,7 @@
     "react-native-gtkx-mcp": "./dist/mcp/bin.js"
   },
   "scripts": {
-    "prepack": "bash ../../scripts/sync-package-readme.sh",
+    "prepack": "node ../../scripts/sync-package-readme.ts",
     "build:dist": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/mcp/bin.js",
     "watch:dist": "tsc -p tsconfig.build.json --watch --preserveWatchOutput"
   },
