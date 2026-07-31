@@ -10,13 +10,21 @@
 // same way @react-navigation/native-stack sits on top of react-native-screens.
 //
 // Why the primitive owns retention: react-navigation (and any router) drops a
-// popped route immediately, while Adwaita still animates the page out for
-// ~200 ms. If the consumer had to keep rendering pages it already considers
-// gone, every consumer would reimplement that bookkeeping and the primitive
-// would be useless without a router. So NavigationView snapshots a page when
-// it leaves `stack` and drops it on the page's "hidden" signal, with a timer
-// fallback for environments that never emit it (headless compositors with
-// animations disabled).
+// popped route immediately, while Adwaita still animates the page out. If the
+// consumer had to keep rendering pages it already considers gone, every
+// consumer would reimplement that bookkeeping and the primitive would be
+// useless without a router. So NavigationView snapshots a page when it
+// leaves `stack` and drops it on the page's "hidden" signal — the real
+// AdwNavigationPage signal, not a guess — with `transitionDuration` as a
+// fallback timer for two cases where the signal never arrives on its own:
+// environments that never deliver it at all (headless compositors with
+// animations disabled), and a page skipped entirely by a multi-hop pop
+// (measured on the rig: `popToTag` from [a,b,c] to "a" fires hiding/hidden
+// only on "c", the page that was actually visible — "b" gets no signal at
+// all, on any environment, because it was never itself on screen during the
+// transition). onTransitionStart/onTransitionEnd and the InteractionManager
+// bracket around them use the exact same real-signal-first, timer-fallback
+// mechanism — see beginTransition below.
 import {
   Children,
   createContext,
@@ -38,12 +46,20 @@ import {
   type Adw,
 } from "../gtkx/bridge/index"
 
-/** Adwaita's page transition is ~200 ms; the fallback waits comfortably past
- *  it. Overridable because a consumer may disable animations. */
+/** A conservative fallback window for the two cases described above, where
+ *  no real per-page signal ever arrives for this specific transition. This
+ *  is NOT a measurement of Adwaita's actual transition length — an earlier
+ *  version of this comment claimed "~200 ms measured", which was never
+ *  actually measured (found while auditing this file). On the project's own
+ *  headless GTK test rig the real signal always arrives, and in well under
+ *  a millisecond, so there is no rig measurement to cite either; this
+ *  number is simply a deliberately generous upper bound. Overridable
+ *  because a consumer may want a shorter/longer safety margin. */
 const DEFAULT_TRANSITION_MS = 400
 
 type PageLifecycle = {
   reportHidden: (tag: string) => void
+  reportShown: (tag: string) => void
 }
 
 const PageLifecycleContext = createContext<PageLifecycle | null>(null)
@@ -70,6 +86,7 @@ export type NavigationStackPageProps = AdwPageProps & {
 export const NavigationStackPage = ({
   tag,
   onHidden,
+  onShown,
   ...rest
 }: NavigationStackPageProps) => {
   const lifecycle = useContext(PageLifecycleContext)
@@ -79,11 +96,17 @@ export const NavigationStackPage = ({
     // bookkeeping must not depend on what the consumer does here.
     ;(onHidden as ((...a: unknown[]) => void) | undefined)?.(...args)
   }) as AdwPageProps["onHidden"]
+  const handleShown = ((...args: unknown[]) => {
+    lifecycle?.reportShown(tag)
+    // Same ordering guarantee as onHidden above.
+    ;(onShown as ((...a: unknown[]) => void) | undefined)?.(...args)
+  }) as AdwPageProps["onShown"]
   return (
     <RawAdwNavigationPage
       {...rest}
       tag={tag}
       onHidden={handleHidden}
+      onShown={handleShown}
     />
   )
 }
@@ -110,10 +133,15 @@ export type NavigationStackProps = Omit<AdwViewProps, "onPopped" | "ref"> & {
   onPageClosed?: (tag: string) => void
   /** A push/pop/replace transition started. */
   onTransitionStart?: () => void
-  /** …and finished (timer-based: Adwaita has no transition-end signal). */
+  /** …and finished. Driven by the transitioning page's own real
+   *  `shown`/`hidden` AdwNavigationPage signal (whichever settles it —
+   *  see beginTransition), with `transitionDuration` as a fallback for the
+   *  cases where neither arrives. */
   onTransitionEnd?: () => void
-  /** Transition length in ms, used for retention and transition callbacks.
-   *  Default 400. */
+  /** Fallback window in ms, used only when a page's own transition signal
+   *  never arrives (see the file header comment for the two cases this
+   *  covers) — for page retention and for the transition callbacks above.
+   *  NOT a measurement of the real transition length. Default 400. */
   transitionDuration?: number
   /** Escape hatch: the underlying Adw.NavigationView, for anything this
    *  primitive does not model. */
@@ -211,8 +239,57 @@ export const NavigationStack = ({
     stackRef.current = stack
   })
 
+  // Per-tag waiters for "this specific page's transition settled" — fed by
+  // reportHidden/reportShown below, drained (and deleted) the moment either
+  // fires. A page can end up "shown" after being "hiding" (an interrupted
+  // pop reversed) or "hidden" after being "showing" (an interrupted push
+  // superseded) — GObject-introspection documents both pairings — so a
+  // waiter for a given tag resolves on WHICHEVER of the two settles it,
+  // not just the one that would be expected in the common case.
+  const transitionWaitersRef = useRef<Map<string, Array<() => void>>>(new Map())
+
+  const addTransitionWaiter = useCallback(
+    (tag: string, resolve: () => void): void => {
+      const waiters = transitionWaitersRef.current.get(tag)
+      if (waiters) {
+        waiters.push(resolve)
+      } else {
+        transitionWaitersRef.current.set(tag, [resolve])
+      }
+    },
+    [],
+  )
+
+  const removeTransitionWaiter = useCallback(
+    (tag: string, resolve: () => void): void => {
+      const waiters = transitionWaitersRef.current.get(tag)
+      if (!waiters) {
+        return
+      }
+      const next = waiters.filter((waiter) => waiter !== resolve)
+      if (next.length > 0) {
+        transitionWaitersRef.current.set(tag, next)
+      } else {
+        transitionWaitersRef.current.delete(tag)
+      }
+    },
+    [],
+  )
+
+  const resolveTransitionWaiters = useCallback((tag: string): void => {
+    const waiters = transitionWaitersRef.current.get(tag)
+    if (!waiters) {
+      return
+    }
+    transitionWaitersRef.current.delete(tag)
+    for (const resolve of waiters) {
+      resolve()
+    }
+  }, [])
+
   const reportHidden = useCallback(
     (tag: string): void => {
+      resolveTransitionWaiters(tag)
       // "hidden" also fires for a live page covered by a push — only pages
       // gone from the requested stack are actually closing.
       if (stackRef.current.includes(tag)) {
@@ -220,12 +297,20 @@ export const NavigationStack = ({
       }
       dropPage(tag)
     },
-    [dropPage],
+    [dropPage, resolveTransitionWaiters],
   )
 
-  // Delivery of "hidden" is not guaranteed (headless compositors with
-  // animations disabled never emit it), so a timer slightly longer than the
-  // transition is the fallback. dropPage is idempotent: whichever wins, wins.
+  const reportShown = useCallback(
+    (tag: string): void => {
+      resolveTransitionWaiters(tag)
+    },
+    [resolveTransitionWaiters],
+  )
+
+  // Delivery of "hidden" is not guaranteed — see the file header comment for
+  // the two cases (a genuinely signal-less environment, and a page skipped
+  // over by a multi-hop pop) — so a timer slightly longer than the fallback
+  // window is the backstop. dropPage is idempotent: whichever wins, wins.
   const scheduleDrop = useCallback(
     (tag: string): void => {
       setTimeout(() => reportHidden(tag), transitionDuration)
@@ -235,16 +320,45 @@ export const NavigationStack = ({
 
   // Bracket every transition with an InteractionManager handle so
   // runAfterInteractions work (a screen's data load, a heavy render) waits
-  // for the slide instead of stealing its frames. Overlapping transitions
-  // reference-count through the handle API.
-  const beginTransition = useCallback((): void => {
-    const handle = InteractionManager.createInteractionHandle()
-    onTransitionStart?.()
-    setTimeout(() => {
-      InteractionManager.clearInteractionHandle(handle)
-      onTransitionEnd?.()
-    }, transitionDuration)
-  }, [onTransitionEnd, onTransitionStart, transitionDuration])
+  // for the slide instead of stealing its frames, closing it and firing
+  // onTransitionEnd exactly when the transition really settles: the real
+  // "shown"/"hidden" signal on `targetTag` (the page this specific push,
+  // popToTag or replaceWithTags call is bringing into view) if it arrives,
+  // `transitionDuration` otherwise. `targetTag` is undefined only for
+  // replaceWithTags([]) — no page becomes visible, nothing to wait on, the
+  // timer alone settles it. Overlapping transitions reference-count through
+  // the handle API.
+  const beginTransition = useCallback(
+    (targetTag: string | undefined): void => {
+      const handle = InteractionManager.createInteractionHandle()
+      onTransitionStart?.()
+      let settled = false
+      const settle = (): void => {
+        if (settled) {
+          return
+        }
+        settled = true
+        InteractionManager.clearInteractionHandle(handle)
+        onTransitionEnd?.()
+      }
+      if (targetTag !== undefined) {
+        addTransitionWaiter(targetTag, settle)
+      }
+      setTimeout(() => {
+        if (targetTag !== undefined) {
+          removeTransitionWaiter(targetTag, settle)
+        }
+        settle()
+      }, transitionDuration)
+    },
+    [
+      addTransitionWaiter,
+      removeTransitionWaiter,
+      onTransitionEnd,
+      onTransitionStart,
+      transitionDuration,
+    ],
+  )
 
   useEffect(() => {
     const view = viewRef.current
@@ -265,10 +379,12 @@ export const NavigationStack = ({
       common += 1
     }
     if (common === 0 && syncedRef.current[0] !== target[0]) {
-      // The root changed (a reset): swap the whole visible stack.
+      // The root changed (a reset): swap the whole visible stack. The last
+      // tag becomes the visible page (undefined only when target is empty —
+      // see beginTransition's targetTag doc above).
       const leaving = syncedRef.current.filter((tag) => !target.includes(tag))
       syncedRef.current = [...target]
-      beginTransition()
+      beginTransition(target[target.length - 1])
       view.replaceWithTags(target)
       for (const tag of leaving) {
         scheduleDrop(tag)
@@ -280,7 +396,7 @@ export const NavigationStack = ({
       const leaving = syncedRef.current.slice(common)
       syncedRef.current = syncedRef.current.slice(0, common)
       if (anchor !== undefined) {
-        beginTransition()
+        beginTransition(anchor)
         view.popToTag(anchor)
       }
       for (const tag of leaving) {
@@ -294,7 +410,7 @@ export const NavigationStack = ({
     ) {
       const tag = target[index]!
       syncedRef.current.push(tag)
-      beginTransition()
+      beginTransition(tag)
       view.pushByTag(tag)
     }
   }, [stack, scheduleDrop, beginTransition])
@@ -313,13 +429,16 @@ export const NavigationStack = ({
   }
 
   // The context value must be identity-stable (every page reads it), so the
-  // live handler is reached through a ref rather than baked into the value.
+  // live handlers are reached through refs rather than baked into the value.
   const reportHiddenRef = useRef<(tag: string) => void>(reportHidden)
+  const reportShownRef = useRef<(tag: string) => void>(reportShown)
   useInsertionEffect(() => {
     reportHiddenRef.current = reportHidden
+    reportShownRef.current = reportShown
   })
   const [lifecycle] = useState<PageLifecycle>(() => ({
     reportHidden: (tag: string) => reportHiddenRef.current(tag),
+    reportShown: (tag: string) => reportShownRef.current(tag),
   }))
 
   return (

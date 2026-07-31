@@ -141,16 +141,19 @@ const App = () => (
   entering or leaving (e.g. the screen underneath a push) gets neither
   event, same as upstream. Two things worth knowing before relying on
   timing:
-  - **`transitionEnd` on the entering screen is timer-based**, not tied to
-    an observed animation-finished signal — Adwaita's `Adw.NavigationView`
-    does not expose one. It fires `transitionDuration` (default 400 ms)
-    after the transition starts. `transitionEnd` on the _leaving_ screen
-    is more precise (tied to the page's real "hidden" signal when the
-    compositor delivers one, with the same timer as a fallback), because
-    it has to be: the leaving screen unmounts as soon as its close
-    finishes, and a purely time-based signal can arrive after that
-    unmount already happened, missing the screen's own listeners
-    entirely.
+  - **`transitionEnd` is tied to `AdwNavigationPage`'s own `shown`/`hidden`
+    signals** — contrary to an earlier version of this page, Adwaita DOES
+    expose a transition-finished signal (four of them, in fact: `showing`,
+    `shown`, `hiding`, `hidden`, all per-page). `transitionEnd` on the
+    entering screen fires on that screen's `shown`; on the leaving screen
+    it fires on `hidden`. `transitionDuration` (default 400 ms) is a
+    fallback only, used when a page's own signal never arrives — a
+    signal-less environment, or a page skipped entirely by a multi-hop
+    pop (popping past an intermediate screen never fires anything on it,
+    since it was never the one actually on screen during the transition).
+    When transitions are not animated, the real signals still fire —
+    immediately — so `transitionEnd` is not delayed by the fallback
+    window either.
   - **Native pops do not fire these events at all today.** A user-driven
     pop (the Adwaita back button, Escape, the back gesture) is handled by
     the widget itself before this package's code is told about it, so
