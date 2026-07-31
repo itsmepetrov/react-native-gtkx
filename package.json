@@ -16,6 +16,8 @@
     "test:unit": "vitest run --project unit",
     "test:gtk": "vitest run --project gtk",
     "docs:check": "bash scripts/check-docs-coverage.sh",
+    "mcp:generate-data": "node scripts/generate-mcp-data.mjs",
+    "mcp:check-data": "node scripts/generate-mcp-data.mjs --check",
     "build:dist": "npm run build:dist -w react-native-gtkx",
     "watch:dist": "npm run watch:dist -w react-native-gtkx",
     "check:package": "npm run build:dist && attw --pack packages/react-native-gtkx --profile esm-only --ignore-rules internal-resolution-error"
