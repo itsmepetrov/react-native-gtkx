@@ -128,6 +128,10 @@ export default typescriptEslint.config(
     files: [
       "packages/react-native-gtkx/src/gtkx/bridge/**",
       "packages/react-native-gtkx/src/runner/**",
+      // The testing preset subpaths: they wrap @gtkx/vitest and
+      // @gtkx/testing directly on purpose, same reasoning as src/runner/.
+      "packages/react-native-gtkx/src/vitest/**",
+      "packages/react-native-gtkx/src/testing/**",
       "packages/react-native-gtkx/tests/gtk/**",
       "**/gtkx.config.ts",
       "vitest.config.ts",

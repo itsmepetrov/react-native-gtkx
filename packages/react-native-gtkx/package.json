@@ -63,6 +63,14 @@
       "types": "./dist/vite/index.d.ts",
       "default": "./dist/vite/index.js"
     },
+    "./vitest": {
+      "types": "./dist/vitest/index.d.ts",
+      "default": "./dist/vitest/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    },
     "./types": {
       "types": "./types.d.ts",
       "default": "./types.js"
@@ -76,13 +84,17 @@
   "peerDependencies": {
     "@react-navigation/native": "^8.0.0-alpha.40 || ^8.0.0",
     "react": "^19.2",
-    "vite": "^7.0.0 || ^8.0.0"
+    "vite": "^7.0.0 || ^8.0.0",
+    "vitest": ">=4"
   },
   "peerDependenciesMeta": {
     "@react-navigation/native": {
       "optional": true
     },
     "vite": {
+      "optional": true
+    },
+    "vitest": {
       "optional": true
     }
   },
@@ -92,11 +104,11 @@
     "@gtkx/css": "1.0.0-rc.2",
     "@gtkx/react": "1.0.0-rc.2",
     "@gtkx/runtime": "1.0.0-rc.2",
+    "@gtkx/testing": "1.0.0-rc.2",
+    "@gtkx/vitest": "1.0.0-rc.2",
     "yoga-layout": "^3.2.1"
   },
   "devDependencies": {
-    "@gtkx/testing": "1.0.0-rc.2",
-    "@gtkx/vitest": "1.0.0-rc.2",
     "vite": "^8.1.4"
   },
   "files": [
