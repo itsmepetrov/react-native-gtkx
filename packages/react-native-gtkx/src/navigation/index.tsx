@@ -28,13 +28,13 @@ import {
 } from "@react-navigation/native"
 import { useEffect, type ComponentType, type ReactNode } from "react"
 import { getActiveChrome } from "../components/app-registry"
+import { AdwHeaderBar, AdwToolbarView } from "../adw"
 import {
-  AdwHeaderBar,
-  AdwToolbarView,
+  IntrinsicContent,
   NavigationStack,
   NavigationStackPage,
-} from "../adw"
-import { IntrinsicContent, SlotContent } from "../gtk"
+  SlotContent,
+} from "../common"
 import { GtkButton } from "../gtkx/bridge/index"
 import { warnIgnoredOptions } from "./option-warnings"
 import type { HeaderButton } from "./sidebar"

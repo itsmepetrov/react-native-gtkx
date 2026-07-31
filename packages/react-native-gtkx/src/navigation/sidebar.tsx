@@ -29,6 +29,7 @@ import {
   AdwNavigationSplitView,
   AdwToolbarView,
 } from "../adw"
+import { SlotContent } from "../common"
 import {
   Gtk,
   GtkButton,
@@ -36,7 +37,6 @@ import {
   GtkListBox,
   GtkListBoxRow,
   GtkScrolledWindow,
-  SlotContent,
 } from "../gtk"
 import { warnIgnoredOptions } from "./option-warnings"
 

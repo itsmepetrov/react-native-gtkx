@@ -1,4 +1,4 @@
-# `react-native-gtkx/gtk` and `/adw` — the platform layer
+# The platform layer: `gtk`, `adw`, `common`
 
 React Native gives you a portable surface. This subpath gives you the platform
 underneath it: GTK4 and libadwaita widgets as React components, with **nothing
@@ -22,8 +22,9 @@ Three rules make it easy to reason about:
 your app
    ├── react-native                    portable components
    ├── react-native-gtkx/navigation    react-navigation adapter   (optional)
+   ├── react-native-gtkx/common        what we wrote ourselves    (this page)
    ├── react-native-gtkx/adw           libadwaita widgets         (this page)
-   └── react-native-gtkx/gtk           GTK widgets + the bridge   (this page)
+   └── react-native-gtkx/gtk           GTK widgets                (this page)
 ```
 
 ## Why you would reach for it

@@ -1,8 +1,8 @@
 // react-native-gtkx/adw — libadwaita widgets as React components.
 //
 // The Adwaita half of the platform layer; its GTK counterpart is
-// react-native-gtkx/gtk, which also holds the bridging helpers both subpaths
-// use (SlotContent, IntrinsicContent, Widget, wrapReactNative). Nothing here
+// react-native-gtkx/gtk, and what we wrote ourselves lives in
+// react-native-gtkx/common (NavigationStack, SlotContent, wrapReactNative). Nothing here
 // imports react-navigation.
 //
 // NAMING, one rule across both subpaths: a name carrying a `Gtk` or `Adw`
@@ -13,13 +13,6 @@
 // Here, this subpath exposes primitives and react-native-gtkx/navigation
 // binds them to react-navigation. You can skip the binding entirely — drive
 // NavigationStack from useState, from your own router, from anything.
-
-export {
-  NavigationStack,
-  NavigationStackPage,
-  type NavigationStackPageProps,
-  type NavigationStackProps,
-} from "./navigation-stack"
 
 // The raw widgets, exactly as gtkx binds them — every GObject property and
 // signal, including ones added after this file was written.

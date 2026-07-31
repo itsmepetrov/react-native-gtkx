@@ -1,3 +1,4 @@
+import { wrapReactNative } from "../common/widget"
 import {
   GtkBox as RawGtkBox,
   GtkButton as RawGtkButton,
@@ -10,10 +11,12 @@ import {
   GtkSwitch as RawGtkSwitch,
   GtkTextView as RawGtkTextView,
 } from "../gtkx/bridge/index"
-import { wrapReactNative } from "./widget"
 
 // react-native-gtkx/gtk — GTK4 widgets as React components, driven by React
 // Native.
+//
+// The GTK half of the platform layer. Its Adwaita counterpart is
+// react-native-gtkx/adw; what WE wrote lives in react-native-gtkx/common.
 //
 // This subpath is the TOOLKIT layer, and it is deliberately NOT portable:
 // importing from here is a decision to write Linux-specific UI, and it shows
@@ -23,24 +26,6 @@ import { wrapReactNative } from "./widget"
 // prefix IS that widget, as gtkx binds it. A name without a prefix is ours —
 // Widget, wrapReactNative, SlotContent. So a wrapper of ours can never make a
 // standard widget unreachable, and you always know which you are holding.
-
-// Bridging the two worlds, in both directions. These are toolkit-level rather
-// than Adwaita-specific, which is why they live here.
-export {
-  IntrinsicContent,
-  SlotContent,
-  type IntrinsicContentProps,
-  type SlotContentProps,
-} from "./content"
-
-export {
-  useWidgetLayout,
-  Widget,
-  wrapReactNative,
-  type ReactNativeLayoutProps,
-  type UseWidgetLayoutOptions,
-  type WidgetProps,
-} from "./widget"
 
 // Wrapped so React Native drives them: pass `style` and the layout half goes
 // to Yoga while the visual half becomes a GTK CSS class on the widget itself.
