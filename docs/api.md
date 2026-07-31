@@ -130,6 +130,23 @@ const App = () => (
   `can-pop: false`, so no native pop can race react-navigation state; the
   route pops once the app lifts the guard (e.g. after its own
   confirmation dialog).
+- Stack screen option `animation` maps onto `Adw.NavigationView`'s
+  `animate-transitions` — GTK has exactly one transition style, not a
+  choice of styles like iOS/Android, so the option collapses to a
+  boolean: `"none"` turns transitions off, any other value (including
+  native-stack's own style names, e.g. `"slide_from_bottom"`, `"fade"`)
+  turns them on, with the standard Adwaita transition rather than the
+  one asked for. Requesting a specific type still animates — it is not
+  silently treated as `"none"` — and warns once in development.
+  `animate-transitions` is a property of the whole view, not a per-page
+  one, so there is no per-screen granularity to offer: the value used is
+  read from whichever screen is currently on top of the visible stack,
+  recomputed on every navigation. Setting it once via `screenOptions`
+  (the same value for every screen) is the reliable way to use this —
+  the per-screen case only matters if different screens genuinely
+  disagree, and even then only the active one's value is observed.
+  Interactive swipe-back gestures always animate regardless of this
+  setting — Adwaita's own behavior, not overridable here.
 - The factories are typed: `createStackNavigator<ParamList>()` gives
   typed `Screen` configs and `StackScreenProps<ParamList, Route>` for
   screen components (`SidebarScreenProps` likewise).

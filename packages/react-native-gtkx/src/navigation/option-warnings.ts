@@ -22,7 +22,10 @@ const VERDICTS: Record<string, string> = {
   headerLargeTitle: "no large-title idiom on this desktop",
   headerBlurEffect: "no blur idiom on this desktop",
   presentation: 'only "card" exists today; "modal" is planned on Adw.Dialog',
-  animation: 'transitions are Adwaita\'s own; "none" is planned',
+  animation:
+    "GTK has a single transition style — the requested type is ignored " +
+    'and the standard Adwaita transition plays regardless; "none" does ' +
+    "disable it entirely, if that is what you want",
   animationDuration: "transitions are Adwaita's own",
   animationTypeForReplace: "transitions are Adwaita's own",
   gestureDirection: "the platform defines gesture directions",

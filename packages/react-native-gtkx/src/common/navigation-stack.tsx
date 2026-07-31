@@ -124,6 +124,18 @@ export type NavigationStackProps = Omit<AdwViewProps, "onPopped" | "ref"> & {
    *  they simply are not shown — so a router may render all of its screens. */
   children?: ReactNode
   /**
+   * Whether push/pop/replace transitions animate at all, forwarded straight
+   * to `Adw.NavigationView`'s own `animate-transitions` property (already
+   * reachable through this component's inherited `Adw.NavigationView` props —
+   * spelled out here because it is the one prop consumers most often go
+   * looking for). GTK has exactly one transition style; there is no per-style
+   * choice to make here, only whether it plays. Default true, matching the
+   * widget's own default. Interactive swipe-back gestures always animate
+   * regardless of this value — that is Adwaita's own behavior, not this
+   * primitive's.
+   */
+  animateTransitions?: boolean
+  /**
    * The widget popped a page by itself: the Adwaita back button, Escape, the
    * back gesture, or the back-history menu. NOT called for pops you caused by
    * changing `stack`. This is where a router follows the view.
