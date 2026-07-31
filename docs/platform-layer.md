@@ -354,6 +354,90 @@ An AdwHeaderBar slot wants a widget that knows its own size, which is what
 />
 ```
 
+## Two ways to react to size
+
+Two mechanisms answer two different questions, and neither is a replacement
+for the other:
+
+- **"Render different content at different widths"** — `useWindowDimensions`
+  (from `react-native`, portable, already exists). A resize triggers a React
+  render, your component reads the new width, you return different JSX.
+  This is the right and ONLY tool for anything that changes what is
+  rendered — swapping a filter bar for a compact one, hiding a column,
+  changing text.
+- **"Flip a widget property natively at a threshold, with no render at all"**
+  — `AdwBreakpoint` + `AdwBreakpointBin`. `Adw.Breakpoint` is a condition
+  (a size/aspect-ratio threshold) plus a set of property setters: when the
+  condition starts holding, each setter writes its value onto its target
+  object's property directly, through GObject, inside GTK's own allocation
+  pass; when the condition stops holding, the setter puts the property back
+  to whatever it held before. **No React commit, no Yoga pass, no JS
+  callback runs for the flip itself** — a resize costs nothing beyond what
+  GTK's layout was already doing.
+
+  `Adw.Breakpoint` is not a widget — verified against the real binding,
+  `Adw.Breakpoint.prototype instanceof Gtk.Widget` is `false`; its
+  prototype chain bottoms out at plain `GObject.Object`. It draws nothing
+  and occupies no space, so it is exported raw (`AdwBreakpoint`, from
+  `react-native-gtkx/adw`), the same way `GtkGestureClick` is: running it
+  through `wrapReactNative` would hand it a Yoga node for something that
+  is not a rectangle, which is a layout bug, not a convenience.
+  `Adw.BreakpointBin` (`AdwBreakpointBin`) IS a real widget — a container
+  that scopes breakpoints to its own child subtree instead of a whole
+  window — and is wrapped normally, taking `style`/flex like anything else
+  here.
+
+  A breakpoint's setters may only target widgets INSIDE the
+  `AdwBreakpointBin` they are attached to, never the bin itself — so the
+  widget whose property you want to flip must be the bin's child:
+
+  ```tsx
+  import { Adw, AdwBreakpoint, AdwBreakpointBin } from "react-native-gtkx/adw"
+
+  const splitViewRef = useRef<Adw.NavigationSplitView | null>(null)
+  const breakpointRef = useRef<Adw.Breakpoint | null>(null)
+
+  useEffect(() => {
+    if (!splitViewRef.current || !breakpointRef.current) return
+    const collapsed = new GObject.Value()
+    collapsed.init(GObject.typeFromName("gboolean"))
+    collapsed.setBoolean(true)
+    breakpointRef.current.addSetter(splitViewRef.current, "collapsed", collapsed)
+  }, [])
+
+  <AdwBreakpointBin
+    breakpoints={
+      <AdwBreakpoint
+        ref={breakpointRef}
+        condition={Adw.BreakpointCondition.newLength(
+          Adw.BreakpointConditionLengthType.MAX_WIDTH,
+          500,
+          Adw.LengthUnit.SP,
+        )}
+      />
+    }
+  >
+    <AdwNavigationSplitView ref={splitViewRef} …>…</AdwNavigationSplitView>
+  </AdwBreakpointBin>
+  ```
+
+  `addSetter` wants a genuine, boxed `GObject.Value` — found empirically: a
+  bare JS `true` fails a `G_IS_VALUE` assertion on the native side, it does
+  not silently coerce. `createSidebarNavigator`'s own `collapseWidth` (see
+  below) is built on exactly this pair; reading `collapsed`/`showContent`
+  back (e.g. to decide whether a click should also reveal content) is a
+  plain native property read through the same ref, not React state — so
+  neither the flip nor a read of it costs a render.
+
+No `useBreakpoint(condition) → boolean` hook exists, and none is planned:
+it would return a flag to JS and trigger a re-render on every crossing,
+which is precisely what `useWindowDimensions` already does — a second name
+for the first mechanism, with none of the second's native-setter value.
+If what you want is "my component's JSX changes", reach for
+`useWindowDimensions`; only reach for `AdwBreakpoint` when the thing that
+should change is a widget property GTK itself owns, and you want that
+change to cost nothing.
+
 ## Mixing with react-navigation
 
 They compose, because the navigator is built on these primitives. Use
