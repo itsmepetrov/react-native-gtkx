@@ -4,12 +4,16 @@ React Native gives you a portable surface. This subpath gives you the platform
 underneath it: GTK4 and libadwaita widgets as React components, with **nothing
 filtered out**.
 
-Two rules make it easy to reason about:
+Three rules make it easy to reason about:
 
 1. **It is not portable, and the import says so.** Anything you take from
    `react-native-gtkx/adwaita` is Linux-only. That is deliberate — it shows up
    in review as a decision, not as an accident.
-2. **It does not know about react-navigation.** No router is involved, none is
+2. **A prefix tells you whose component it is.** `AdwHeaderBar`, `GtkButton`,
+   `AdwNavigationView` — that IS the widget, as gtkx binds it. No prefix —
+   `NavigationStack`, `PageContent`, `Widget` — means it is ours. A wrapper of
+   ours therefore never makes a standard widget unreachable.
+3. **It does not know about react-navigation.** No router is involved, none is
    required. `react-native-gtkx/navigation` is a thin adapter built on top of
    this subpath, exactly the way `@react-navigation/native-stack` is built on
    top of `react-native-screens`. You can skip the adapter entirely.
@@ -39,14 +43,14 @@ your app
 These are the two components we wrap, because a raw `Adw.NavigationView` is
 imperative (`push`, `pop`, `pop_to_tag`) and React is not.
 
-| Export               | What it is                                             |
-| -------------------- | ------------------------------------------------------ |
-| `AdwNavigationStack` | `Adw.NavigationView` driven by a `stack` array of tags |
-| `AdwNavigationPage`  | one page of that stack, identified by `tag`            |
+| Export                | What it is                                             |
+| --------------------- | ------------------------------------------------------ |
+| `NavigationStack`     | `Adw.NavigationView` driven by a `stack` array of tags |
+| `NavigationStackPage` | one page of that stack, identified by `tag`            |
 
 They **inherit every prop of the underlying widget** and only add to it, so
 anything you could set on `Adw.NavigationPage` you can set on
-`AdwNavigationPage`.
+`NavigationStackPage`.
 
 ### React Native content inside GTK slots
 
@@ -119,9 +123,9 @@ import { useState } from "react"
 import { Pressable, Text, View } from "react-native"
 import {
   AdwHeaderBar,
-  AdwNavigationPage,
-  AdwNavigationStack,
   AdwToolbarView,
+  NavigationStack,
+  NavigationStackPage,
   PageContent,
 } from "react-native-gtkx/adwaita"
 
@@ -129,13 +133,13 @@ const App = () => {
   const [stack, setStack] = useState(["home"])
 
   return (
-    <AdwNavigationStack
+    <NavigationStack
       stack={stack}
       // The Adwaita back button, Escape, the back gesture and the
       // back-history menu all arrive here. Follow them in your own state.
       onPopped={(tag) => setStack((s) => s.filter((entry) => entry !== tag))}
     >
-      <AdwNavigationPage
+      <NavigationStackPage
         tag="home"
         title="Home"
       >
@@ -146,9 +150,9 @@ const App = () => {
             </Pressable>
           </PageContent>
         </AdwToolbarView>
-      </AdwNavigationPage>
+      </NavigationStackPage>
 
-      <AdwNavigationPage
+      <NavigationStackPage
         tag="detail"
         title="Detail"
       >
@@ -157,8 +161,8 @@ const App = () => {
             <View />
           </PageContent>
         </AdwToolbarView>
-      </AdwNavigationPage>
-    </AdwNavigationStack>
+      </NavigationStackPage>
+    </NavigationStack>
   )
 }
 ```
@@ -166,7 +170,7 @@ const App = () => {
 A runnable version is `examples/adwaita-primitives` — three levels deep, with
 React Native content in the header bar and a raw `GtkButton` beside it.
 
-### `AdwNavigationStack` props
+### `NavigationStack` props
 
 Everything `Adw.NavigationView` has, plus:
 
@@ -183,7 +187,7 @@ Pages not listed in `stack` are still accepted as children and simply are not
 shown, so a router may hand over all of its screens at once.
 
 **Exit animations are handled for you.** When a tag leaves `stack`, the widget
-still animates the page out for about 200 ms. `AdwNavigationStack` keeps a
+still animates the page out for about 200 ms. `NavigationStack` keeps a
 snapshot of that page until its `hidden` signal (with a timer fallback for
 compositors that never emit it), so you never have to keep rendering pages
 you already consider gone.
@@ -250,7 +254,7 @@ If something is missing, reach the widget directly:
 
 ```tsx
 const viewRef = useRef<Adw.NavigationView | null>(null)
-<AdwNavigationStack ref={viewRef} stack={stack}>…</AdwNavigationStack>
+<NavigationStack ref={viewRef} stack={stack}>…</NavigationStack>
 // viewRef.current is the real Adw.NavigationView
 ```
 

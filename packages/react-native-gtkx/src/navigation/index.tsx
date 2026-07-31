@@ -6,7 +6,7 @@
 // exit animation ends, bracketing transitions — lives in the primitive. What
 // stays here is exactly the react-navigation half:
 //
-// - state → the ordered tags handed to AdwNavigationStack (route keys);
+// - state → the ordered tags handed to NavigationStack (route keys);
 // - a native pop (back button, Escape, back gesture) → StackActions.pop,
 //   but only when the tag is still in state, otherwise the pop was one WE
 //   caused and echoing it would double-pop;
@@ -30,10 +30,10 @@ import { useEffect, type ComponentType, type ReactNode } from "react"
 import { getActiveChrome } from "../components/app-registry"
 import {
   AdwHeaderBar,
-  AdwNavigationPage,
-  AdwNavigationStack,
   AdwToolbarView,
   IntrinsicContent,
+  NavigationStack,
+  NavigationStackPage,
   PageContent,
 } from "../adwaita"
 import { GtkButton } from "../gtkx/bridge/index"
@@ -162,7 +162,7 @@ type StackViewProps = {
 const StackView = ({ routeKeys, descriptors, onPopped }: StackViewProps) => {
   const { preventedRoutes } = usePreventRemoveContext()
   return (
-    <AdwNavigationStack
+    <NavigationStack
       stack={routeKeys}
       onPopped={onPopped}
     >
@@ -178,7 +178,7 @@ const StackView = ({ routeKeys, descriptors, onPopped }: StackViewProps) => {
           !preventedRoutes[key]?.preventRemove
         const content = <PageContent>{descriptor.render()}</PageContent>
         return (
-          <AdwNavigationPage
+          <NavigationStackPage
             key={key}
             tag={key}
             // Never the route key — that is an internal identifier, and it
@@ -222,10 +222,10 @@ const StackView = ({ routeKeys, descriptors, onPopped }: StackViewProps) => {
             ) : (
               content
             )}
-          </AdwNavigationPage>
+          </NavigationStackPage>
         )
       })}
-    </AdwNavigationStack>
+    </NavigationStack>
   )
 }
 

@@ -1,7 +1,26 @@
-// Unwrapped Adwaita widgets: full property and signal surface, exactly as
-// gtkx binds it. Renamed only to drop the Adw prefix, since the subpath
-// already says it. Nothing is filtered — if libadwaita has the property and
-// gtkx binds it, you can set it.
+// react-native-gtkx/adwaita — GTK4/libadwaita widgets as React components.
+//
+// This subpath is the PLATFORM layer, and it is deliberately NOT portable:
+// importing from here is a decision to write Linux-specific UI, and it shows
+// up in your diff as such. Nothing in this file imports react-navigation.
+//
+// NAMING, one rule: a name carrying an `Adw` or `Gtk` prefix IS that widget,
+// as gtkx binds it. A name without a prefix is ours — NavigationStack,
+// PageContent, Widget, wrapReactNative. So a wrapper of ours can never make
+// a standard widget unreachable, and you always know which you are holding.
+//
+// The layering mirrors the React Native ecosystem: react-native-screens
+// exposes primitives, @react-navigation/native-stack binds them to a router.
+// Here, this subpath exposes primitives and react-native-gtkx/navigation
+// binds them to react-navigation. You can skip the binding entirely — drive
+// NavigationStack from useState, from your own router, from anything.
+//
+// Prop pass-through is total by design: the widgets below are re-exported
+// straight from the gtkx bindings, so every GObject property and signal gtkx
+// generates is available, including ones added after this file was written.
+// The two components we do wrap (NavigationStack, NavigationStackPage) inherit
+// their props from the widget and only ADD to them.
+
 import {
   GtkBox as RawGtkBox,
   GtkButton as RawGtkButton,
@@ -16,29 +35,11 @@ import {
 } from "../gtkx/bridge/index"
 import { wrapReactNative } from "./widget"
 
-// react-native-gtkx/adwaita — GTK4/libadwaita widgets as React components.
-//
-// This subpath is the PLATFORM layer, and it is deliberately NOT portable:
-// importing from here is a decision to write Linux-specific UI, and it shows
-// up in your diff as such. Nothing in this file imports react-navigation.
-//
-// The layering mirrors the React Native ecosystem: react-native-screens
-// exposes primitives, @react-navigation/native-stack binds them to a router.
-// Here, this subpath exposes primitives and react-native-gtkx/navigation
-// binds them to react-navigation. You can skip the binding entirely — drive
-// AdwNavigationStack from useState, from your own router, from anything.
-//
-// Prop pass-through is total by design: the widgets below are re-exported
-// straight from the gtkx bindings, so every GObject property and signal gtkx
-// generates is available, including ones added after this file was written.
-// The two components we do wrap (AdwNavigationStack, AdwNavigationPage) inherit
-// their props from the widget and only ADD to them.
-
 export {
-  AdwNavigationPage,
-  AdwNavigationStack,
-  type AdwNavigationPageProps,
-  type AdwNavigationStackProps,
+  NavigationStackPage,
+  NavigationStack,
+  type NavigationStackPageProps,
+  type NavigationStackProps,
 } from "./navigation-view"
 
 export {
@@ -63,9 +64,12 @@ export {
 export {
   AdwApplicationWindow,
   AdwHeaderBar,
-  // The raw, imperative widget: push/pop/popToTag by hand. AdwNavigationStack
-  // above is the declarative alternative, not a replacement — this one stays
-  // reachable because a different contract deserves a different name.
+  // The raw widgets. NavigationStack and NavigationStackPage above are
+  // the declarative alternatives, NOT replacements: the stack is imperative
+  // here (pushByTag / popToTag by hand) and the page carries no coupling to
+  // it. A standard widget must never become unreachable because we wrapped
+  // it, so both names stay pointed at gtkx.
+  AdwNavigationPage,
   AdwNavigationView,
   AdwNavigationSplitView,
   AdwToolbarView,

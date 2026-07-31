@@ -10,8 +10,8 @@ import { render, waitFor } from "@gtkx/testing"
 import { useEffect, useState } from "react"
 import { expect, it } from "vitest"
 import {
-  AdwNavigationPage,
-  AdwNavigationStack,
+  NavigationStack,
+  NavigationStackPage,
   PageContent,
 } from "../../../src/adwaita"
 import type { Adw, Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
@@ -48,14 +48,14 @@ const Demo = () => {
     push = (tag) => setStack((current) => [...current, tag])
   }, [])
   return (
-    <AdwNavigationStack
+    <NavigationStack
       stack={stack}
       onPopped={(tag) => {
         popped.push(tag)
         setStack((current) => current.filter((entry) => entry !== tag))
       }}
     >
-      <AdwNavigationPage
+      <NavigationStackPage
         tag="home"
         title="Home"
       >
@@ -64,8 +64,8 @@ const Demo = () => {
             <Text>home body</Text>
           </View>
         </PageContent>
-      </AdwNavigationPage>
-      <AdwNavigationPage
+      </NavigationStackPage>
+      <NavigationStackPage
         tag="detail"
         title="Detail"
       >
@@ -74,8 +74,8 @@ const Demo = () => {
             <Text>detail body</Text>
           </View>
         </PageContent>
-      </AdwNavigationPage>
-    </AdwNavigationStack>
+      </NavigationStackPage>
+    </NavigationStack>
   )
 }
 

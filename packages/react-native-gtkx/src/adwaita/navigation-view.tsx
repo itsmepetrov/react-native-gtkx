@@ -53,7 +53,7 @@ const PageLifecycleContext = createContext<PageLifecycle | null>(null)
 // change here. Only `onHidden` is intercepted, and it is still forwarded.
 type AdwPageProps = ComponentProps<typeof RawAdwNavigationPage>
 
-export type AdwNavigationPageProps = AdwPageProps & {
+export type NavigationStackPageProps = AdwPageProps & {
   /** Stable identity of this page inside the view. Required: the whole sync
    *  protocol is expressed in tags, and Adwaita itself pushes and pops by
    *  tag. Use the same string you put in NavigationView's `stack`. */
@@ -61,17 +61,17 @@ export type AdwNavigationPageProps = AdwPageProps & {
 }
 
 /**
- * One page of an {@link AdwNavigationStack}.
+ * One page of an {@link NavigationStack}.
  *
  * Children are passed to the widget untouched. To put React Native content
  * inside a page, wrap it in `PageContent` (see ./content) — the primitive
  * deliberately does not guess, so raw GTK children keep working.
  */
-export const AdwNavigationPage = ({
+export const NavigationStackPage = ({
   tag,
   onHidden,
   ...rest
-}: AdwNavigationPageProps) => {
+}: NavigationStackPageProps) => {
   const lifecycle = useContext(PageLifecycleContext)
   const handleHidden = ((...args: unknown[]) => {
     lifecycle?.reportHidden(tag)
@@ -90,14 +90,14 @@ export const AdwNavigationPage = ({
 
 type AdwViewProps = ComponentProps<typeof RawAdwNavigationView>
 
-export type AdwNavigationStackProps = Omit<AdwViewProps, "onPopped" | "ref"> & {
+export type NavigationStackProps = Omit<AdwViewProps, "onPopped" | "ref"> & {
   /**
    * The visible stack, root first, as page tags. Change it and the widget
    * animates to match: appended tags push, removed tags pop, a changed root
    * replaces the whole stack.
    */
   stack: readonly string[]
-  /** `AdwNavigationPage` elements. Pages not in `stack` are still accepted —
+  /** `NavigationStackPage` elements. Pages not in `stack` are still accepted —
    *  they simply are not shown — so a router may render all of its screens. */
   children?: ReactNode
   /**
@@ -126,19 +126,19 @@ export type AdwNavigationStackProps = Omit<AdwViewProps, "onPopped" | "ref"> & {
  * ```tsx
  * const [stack, setStack] = useState(["home"])
  *
- * <AdwNavigationStack
+ * <NavigationStack
  *   stack={stack}
  *   onPopped={(tag) => setStack((s) => s.filter((t) => t !== tag))}
  * >
- *   <AdwNavigationPage tag="home" title="Home">…</AdwNavigationPage>
- *   <AdwNavigationPage tag="detail" title="Detail">…</AdwNavigationPage>
- * </AdwNavigationStack>
+ *   <NavigationStackPage tag="home" title="Home">…</NavigationStackPage>
+ *   <NavigationStackPage tag="detail" title="Detail">…</NavigationStackPage>
+ * </NavigationStack>
  * ```
  *
  * No router required. `react-native-gtkx/navigation` uses exactly this
  * component to back `createStackNavigator`.
  */
-export const AdwNavigationStack = ({
+export const NavigationStack = ({
   stack,
   children,
   onPopped,
@@ -148,7 +148,7 @@ export const AdwNavigationStack = ({
   transitionDuration = DEFAULT_TRANSITION_MS,
   ref,
   ...rest
-}: AdwNavigationStackProps) => {
+}: NavigationStackProps) => {
   const viewRef = useRef<Adw.NavigationView | null>(null)
   // Mirror of the widget's visible stack. Maintained by the sync effect and
   // by the popped handler; the two never race, because GTK signals run
