@@ -1,28 +1,46 @@
 #!/usr/bin/env node
-// Build a .deb of an example application. Two source shapes exist:
+// Build a .deb of an example application.
 //
-//   vite path (examples/monitor, gallery, tasks-app — `gtkx build`):
-//     dist/bundle.js + dist/gtkx.node, everything except the native addon
-//     inlined. Ships as-is under /opt, `node bundle.js` needs nothing else.
+// The artifact kind is DECLARED by the caller (--artifact), never inferred
+// from which file happens to exist in dist/. That used to be a filename
+// probe, and the probe broke the moment a second Metro artifact appeared:
+// `build-linux --standalone` writes dist/main.jsbundle AND dist/<name>.cjs,
+// so "does main.jsbundle exist" stopped answering "which artifact am I
+// packaging" and started silently answering "yes" for both. Declaring the
+// kind turns every existsSync below into validation of a stated intent
+// rather than the decision itself.
 //
-//   Metro path (examples/hn-app — `react-native build-linux`):
-//     dist/main.jsbundle only. Metro deliberately keeps @gtkx/*, react and
-//     yoga-layout OUT of the bundle (see packages/react-native-gtkx's
-//     src/metro/index.ts, HOST_MODULE_EXTERNALS) — they have to be the same
-//     instances the Node+GTK host itself loads. So the target machine needs
-//     a real node_modules too, and this script builds one: `npm pack` the
-//     local react-native-gtkx (never the stale registry version — we may be
-//     packaging the release that publishes it), install that tarball in an
-//     isolated scratch project (a `file:` reference to the directory would
-//     silently resolve through the monorepo's own hoisted node_modules and
-//     prove nothing), run `gtkx codegen` there, and stage the result next to
-//     the bundle. Validated by hand in the VM before being encoded here:
-//     built, isolated-installed, codegen'd and launched inside a real
-//     desktop session — see .claude/epics/metro-production-build.
+// Two kinds ship as a .deb, and both are one bundle plus a `nodejs`
+// dependency — the same shape, reached from the two toolchains:
 //
-// The app must be built first (npm run build in the example).
-// usage: build-deb.ts <example> <app-title> <version> <out-dir>
-//   e.g. build-deb.ts monitor "System Monitor" 0.1.0-alpha.1 /tmp/debs
+//   --artifact vite (examples/monitor, gallery, tasks-app, tasks-nav —
+//     `gtkx build`): dist/bundle.js + dist/gtkx.node, everything except the
+//     native addon inlined. Ships as-is under /opt; `node bundle.js` needs
+//     nothing else.
+//
+//   --artifact standalone (examples/hn-app — `react-native build-linux
+//     --standalone`): dist/<name>.cjs, ONE file with the whole dependency
+//     closure and the native addon inlined (the addon as a base64 literal,
+//     extracted to a per-user cache on first run — see the package's
+//     src/sea/native-shim.ts).
+//
+// A third Metro artifact exists and is deliberately NOT packaged here: the
+// plain `build-linux` output, dist/main.jsbundle, which is not
+// self-contained. Metro keeps @gtkx/*, react and yoga-layout out of the
+// bundle (src/metro/index.ts, HOST_MODULE_EXTERNALS), so packaging it means
+// shipping a real node_modules beside it, and this script used to build one
+// — npm pack, an isolated install, `gtkx codegen`, `cp -a`. Measured on the
+// v0.2.0-alpha.1 release that produced: 10,515 files and 206 MiB installed
+// to run a 369 KB bundle, because the runtime closure of react-native-gtkx
+// drags its BUILD toolchain along (typescript, @swc, rolldown, babel,
+// lightningcss). --standalone is that same app as a single 6.9 MB file, so
+// the closure-building has no reason left to exist.
+//
+// The app must be built first (npm run build in the example; for hn-app
+// that is `react-native build-linux --standalone`).
+// usage: build-deb.ts <example> <app-title> <version> <out-dir> --artifact <kind>
+//   e.g. build-deb.ts monitor "System Monitor" 0.1.0-alpha.1 debs --artifact vite
+//        build-deb.ts hn-app "Hacker News" 0.1.0-alpha.1 debs --artifact standalone
 import { execFileSync } from "node:child_process"
 import {
   chmodSync,
@@ -30,22 +48,59 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readdirSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-const usage = "usage: build-deb.ts <example> <app-title> <version> <out-dir>"
-const [example, title, version, out] = process.argv.slice(2)
-if (!example || !title || !version || !out) {
+/** The artifact kinds this script knows how to package. */
+const ARTIFACTS = ["vite", "standalone"] as const
+type Artifact = (typeof ARTIFACTS)[number]
+
+const usage =
+  "usage: build-deb.ts <example> <app-title> <version> <out-dir> " +
+  `--artifact <${ARTIFACTS.join("|")}>`
+
+const argv = process.argv.slice(2)
+const artifactIndex = argv.indexOf("--artifact")
+const artifactArg = artifactIndex === -1 ? undefined : argv[artifactIndex + 1]
+const positional =
+  artifactIndex === -1 ? argv : argv.toSpliced(artifactIndex, 2)
+const [example, title, version, out] = positional
+
+const isArtifact = (value: string | undefined): value is Artifact =>
+  ARTIFACTS.includes(value as Artifact)
+
+if (!example || !title || !version || !out || !isArtifact(artifactArg)) {
   console.error(usage)
   process.exit(1)
 }
+const artifact: Artifact = artifactArg
 
 const ROOT = join(import.meta.dirname, "..")
-const DIST = join(ROOT, "examples", example, "dist")
+const APP = join(ROOT, "examples", example)
+const DIST = join(APP, "dist")
+
+/**
+ * The basename `build-linux --standalone` gives its artifact: the app's
+ * package name with any npm scope stripped, so hn-app writes
+ * dist/hn-app.cjs. Deliberately re-derived from package.json the same way
+ * the runner's appBinaryName() does, rather than assumed to equal the
+ * example directory name — the two are free to differ, and reading the
+ * manifest is how the file got its name in the first place.
+ */
+const standaloneName = (): string => {
+  const manifest = JSON.parse(
+    readFileSync(join(APP, "package.json"), "utf8"),
+  ) as { name?: string }
+  const name = manifest.name?.split("/").pop()
+  if (!name) {
+    throw new Error(`${APP}/package.json has no usable "name"`)
+  }
+  return `${name}.cjs`
+}
 
 const PKG = `react-native-gtkx-${example}`
 const ARCH = execFileSync("dpkg", ["--print-architecture"], {
@@ -54,7 +109,6 @@ const ARCH = execFileSync("dpkg", ["--print-architecture"], {
 // Debian versions use ~ for prereleases (sorts before the release).
 const DEB_VERSION = version.replaceAll("-", "~")
 const STAGE = mkdtempSync(join(tmpdir(), "build-deb-stage-"))
-const SCRATCH = mkdtempSync(join(tmpdir(), "build-deb-scratch-"))
 
 try {
   // `install -d`, not mkdirSync: it gives auto-created parents and the
@@ -78,16 +132,31 @@ try {
   const launcherPath = join(STAGE, "usr/bin", PKG)
   let descriptionBody = ""
 
-  if (existsSync(join(DIST, "bundle.js"))) {
-    // --- vite path -------------------------------------------------------
-    copyFileSync(join(DIST, "bundle.js"), join(STAGE, "opt", PKG, "bundle.js"))
-    copyFileSync(join(DIST, "gtkx.node"), join(STAGE, "opt", PKG, "gtkx.node"))
+  /** Stages one built file under /opt/<PKG>, failing loudly if the declared
+   * artifact kind did not actually produce it. 0644 explicitly: dpkg-deb
+   * ships whatever mode the staged file carries, and copyFileSync inherits
+   * the source's, which came from whichever bundler wrote it. */
+  const stage = (name: string): void => {
+    const source = join(DIST, name)
+    if (!existsSync(source)) {
+      console.error(
+        `missing ${source} — --artifact ${artifact} needs it; build the example first`,
+      )
+      process.exit(1)
+    }
+    const target = join(STAGE, "opt", PKG, name)
+    copyFileSync(source, target)
+    chmodSync(target, 0o644)
+  }
+
+  if (artifact === "vite") {
+    stage("bundle.js")
+    stage("gtkx.node")
     // tasks-app (and any future GSettings-using app) also emits a compiled
     // schema; bundle.js's own banner points GSETTINGS_SCHEMA_DIR at its own
     // directory, so copying it alongside is the only thing needed.
-    const gschemas = join(DIST, "gschemas.compiled")
-    if (existsSync(gschemas)) {
-      copyFileSync(gschemas, join(STAGE, "opt", PKG, "gschemas.compiled"))
+    if (existsSync(join(DIST, "gschemas.compiled"))) {
+      stage("gschemas.compiled")
     }
 
     writeFileSync(
@@ -98,108 +167,25 @@ try {
     descriptionBody = ` An application written against the React Native API and rendered as native
  GTK4/Adwaita widgets by react-native-gtkx. Ships as a single Node bundle
  with the gtkx native addon.`
-  } else if (existsSync(join(DIST, "main.jsbundle"))) {
-    // --- Metro path --------------------------------------------------------
-    const rngDist = join(ROOT, "packages/react-native-gtkx/dist")
-    if (!existsSync(rngDist)) {
-      console.error(`missing ${rngDist} — run npm run build:dist first`)
-      process.exit(1)
-    }
-    const appConfig = join(ROOT, "examples", example, "gtkx.config.ts")
-    if (!existsSync(appConfig)) {
-      console.error(`missing ${appConfig} — a Metro-path app needs one`)
-      process.exit(1)
-    }
+  } else {
+    const script = standaloneName()
+    stage(script)
 
-    console.error("packing the local react-native-gtkx build…")
-    // Glob the result rather than parse npm pack's stdout: the package's own
-    // prepack script (README sync) prints a notice line first, so the
-    // tarball filename is not reliably "the whole output".
-    execFileSync(
-      "npm",
-      [
-        "pack",
-        "-w",
-        "react-native-gtkx",
-        "--pack-destination",
-        SCRATCH,
-        "--silent",
-      ],
-      {
-        cwd: ROOT,
-        stdio: ["ignore", "ignore", "inherit"],
-      },
-    )
-    const tarballName = readdirSync(SCRATCH).find(
-      (name) => name.startsWith("react-native-gtkx-") && name.endsWith(".tgz"),
-    )
-    if (!tarballName) {
-      throw new Error(
-        `npm pack did not produce a react-native-gtkx-*.tgz in ${SCRATCH}`,
-      )
-    }
-    const tarball = join(SCRATCH, tarballName)
-
-    const runtime = join(SCRATCH, "runtime")
-    mkdirSync(runtime, { recursive: true })
-    writeFileSync(
-      join(runtime, "package.json"),
-      `{
-  "name": "${PKG}-runtime",
-  "private": true,
-  "dependencies": { "react-native-gtkx": "file:${tarball}" }
-}
-`,
-    )
-    copyFileSync(appConfig, join(runtime, "gtkx.config.ts"))
-    copyFileSync(join(DIST, "main.jsbundle"), join(runtime, "main.jsbundle"))
-
-    console.error(`installing the isolated runtime closure for ${example}…`)
-    execFileSync("npm", ["install", "--no-audit", "--no-fund", "--silent"], {
-      cwd: runtime,
-      stdio: "inherit",
-    })
-
-    console.error(`generating the ${example} codegen store…`)
-    execFileSync(join(runtime, "node_modules/.bin/gtkx"), ["codegen"], {
-      cwd: runtime,
-      stdio: "inherit",
-    })
-
-    // Keep symlinks as symlinks (don't dereference): codegen's own store
-    // links (node_modules/@gtkx/gi -> .gtkx/gi) are relative and some are
-    // reflexively cyclic (a store directory linking back to its own package
-    // name for resolution) — dereferencing recurses forever. `cp -a`, not
-    // fs.cpSync, for the same reason this script prefers `install -d` over
-    // mkdirSync elsewhere: real, already-debugged tool behavior beats a
-    // hand-rolled equivalent for a case this subtle.
-    execFileSync("cp", [
-      "-a",
-      join(runtime, "node_modules"),
-      join(runtime, "gtkx.config.ts"),
-      join(runtime, "main.jsbundle"),
-      join(STAGE, "opt", PKG),
-    ])
-    // gtkx codegen creates its store (node_modules/.gtkx/{gi,jsx}) 0700 —
-    // fine for a per-user dev cache, fatal here: dpkg-deb --root-owner-group
-    // ships it root-owned and the installed app runs as a regular user.
-    // world-readable/traversable, does not touch already-set exec bits.
-    execFileSync("chmod", ["-R", "a+rX", join(STAGE, "opt", PKG)])
-
+    // No `cd` into /opt first, unlike the jsbundle launcher this replaced:
+    // that one had to run from the app directory so the host could resolve
+    // node_modules and read gtkx.config.ts at startup. A --standalone build
+    // resolved the config at BUNDLE time and carries its whole closure, so
+    // it has nothing to look up next to itself and inherits the user's
+    // working directory like any other program.
     writeFileSync(
       launcherPath,
-      `#!/bin/sh\ncd "/opt/${PKG}" || exit 1\nexec node node_modules/react-native-gtkx/dist/runner/host.js main.jsbundle "$@"\n`,
+      `#!/bin/sh\nexec node "/opt/${PKG}/${script}" "$@"\n`,
     )
 
     descriptionBody = ` An application written against the React Native API on the standard Metro
- toolchain (\`react-native run-linux\`) and rendered as native GTK4/Adwaita
- widgets by react-native-gtkx. Ships its Metro release bundle alongside the
- runtime packages it does not inline (react-native-gtkx, react, yoga-layout).`
-  } else {
-    console.error(
-      `missing ${DIST}/bundle.js or ${DIST}/main.jsbundle — build the example first`,
-    )
-    process.exit(1)
+ toolchain (\`react-native build-linux --standalone\`) and rendered as native
+ GTK4/Adwaita widgets by react-native-gtkx. Ships as a single self-contained
+ script with the gtkx native addon embedded.`
   }
 
   chmodSync(launcherPath, 0o755)
@@ -254,5 +240,4 @@ ${descriptionBody}
   )
 } finally {
   rmSync(STAGE, { recursive: true, force: true })
-  rmSync(SCRATCH, { recursive: true, force: true })
 }
