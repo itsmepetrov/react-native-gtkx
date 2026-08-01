@@ -319,8 +319,24 @@ const App = () => {
     )
     return MODE
   })
+  // Painted area is the variable that separates "our work" from "the pixels",
+  // and in a session run it is NOT known up front: the maximize keystroke can
+  // land on another window, and the compositor may clamp a requested size.
+  // Log every size the root actually gets so a run certifies its own geometry
+  // instead of the analysis assuming it.
+  const size = useRef("")
   return (
-    <View style={styles.screen}>
+    <View
+      style={styles.screen}
+      onLayout={({ nativeEvent }) => {
+        const { width, height } = nativeEvent.layout
+        const next = `${Math.round(width)}x${Math.round(height)}`
+        if (next !== size.current) {
+          size.current = next
+          mark(`size ${next}`)
+        }
+      }}
+    >
       {config === "scrollview" ? <ScrollViewProbe /> : <FlatListProbe />}
     </View>
   )

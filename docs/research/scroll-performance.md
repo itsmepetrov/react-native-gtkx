@@ -350,3 +350,149 @@ twice — for a reason still unknown, since the identity theory is dead. The
 next honest step is to find out what actually breaks under the skip, with the
 same instrument-first discipline that settled rounds three and four, rather
 than to try a third variant.
+
+> Round six re-measured the two numbers this section compares (44.0 against
+> 17.3) with the window geometry actually verified, and they do not survive:
+> the 17.3 is a windowed measurement. See below.
+
+## Round six: the maximized numbers were never area-controlled
+
+Re-measured 2026-08-01 on the same rig, on `main` at gtkx `1.0.0-rc.3`,
+after transforms in the allocation path (#29), the negative-size and
+classifier fixes (#32), and the responder system (#41). The starting question
+was whether a next win exists past round three's 17.3 ms. The answer is that
+17.3 ms was never a maximized number.
+
+### The instrument that was missing
+
+Every session run resizes the window by pressing GNOME's maximize binding
+through `ydotool` — and the keystroke goes to whatever window has focus.
+This box is shared with other agents' running example apps, and the miss is
+not rare: of the eight maximize runs taken today whose geometry could be
+checked at all, **one silently stayed windowed** and reported windowed
+numbers under a maximized label. Round three caught that class of error for
+the FlatList runs by
+checking live Yoga nodes (445 windowed against ~800 maximized), which is why
+its FlatList numbers hold up.
+
+**That check is blind in exactly the run the conclusion rested on.** In
+`PERF_MODE=scrollview` all 500 rows are mounted no matter how big the window
+is, so the node count is ~1504 either way and cannot witness the geometry.
+The control that established "area alone costs nothing" is the one run whose
+geometry nothing verified.
+
+The probe now logs its own root allocation (`PERF_MARK size WxH`) on every
+change, so a run certifies its own geometry instead of the analysis assuming
+it. Two things fell out immediately:
+
+- Maximized on this display (2632×1700) is **1981×1212**, and windowed is
+  560×724 — a **5.9× area ratio**, not the "roughly doubled" viewport round
+  three inferred from the node count. Nodes track viewport HEIGHT (2.2×
+  here); the width went 4.7× and nothing was counting it.
+- Requesting an oversized window (`PERF_WIDTH=2600 PERF_HEIGHT=1620`) is
+  clamped by the compositor to that same 1981×1212. So the large-area cell
+  needs no keystroke, no focus, and no ydotool at all — it is deterministic.
+  Prefer it.
+
+### Area is most of the frame, and it is not ours
+
+The 2×2 that separates painted area from our own work, medians of three
+interleaved repeats on a quiet box (`down2`, steady scroll over warm rows):
+
+| Configuration              |      area | `frame.avg` | `frame.veryLate`/s |
+| -------------------------- | --------: | ----------: | -----------------: |
+| ScrollView, windowed       |   560×724 |     15.5 ms |                0.3 |
+| FlatList `windowSize` 11   |   560×724 |     15.0 ms |                0.4 |
+| ScrollView, full area      | 1981×1212 | **43.9 ms** |               22.0 |
+| FlatList `windowSize` 11   | 1981×1212 |     44.5 ms |               21.8 |
+| …plus a sticky header      | 1981×1212 |     52.6 ms |               18.5 |
+
+The ScrollView row is the control: all 500 rows mounted, scrolling is a pure
+native adjustment translation, and the instrumentation confirms it does
+**zero** engine flushes and **zero** GTK allocate passes for the whole phase —
+the only thing we spend is 0.04 ms/s of scroll handler. It still costs
+43.9 ms per frame at full area against 15.5 ms windowed.
+
+So round three's control does not reproduce, and its central inference —
+"area alone costs nothing… only the PRODUCT hurts… the lever is ours: shrink
+N per frame" — rests on a run that was almost certainly never maximized. Area
+alone costs 2.8×, measured with nothing of ours in the loop.
+
+What our whole virtualized list adds on top of a native scroll of the same
+content at the same size is the difference between rows three and four:
+**0.6 ms of a 44.5 ms frame.** Windowed it is negative (15.0 against 15.5) —
+inside the noise. The same run repeated before the rc.3 rebase landed on the
+same shape (15.5 / 15.3 / 47.7 / 49.9), so the renderer bump moves none of
+this either way.
+
+### Round five's sticky amplifier, with the geometry held still
+
+The sticky row above is the same comparison round five made, and it shrinks
+the same way. Round five recorded 44.0 ms sticky against 17.3 ms plain and
+read the gap as a 2.5× amplifier; measured at one geometry, it is **52.6
+against 44.5 — about 8 ms**, because the 17.3 comparator was windowed.
+
+The mechanism round five described is real and is still there (the pin tick
+calls `queueAllocate(content)` on nearly every frame of motion, and the
+container's `allocate()` re-allocates every child to move one pinned widget:
+`gtk.allocPass` 55.5/s sticky against 49.2/s plain, for the same ~1200 child
+allocations a second). What changed is the size of the prize. Eight
+milliseconds is real, but it sits on top of a frame that is already 44 ms of
+rasterization, so buying all of it still leaves ~23 fps. Against a fix that
+has broken five test files on two separate attempts, that is not a trade
+worth a third variant — the cost is now quantified and documented, which is
+the useful state for it to be in.
+
+### The round-three fix does not fire
+
+`use-layout-child.ts`'s early return on an identical rect was credited with
+40.4 → 17.3 ms. It is now instrumented: `rect.skip` counts the guard firing,
+`rect.change` counts it not firing.
+
+**`rect.skip` is zero in every phase, at both window sizes, in every run.**
+`rect.change` equals `engine.commits` exactly. The unchanged-rect commit the
+guard exists to catch does not occur at all in this workload — `collectChanges()`
+only descends into a child that Yoga gave a new layout or that lies on the
+dirty path, so a leaf that reaches the commit callback during a scroll has
+genuinely moved.
+
+Gating the guard off behind an env flag and running it head to head confirms
+it: identical counters (`gtk.allocPass` 47.2 against 46.9, `gtk.allocChild`
+1264 against 1255) and frame times inside the noise, maximized and windowed.
+
+The guard is correct and free, so it stays — but it is not what moved those
+numbers. Reading the two records together, the pre-fix 40.4 ms is recorded
+with 801 live nodes (so it really was maximized, and it agrees with today's
+~48 ms for the same geometry), while the post-fix 17.3 ms carries no geometry
+evidence and matches today's **windowed** 15.3 ms. The pair compares a
+maximized run against a windowed one.
+
+### What this means for the epic
+
+At full-screen size on this rig, a scrolling frame costs ~44 ms and ~44 of
+those are the software rasterizer moving pixels. Our layer is under 1 ms of
+it. Removing every allocation, commit and measure we do would take a 22 fps
+window to about 23 fps. There is no next win on our side of the line, and the
+"maximized is worse" symptom that started rounds three to five is a property
+of a guest with no GPU: `systemd-detect-virt` reports `apple`, whose
+virtio-gpu is display-only, and round three already measured that the cairo
+renderer is twice as slow again.
+
+Windowed — the size these apps actually run at in the gallery and the
+examples — FlatList is at 15.0 ms and 0.4 very-late frames a second, i.e.
+60 fps with headroom, and indistinguishable from a plain native
+`GtkScrolledWindow` holding the same content. That is the honest end state,
+and the epic closes here.
+
+One caveat the numbers cannot settle: because this guest has no GPU, paint is
+at its most expensive here and our share is at its smallest. On hardware with
+a working GL path the ~44 ms would collapse and our ~1 ms would be a much
+larger fraction of a much smaller frame. Nothing measured here says our layer
+is cheap in absolute terms — it says it is not what is costing frames on the
+only rig available.
+
+Two things worth keeping from this round, both instruments rather than fixes:
+the probe's `PERF_MARK size` line, and the `rect.skip`/`rect.change` counters.
+Between them, a future run cannot repeat either of the mistakes in this
+document — comparing two geometries by accident, or crediting a guard that
+never fired.
