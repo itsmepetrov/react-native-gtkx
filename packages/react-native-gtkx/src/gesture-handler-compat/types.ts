@@ -6,6 +6,12 @@
 // deprecated all twelve `Gesture.*` statics in 3.1.0 in favour of a hook tree
 // and had to rewrite the internals because the builder WAS the internals.
 //
+// One config type covers all three recognizers rather than one per kind, and
+// that is the same call: `Tap` and `LongPress` are the same state machine as
+// `Pan` with different predicates, so what tells them apart is which fields a
+// decider READS, not which fields exist. A per-kind config would have to be
+// narrowed at every point the machine touches it, for no behaviour.
+//
 // The two spellings are not cosmetic variants of each other, and that is the
 // reason this middle layer earns its keep. Upstream's hook renamed `onStart`
 // to `onActivate` and `onEnd` to `onDeactivate`, dropped `onChange`, renamed
@@ -24,9 +30,11 @@
  * RNGH's gesture states, as numbers, because its event payloads carry `state`
  * and consumers compare it.
  *
- * The `State` enum is NOT exported from this package yet — that is slice 2,
- * with `Tap` and `LongPress`. The values live here so payloads can be
- * faithful in the meantime.
+ * Exported from the package entry as `State`, which is the name upstream uses
+ * — see ./index. The numbers are `react-native-gesture-handler` 3.1.0's own
+ * (`src/State.ts`) and a test pins every one of them, because a silently
+ * different number is the failure mode: `state === State.ACTIVE` would just
+ * quietly answer wrong.
  */
 export const GESTURE_STATE = {
   UNDETERMINED: 0,
@@ -109,7 +117,7 @@ export type GestureHitSlop =
  * second payload so each could be exactly minimal would be two things to keep
  * correct instead of one.
  */
-export type PanEventPayload = {
+export type GestureEventPayload = {
   handlerTag: number
   numberOfPointers: number
   pointerType: (typeof POINTER_TYPE)[keyof typeof POINTER_TYPE]
@@ -130,10 +138,20 @@ export type PanEventPayload = {
   /** Delta of TRANSLATION since the previous update; equal to it on the first. */
   changeX: number
   changeY: number
+  /**
+   * Milliseconds since the press that started this gesture.
+   *
+   * Upstream carries it on `LongPress` alone, where it is the point of the
+   * gesture. It is filled in for every kind here for the same reason the rest
+   * of this payload is a union: one payload built once beats three that each
+   * have to stay correct, and a field a spelling does not document is
+   * harmless where a missing one is not.
+   */
+  duration: number
 }
 
 /** The ending payload the hook spelling reads, which says `canceled` instead. */
-export type PanEndEventPayload = PanEventPayload & { canceled: boolean }
+export type GestureEndEventPayload = GestureEventPayload & { canceled: boolean }
 
 /** One pointer, as the `onTouches*` callbacks see it. */
 export type GestureTouchData = {
@@ -172,13 +190,13 @@ export type GestureStateManagerApi = {
  * The internal callback set, in the hook spelling's names. Both facades
  * normalise onto this; the recognizer knows no other names.
  */
-export type PanRecognizerCallbacks = {
-  onBegin?: (event: PanEventPayload) => void
-  onActivate?: (event: PanEventPayload) => void
-  onUpdate?: (event: PanEventPayload) => void
-  onChange?: (event: PanEventPayload) => void
-  onDeactivate?: (event: PanEventPayload, success: boolean) => void
-  onFinalize?: (event: PanEventPayload, success: boolean) => void
+export type RecognizerCallbacks = {
+  onBegin?: (event: GestureEventPayload) => void
+  onActivate?: (event: GestureEventPayload) => void
+  onUpdate?: (event: GestureEventPayload) => void
+  onChange?: (event: GestureEventPayload) => void
+  onDeactivate?: (event: GestureEventPayload, success: boolean) => void
+  onFinalize?: (event: GestureEventPayload, success: boolean) => void
   onTouchesDown?: (
     event: GestureTouchEvent,
     manager: GestureStateManagerApi,
@@ -197,11 +215,18 @@ export type PanRecognizerCallbacks = {
   ) => void
 }
 
-/** Everything both spellings configure, normalised. */
-export type PanRecognizerConfig = PanRecognizerCallbacks & {
+/** Everything every spelling of every kind configures, normalised. */
+export type RecognizerConfig = RecognizerCallbacks & {
+  // --- common to all three kinds ---
   enabled?: boolean
   hitSlop?: GestureHitSlop
   shouldCancelWhenOutside?: boolean
+  minPointers?: number
+  maxPointers?: number
+  /** Only the `onTouches*` state manager may activate the gesture. */
+  manualActivation?: boolean
+
+  // --- Pan ---
   activeOffsetX?: OffsetBound
   activeOffsetY?: OffsetBound
   failOffsetX?: OffsetBound
@@ -210,11 +235,33 @@ export type PanRecognizerConfig = PanRecognizerCallbacks & {
   minVelocity?: number
   minVelocityX?: number
   minVelocityY?: number
-  minPointers?: number
-  maxPointers?: number
   activateAfterLongPress?: number
-  /** Only the `onTouches*` state manager may activate the gesture. */
-  manualActivation?: boolean
+
+  // --- Tap ---
+  /** Presses required before the tap activates. Upstream's default is 1. */
+  numberOfTaps?: number
+  /** How fast the pointer must come back up. Upstream's default is 500ms. */
+  maxDuration?: number
+  /** How long the next tap may take to arrive. Upstream's default is 500ms. */
+  maxDelay?: number
+  maxDeltaX?: number
+  maxDeltaY?: number
+
+  // --- LongPress ---
+  /** How long the pointer must stay down. Upstream's default is 500ms. */
+  minDuration?: number
+  /** Exactly this many pointers, which is upstream's spelling for LongPress. */
+  numberOfPointers?: number
+
+  // --- Tap and LongPress share this one, with different defaults ---
+  /**
+   * How far the pointer may travel and still count. Upstream defaults it to
+   * 10 for `LongPress` and leaves it UNSET for `Tap` — a tap that drags 200px
+   * inside the view and lifts in time is still a tap there, which reads like
+   * an oversight and is reproduced because guessing a default would silently
+   * refuse taps upstream accepts.
+   */
+  maxDistance?: number
 
   // Recorded, and deliberately not acted on. Each is either platform-specific
   // upstream and inert off its platform (`averageTouches` is Android-only,
@@ -232,7 +279,13 @@ export type PanRecognizerConfig = PanRecognizerCallbacks & {
   testId?: string
 }
 
-export type GestureKind = "pan"
+/**
+ * Which predicates the shared machine runs. Spelled as upstream's
+ * `SingleGestureName` reads, minus the `GestureHandler` suffix.
+ */
+export type GestureKind = "pan" | "tap" | "longPress"
+
+const KINDS = new Set<string>(["pan", "tap", "longPress"])
 
 /**
  * What a `GestureDetector` consumes. Both spellings produce exactly this.
@@ -245,7 +298,7 @@ export type GestureKind = "pan"
  */
 export type GestureSpec = {
   readonly kind: GestureKind
-  readonly config: PanRecognizerConfig
+  readonly config: RecognizerConfig
 }
 
 let nextHandlerTag = 1
@@ -261,5 +314,5 @@ export const mintHandlerTag = (): number => {
 export const isGestureSpec = (value: unknown): value is GestureSpec =>
   typeof value === "object" &&
   value !== null &&
-  (value as GestureSpec).kind === "pan" &&
+  KINDS.has((value as GestureSpec).kind) &&
   typeof (value as GestureSpec).config === "object"

@@ -1,11 +1,18 @@
-// Spelling one: `Gesture.Pan()`, the chainable builder.
+// Spelling one: `Gesture.Pan()` / `.Tap()` / `.LongPress()`, the chainable
+// builders.
 //
 // Deprecated upstream since 3.1.0 — every one of the twelve `Gesture.*`
 // statics carries an `@deprecated` tag pointing at a hook — and it is still
 // what every shipped consumer calls, which is why it is the spelling that had
 // to work first. It is a facade: each method writes one value into a
-// `PanRecognizerConfig` and returns `this`, and the object it builds is a
+// `RecognizerConfig` and returns `this`, and the object it builds is a
 // `GestureSpec` and nothing more.
+//
+// The class split mirrors upstream's. `BaseGestureBuilder` is its
+// `BaseGesture` — everything the three kinds share — and `onUpdate`/`onChange`
+// live on `PanGestureBuilder` alone because upstream puts them on
+// `ContinousBaseGesture`, which `TapGesture` and `LongPressGesture` do not
+// extend. A discrete gesture has no travel to report.
 //
 // The callback renames are where the two spellings genuinely differ.
 // `onStart` and `onEnd` here are `onActivate` and `onDeactivate` internally,
@@ -14,13 +21,14 @@
 // the payload already carries `changeX`/`changeY`.
 import { createUnsupportedFactory } from "../unsupported-export"
 import type {
+  GestureEventPayload,
   GestureHitSlop,
+  GestureKind,
   GestureSpec,
   GestureStateManagerApi,
   GestureTouchEvent,
   OffsetBound,
-  PanEventPayload,
-  PanRecognizerConfig,
+  RecognizerConfig,
 } from "./types"
 
 type TouchHandler = (
@@ -30,8 +38,8 @@ type TouchHandler = (
 
 const unsupported = createUnsupportedFactory(
   "react-native-gesture-handler",
-  "Pan and GestureDetector are implemented; cross-gesture relations and the " +
-    "composers arrive with the arbitration registry. See docs/api.md.",
+  "Pan, Tap, LongPress and GestureDetector are implemented; cross-gesture " +
+    "relations and the composers arrive with the arbitration registry. See docs/api.md.",
 )
 
 /**
@@ -50,64 +58,19 @@ const refuseRelation = (name: string, gestures: unknown[]): never => {
 }
 
 /**
- * The builder. Not a port of upstream's `PanGesture`: it holds no handler
- * tag, no relation bookkeeping and no worklet machinery, because on this
- * platform there is one runtime and the arbitration registry does not exist
- * yet.
+ * Everything upstream's `BaseGesture` has, which is everything the three
+ * implemented kinds share. Not a port of it: it holds no handler tag, no
+ * relation bookkeeping and no worklet machinery, because on this platform
+ * there is one runtime and the arbitration registry does not exist yet.
+ *
+ * `onUpdate` and `onChange` are deliberately NOT here. Upstream puts them on
+ * `ContinousBaseGesture`, which `Tap` and `LongPress` do not extend — they are
+ * discrete, they have no travel to report, and offering the methods would
+ * invite a callback that never fires.
  */
-export class PanGestureBuilder implements GestureSpec {
-  readonly kind = "pan" as const
-  readonly config: PanRecognizerConfig = {}
-
-  // --- activation and failure bounds ---
-  activeOffsetX(offset: OffsetBound): this {
-    this.config.activeOffsetX = offset
-    return this
-  }
-  activeOffsetY(offset: OffsetBound): this {
-    this.config.activeOffsetY = offset
-    return this
-  }
-  failOffsetX(offset: OffsetBound): this {
-    this.config.failOffsetX = offset
-    return this
-  }
-  failOffsetY(offset: OffsetBound): this {
-    this.config.failOffsetY = offset
-    return this
-  }
-  minDistance(distance: number): this {
-    this.config.minDistance = distance
-    return this
-  }
-  minVelocity(velocity: number): this {
-    this.config.minVelocity = velocity
-    return this
-  }
-  minVelocityX(velocity: number): this {
-    this.config.minVelocityX = velocity
-    return this
-  }
-  minVelocityY(velocity: number): this {
-    this.config.minVelocityY = velocity
-    return this
-  }
-  minPointers(count: number): this {
-    this.config.minPointers = count
-    return this
-  }
-  maxPointers(count: number): this {
-    this.config.maxPointers = count
-    return this
-  }
-  activateAfterLongPress(duration: number): this {
-    this.config.activateAfterLongPress = duration
-    return this
-  }
-  manualActivation(value: boolean): this {
-    this.config.manualActivation = value
-    return this
-  }
+abstract class BaseGestureBuilder implements GestureSpec {
+  abstract readonly kind: GestureKind
+  readonly config: RecognizerConfig = {}
 
   // --- common configuration ---
   enabled(value: boolean): this {
@@ -122,30 +85,28 @@ export class PanGestureBuilder implements GestureSpec {
     this.config.hitSlop = value
     return this
   }
+  manualActivation(value: boolean): this {
+    this.config.manualActivation = value
+    return this
+  }
 
   // --- callbacks ---
-  onBegin(callback: (event: PanEventPayload) => void): this {
+  onBegin(callback: (event: GestureEventPayload) => void): this {
     this.config.onBegin = callback
     return this
   }
-  onStart(callback: (event: PanEventPayload) => void): this {
+  onStart(callback: (event: GestureEventPayload) => void): this {
     this.config.onActivate = callback
     return this
   }
-  onUpdate(callback: (event: PanEventPayload) => void): this {
-    this.config.onUpdate = callback
-    return this
-  }
-  onChange(callback: (event: PanEventPayload) => void): this {
-    this.config.onChange = callback
-    return this
-  }
-  onEnd(callback: (event: PanEventPayload, success: boolean) => void): this {
+  onEnd(
+    callback: (event: GestureEventPayload, success: boolean) => void,
+  ): this {
     this.config.onDeactivate = callback
     return this
   }
   onFinalize(
-    callback: (event: PanEventPayload, success: boolean) => void,
+    callback: (event: GestureEventPayload, success: boolean) => void,
   ): this {
     this.config.onFinalize = callback
     return this
@@ -221,7 +182,7 @@ export class PanGestureBuilder implements GestureSpec {
   }
 
   /** Upstream's flattening hook for composed gestures; a lone gesture is a list of one. */
-  toGestureArray(): PanGestureBuilder[] {
+  toGestureArray(): BaseGestureBuilder[] {
     return [this]
   }
 
@@ -242,17 +203,147 @@ export class PanGestureBuilder implements GestureSpec {
   }
 }
 
+/** `Gesture.Pan()`, and the only one of the three that reports travel. */
+export class PanGestureBuilder extends BaseGestureBuilder {
+  readonly kind = "pan" as const
+
+  // --- activation and failure bounds ---
+  activeOffsetX(offset: OffsetBound): this {
+    this.config.activeOffsetX = offset
+    return this
+  }
+  activeOffsetY(offset: OffsetBound): this {
+    this.config.activeOffsetY = offset
+    return this
+  }
+  failOffsetX(offset: OffsetBound): this {
+    this.config.failOffsetX = offset
+    return this
+  }
+  failOffsetY(offset: OffsetBound): this {
+    this.config.failOffsetY = offset
+    return this
+  }
+  minDistance(distance: number): this {
+    this.config.minDistance = distance
+    return this
+  }
+  minVelocity(velocity: number): this {
+    this.config.minVelocity = velocity
+    return this
+  }
+  minVelocityX(velocity: number): this {
+    this.config.minVelocityX = velocity
+    return this
+  }
+  minVelocityY(velocity: number): this {
+    this.config.minVelocityY = velocity
+    return this
+  }
+  minPointers(count: number): this {
+    this.config.minPointers = count
+    return this
+  }
+  maxPointers(count: number): this {
+    this.config.maxPointers = count
+    return this
+  }
+  activateAfterLongPress(duration: number): this {
+    this.config.activateAfterLongPress = duration
+    return this
+  }
+
+  // --- the continuous callbacks, which only a continuous gesture has ---
+  onUpdate(callback: (event: GestureEventPayload) => void): this {
+    this.config.onUpdate = callback
+    return this
+  }
+  onChange(callback: (event: GestureEventPayload) => void): this {
+    this.config.onChange = callback
+    return this
+  }
+}
+
+/**
+ * `Gesture.Tap()`.
+ *
+ * `shouldCancelWhenOutside` is on by default, set from the constructor exactly
+ * as upstream's `TapGesture` does — a press that wanders off the view is not a
+ * tap on it, and the native `TapGestureHandler` config says the same.
+ */
+export class TapGestureBuilder extends BaseGestureBuilder {
+  readonly kind = "tap" as const
+
+  constructor() {
+    super()
+    this.shouldCancelWhenOutside(true)
+  }
+
+  numberOfTaps(count: number): this {
+    this.config.numberOfTaps = count
+    return this
+  }
+  maxDuration(duration: number): this {
+    this.config.maxDuration = duration
+    return this
+  }
+  maxDelay(delay: number): this {
+    this.config.maxDelay = delay
+    return this
+  }
+  maxDistance(distance: number): this {
+    this.config.maxDistance = distance
+    return this
+  }
+  maxDeltaX(delta: number): this {
+    this.config.maxDeltaX = delta
+    return this
+  }
+  maxDeltaY(delta: number): this {
+    this.config.maxDeltaY = delta
+    return this
+  }
+  minPointers(count: number): this {
+    this.config.minPointers = count
+    return this
+  }
+}
+
+/** `Gesture.LongPress()`, with upstream's default of `shouldCancelWhenOutside`. */
+export class LongPressGestureBuilder extends BaseGestureBuilder {
+  readonly kind = "longPress" as const
+
+  constructor() {
+    super()
+    this.shouldCancelWhenOutside(true)
+  }
+
+  minDuration(duration: number): this {
+    this.config.minDuration = duration
+    return this
+  }
+  maxDistance(distance: number): this {
+    this.config.maxDistance = distance
+    return this
+  }
+  numberOfPointers(count: number): this {
+    this.config.numberOfPointers = count
+    return this
+  }
+}
+
 /**
  * `Gesture`, the namespace of statics.
  *
- * `Pan` is real. The other eleven throw by name, and that is the point:
- * docs/research/gestures.md records the failure mode this repo most wants to
- * avoid — a component that accepts its props, renders, and does nothing.
+ * `Pan`, `Tap` and `LongPress` are real. The other nine throw by name, and
+ * that is the point: docs/research/gestures.md records the failure mode this
+ * repo most wants to avoid — a component that accepts its props, renders, and
+ * does nothing.
  */
 export const Gesture = {
   Pan: (): PanGestureBuilder => new PanGestureBuilder(),
-  Tap: unsupported("Gesture.Tap"),
-  LongPress: unsupported("Gesture.LongPress"),
+  Tap: (): TapGestureBuilder => new TapGestureBuilder(),
+  LongPress: (): LongPressGestureBuilder => new LongPressGestureBuilder(),
   Native: unsupported("Gesture.Native"),
   Pinch: unsupported("Gesture.Pinch"),
   Rotation: unsupported("Gesture.Rotation"),

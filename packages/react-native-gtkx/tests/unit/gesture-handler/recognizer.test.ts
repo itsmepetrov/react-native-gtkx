@@ -1,4 +1,5 @@
-// The Pan recognizer, driven through the REAL responder system.
+// The recognizer — all three kinds of it — driven through the REAL responder
+// system.
 //
 // Not a mock of the negotiation: `createResponderSystem` is the shipped one,
 // with a fake host tree standing in for the GTK widget hierarchy exactly as
@@ -11,7 +12,12 @@
 // which drives the same code with an injected `zwlr_virtual_pointer_v1`.
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { Gesture } from "../../../src/gesture-handler-compat/builder"
-import { usePanGesture } from "../../../src/gesture-handler-compat/hooks"
+import {
+  useLongPressGesture,
+  usePanGesture,
+  useTapGesture,
+} from "../../../src/gesture-handler-compat/hooks"
+import { longPressDecider } from "../../../src/gesture-handler-compat/long-press"
 import {
   asRange,
   DEFAULT_MIN_DISTANCE,
@@ -21,12 +27,14 @@ import {
 import {
   createRecognizer,
   hitSlopRect,
+  type RecognizerDecider,
   type Rect,
 } from "../../../src/gesture-handler-compat/recognizer"
+import { tapDecider } from "../../../src/gesture-handler-compat/tap"
 import { GESTURE_STATE } from "../../../src/gesture-handler-compat/types"
 import type {
   GestureStateValue,
-  PanRecognizerConfig,
+  RecognizerConfig,
 } from "../../../src/gesture-handler-compat/types"
 import { createResponderSystem } from "../../../src/responder/system"
 import type { NativeTouch } from "../../../src/responder/types"
@@ -51,7 +59,11 @@ const BOUNDS: Rect = { x: 100, y: 100, width: 200, height: 200 }
  * One mounted `GestureDetector`, minus React and minus GTK: the recognizer's
  * handlers registered on a host, and a clock the caller advances by hand.
  */
-const mount = (config: PanRecognizerConfig, bounds: Rect | null = BOUNDS) => {
+const mount = (
+  config: RecognizerConfig,
+  bounds: Rect | null = BOUNDS,
+  decider: RecognizerDecider = panDecider,
+) => {
   const view: Node = { name: "view" }
   const root: Node = { name: "root" }
   const parents = new Map<object, object | null>([
@@ -65,7 +77,7 @@ const mount = (config: PanRecognizerConfig, bounds: Rect | null = BOUNDS) => {
   })
 
   let current = config
-  const recognizer = createRecognizer(7, panDecider, () => current, {
+  const recognizer = createRecognizer(7, decider, () => current, {
     boundsInWindow: () => bounds,
     requestResponder: () => system.requestResponder(view),
   })
@@ -80,7 +92,7 @@ const mount = (config: PanRecognizerConfig, bounds: Rect | null = BOUNDS) => {
     system,
     onClaim,
     recognizer,
-    reconfigure: (next: PanRecognizerConfig) => {
+    reconfigure: (next: RecognizerConfig) => {
       current = next
     },
     advance: (ms: number) => {
@@ -108,7 +120,7 @@ const CY = 200
 
 const tracer = () => {
   const trace: string[] = []
-  const config: PanRecognizerConfig = {
+  const config: RecognizerConfig = {
     onBegin: () => trace.push("begin"),
     onActivate: () => trace.push("activate"),
     onUpdate: () => trace.push("update"),
@@ -118,8 +130,77 @@ const tracer = () => {
   return { trace, config }
 }
 
+/** The same rig, with Tap's predicates and Tap's own default. */
+const mountTap = (config: RecognizerConfig, bounds: Rect | null = BOUNDS) =>
+  mount({ shouldCancelWhenOutside: true, ...config }, bounds, tapDecider)
+
+/** The same rig, with LongPress's predicates and LongPress's own default. */
+const mountLongPress = (
+  config: RecognizerConfig,
+  bounds: Rect | null = BOUNDS,
+) =>
+  mount({ shouldCancelWhenOutside: true, ...config }, bounds, longPressDecider)
+
 beforeEach(() => {
   vi.useFakeTimers()
+})
+
+// `State` is this object, re-exported under upstream's name from the package
+// entry. It is referred to HERE by the internal name because loading the entry
+// loads the components, and this file deliberately runs without GTK —
+// `tests/gtk/gesture-handler/root-view.gtk.test.tsx` pins the export itself,
+// under the name and through the import path an app really uses.
+const State = GESTURE_STATE
+
+describe("State is upstream's enum, by value", () => {
+  // The whole reason this slice touched `State` at all. Two of the four
+  // libraries the epic targets compare it BY VALUE, so a number that is
+  // silently different is the failure mode: `state === State.ACTIVE` goes on
+  // compiling, goes on running, and quietly answers false. Nothing else in
+  // this file would catch it.
+  //
+  // Transcribed from `react-native-gesture-handler` 3.1.0, `src/State.ts`,
+  // which is the whole file:
+  //
+  //   export const State = {
+  //     UNDETERMINED: 0, FAILED: 1, BEGAN: 2,
+  //     CANCELLED: 3, ACTIVE: 4, END: 5,
+  //   } as const
+  it("has all six of upstream's members, with upstream's numbers", () => {
+    expect(State).toEqual({
+      UNDETERMINED: 0,
+      FAILED: 1,
+      BEGAN: 2,
+      CANCELLED: 3,
+      ACTIVE: 4,
+      END: 5,
+    })
+    // `toEqual` on an object with extra members would still pass if a member
+    // were REMOVED and the expectation edited to match, so the count is pinned
+    // separately: six, no more and no fewer.
+    expect(Object.keys(State)).toHaveLength(6)
+  })
+
+  it("reports the ending state a consumer compares against", () => {
+    const states: GestureStateValue[] = []
+    const gd = mount({
+      onActivate: (event) => states.push(event.state),
+      onFinalize: (event) => states.push(event.state),
+    })
+    gd.press(CX, CY)
+    gd.moveTo(CX, CY + 40)
+    gd.release(CX, CY + 40)
+    expect(states).toEqual([State.ACTIVE, State.END])
+
+    const failed: GestureStateValue[] = []
+    const other = mountTap({
+      maxDistance: 10,
+      onFinalize: (event) => failed.push(event.state),
+    })
+    other.press(CX, CY)
+    other.moveTo(CX + 40, CY)
+    expect(failed).toEqual([State.FAILED])
+  })
 })
 
 describe("the recognizer holds no lock while it is deciding", () => {
@@ -531,7 +612,7 @@ describe("the two spellings are one implementation", () => {
   })
 
   it("behave identically when driven", () => {
-    const runWith = (config: PanRecognizerConfig) => {
+    const runWith = (config: RecognizerConfig) => {
       const gd = mount(config)
       gd.press(CX, CY)
       gd.moveTo(CX, CY + 6)
@@ -603,9 +684,374 @@ describe("what is not implemented stays loud", () => {
     ).not.toThrow()
   })
 
-  it("keeps the state machine's states as upstream numbers", () => {
-    expect(GESTURE_STATE.ACTIVE).toBe(4)
-    expect(GESTURE_STATE.FAILED).toBe(1)
+  it("gives the discrete kinds no onUpdate, because upstream does not", () => {
+    // `Tap` and `LongPress` extend `BaseGesture` upstream, not
+    // `ContinousBaseGesture`. Offering the method would invite a callback that
+    // can never fire, which is the silent-no-op failure this module refuses.
+    expect("onUpdate" in Gesture.Pan()).toBe(true)
+    expect("onUpdate" in Gesture.Tap()).toBe(false)
+    expect("onUpdate" in Gesture.LongPress()).toBe(false)
+    expect("onChange" in Gesture.LongPress()).toBe(false)
+  })
+})
+
+describe("Tap", () => {
+  it("activates on the RELEASE, and takes the interaction only then", () => {
+    const { trace, config } = tracer()
+    const gd = mountTap(config)
+    gd.press(CX, CY)
+    // Nothing yet: a tap that grabbed the interaction on press would take it
+    // away from every pan watching the same pointer, for a gesture that has
+    // not happened. Upstream's tap activates from `endTap`.
+    expect(trace).toEqual(["begin"])
+    expect(gd.holder()).toBeNull()
+
+    gd.release(CX, CY)
+    expect(trace).toEqual([
+      "begin",
+      "activate",
+      "deactivate(true)",
+      "finalize(true)",
+    ])
+    // It did claim GTK, once, at the instant it activated.
+    expect(gd.onClaim).toHaveBeenCalledTimes(1)
+  })
+
+  it("FAILS a press that moves past maxDistance — the tap-vs-drag rule", () => {
+    // The assertion this slice exists to make. A press that turns into a drag
+    // is not a tap, and nothing else distinguishes the two.
+    const { trace, config } = tracer()
+    const gd = mountTap({ ...config, maxDistance: 10 })
+    gd.press(CX, CY)
+    gd.moveTo(CX + 6, CY)
+    expect(trace).toEqual(["begin"])
+
+    gd.moveTo(CX + 40, CY)
+    expect(trace).toEqual(["begin", "finalize(false)"])
+
+    // And coming back does not revive it: the gesture is over.
+    gd.moveTo(CX, CY)
+    gd.release(CX, CY)
+    expect(trace).toEqual(["begin", "finalize(false)"])
+    expect(gd.holder()).toBeNull()
+  })
+
+  it("measures maxDistance as a radius, and maxDeltaX per axis", () => {
+    const diagonal = mountTap({ maxDistance: 10 })
+    diagonal.press(CX, CY)
+    // 8px on each axis is 11.3px of travel: under both limits taken alone,
+    // over the radius. Reading maxDistance per-axis would have let this pass.
+    diagonal.moveTo(CX + 8, CY + 8)
+    diagonal.release(CX + 8, CY + 8)
+    expect(diagonal.onClaim).not.toHaveBeenCalled()
+
+    const perAxis = mountTap({ maxDeltaX: 10 })
+    perAxis.press(CX, CY)
+    // 40px of pure VERTICAL travel, and maxDeltaX says nothing about it.
+    perAxis.moveTo(CX, CY + 40)
+    perAxis.release(CX, CY + 40)
+    expect(perAxis.onClaim).toHaveBeenCalledTimes(1)
+  })
+
+  it("accepts any travel when no distance limit is configured", () => {
+    // Upstream's own default, and it reads like an oversight: all three
+    // distance limits start at a MIN_SAFE_INTEGER sentinel meaning "unset", so
+    // shouldCancelWhenOutside is what actually bounds an unconfigured tap.
+    // Guessing a default here would refuse taps upstream accepts.
+    const gd = mountTap({})
+    gd.press(CX, CY)
+    gd.moveTo(CX + 60, CY + 60)
+    gd.release(CX + 60, CY + 60)
+    expect(gd.onClaim).toHaveBeenCalledTimes(1)
+  })
+
+  it("fails a press held past maxDuration, with the pointer still down", () => {
+    const { trace, config } = tracer()
+    const gd = mountTap({ ...config, maxDuration: 200 })
+    gd.press(CX, CY)
+    gd.advance(260)
+    // The timer decided it with no event in flight — a press this slow is a
+    // press, not a tap.
+    expect(trace).toEqual(["begin", "finalize(false)"])
+
+    gd.release(CX, CY)
+    expect(trace).toEqual(["begin", "finalize(false)"])
+  })
+
+  it("fails a press that leaves the view, which is Tap's default", () => {
+    const { trace, config } = tracer()
+    const gd = mountTap(config)
+    gd.press(CX, CY)
+    // BOUNDS is 200x200 at (100, 100); 400px down is well outside it.
+    gd.moveTo(CX, CY + 400)
+    expect(trace).toEqual(["begin", "finalize(false)"])
+  })
+
+  it("numberOfTaps: 2 needs two presses, and begins only once", () => {
+    const { trace, config } = tracer()
+    const gd = mountTap({ ...config, numberOfTaps: 2 })
+    gd.press(CX, CY)
+    gd.release(CX, CY)
+    // Between the taps: still BEGAN, still holding nothing, no callback.
+    expect(trace).toEqual(["begin"])
+    expect(gd.holder()).toBeNull()
+
+    gd.advance(100)
+    gd.press(CX, CY)
+    // No second `onBegin`: upstream reaches `begin()` from the UNDETERMINED
+    // branch only, so a sequence begins once however many taps it takes.
+    expect(trace).toEqual(["begin"])
+
+    gd.release(CX, CY)
+    expect(trace).toEqual([
+      "begin",
+      "activate",
+      "deactivate(true)",
+      "finalize(true)",
+    ])
+  })
+
+  it("gives up on the second tap after maxDelay", () => {
+    const { trace, config } = tracer()
+    const gd = mountTap({ ...config, numberOfTaps: 2, maxDelay: 200 })
+    gd.press(CX, CY)
+    gd.release(CX, CY)
+    expect(trace).toEqual(["begin"])
+
+    gd.advance(260)
+    expect(trace).toEqual(["begin", "finalize(false)"])
+
+    // And the tap that arrives too late starts its own sequence rather than
+    // completing the dead one.
+    gd.press(CX, CY)
+    gd.release(CX, CY)
+    expect(trace).toEqual(["begin", "finalize(false)", "begin"])
+  })
+
+  it("restarts the duration deadline on each tap of a sequence", () => {
+    const { trace, config } = tracer()
+    // 200ms per tap, 400ms between them. A deadline armed once for the whole
+    // sequence would have killed this before the second press.
+    const gd = mountTap({
+      ...config,
+      numberOfTaps: 2,
+      maxDuration: 200,
+      maxDelay: 600,
+    })
+    gd.press(CX, CY)
+    gd.advance(120)
+    gd.release(CX, CY)
+    gd.advance(400)
+    gd.press(CX, CY)
+    gd.advance(120)
+    gd.release(CX, CY)
+    expect(trace).toContain("activate")
+  })
+
+  it("never activates when minPointers exceeds what this platform delivers", () => {
+    const { trace, config } = tracer()
+    const gd = mountTap({ ...config, minPointers: 2, maxDelay: 100 })
+    gd.press(CX, CY)
+    gd.release(CX, CY)
+    gd.advance(160)
+    expect(trace).toEqual(["begin", "finalize(false)"])
+  })
+})
+
+describe("LongPress", () => {
+  it("activates ON THE TIMER without the pointer moving", () => {
+    const { trace, config } = tracer()
+    const gd = mountLongPress({ ...config, minDuration: 200 })
+    gd.press(CX, CY)
+    expect(gd.holder()).toBeNull()
+
+    // The same out-of-event grant channel `activateAfterLongPress` uses. A
+    // press-and-hold never moves again, so waiting for a move is waiting
+    // forever.
+    gd.advance(220)
+    expect(trace).toEqual(["begin", "activate"])
+    expect(gd.holder()).toBe(gd.view)
+    expect(gd.onClaim).toHaveBeenCalledTimes(1)
+
+    gd.release(CX, CY)
+    expect(trace).toEqual([
+      "begin",
+      "activate",
+      "deactivate(true)",
+      "finalize(true)",
+    ])
+  })
+
+  it("gives a release before minDuration onFinalize and nothing else", () => {
+    const { trace, config } = tracer()
+    const gd = mountLongPress({ ...config, minDuration: 200 })
+    gd.press(CX, CY)
+    gd.advance(100)
+    gd.release(CX, CY)
+    expect(trace).toEqual(["begin", "finalize(false)"])
+    expect(gd.holder()).toBeNull()
+  })
+
+  it("fails a press that travels past maxDistance before it matures", () => {
+    const { trace, config } = tracer()
+    const gd = mountLongPress({ ...config, minDuration: 200 })
+    gd.press(CX, CY)
+    // The default maxDistance is 10.
+    gd.moveTo(CX + 4, CY + 4)
+    gd.advance(50)
+    expect(trace).toEqual(["begin"])
+
+    gd.moveTo(CX + 20, CY)
+    expect(trace).toEqual(["begin", "finalize(false)"])
+    gd.advance(300)
+    expect(trace).toEqual(["begin", "finalize(false)"])
+  })
+
+  it("CANCELS an already-active hold that travels past maxDistance", () => {
+    const { trace, config } = tracer()
+    const gd = mountLongPress({ ...config, minDuration: 200, maxDistance: 12 })
+    gd.press(CX, CY)
+    gd.advance(220)
+    expect(trace).toEqual(["begin", "activate"])
+
+    gd.moveTo(CX, CY + 30)
+    // Cancelled rather than ended: `onDeactivate(false)`, which is how a
+    // consumer tells a hold that was abandoned from one that completed.
+    expect(trace).toEqual([
+      "begin",
+      "activate",
+      "deactivate(false)",
+      "finalize(false)",
+    ])
+  })
+
+  it("measures maxDistance from the PRESS, not from the activation point", () => {
+    // Upstream's `startX`/`startY` are set on pointer-down and never moved —
+    // its base `resetProgress()` is empty, unlike Pan's. So drift before the
+    // timer and drift after it are the same budget. Re-basing at activation
+    // would let a hold wander twice as far.
+    const { trace, config } = tracer()
+    const gd = mountLongPress({ ...config, minDuration: 200, maxDistance: 10 })
+    gd.press(CX, CY)
+    gd.moveTo(CX, CY + 8)
+    gd.advance(220)
+    expect(trace).toEqual(["begin", "activate"])
+
+    // 8 more, for 16 from the press — over the budget, under it if measured
+    // from where the timer granted.
+    gd.moveTo(CX, CY + 16)
+    expect(trace).toContain("deactivate(false)")
+  })
+
+  it("reports how long the press has lasted", () => {
+    let atActivation = 0
+    const gd = mountLongPress({
+      minDuration: 200,
+      onActivate: (event) => {
+        atActivation = event.duration
+      },
+    })
+    gd.press(CX, CY)
+    gd.advance(220)
+    // Upstream's LongPress payload is the only one carrying `duration`, and
+    // it is the point of the gesture.
+    expect(atActivation).toBeGreaterThanOrEqual(200)
+    expect(atActivation).toBeLessThan(260)
+  })
+
+  it("never activates when numberOfPointers exceeds one", () => {
+    const { trace, config } = tracer()
+    const gd = mountLongPress({
+      ...config,
+      minDuration: 200,
+      numberOfPointers: 2,
+    })
+    gd.press(CX, CY)
+    gd.advance(300)
+    // Honest rather than silently single-finger: this platform fabricates one
+    // touch per pointer and has no virtual-touch protocol to test more with.
+    expect(trace).toEqual(["begin"])
+    expect(gd.holder()).toBeNull()
+    gd.release(CX, CY)
+    expect(trace).toEqual(["begin", "finalize(false)"])
+  })
+})
+
+describe("Tap and LongPress are two spellings each, over one machine", () => {
+  it("build the same config from the builder and the hook", () => {
+    const tapBuilder = Gesture.Tap()
+      .numberOfTaps(2)
+      .maxDuration(300)
+      .maxDelay(250)
+      .maxDistance(8)
+    const tapHook = useTapGesture({
+      numberOfTaps: 2,
+      maxDuration: 300,
+      maxDelay: 250,
+      maxDistance: 8,
+    })
+    expect(tapBuilder.kind).toBe("tap")
+    expect(tapHook.kind).toBe("tap")
+    for (const key of [
+      "numberOfTaps",
+      "maxDuration",
+      "maxDelay",
+      "maxDistance",
+      // Upstream's own hook forgets this one even though its builder sets it;
+      // both spellings agree here, because two spellings of one gesture
+      // disagreeing about it is a slip rather than a semantic.
+      "shouldCancelWhenOutside",
+    ] as const) {
+      expect(tapHook.config[key]).toEqual(tapBuilder.config[key])
+    }
+
+    const holdBuilder = Gesture.LongPress().minDuration(300).maxDistance(20)
+    const holdHook = useLongPressGesture({ minDuration: 300, maxDistance: 20 })
+    expect(holdBuilder.kind).toBe("longPress")
+    expect(holdHook.kind).toBe("longPress")
+    for (const key of [
+      "minDuration",
+      "maxDistance",
+      "shouldCancelWhenOutside",
+    ] as const) {
+      expect(holdHook.config[key]).toEqual(holdBuilder.config[key])
+    }
+  })
+
+  it("behave identically when driven", () => {
+    const runTap = (config: RecognizerConfig) => {
+      const gd = mountTap(config)
+      gd.press(CX, CY)
+      gd.moveTo(CX + 40, CY)
+      gd.release(CX + 40, CY)
+      return gd.onClaim.mock.calls.length
+    }
+    expect(runTap(Gesture.Tap().maxDistance(10).config)).toBe(0)
+    expect(runTap(useTapGesture({ maxDistance: 10 }).config)).toBe(0)
+    expect(runTap(Gesture.Tap().config)).toBe(1)
+    expect(runTap(useTapGesture().config)).toBe(1)
+
+    const runHold = (config: RecognizerConfig) => {
+      const gd = mountLongPress(config)
+      gd.press(CX, CY)
+      gd.advance(320)
+      const held = gd.holder()
+      gd.release(CX, CY)
+      return held
+    }
+    expect(runHold(Gesture.LongPress().minDuration(300).config)).not.toBeNull()
+    expect(
+      runHold(useLongPressGesture({ minDuration: 300 }).config),
+    ).not.toBeNull()
+  })
+
+  it("renames the ending callback exactly as upstream's hook does", () => {
+    const onFinalize = vi.fn()
+    const gd = mountTap(useTapGesture({ maxDistance: 5, onFinalize }).config)
+    gd.press(CX, CY)
+    gd.moveTo(CX + 40, CY)
+    expect(onFinalize).toHaveBeenCalledTimes(1)
+    expect(onFinalize.mock.calls[0]![0]).toMatchObject({ canceled: true })
   })
 })
 
@@ -734,7 +1180,7 @@ describe("a second drag on an already-moved view", () => {
     // The documented pattern, and the one every example must show.
     const offset = { value: 0 }
     const start = { value: 0 }
-    const config: PanRecognizerConfig = {
+    const config: RecognizerConfig = {
       onActivate: () => {
         start.value = offset.value
       },

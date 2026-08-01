@@ -649,15 +649,33 @@ const pan = Gesture.Pan()
 </GestureDetector>
 ```
 
-| Export                               | Behaviour                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GestureHandlerRootView`             | **Implemented, faithfully.** A `View` with `style ?? { flex: 1 }` — note that an explicit `style` _replaces_ the default rather than merging with it, which is what upstream does in all three of its implementations. Its other job, marking the subtree as gesture-arbitrating, is already this platform's: the responder system's lock is global, so there is nothing to scope.                                                    |
-| `GestureDetector`                    | **Implemented, and it adds no widget.** It renders its single child unchanged and reaches that child's widget through the handle the child already exposes, the same seam `createAnimatedComponent` uses. Its recognizer's responder props are merged into the child's, so a child with its own `onTouchStart` keeps working. `userSelect`, `touchAction` and `enableContextMenu` are Web-only upstream and are accepted and ignored. |
-| `Gesture.Pan()`                      | **Implemented.** See the table below for the config surface.                                                                                                                                                                                                                                                                                                                                                                          |
-| `usePanGesture()`                    | **Implemented**, over the same recognizer. Upstream deprecated all twelve `Gesture.*` statics in 3.1.0 in favour of hooks, and its hook renamed the callbacks: `onStart` → `onActivate`, `onEnd` → `onDeactivate`, `onTouchesCancelled` → `onTouchesCancel`, no `onChange`, and `canceled` on the ending event instead of a second `success` argument. Both spellings are honoured as written.                                        |
-| the other eleven `Gesture.*` statics | **Throw**, each naming itself — `Gesture.Pinch()` reports `Gesture.Pinch`, not `Gesture`.                                                                                                                                                                                                                                                                                                                                             |
-| `State`                              | **Throws.** It is only meaningful compared against an event from a handler that does not exist here yet; it lands with `Tap` and `LongPress`.                                                                                                                                                                                                                                                                                         |
-| everything else                      | **Throws**, naming the symbol. `PanGestureHandler` and the legacy handler components, `RectButton` and the button family, the re-exported `ScrollView`/`FlatList`, the other `use*Gesture` hooks.                                                                                                                                                                                                                                     |
+`Tap` and `LongPress` are the same state machine with different predicates —
+one recognizer, one event stream, one grant channel:
+
+```tsx
+const doubleTap = Gesture.Tap()
+  .numberOfTaps(2)
+  // The tap-vs-drag rule: a press that travels further than this is a drag,
+  // and stops being a tap.
+  .maxDistance(10)
+  .onStart(() => setZoomed((on) => !on))
+
+const hold = Gesture.LongPress()
+  .minDuration(400)
+  // Fires with the pointer standing still — a long press activates on its
+  // timer, not on the next movement.
+  .onStart((event) => openMenuAfter(event.duration))
+```
+
+| Export                                                        | Behaviour                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GestureHandlerRootView`                                      | **Implemented, faithfully.** A `View` with `style ?? { flex: 1 }` — note that an explicit `style` _replaces_ the default rather than merging with it, which is what upstream does in all three of its implementations. Its other job, marking the subtree as gesture-arbitrating, is already this platform's: the responder system's lock is global, so there is nothing to scope.                                                    |
+| `GestureDetector`                                             | **Implemented, and it adds no widget.** It renders its single child unchanged and reaches that child's widget through the handle the child already exposes, the same seam `createAnimatedComponent` uses. Its recognizer's responder props are merged into the child's, so a child with its own `onTouchStart` keeps working. `userSelect`, `touchAction` and `enableContextMenu` are Web-only upstream and are accepted and ignored. |
+| `Gesture.Pan()`, `Gesture.Tap()`, `Gesture.LongPress()`       | **Implemented**, all three over one state machine — the same event stream, the same grant channel, different predicates. See the config tables below.                                                                                                                                                                                                                                                                                 |
+| `usePanGesture()`, `useTapGesture()`, `useLongPressGesture()` | **Implemented**, over the same recognizers. Upstream deprecated all twelve `Gesture.*` statics in 3.1.0 in favour of hooks, and its hook renamed the callbacks: `onStart` → `onActivate`, `onEnd` → `onDeactivate`, `onTouchesCancelled` → `onTouchesCancel`, no `onChange`, and `canceled` on the ending event instead of a second `success` argument. Both spellings are honoured as written.                                       |
+| the other nine `Gesture.*` statics                            | **Throw**, each naming itself — `Gesture.Pinch()` reports `Gesture.Pinch`, not `Gesture`.                                                                                                                                                                                                                                                                                                                                             |
+| `State`                                                       | **Implemented**, as the plain enum it is upstream: `UNDETERMINED` 0, `FAILED` 1, `BEGAN` 2, `CANCELLED` 3, `ACTIVE` 4, `END` 5. Every payload carries a faithful `state`, and two of the libraries this targets compare it by value, so all six numbers are pinned by a test against 3.1.0 — a silently different one would go on compiling and quietly answer false.                                                                 |
+| everything else                                               | **Throws**, naming the symbol. `PanGestureHandler` and the legacy handler components, `RectButton` and the button family, the re-exported `ScrollView`/`FlatList`, the remaining `use*Gesture` hooks.                                                                                                                                                                                                                                 |
 
 ### `Gesture.Pan()` — the config surface
 
@@ -673,15 +691,80 @@ const pan = Gesture.Pan()
 | `averageTouches`, `enableTrackpadTwoFingerGesture`, `cancelsTouchesInView`, `activeCursor`, `mouseButton`, `withTestId` | **Accepted, inert** — each is platform-specific upstream too, and inert off its platform there.                                                                                                                                                                          |
 | `simultaneousWithExternalGesture`, `requireExternalGestureToFail`, `blocksExternalGesture`                              | **Throw.** Cross-gesture relations need the arbitration registry, which is a later slice. Silently ignoring a relation would let two gestures that were meant to cooperate race instead, with no error.                                                                  |
 
-**Differences from `react-native-gesture-handler`.** `numberOfPointers` is
-always 1 and `pointerType` is always `MOUSE`: the responder system fabricates
-one touch per pointer, and wlroots offers no virtual-touch protocol, so a
-`minPointers(2)` gesture is unreachable rather than merely untested. Nothing
-is simultaneous yet — one interaction has one holder — so two detectors over
-the same pointer do not both activate. `Pinch` and `Rotation` are a later
-increment for a measured reason: GTK feeds touchpad gestures properly and
-better than RNGH's own web path does, but nothing in this rig can produce one
-to test against.
+The common configuration and the callbacks above are shared by all three
+recognizers, minus `onUpdate` and `onChange`: upstream puts those on
+`ContinousBaseGesture`, which `Tap` and `LongPress` do not extend. A discrete
+gesture has no travel to report and the methods are not offered.
+
+### `Gesture.Tap()` — the config surface
+
+`Tap` activates on the **release**, not on the press, which is what leaves the
+interaction available to anything else watching the same pointer while a tap is
+still being decided. It never holds the responder until the instant it wins.
+
+| Method                    | Behaviour                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `numberOfTaps`            | **Implemented.** Between the taps the gesture stays `BEGAN` and holds nothing; `onBegin` fires once for the whole sequence, which is upstream's shape.                                                                                                                                                                                                              |
+| `maxDuration`             | **Implemented**, default 500ms, re-armed on every press of a sequence. A press held past it fails on the timer, with the pointer still down.                                                                                                                                                                                                                        |
+| `maxDelay`                | **Implemented**, default 500ms — how long the next tap may take to arrive before the sequence gives up.                                                                                                                                                                                                                                                             |
+| `maxDistance`             | **Implemented.** A radius from the press, not a per-axis limit. This is the tap-vs-drag rule, and it is what lets a press that turns into a drag stop being a tap. **There is no default**, which is upstream's own behaviour: all three of its distance limits start at an "unset" sentinel, so an unconfigured tap accepts any travel that stays inside the view. |
+| `maxDeltaX`, `maxDeltaY`  | **Implemented**, per axis, and independent of `maxDistance`.                                                                                                                                                                                                                                                                                                        |
+| `minPointers`             | **Implemented**, checked against the most pointers the interaction ever had at once. Above 1 it never activates — see the differences below.                                                                                                                                                                                                                        |
+| `shouldCancelWhenOutside` | **On by default**, set from the constructor exactly as upstream's `TapGesture` does. A press that wanders off the view is not a tap on it. Note that upstream's own `useTapGesture` forgets this and its builder does not; both spellings agree here.                                                                                                               |
+
+### `Gesture.LongPress()` — the config surface
+
+`LongPress` activates on a **timer**, with the pointer standing still — which
+works only because of the out-of-event grant channel described in
+[research/gestures.md](research/gestures.md). Waiting for the next pointer move
+would mean waiting forever for a press-and-hold.
+
+| Method                    | Behaviour                                                                                                                                                                                                                                                                                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `minDuration`             | **Implemented**, default 500ms. `minDuration(0)` activates on the next tick rather than synchronously inside the press, which upstream does; nothing observable here depends on the difference.                                                                                                                                                   |
+| `maxDistance`             | **Implemented**, default 10, and measured **from the press** for the whole gesture rather than re-based at activation — upstream's `startX`/`startY` are set on pointer-down and never moved. Travelling past it before the press matures **fails** the gesture; travelling past it after **cancels** it, so `onEnd`/`onFinalize` report `false`. |
+| `numberOfPointers`        | **Implemented**, and above 1 it never activates — see the differences below.                                                                                                                                                                                                                                                                      |
+| `shouldCancelWhenOutside` | **On by default**, as upstream sets it in both spellings.                                                                                                                                                                                                                                                                                         |
+| `event.duration`          | **Implemented.** Milliseconds since the press, which is the point of the gesture. Upstream carries it on `LongPress` alone; here every payload has it, because there is one payload type.                                                                                                                                                         |
+
+**Differences from `react-native-gesture-handler`.** There is one pointer and
+`pointerType` is always `MOUSE`: the responder system fabricates one touch per
+pointer, and wlroots offers no virtual-touch protocol, so `minPointers(2)`,
+`numberOfPointers(2)` and every other multi-touch configuration is unreachable
+rather than merely untested — those gestures simply never activate, which is
+the honest outcome rather than a silently single-finger one. Nothing is
+simultaneous yet — one interaction has one holder — so two detectors over the
+same pointer do not both activate, and a `Tap` and a `Pan` cannot yet share a
+view. `Pinch` and `Rotation` are a later increment for a measured reason: GTK
+feeds touchpad gestures properly and better than RNGH's own web path does, but
+nothing in this rig can produce one to test against.
+
+### What still stops the two libraries this slice was measured against
+
+Read off the shipped sources at the versions
+[research/gesture-detector.md](research/gesture-detector.md) measured, and it
+corrects that recon on one point: **`State` was not what stopped either of
+them.**
+
+- **`@gorhom/bottom-sheet` 5.2.14 — nothing here stops it at import.** Its two
+  `State` imports are both `import type` (`src/types.d.ts`,
+  `src/contexts/internal.ts`), so it never read the enum at runtime, and its
+  only module-scope touch of this surface is a bare re-export
+  (`src/components/touchables/Touchables.tsx`), which binds without reading.
+  What stops it is all at the point of use, and all in later slices:
+  `Gesture.Native()` (`createBottomSheetScrollableComponent.tsx`), the
+  relation methods `simultaneousWithExternalGesture` and
+  `requireExternalGestureToFail` on its pan chains
+  (`BottomSheetDraggableView.tsx`, `BottomSheetHandleContainer.tsx`), and
+  rendering any `BottomSheetTouchable`.
+- **`react-native-draggable-flatlist` 4.0.3 — still stops at import**, and it
+  is the scrollable re-exports rather than the enum:
+  `src/components/DraggableFlatList.tsx` and
+  `src/components/NestableScrollContainer.tsx` both call
+  `Animated.createAnimatedComponent()` on RNGH's `FlatList`/`ScrollView` at
+  module scope, and those are still stand-ins. Its one `State` read is inside
+  a hook body (`src/context/animatedValueContext.tsx`), so the enum would have
+  failed it at first render, not at import.
 
 The throws are the point. A `PanGestureHandler` that quietly rendered its
 children without gestures is exactly the trap
@@ -1024,9 +1107,12 @@ on property access (`BounceIn.duration(300)`, `css.create`), while still
 answering the introspection React and `console.log` do first. A symbol not
 listed at all fails earlier still, at bundle time.
 
-**This does not unblock `@gorhom/bottom-sheet` and friends.** They need
-`GestureDetector` from `react-native-gesture-handler`, which remains
-unimplemented and is its own piece of work.
+**This does not unblock `@gorhom/bottom-sheet` and friends on its own.** They
+need `react-native-gesture-handler`, which is
+[its own surface](#react-native-gesture-handler-react-native-gtkxgesture-handler)
+— `GestureDetector`, `Pan`, `Tap`, `LongPress` and `State` ship there; the
+cross-gesture relations and `Gesture.Native()` that `@gorhom/bottom-sheet`
+needs do not yet.
 
 ## `react-native-worklets` (`react-native-gtkx/worklets`)
 
@@ -1048,8 +1134,8 @@ than their docs:
   — `scheduleOnRN` and `scheduleOnUI`, both implemented here.
 - **`@gorhom/bottom-sheet` 5.2.14 imports none.** It reaches `runOnJS` and
   `runOnUI` through `react-native-reanimated`, and does not depend on
-  `react-native-worklets` at all. What blocks it is still `GestureDetector`,
-  as above. `react-native-gesture-handler` 3.1.0 does use this package
+  `react-native-worklets` at all. What blocks it is the cross-gesture
+  relations and `Gesture.Native()`, as above. `react-native-gesture-handler` 3.1.0 does use this package
   (`scheduleOnUI`), but behind a `try { require } catch`, so it never had this
   failure mode.
 
