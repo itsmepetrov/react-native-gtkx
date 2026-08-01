@@ -97,6 +97,7 @@ export {
 export { PlatformColor, StyleSheet } from "./style/index"
 
 export type {
+  BoxShadowValue,
   DimensionValue,
   FlatStyle,
   LayoutStyle,

@@ -185,6 +185,11 @@ describe("visualStyleToCss", () => {
   it("renders the full visual contract deterministically (string snapshot)", () => {
     const visual: Required<VisualStyle> = {
       backgroundColor: "#3584e4",
+      boxShadow: [{ offsetX: 0, offsetY: 1, blurRadius: 3, color: "#000" }],
+      outlineColor: "#3584e4",
+      outlineOffset: -1,
+      outlineStyle: "solid",
+      outlineWidth: 2,
       borderBottomColor: "#33d17a",
       borderBottomLeftRadius: 1,
       borderBottomRightRadius: 2,

@@ -56,6 +56,11 @@ const fullLayout: Required<LayoutStyle> = {
 // Every key of the frozen VisualStyle contract.
 const fullVisual: Required<VisualStyle> = {
   backgroundColor: "red",
+  boxShadow: "0 1px 3px black",
+  outlineColor: "blue",
+  outlineOffset: -1,
+  outlineStyle: "solid",
+  outlineWidth: 2,
   borderBottomColor: "green",
   borderBottomLeftRadius: 1,
   borderBottomRightRadius: 2,
@@ -188,13 +193,16 @@ describe("splitStyle", () => {
 
   it("warns once per unknown key and ignores it", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
-    const style = { width: 10, boxShadow: "0 0 4px black" } as FlatStyle
+    // `textTransform` rather than the `boxShadow` this used to use: boxShadow
+    // is a supported visual prop now (Adwaita's own card/list frame IS a
+    // box-shadow), so it stopped being an example of an unknown key.
+    const style = { width: 10, textTransform: "uppercase" } as FlatStyle
 
     const first = splitStyle(style)
     expect(first.layout).toEqual({ width: 10 })
     expect(first.visual).toEqual({})
     expect(warn).toHaveBeenCalledTimes(1)
-    expect(warn.mock.calls[0]?.[0]).toContain('"boxShadow"')
+    expect(warn.mock.calls[0]?.[0]).toContain('"textTransform"')
 
     // Same unknown key again — still a single warning.
     splitStyle(style)
