@@ -191,3 +191,179 @@ test("transform entries that are not simple leaves pass through untouched", () =
   expect(parts[0]).toBe(matrix)
   expect(nodeValue((parts[1] as Record<string, unknown>).translateY)).toBe(5)
 })
+
+// --- slice 2b: absolute insets -------------------------------------------
+
+test("an inset on an absolutely positioned node becomes a driven leaf", () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+  const animated = createAnimatedStyle({
+    position: "absolute",
+    left: 0,
+    right: 0,
+    height: 60,
+    top: 0,
+  })
+
+  expect(nodeValue(animated.style.top)).toBe(0)
+  expect(
+    animated.apply({
+      position: "absolute",
+      left: 0,
+      right: 0,
+      height: 60,
+      top: 240,
+    }),
+  ).toBe(true)
+  expect(nodeValue(animated.style.top)).toBe(240)
+  // The whole point: no warning, and no rebuild.
+  expect(warn).not.toHaveBeenCalled()
+})
+
+test("all four insets are driven, each on its own axis", () => {
+  const box = { position: "absolute", width: 80, height: 40 }
+  for (const property of ["top", "bottom", "left", "right"]) {
+    const animated = createAnimatedStyle({ ...box, [property]: 5 })
+    expect(nodeValue(animated.style[property])).toBe(5)
+  }
+})
+
+test("an inset on a node the updater says is NOT absolute keeps slice 2's refusal", () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+  const animated = createAnimatedStyle({ position: "relative", top: 0 })
+
+  // Not a node: the mapper's value is a plain number that React applies.
+  expect(animated.style.top).toBe(0)
+  animated.apply({ position: "relative", top: 40 })
+
+  expect(warn).toHaveBeenCalledTimes(1)
+  const message = String(warn.mock.calls[0]?.[0])
+  expect(message).toContain("LAYOUT property")
+  expect(message).toContain("translateY")
+  // …and it now also names the one configuration that IS driven.
+  expect(message).toContain('"absolute"')
+})
+
+test("an updater that says nothing about position defers to the view layer", () => {
+  // `style={[styles.row, useAnimatedStyle(() => ({ top: y.value }))]}` is how
+  // most people write this, and `position` is then in a sibling entry this
+  // module never sees. Refusing here would refuse the common spelling of the
+  // feature; the view layer re-asks against the flattened style and is the
+  // one that warns when the answer is no.
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+  const animated = createAnimatedStyle({ top: 0 })
+
+  expect(nodeValue(animated.style.top)).toBe(0)
+  expect(animated.apply({ top: 40 })).toBe(true)
+  expect(nodeValue(animated.style.top)).toBe(40)
+  expect(warn).not.toHaveBeenCalled()
+})
+
+test("an absolute node stretched between two edges is refused in its own words", () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+  // No `height`, so Yoga derives it from top and bottom: animating `top`
+  // resizes the node, which no translation reproduces.
+  const animated = createAnimatedStyle({
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: 80,
+  })
+  expect(animated.style.top).toBe(0)
+
+  animated.apply({ position: "absolute", top: 40, bottom: 0, width: 80 })
+
+  expect(warn).toHaveBeenCalledTimes(1)
+  const message = String(warn.mock.calls[0]?.[0])
+  expect(message).toContain("IS absolutely")
+  expect(message).toContain("RESIZES")
+  expect(message).toContain("translateY")
+})
+
+test("the end edge is refused when the start edge already anchors the axis", () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+  const animated = createAnimatedStyle({
+    position: "absolute",
+    left: 10,
+    right: 10,
+    width: 80,
+    height: 40,
+  })
+  // `left` is driven; `right` is not, because Yoga ignores it entirely here.
+  expect(nodeValue(animated.style.left)).toBe(10)
+  expect(animated.style.right).toBe(10)
+
+  animated.apply({
+    position: "absolute",
+    left: 10,
+    right: 50,
+    width: 80,
+    height: 40,
+  })
+
+  expect(warn).toHaveBeenCalledTimes(1)
+  expect(String(warn.mock.calls[0]?.[0])).toContain("ignores `right`")
+})
+
+test("a percentage inset is not driven, and switching to one rebuilds", () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+  const animated = createAnimatedStyle({
+    position: "absolute",
+    top: 10,
+    width: 80,
+    height: 40,
+  })
+  expect(nodeValue(animated.style.top)).toBe(10)
+
+  // A percentage has no fixed offset from a point base. The leaf set changes,
+  // so the style rebuilds — and on the rebuild `top` is an ordinary refused
+  // layout property again.
+  expect(
+    animated.apply({
+      position: "absolute",
+      top: "50%",
+      width: 80,
+      height: 40,
+    }),
+  ).toBe(false)
+  expect(warn).not.toHaveBeenCalled()
+})
+
+test("zIndex is refused in words about GTK, not about React renders", () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+  const animated = createAnimatedStyle({ position: "absolute", zIndex: 1 })
+
+  animated.apply({ position: "absolute", zIndex: 10 })
+
+  expect(warn).toHaveBeenCalledTimes(1)
+  const message = String(warn.mock.calls[0]?.[0])
+  expect(message).toContain("sibling order")
+  expect(message).not.toContain("next React render")
+})
+
+test("the upstream useSortable style shape drives exactly one leaf", () => {
+  // hooks/useSortable.ts:489-503 returns this object every frame.
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+  const animated = createAnimatedStyle({
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    zIndex: 0,
+    height: 60,
+  })
+
+  expect([...animated.nodes.keys()]).toEqual(["top"])
+  // A frame of a real drag: only `top` moved.
+  expect(
+    animated.apply({
+      position: "absolute",
+      left: 0,
+      right: 0,
+      top: 180,
+      zIndex: 0,
+      height: 60,
+    }),
+  ).toBe(true)
+  expect(nodeValue(animated.style.top)).toBe(180)
+  expect(warn).not.toHaveBeenCalled()
+})

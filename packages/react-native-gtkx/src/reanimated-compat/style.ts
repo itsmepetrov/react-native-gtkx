@@ -10,7 +10,7 @@
 // transforms, and a CSS provider private to the widget for colours.
 //
 // WHERE THE BOUNDARY IS NOW. Opacity, transforms and colours are driven.
-// What is left out is layout — `width`, `height`, `top`, `flex`, every
+// What is left out is layout — `width`, `height`, `flex`, every
 // `margin*`/`padding*` — and that is a refusal on measured grounds rather
 // than a gap waiting to be filled. A layout write has to go through Yoga,
 // and a Yoga pass costs what the TREE costs, not what the animated value
@@ -20,11 +20,25 @@
 // at all. docs/research/animated-colors.md has the full table and the number
 // that would change the decision.
 //
+// THE ONE CARVE-OUT, and it is not a softening of that. `top`/`left`/
+// `right`/`bottom` on a node whose OWN `position` is `"absolute"` are driven,
+// because an out-of-flow node's inset has an exact transform equivalent:
+// moving it changes nothing but where it is drawn, which is what the
+// transform path already does, so no Yoga pass is needed at all. That
+// equivalence is measured, it is not universal across the four insets, and
+// the configurations where it fails are refused as loudly as `width` is —
+// src/style/absolute-insets.ts and docs/research/absolute-insets.md.
+//
 // The rule for everything undriveable stays what it was: it must be VISIBLE.
 // A property that changes between mapper runs but cannot be driven says so
 // once, by name — and layout properties say it in their own words, because
 // "use translateX instead of left" is advice and "cannot be written" is not.
 
+import {
+  INSET_PROPERTIES,
+  insetRefusalReason,
+  insetTranslation,
+} from "../style/absolute-insets"
 import { DRIVEABLE_COLOR_PROPERTIES } from "../style/imperative-css"
 
 export type StyleValue = number | string
@@ -77,9 +91,40 @@ const isStyleValue = (value: unknown): value is StyleValue =>
   typeof value === "number" || typeof value === "string"
 
 const OPACITY = "opacity"
+const Z_INDEX = "zIndex"
 
 const transformLeafKey = (index: number, part: string): string =>
   `transform.${index}.${part}`
+
+type InsetProperty = (typeof INSET_PROPERTIES)[number]
+
+const isInsetProperty = (property: string): property is InsetProperty =>
+  (INSET_PROPERTIES as readonly string[]).includes(property)
+
+/**
+ * Whether this style's `property` is one of the insets that becomes a
+ * transform. A number is required rather than merely a `DimensionValue`: a
+ * percentage has no fixed offset from a point base, and switching to one
+ * mid-animation changes the leaf signature, which rebuilds the style and puts
+ * the property back on the refusal path where it belongs.
+ *
+ * The updater's object is not the whole style. `style={[styles.row, animated]}`
+ * is how most people write this, so `position` and the opposite edge are very
+ * often in a SIBLING entry that this module never sees. When the updater says
+ * nothing about `position`, the question is simply not answerable here and the
+ * leaf is made optimistically — the view layer re-asks it against the
+ * FLATTENED style, which is the only place the true answer exists, and warns
+ * there if the answer is no (components/animated.tsx). Nothing becomes silent
+ * either way; only which channel says it moves.
+ */
+const isDriveableInset = (source: StyleObject, property: string): boolean => {
+  if (!isInsetProperty(property) || typeof source[property] !== "number") {
+    return false
+  }
+  return source.position === undefined
+    ? true
+    : insetTranslation(source, property) !== null
+}
 
 // RN's layout properties, as `STYLE_PROPERTIES_CONFIG` enumerates them.
 // Enumerated by hand rather than derived by subtracting the driveable set,
@@ -153,7 +198,7 @@ const TRANSFORM_ALTERNATIVE: Record<string, string> = {
 // second, and the name is the actionable part.
 const warned = new Set<string>()
 
-const warnUndriveable = (property: string): void => {
+const warnUndriveable = (property: string, source: StyleObject): void => {
   if (warned.has(property)) {
     return
   }
@@ -161,6 +206,31 @@ const warnUndriveable = (property: string): void => {
   const isProduction =
     typeof process !== "undefined" && process.env.NODE_ENV === "production"
   if (isProduction) {
+    return
+  }
+  if (property === Z_INDEX) {
+    console.warn(
+      "react-native-reanimated: useAnimatedStyle changed `zIndex`, which react-native-gtkx does not " +
+        "implement at all — animated or not. GTK4 has no z-order property: a container paints its children " +
+        "in sibling order, so the LAST sibling is on top, and the only way to restack is to reorder the " +
+        "widgets themselves — which is the same order this platform's shadow tree is kept in sync with " +
+        "(components/use-layout-child.ts), so restacking for paint would silently reorder the layout. " +
+        "Order the elements as you want them painted. See docs/api.md.",
+    )
+    return
+  }
+  const insetReason = isInsetProperty(property)
+    ? insetRefusalReason(source, property)
+    : null
+  if (insetReason) {
+    console.warn(
+      `react-native-reanimated: useAnimatedStyle changed \`${property}\`. This node IS absolutely ` +
+        `positioned — which is normally driven at frame rate here — but ${insetReason}, so no ` +
+        "translation reproduces it and it would need a Yoga pass. Give the axis a single edge (or a " +
+        `definite size) and \`${property}\` animates; otherwise animate ` +
+        `\`transform: [{ ${TRANSFORM_ALTERNATIVE[property]}: … }]\`. The new value is applied on the next ` +
+        "React render. See docs/api.md.",
+    )
     return
   }
   if (LAYOUT_PROPERTIES.has(property)) {
@@ -174,6 +244,10 @@ const warnUndriveable = (property: string): void => {
           ? `Animate \`transform: [{ ${alternative}: … }]\` instead — it is paint-only, costs the same at ` +
             "any tree size, and is what RN's own native driver restricts you to. "
           : "Transforms are paint-only and cost the same at any tree size. ") +
+        (isInsetProperty(property)
+          ? `(\`${property}\` IS driven at frame rate on a node whose own \`position\` is "absolute", ` +
+            "where moving it is exactly a translation and touches no sibling.) "
+          : "") +
         "The new value is applied on the next React render. See docs/api.md.",
     )
     return
@@ -208,6 +282,11 @@ const leavesOf = (
     // colour we can drive and belongs on the warn path with everything else.
     if (typeof value === "string") {
       leaves.push({ key: property, value })
+    }
+  }
+  for (const property of INSET_PROPERTIES) {
+    if (isDriveableInset(source, property)) {
+      leaves.push({ key: property, value: source[property] as number })
     }
   }
   if (Array.isArray(source.transform)) {
@@ -278,6 +357,15 @@ export const createAnimatedStyle = (
       style[property] = colorNode
     }
   }
+  // The view layer duck-types these exactly as it does opacity and colours,
+  // and turns each into a translate measured from the position Yoga committed
+  // (components/animated.tsx, splitAnimated).
+  for (const property of INSET_PROPERTIES) {
+    const insetNode = nodes.get(property)
+    if (insetNode) {
+      style[property] = insetNode
+    }
+  }
   if (Array.isArray(source.transform)) {
     style.transform = source.transform.map((entry, index) => {
       if (typeof entry !== "object" || entry === null) {
@@ -312,7 +400,7 @@ export const createAnimatedStyle = (
           continue
         }
         if (!Object.is(next[key], staticSnapshot[key])) {
-          warnUndriveable(key)
+          warnUndriveable(key, next)
           // Kept up to date anyway: the next React render — whenever it
           // happens, for whatever reason — then applies the current value
           // rather than the one from mount.

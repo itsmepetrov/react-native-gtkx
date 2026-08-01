@@ -405,7 +405,10 @@ already know.
   semantics are implemented and its package name aliased —
   [research/reanimated.md](reanimated.md) and
   [api.md](../api.md#react-native-reanimated-react-native-gtkxreanimated).
-  The gap that remains is which style properties can be driven per frame.
+  The gap that remains is which style properties can be driven per frame —
+  and the row shape quoted above (`position: absolute`, `left: 0`, `right: 0`,
+  `top: <shared value>`) is now one of the ones that can be:
+  [absolute-insets.md](absolute-insets.md). `zIndex` is still inert.
 - Any RNGH import beyond `GestureHandlerRootView` throws when it runs. That
   is deliberate — see the shim above — but it does mean an app that mixes
   real RNGH gestures into its drag-and-drop screens has work to do that no
