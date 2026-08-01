@@ -16,6 +16,24 @@ export const escapeMarkup = (text: string): string =>
 const startOfDay = (date: Date): number =>
   new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
 
+/** Whether a due date falls on the CURRENT calendar day, in local time —
+ *  what the "Today" smart view selects on. Deliberately not "within the
+ *  next 24 hours": a task due at 09:00 tomorrow is not due today, however
+ *  few hours away it is, and a view called Today has to agree with the
+ *  calendar rather than with a stopwatch. Undated tasks are never today. */
+export const isToday = (iso: string | null): boolean =>
+  iso !== null && startOfDay(new Date(iso)) === startOfDay(new Date())
+
+/** Absolute date and time — for the editor's Created/Completed rows, where
+ *  "3 days ago" would be worse than the timestamp itself. */
+export const formatDateTime = (iso: string | null): string =>
+  iso === null
+    ? "Never"
+    : new Date(iso).toLocaleString([], {
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+
 /** Relative to WHOLE days, not to 24-hour spans: a task due at 09:00
  *  tomorrow is "Tomorrow", whether it is now 23:00 or 01:00. */
 export const formatDue = (iso: string | null): string | null => {

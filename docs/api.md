@@ -284,6 +284,31 @@ const App = () => (
   the content pane when collapsed, same as a native row click; the
   navigator, not this callback, decides that.
 
+- Sidebar navigator props `sidebarHeaderLeft` / `sidebarHeaderRight` /
+  `sidebarHeaderTitle`: `() => ReactNode` — the SIDEBAR pane's own
+  AdwHeaderBar start/end/title, the exact counterparts of the content
+  header's `headerLeft`/`headerRight`/`headerTitle`. Until these existed the
+  sidebar header was a hard-coded `<AdwHeaderBar />` and `sidebarTitle` (a
+  plain string) was the only thing an app could set on it at all, so a
+  sidebar's own "new item" action — where GNOME puts it, next to the pane
+  title — had nowhere to go and ended up on the content header instead
+  (`examples/tasks-nav` shipped with two indistinguishable `+` buttons for
+  exactly this reason). `sidebarHeaderTitle` replaces the title widget the
+  same way a screen's `headerTitle` does; unset, `sidebarTitle` renders as
+  before. Content is mounted through the same `HeaderSlotContent` root the
+  content header uses, so React Native content lays out as a horizontal,
+  content-hugging cluster flush with natively packed buttons — do not
+  hand-roll an `IntrinsicContent` here, a bare Yoga root defaults to
+  `column` and pushes the window controls onto a second row. These are
+  navigator PROPS rather than screen options on purpose: there is one
+  sidebar pane shared by every screen, so its chrome sits at the level
+  `sidebarTitle`/`sidebarContent` already do, and the `sidebar` prefix marks
+  which header a name refers to. There is deliberately no
+  `sidebarHeaderButtons` convenience mirroring `headerButtons` — arbitrary
+  content is the primitive, and a one-button call site reads no better as a
+  `{id, icon, tooltip, onPress}` record than as the `GtkButton` it already
+  is; add it only if a real call site is worse without it.
+
 - Sidebar screen option `contentLayout`: `"react-native"` (default) or
   `"widget"` — what the screen's body IS. The default mounts it in a Yoga
   layout root that fills the pane, so `<View style={{ flex: 1 }}>` behaves

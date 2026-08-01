@@ -13,6 +13,7 @@
 // module-global to begin with. Same public `useStore()` API as before,
 // plus `getStore()` for the out-of-tree callers.
 import { useSyncExternalStore } from "react"
+import { loadTasks, saveTasks, type PersistedState } from "./storage"
 import type { DialogKind, Task, TaskList } from "./types"
 
 type State = {
@@ -38,6 +39,7 @@ export type Action =
   | { type: "addList"; list: TaskList }
   | { type: "addTask"; task: Task }
   | { type: "setTitle"; id: string; title: string }
+  | { type: "setNotes"; id: string; notes: string }
   | { type: "setDue"; id: string; due: string | null }
   | { type: "toggleDone"; id: string }
   | { type: "toggleImportant"; id: string }
@@ -52,8 +54,11 @@ export type Action =
   | { type: "askDeleteTask"; id: string | null }
   | { type: "setActiveRoute"; route: string }
 
-// Cycled for each new list — a fixed palette rather than a color picker,
-// same simplification as skipping a "new list" dialog (see README).
+// The swatches the "New List" dialog offers, and the colors the two seeded
+// lists use. A fixed palette rather than a full color picker — same choice
+// examples/tasks-app makes, for the same reason: six Adwaita-ish colors
+// cover a task app's needs and a GtkColorDialogButton would be a tour of a
+// different widget.
 export const LIST_COLOR_PALETTE = [
   "#e01b24",
   "#3584e4",
@@ -81,41 +86,49 @@ const dueInDays = (days: number): string => {
 const patch = (tasks: Task[], id: string, fields: Partial<Task>): Task[] =>
   tasks.map((task) => (task.id === id ? { ...task, ...fields } : task))
 
-export const createInitialState = (): State => ({
-  lists: [
-    { id: PERSONAL_LIST_ID, name: "Personal", color: LIST_COLOR_PALETTE[0]! },
-    { id: WORK_LIST_ID, name: "Work", color: LIST_COLOR_PALETTE[1]! },
-  ],
-  // Seeded ids live in their OWN namespace (`seed-*`), disjoint from the
-  // `task-*`/`list-*` ids `makeId` hands out. They used to share it, and a
-  // fresh counter meant the first task ever created was handed the id of a
-  // seeded one: pressing Ctrl+N added a task and then opened "Water the
-  // plants", because `tasks.find(id)` matched the seed first. Found by
-  // actually pressing Ctrl+N in a running window; no test had noticed.
-  tasks: [
-    {
-      id: "seed-1",
-      title: "Water the plants",
-      listId: PERSONAL_LIST_ID,
-      done: false,
-      important: false,
-      deleted: false,
-      due: dueInDays(0),
-      position: 0,
-      createdAt,
-    },
-    {
-      id: "seed-2",
-      title: "Renew passport",
-      listId: PERSONAL_LIST_ID,
-      done: false,
-      important: true,
-      deleted: false,
-      due: dueInDays(9),
-      position: 1,
-      createdAt,
-    },
-    {
+/** One seeded task, with the fields a fixture never varies filled in. Keeps
+ *  the six literals below about what actually differs between them. */
+const seedTask = (
+  index: number,
+  fields: Omit<Task, "notes" | "position" | "createdAt" | "completedAt">,
+): Task => ({
+  notes: "",
+  position: index,
+  createdAt,
+  completedAt: null,
+  ...fields,
+})
+
+// Seeded ids live in their OWN namespace (`seed-*`), disjoint from the ids
+// `makeId` hands out. They used to share it, and a fresh counter meant the
+// first task ever created was handed the id of a seeded one: pressing
+// Ctrl+N added a task and then opened "Water the plants", because
+// `tasks.find(id)` matched the seed first. Found by actually pressing
+// Ctrl+N in a running window; no test had noticed. `makeId` is now random
+// rather than sequential, which closes the collision by construction
+// instead of by careful naming — see its own comment for why persistence
+// made that necessary rather than merely tidier.
+const seedTasks = (): Task[] => [
+  seedTask(0, {
+    id: "seed-1",
+    title: "Water the plants",
+    listId: PERSONAL_LIST_ID,
+    done: false,
+    important: false,
+    deleted: false,
+    due: dueInDays(0),
+  }),
+  seedTask(1, {
+    id: "seed-2",
+    title: "Renew passport",
+    listId: PERSONAL_LIST_ID,
+    done: false,
+    important: true,
+    deleted: false,
+    due: dueInDays(9),
+  }),
+  {
+    ...seedTask(2, {
       id: "seed-3",
       title: "Book dentist appointment",
       listId: PERSONAL_LIST_ID,
@@ -123,43 +136,55 @@ export const createInitialState = (): State => ({
       important: false,
       deleted: false,
       due: null,
-      position: 2,
-      createdAt,
-    },
-    {
-      id: "seed-4",
-      title: "Review the navigation-depth-2 PR",
-      listId: WORK_LIST_ID,
-      done: false,
-      important: true,
-      deleted: false,
-      due: dueInDays(-1),
-      position: 3,
-      createdAt,
-    },
-    {
-      id: "seed-5",
-      title: "Update the sprint board",
-      listId: WORK_LIST_ID,
-      done: false,
-      important: false,
-      deleted: false,
-      due: dueInDays(1),
-      position: 4,
-      createdAt,
-    },
-    {
-      id: "seed-6",
-      title: "Draft the old status report",
-      listId: WORK_LIST_ID,
-      done: false,
-      important: false,
-      deleted: true,
-      due: null,
-      position: 5,
-      createdAt,
-    },
-  ],
+    }),
+    // The one done seed, so the editor's "Completed" row has something to
+    // show without the user having to tick a box first.
+    completedAt: createdAt,
+  },
+  seedTask(3, {
+    id: "seed-4",
+    title: "Review the navigation-depth-2 PR",
+    listId: WORK_LIST_ID,
+    done: false,
+    important: true,
+    deleted: false,
+    due: dueInDays(-1),
+  }),
+  seedTask(4, {
+    id: "seed-5",
+    title: "Update the sprint board",
+    listId: WORK_LIST_ID,
+    done: false,
+    important: false,
+    deleted: false,
+    due: dueInDays(1),
+  }),
+  seedTask(5, {
+    id: "seed-6",
+    title: "Draft the old status report",
+    listId: WORK_LIST_ID,
+    done: false,
+    important: false,
+    deleted: true,
+    due: null,
+  }),
+]
+
+const seedLists = (): TaskList[] => [
+  { id: PERSONAL_LIST_ID, name: "Personal", color: LIST_COLOR_PALETTE[0]! },
+  { id: WORK_LIST_ID, name: "Work", color: LIST_COLOR_PALETTE[1]! },
+]
+
+/** The state a run starts from. `persisted` is the restored document when
+ *  there is one; the seed fixture otherwise (first run, or a save file that
+ *  could not be used — see storage.ts). UI state is never restored: which
+ *  dialog was open or what was typed into the search field is not part of
+ *  the document, and a window that reopened mid-search would be a bug. */
+export const createInitialState = (
+  persisted?: PersistedState | null,
+): State => ({
+  lists: persisted?.lists ?? seedLists(),
+  tasks: persisted?.tasks ?? seedTasks(),
   selectedTaskId: null,
   searchMode: false,
   searchQuery: "",
@@ -181,6 +206,11 @@ export const reducer = (state: State, action: Action): State => {
         ...state,
         tasks: patch(state.tasks, action.id, { title: action.title }),
       }
+    case "setNotes":
+      return {
+        ...state,
+        tasks: patch(state.tasks, action.id, { notes: action.notes }),
+      }
     case "setDue":
       return {
         ...state,
@@ -190,7 +220,16 @@ export const reducer = (state: State, action: Action): State => {
       return {
         ...state,
         tasks: state.tasks.map((task) =>
-          task.id === action.id ? { ...task, done: !task.done } : task,
+          task.id === action.id
+            ? {
+                ...task,
+                done: !task.done,
+                // Stamped on completion and cleared on reopening, so the
+                // editor's "Completed" row can never outlive the state it
+                // describes.
+                completedAt: task.done ? null : new Date().toISOString(),
+              }
+            : task,
         ),
       }
     case "toggleImportant":
@@ -281,9 +320,10 @@ export const reducer = (state: State, action: Action): State => {
 }
 
 export type Store = State & {
-  addList: (name: string, color: string) => TaskList
+  addList: (name: string, color: string) => TaskList | undefined
   addTask: (listId: string, title: string) => Task | undefined
   setTitle: (id: string, title: string) => void
+  setNotes: (id: string, notes: string) => void
   setDue: (id: string, due: string | null) => void
   toggleDone: (id: string) => void
   toggleImportant: (id: string) => void
@@ -299,7 +339,12 @@ export type Store = State & {
   setActiveRoute: (route: string) => void
 }
 
-let state = createInitialState()
+// Restored at module load, which is before the app mounts — so the very
+// first render already draws the saved document and no "loading" state ever
+// exists. Reading a small JSON file synchronously at startup is what a
+// GNOME app of this size does; it is also what keeps this store a plain
+// synchronous external store.
+let state = createInitialState(loadTasks())
 let snapshot: Store | null = null
 const listeners = new Set<() => void>()
 
@@ -308,25 +353,44 @@ const dispatch = (action: Action): void => {
   if (next === state) {
     return
   }
+  // Only the DOCUMENT is persisted, and only when it actually changed:
+  // typing in the search field, opening a dialog or selecting a task are
+  // state changes too, and none of them should touch the disk. Identity
+  // comparison is enough because the reducer is immutable throughout.
+  const documentChanged =
+    next.lists !== state.lists || next.tasks !== state.tasks
   state = next
   snapshot = null
+  if (documentChanged) {
+    saveTasks({ lists: state.lists, tasks: state.tasks })
+  }
   for (const listener of listeners) {
     listener()
   }
 }
 
-let nextId = 0
-const makeId = (prefix: string): string => {
-  nextId += 1
-  return `${prefix}-${nextId}`
-}
+// Random, not a counter. A counter is only safe while state starts empty
+// every run: once the document is restored from disk (see storage.ts), a
+// fresh `task-1` on the next launch collides with the `task-1` the PREVIOUS
+// launch saved, and `tasks.find(id)` then matches whichever came first —
+// the same defect the seed data hit in #33, but now reachable without any
+// fixture at all. `crypto.randomUUID()` removes the class rather than
+// dodging it, and is what examples/tasks-app already uses. The prefix is
+// kept purely so an id is readable in a log or a save file.
+const makeId = (prefix: string): string => `${prefix}-${crypto.randomUUID()}`
 
 // Bound once, at module scope: useSyncExternalStore compares snapshots by
 // identity, so the action half must never be rebuilt — a fresh object per
 // read would make every consumer re-render on every read, forever.
 const actions = {
-  addList: (name: string, color: string): TaskList => {
-    const list: TaskList = { id: makeId("list"), name, color }
+  // Rejects an empty name here rather than in the dialog, so the rule holds
+  // for every caller — same as examples/tasks-app's own `addList`.
+  addList: (name: string, color: string): TaskList | undefined => {
+    const trimmed = name.trim()
+    if (!trimmed) {
+      return undefined
+    }
+    const list: TaskList = { id: makeId("list"), name: trimmed, color }
     dispatch({ type: "addList", list })
     return list
   },
@@ -339,18 +403,22 @@ const actions = {
       id: makeId("task"),
       title: trimmed,
       listId,
+      notes: "",
       done: false,
       important: false,
       deleted: false,
       due: null,
       position: state.tasks.length,
       createdAt: new Date().toISOString(),
+      completedAt: null,
     }
     dispatch({ type: "addTask", task })
     return task
   },
   setTitle: (id: string, title: string) =>
     dispatch({ type: "setTitle", id, title }),
+  setNotes: (id: string, notes: string) =>
+    dispatch({ type: "setNotes", id, notes }),
   setDue: (id: string, due: string | null) =>
     dispatch({ type: "setDue", id, due }),
   toggleDone: (id: string) => dispatch({ type: "toggleDone", id }),

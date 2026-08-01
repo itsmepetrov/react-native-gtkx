@@ -1,12 +1,13 @@
-// Preferences: the two settings this app actually has. Reminders and their
-// lead time are examples/tasks-app's demo, not this one's (see README).
+// Preferences: theme, sort order, and how far ahead of a due time a
+// reminder notification fires.
 import schema from "#data/dev.rngtkx.tasksnav.gschema.xml"
 import {
   AdwPreferencesDialog,
   AdwPreferencesGroup,
   AdwPreferencesPage,
+  AdwSpinRow,
 } from "react-native-gtkx/adw"
-import { useSetting } from "react-native-gtkx/gtk"
+import { GtkAdjustment, useSetting } from "react-native-gtkx/gtk"
 import { useSortOrder } from "../hooks/use-sort-order"
 import type { SortOrder } from "../types"
 import { DropDownRow } from "./dropdown-row"
@@ -25,6 +26,10 @@ const isSort = (value: string): value is SortOrder =>
 export const Preferences = ({ onClose }: { onClose: () => void }) => {
   const [scheme, setScheme] = useSetting(schema, "color-scheme")
   const [sortOrder, setSortOrder] = useSortOrder()
+  const [reminderMinutes, setReminderMinutes] = useSetting(
+    schema,
+    "reminder-minutes",
+  )
 
   return (
     <AdwPreferencesDialog
@@ -67,6 +72,19 @@ export const Preferences = ({ onClose }: { onClose: () => void }) => {
                 setSortOrder(id)
               }
             }}
+          />
+          <AdwSpinRow
+            title="Reminder lead time"
+            subtitle="Minutes before a task is due"
+            adjustment={
+              <GtkAdjustment
+                value={reminderMinutes}
+                lower={0}
+                upper={1440}
+                stepIncrement={5}
+              />
+            }
+            onNotifyValue={(value) => setReminderMinutes(value ?? 30)}
           />
         </AdwPreferencesGroup>
       </AdwPreferencesPage>

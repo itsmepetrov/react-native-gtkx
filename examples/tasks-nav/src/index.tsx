@@ -1,5 +1,5 @@
 import { AppRegistry } from "react-native"
-import { GSimpleAction } from "react-native-gtkx/gtk"
+import { GLib, GSimpleAction } from "react-native-gtkx/gtk"
 import { AppShortcuts } from "./components/app-shortcuts"
 import { App } from "./app"
 import { addTargetListId, parseRoute } from "./selectors"
@@ -22,6 +22,44 @@ AppRegistry.runApplication("tasks-nav", {
   width: 900,
   height: 600,
   chrome: "content",
+  // APPLICATION-level actions, not window-level: these are what a
+  // Gio.Notification's buttons target (src/notifications.ts), and a
+  // notification outlives any particular window — it can still be sitting
+  // in GNOME's notification list after the window is gone. `win.*` would
+  // stop working at that point; `app.*` does not.
+  applicationActions: (
+    <>
+      <GSimpleAction
+        name="complete-task"
+        parameterType={GLib.VariantType.new("s")}
+        onActivate={(parameter) => {
+          if (!parameter) {
+            return
+          }
+          const store = getStore()
+          const id = parameter.getString()[0]
+          const task = store.tasks.find((candidate) => candidate.id === id)
+          // toggleDone, so guard on the current state: activating "Mark
+          // Complete" twice (a stale banner, say) must not reopen the task.
+          if (task && !task.done) {
+            store.toggleDone(task.id)
+          }
+        }}
+      />
+      <GSimpleAction
+        name="open-task"
+        parameterType={GLib.VariantType.new("s")}
+        onActivate={(parameter) => {
+          if (parameter) {
+            // No navigation needed: the content screen renders the open
+            // task's editor from `selectedTaskId` alone, whichever sidebar
+            // route happens to be focused (see screens/content-screen.tsx).
+            getStore().openTask(parameter.getString()[0])
+          }
+        }}
+      />
+    </>
+  ),
   actionAccels: [
     { detailedActionName: "win.new", accels: ["<Control>n"] },
     { detailedActionName: "win.preferences", accels: ["<Control>comma"] },
