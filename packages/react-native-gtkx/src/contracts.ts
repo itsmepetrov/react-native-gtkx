@@ -108,6 +108,9 @@ export type BoxShadowValue = {
   inset?: boolean
 }
 
+export type TextDecorationLine =
+  "none" | "underline" | "line-through" | "underline line-through"
+
 export type VisualStyle = Partial<{
   backgroundColor: string
   // RN 0.76+. Both forms RN takes: a CSS `box-shadow` string or the
@@ -159,6 +162,10 @@ export type VisualStyle = Partial<{
   // NOT emitted to CSS (no such GTK CSS property): the Text component applies
   // it via label props using the pure style/text-align helper.
   textAlign: "auto" | "left" | "right" | "center" | "justify"
+  // NOT emitted to CSS either — GTK4 CSS has no widget `text-decoration`.
+  // Pango carries it, so the Text component turns it into the label's
+  // attribute list using the pure style/text-decoration helper.
+  textDecorationLine: TextDecorationLine
   // NOT emitted to CSS (GTK4 has no widget `transform` property): composed
   // into a Transform2D by style/transform.ts and applied as the GskTransform
   // of the child's allocation by the container's layout manager.

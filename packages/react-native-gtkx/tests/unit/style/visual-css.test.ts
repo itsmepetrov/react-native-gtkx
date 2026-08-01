@@ -215,6 +215,7 @@ describe("visualStyleToCss", () => {
       lineHeight: 21,
       opacity: 0.9,
       textAlign: "center",
+      textDecorationLine: "line-through",
       transform: [{ rotate: "45deg" }],
     }
     expect(visualStyleToCss(visual)).toMatchSnapshot()

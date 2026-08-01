@@ -38,3 +38,15 @@ export {
   type UseWidgetLayoutOptions,
   type WidgetProps,
 } from "./widget"
+
+export { Icon, type IconProps } from "./icon"
+
+export {
+  List,
+  ListRow,
+  ListSeparator,
+  rowPosition,
+  type ListProps,
+  type ListRowPosition,
+  type ListRowProps,
+} from "./list"

@@ -19,6 +19,7 @@ export {
   hairlineWidth,
   StyleSheet,
 } from "./style-sheet"
+export { textDecorationToAttrs, type TextDecorations } from "./text-decoration"
 export {
   textAlignToLabelProps,
   type LabelAlignProps,

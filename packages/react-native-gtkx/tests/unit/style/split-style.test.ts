@@ -86,6 +86,7 @@ const fullVisual: Required<VisualStyle> = {
   lineHeight: 20,
   opacity: 0.5,
   textAlign: "center",
+  textDecorationLine: "underline line-through",
   transform: [{ translateX: 5 }, { rotate: "45deg" }],
 }
 
