@@ -21,7 +21,7 @@
     "mcp:check-data": "node scripts/generate-mcp-data.mjs --check",
     "build:dist": "npm run build:dist -w react-native-gtkx",
     "watch:dist": "npm run watch:dist -w react-native-gtkx",
-    "check:package": "npm run build:dist && attw --pack packages/react-native-gtkx --profile esm-only --ignore-rules internal-resolution-error",
+    "check:package": "npm run build:dist && node scripts/check-package.ts",
     "prepare": "husky"
   },
   "lint-staged": {

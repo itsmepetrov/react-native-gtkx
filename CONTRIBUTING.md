@@ -25,6 +25,18 @@ and `@gtkx/jsx` packages from node_modules as extraneous — re-run
 And `build:dist` only works where the codegen store exists (the VM from
 macOS), same as `typecheck`.
 
+`check:package` prints two findings it will never fail on, and they are the
+right answer rather than a to-do list: `💀 NoResolution` under **node10**
+(the classic resolver cannot read an `exports` map, and we ship no CJS
+fallback) and `⚠️ CJSResolvesToESM` under **node16 (from CJS)**
+(`require()` of an ESM file — CJS consumers use a dynamic import). The
+package is ESM-only on purpose; the `esm-only` profile is what marks those
+two as expected. What it does gate is node16-from-ESM and bundler — see the
+header of `scripts/check-package.ts` for why the subpaths Node loads
+directly (`./mcp`, `./vitest`, …) are checked with no ignored rules while
+the bundler-only React surfaces are not, and what to do when you add a new
+subpath.
+
 The Metro toolchain can be exercised end to end without a desktop session:
 `node scripts/run-linux-headless.ts examples/rn-app /tmp/shot.png` runs
 `react-native run-linux` under headless sway and screenshots the window;
