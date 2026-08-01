@@ -159,7 +159,8 @@ const NAMED_COLORS: Record<string, string> = {
   yellowgreen: "#9acd32",
 }
 
-type Rgba = { r: number; g: number; b: number; a: number }
+/** A parsed colour: 0-255 channels, 0-1 alpha. */
+export type Rgba = { r: number; g: number; b: number; a: number }
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value))
@@ -339,6 +340,31 @@ const CSS_VARIABLE_PATTERN = /^var\(--[\w-]+.*\)$/i
 const GTK_NAMED_COLOR_PATTERN = /^@[A-Za-z_][\w-]*$/
 
 /**
+ * Parses a React Native color string into numeric channels.
+ *
+ * Returns null for anything that has no fixed value at parse time — the
+ * `var(--name)` and `@named` forms {@link parseColor} passes through to GTK,
+ * which resolves them against the live theme. Callers that need to compute
+ * WITH a colour (interpolation, blending) have to refuse those; callers that
+ * only need to hand it to GTK should use {@link parseColor} instead.
+ */
+export const parseColorToRgba = (value: string): Rgba | null => {
+  if (typeof value !== "string") {
+    return null
+  }
+  const input = value.trim()
+  if (input === "") {
+    return null
+  }
+  const lower = input.toLowerCase()
+  if (lower === "transparent") {
+    return { r: 0, g: 0, b: 0, a: 0 }
+  }
+  const named = NAMED_COLORS[lower]
+  return parseHex(named ?? input) ?? parseColorFunction(input)
+}
+
+/**
  * Parses a React Native color string into a GTK4 CSS color value.
  * Returns null for values that cannot be understood.
  */
@@ -358,12 +384,7 @@ export const parseColor = (value: string): string | null => {
   if (GTK_NAMED_COLOR_PATTERN.test(input)) {
     return input
   }
-  const lower = input.toLowerCase()
-  if (lower === "transparent") {
-    return "rgba(0, 0, 0, 0)"
-  }
-  const named = NAMED_COLORS[lower]
-  const rgba = parseHex(named ?? input) ?? parseColorFunction(input)
+  const rgba = parseColorToRgba(input)
   return rgba === null ? null : formatRgba(rgba)
 }
 

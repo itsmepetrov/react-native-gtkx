@@ -1,22 +1,31 @@
 // Turning a `useAnimatedStyle` updater's plain object into a style the view
 // layer can drive without React.
 //
-// The mapper returns ordinary numbers every frame. On the first run each
+// The mapper returns ordinary values every frame. On the first run each
 // animatable leaf is replaced by a small animated NODE and the mapping is
 // remembered; later runs only push new values into those nodes, so a running
 // animation costs zero React renders. `src/components/animated.tsx`
 // recognises those nodes structurally and writes them straight to GTK —
 // `widget.setOpacity` for opacity, the rect store plus `queueAllocate` for
-// transforms.
+// transforms, and a CSS provider private to the widget for colours.
 //
-// WHY ONLY TWO PROPERTIES. Those are the only two things this platform can
-// currently write to a mounted widget imperatively. Everything else — every
-// colour, border, radius, and all of layout — reaches GTK as a CSS class
-// computed during render, or as a Yoga pass, and neither has an imperative
-// escape hatch yet. That is the honest boundary of this slice
-// (docs/research/reanimated.md, "the animatable-property gap"), and the rule
-// here is that it must be VISIBLE: a property that changes between mapper
-// runs but cannot be driven says so once, by name, instead of being dropped.
+// WHERE THE BOUNDARY IS NOW. Opacity, transforms and colours are driven.
+// What is left out is layout — `width`, `height`, `top`, `flex`, every
+// `margin*`/`padding*` — and that is a refusal on measured grounds rather
+// than a gap waiting to be filled. A layout write has to go through Yoga,
+// and a Yoga pass costs what the TREE costs, not what the animated value
+// costs: 63 µs for a five-child container, 135 µs at sixty, 519 µs at three
+// hundred, per frame, before GTK re-measures the ancestors the resize
+// invalidated. The same frame's transform write is 0.7 µs and does not grow
+// at all. docs/research/animated-colors.md has the full table and the number
+// that would change the decision.
+//
+// The rule for everything undriveable stays what it was: it must be VISIBLE.
+// A property that changes between mapper runs but cannot be driven says so
+// once, by name — and layout properties say it in their own words, because
+// "use translateX instead of left" is advice and "cannot be written" is not.
+
+import { DRIVEABLE_COLOR_PROPERTIES } from "../style/imperative-css"
 
 export type StyleValue = number | string
 
@@ -72,6 +81,73 @@ const OPACITY = "opacity"
 const transformLeafKey = (index: number, part: string): string =>
   `transform.${index}.${part}`
 
+// RN's layout properties, as `STYLE_PROPERTIES_CONFIG` enumerates them.
+// Enumerated by hand rather than derived by subtracting the driveable set,
+// because the point of the list is to produce a DIFFERENT message: these are
+// refused for a measured reason and have a real alternative, which
+// `borderStyle` does not.
+const LAYOUT_PROPERTIES = new Set([
+  "aspectRatio",
+  "borderBottomWidth",
+  "borderEndWidth",
+  "borderLeftWidth",
+  "borderRightWidth",
+  "borderStartWidth",
+  "borderTopWidth",
+  "borderWidth",
+  "bottom",
+  "columnGap",
+  "end",
+  "flex",
+  "flexBasis",
+  "flexGrow",
+  "flexShrink",
+  "gap",
+  "height",
+  "left",
+  "margin",
+  "marginBottom",
+  "marginEnd",
+  "marginHorizontal",
+  "marginLeft",
+  "marginRight",
+  "marginStart",
+  "marginTop",
+  "marginVertical",
+  "maxHeight",
+  "maxWidth",
+  "minHeight",
+  "minWidth",
+  "padding",
+  "paddingBottom",
+  "paddingEnd",
+  "paddingHorizontal",
+  "paddingLeft",
+  "paddingRight",
+  "paddingStart",
+  "paddingTop",
+  "paddingVertical",
+  "right",
+  "rowGap",
+  "start",
+  "top",
+  "width",
+])
+
+// Which transform to reach for instead. Only the properties with an exact
+// visual equivalent are listed; suggesting `scaleX` for `flexGrow` would be
+// worse than saying nothing.
+const TRANSFORM_ALTERNATIVE: Record<string, string> = {
+  bottom: "translateY",
+  end: "translateX",
+  height: "scaleY",
+  left: "translateX",
+  right: "translateX",
+  start: "translateX",
+  top: "translateY",
+  width: "scaleX",
+}
+
 // One warning per property name per session, matching the platform's
 // warnNativeDriverIgnored policy: a 60 Hz mapper must not produce 60 lines a
 // second, and the name is the actionable part.
@@ -84,13 +160,29 @@ const warnUndriveable = (property: string): void => {
   warned.add(property)
   const isProduction =
     typeof process !== "undefined" && process.env.NODE_ENV === "production"
-  if (!isProduction) {
-    console.warn(
-      `react-native-reanimated: useAnimatedStyle changed \`${property}\`, which react-native-gtkx cannot ` +
-        "write to a mounted widget without a React render. Only `opacity` and `transform` animate at frame " +
-        "rate here; the new value is applied on the next render instead. See docs/api.md.",
-    )
+  if (isProduction) {
+    return
   }
+  if (LAYOUT_PROPERTIES.has(property)) {
+    const alternative = TRANSFORM_ALTERNATIVE[property]
+    console.warn(
+      `react-native-reanimated: useAnimatedStyle changed \`${property}\`, a LAYOUT property. ` +
+        "react-native-gtkx does not drive layout at frame rate on purpose: a layout write costs a Yoga " +
+        "pass over the container plus a GTK resize of every ancestor, and that cost grows with the tree " +
+        "rather than with the number of animated values. " +
+        (alternative
+          ? `Animate \`transform: [{ ${alternative}: … }]\` instead — it is paint-only, costs the same at ` +
+            "any tree size, and is what RN's own native driver restricts you to. "
+          : "Transforms are paint-only and cost the same at any tree size. ") +
+        "The new value is applied on the next React render. See docs/api.md.",
+    )
+    return
+  }
+  console.warn(
+    `react-native-reanimated: useAnimatedStyle changed \`${property}\`, which react-native-gtkx cannot ` +
+      "write to a mounted widget without a React render. `opacity`, `transform` and colours animate at " +
+      "frame rate here; the new value is applied on the next render instead. See docs/api.md.",
+  )
 }
 
 /** @internal Test seam: the warning is once per session by design. */
@@ -108,6 +200,15 @@ const leavesOf = (
   const leaves: { key: string; value: StyleValue }[] = []
   if (typeof source[OPACITY] === "number") {
     leaves.push({ key: OPACITY, value: source[OPACITY] })
+  }
+  for (const property of DRIVEABLE_COLOR_PROPERTIES) {
+    const value = source[property]
+    // Strings only. A colour is a string on this platform (RN's packed
+    // integers never reach a GTK stylesheet), so a number here is not a
+    // colour we can drive and belongs on the warn path with everything else.
+    if (typeof value === "string") {
+      leaves.push({ key: property, value })
+    }
   }
   if (Array.isArray(source.transform)) {
     source.transform.forEach((entry, index) => {
@@ -171,6 +272,12 @@ export const createAnimatedStyle = (
   if (opacityNode) {
     style[OPACITY] = opacityNode
   }
+  for (const property of DRIVEABLE_COLOR_PROPERTIES) {
+    const colorNode = nodes.get(property)
+    if (colorNode) {
+      style[property] = colorNode
+    }
+  }
   if (Array.isArray(source.transform)) {
     style.transform = source.transform.map((entry, index) => {
       if (typeof entry !== "object" || entry === null) {
@@ -201,7 +308,7 @@ export const createAnimatedStyle = (
         nodes.get(leaf.key)?.__push(leaf.value)
       }
       for (const key of Object.keys(next)) {
-        if (key === OPACITY || key === "transform") {
+        if (key === OPACITY || key === "transform" || nodes.has(key)) {
           continue
         }
         if (!Object.is(next[key], staticSnapshot[key])) {

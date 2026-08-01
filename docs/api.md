@@ -677,36 +677,59 @@ rebuilt.
 
 ### The boundary: what can be animated
 
-This is the honest limit of the surface, and it is not a runtime limit. This
-platform can write exactly three things to a mounted widget without a React
-render:
+This is the honest limit of the surface, and it is not a runtime limit. What
+this platform can write to a mounted widget without a React render:
 
 | Property                                                                                                            | Reached through    | How it reaches GTK                                                                                                                |
 | ------------------------------------------------------------------------------------------------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
 | `opacity`                                                                                                           | `useAnimatedStyle` | `gtk_widget_set_opacity`, straight from the animation frame.                                                                      |
 | `transform` (`translateX/Y`, `scale`, `scaleX/Y`, `rotate`, `skew`)                                                 | `useAnimatedStyle` | The rect store plus one queued allocation, applied as a `GskTransform`.                                                           |
+| `backgroundColor`, `color`, `borderColor` (and per side), `outlineColor`                                            | `useAnimatedStyle` | A `GtkCssProvider` private to that widget, reloaded in place — 11.2 µs per frame, flat in the size of the tree.                   |
 | The numeric SVG props (`r`, `cx`, `strokeWidth`, `strokeDashoffset` and the rest of the geometry and paint numbers) | `useAnimatedProps` | The shape's own descriptor plus `queueDraw` — the SVG components subscribe to an animated node themselves, so nothing new writes. |
 
-Everything else — every colour, border, radius, and all of layout — reaches
-GTK as a CSS class computed during render, and layout properties additionally
-need a Yoga pass. A `useAnimatedStyle` returning `backgroundColor` or `width`
-therefore **cannot** be driven at frame rate here yet. It is not dropped
-silently: the property is named in a one-per-session warning, and its latest
-value is applied on the next React render. Closing that gap is separate work
-(see the research doc's "animatable-property gap"). `useAnimatedProps` has the
-same rule with the same warning: a numeric prop is driven, anything else is
-named and lands on the next render.
+Colours deliberately do **not** go through the memoised class registry the
+static styles use. That registry keys on the generated CSS text, so a colour
+driven through it would mint a class per frame into one process-wide
+stylesheet that GTK re-parses whole and that is never pruned — measured at
+0.8 ms for the first frame and 6.8 ms by the six-hundredth, still climbing.
+The private provider has no cache and no document, so nothing about the
+static path — including its memoisation — changes. Every animated component
+gets this, not just `Animated.View`: the write path is a hook over "a widget
+and its parent", so `Animated.Text` and anything through
+`createAnimatedComponent` animate colours on the same terms.
+
+**Layout properties are refused, and it is a decision rather than a gap.**
+`width`, `height`, `top`, `flex` and every `margin*`/`padding*` need a Yoga
+pass, whose cost is proportional to the TREE and not to the animated value:
+64 µs for a five-child container, 128 µs at sixty, 496 µs at three hundred,
+per frame, before GTK re-measures every ancestor the resize invalidated. A
+transform is 0.7 µs at all three, and a colour 11.2 µs. A `useAnimatedStyle`
+that changes a layout property warns once for that property, says it is a
+layout property and why, and names the transform to use instead (`translateX`
+for `left`, `scaleX` for `width`, and so on). The value is still applied on
+the next React render rather than dropped. Full measurements, and the two
+numbers that would change the decision, in
+[research/animated-colors.md](research/animated-colors.md).
+
+Everything else — borders, radii, shadows — still reaches GTK as a CSS class
+computed during render. It is not dropped silently either: the property is
+named in a one-per-session warning and its latest value is applied on the
+next React render. `useAnimatedProps` has the same rule with the same
+warning: a numeric prop is driven, anything else is named and lands on the
+next render.
 
 ### Implemented
 
 | Export                                                                                                           | Behaviour                                                                                                                                                                                                                                                                                                                               |
 | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `useSharedValue`, `makeMutable`, `isSharedValue`, `cancelAnimation`                                              | Full. A shared value is also a platform animated node, so it can be handed to `Animated.View`'s style directly as well as through `useAnimatedStyle`.                                                                                                                                                                                   |
-| `useAnimatedStyle`                                                                                               | Full for `opacity` and `transform` — see the boundary above. A style whose _shape_ changes between runs costs exactly one React render and rebinds; a running animation costs none.                                                                                                                                                     |
+| `useAnimatedStyle`                                                                                               | Full for `opacity`, `transform` and colours — see the boundary above. A style whose _shape_ changes between runs costs exactly one React render and rebinds; a running animation costs none.                                                                                                                                            |
 | `useAnimatedProps`                                                                                               | Numeric props, driven straight into the component that takes them — in practice the SVG shapes, which already accept `number \| AnimatedNode` on every geometry and paint number. Same lifecycle as `useAnimatedStyle`, down to the one render a shape change costs.                                                                    |
 | `useDerivedValue`, `useAnimatedReaction`, `startMapper`, `stopMapper`                                            | Full. Mappers are torn down on unmount.                                                                                                                                                                                                                                                                                                 |
 | `withTiming`, `withSpring`, `withSequence`, `withRepeat`, `withDelay`                                            | Full for numeric values, on upstream's defaults (timing 300 ms / `inOut(quad)`, spring `GentleSpringConfig`), driven by the platform's own frame scheduler.                                                                                                                                                                             |
 | `interpolate`, `clamp`, `Extrapolation`, `Extrapolate`, `Easing`                                                 | Full, including per-edge extrapolation and `Easing.bezier`'s factory shape.                                                                                                                                                                                                                                                             |
+| `interpolateColor`, `convertToRGBA`, `isColor`, `rgbaArrayToRGBAColor`                                           | Full for `'RGB'` (upstream's 2.2 gamma) and `'HSV'` (upstream's hue-wrap correction), including its `transparent` handling. `'LAB'` throws — see the differences table.                                                                                                                                                                 |
+| `PlatformColor`                                                                                                  | The platform's own: theme colours by name, resolved by GTK against the live Adwaita palette. Can be animated _between_ on a shared value; cannot be interpolated _through_.                                                                                                                                                             |
 | `useAnimatedRef`, `measure`                                                                                      | Full, and callable from anywhere — there is no worklet to be inside of. Returns `null` before the first committed layout, which is RN's own contract.                                                                                                                                                                                   |
 | `runOnUI`, `runOnJS`, `scheduleOnUI`, `scheduleOnRN`                                                             | Deferred, not inlined — see below.                                                                                                                                                                                                                                                                                                      |
 | `Animated.View`                                                                                                  | The platform's own, unchanged. Takes a `ref` giving `measure`/`measureInWindow`/`measureLayout`.                                                                                                                                                                                                                                        |
@@ -752,8 +775,11 @@ const Pulse = () => {
 
 | Behaviour                          | Here                                                                                                                                                                                                                                                                                                 |
 | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Animatable properties              | `opacity` and `transform` only — see the boundary table. Anything else warns once by name and lands on the next render.                                                                                                                                                                              |
-| Animated values                    | Numbers only. `withTiming("#ff0000")` and animated arrays/objects throw rather than animating nothing; colours are the property gap above.                                                                                                                                                           |
+| Animatable properties              | `opacity`, `transform` and colours — see the boundary table. Layout properties are refused with the transform to use instead; anything else warns once by name. Both land on the next render.                                                                                                        |
+| Animated values                    | Numbers only. `withTiming("#ff0000")` throws rather than animating nothing: animate a number and map it with `interpolateColor`, which is what upstream's own examples do.                                                                                                                           |
+| `interpolateColor` colour spaces   | `'RGB'` and `'HSV'`. `'LAB'` throws by name — upstream's is a vendored slice of culori fed 0-255 channels where culori documents 0-1, so matching it would mean matching the scaling.                                                                                                                |
+| `interpolateColor` inputs          | Colour strings only, and not `PlatformColor` — a theme colour has no value until GTK resolves it against the live theme, so it has nothing to blend. Both cases throw and say which one happened.                                                                                                    |
+| `processColor`                     | Throws. It returns RN's packed AARRGGBB integer, whose only consumer is a native module; a colour's destination here is a GTK stylesheet, which takes strings.                                                                                                                                       |
 | `runOnUI` / `runOnJS`              | Schedule rather than run inline, and return `void` — matching upstream's own single-runtime path (`react-native-worklets/src/threads.ts`: a microtask plus one frame for `runOnUI`, a microtask for `runOnJS`). They _could_ be direct calls here; code written for Reanimated assumes they are not. |
 | `SharedValue.addListener`          | Accepts upstream's `(listenerID, listener)` **and** this platform's animated-node `(callback) => id`. Both callers are real, and supporting only one fails silently.                                                                                                                                 |
 | Worklet closure capture            | Live lexical capture, not the plugin's by-value snapshot. Only observable for a worklet closing over a reassigned plain `let`, which is already a bug on mobile.                                                                                                                                     |
@@ -765,7 +791,7 @@ const Pulse = () => {
 
 `Animated.FlatList`; layout animations (`entering`/`exiting`/`layout`,
 `FadeIn`, `LinearTransition`, `Keyframe` and the ~90 preset builders);
-`interpolateColor` and the colour helpers; `useEvent`/`useHandler`,
+`processColor` and `DynamicColorIOS`; `useEvent`/`useHandler`,
 `useAnimatedScrollHandler`, `useScrollOffset`, `useFrameCallback`,
 `useTimestamp`; sensors, the keyboard hook, screen and shared-element
 transitions; Reanimated 4's CSS animations (`css.create`, `css.keyframes`);

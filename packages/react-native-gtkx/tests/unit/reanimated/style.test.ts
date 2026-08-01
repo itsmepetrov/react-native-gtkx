@@ -92,20 +92,81 @@ test("a rebuild reuses the nodes of the leaves that survived", () => {
   expect(nodeValue(parts[1]!.scale)).toBe(2)
 })
 
+test("replaces every driveable colour with a node too", () => {
+  const animated = createAnimatedStyle({
+    backgroundColor: "#ff0000",
+    color: "white",
+    borderTopColor: "rgba(0, 0, 0, 0.5)",
+    borderStyle: "solid",
+  })
+
+  expect(nodeValue(animated.style.backgroundColor)).toBe("#ff0000")
+  expect(nodeValue(animated.style.color)).toBe("white")
+  expect(nodeValue(animated.style.borderTopColor)).toBe("rgba(0, 0, 0, 0.5)")
+  // Not a colour, and not driveable: still a plain value for React.
+  expect(animated.style.borderStyle).toBe("solid")
+})
+
+test("a driven colour costs no warning and no rebuild", () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+  const animated = createAnimatedStyle({ backgroundColor: "#ff0000" })
+  const node = animated.style.backgroundColor as StyleNode
+  const seen: unknown[] = []
+  node.addListener(({ value }) => seen.push(value))
+
+  expect(animated.apply({ backgroundColor: "#00ff00" })).toBe(true)
+  expect(animated.apply({ backgroundColor: "rgb(0, 0, 255)" })).toBe(true)
+
+  expect(seen).toEqual(["#00ff00", "rgb(0, 0, 255)"])
+  // Same node throughout: the view layer never rebinds.
+  expect(animated.style.backgroundColor).toBe(node)
+  expect(warn).not.toHaveBeenCalled()
+})
+
+test("a colour that stops being a string is a shape change, not a silent drop", () => {
+  // RN's packed colour integers have no meaning on this platform, so a
+  // number here is not a colour — it must not be pushed into a node the
+  // view layer would then write into a stylesheet.
+  const animated = createAnimatedStyle({ backgroundColor: "#ff0000" })
+  expect(animated.apply({ backgroundColor: 4294901760 })).toBe(false)
+})
+
 test("a property this platform cannot drive warns once, by name", () => {
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
   const animated = createAnimatedStyle({
-    backgroundColor: "#ff0000",
+    borderStyle: "solid",
     opacity: 1,
   })
 
-  animated.apply({ backgroundColor: "#00ff00", opacity: 0.9 })
-  animated.apply({ backgroundColor: "#0000ff", opacity: 0.8 })
+  animated.apply({ borderStyle: "dashed", opacity: 0.9 })
+  animated.apply({ borderStyle: "dotted", opacity: 0.8 })
 
   expect(warn).toHaveBeenCalledTimes(1)
-  expect(String(warn.mock.calls[0]?.[0])).toContain("backgroundColor")
+  expect(String(warn.mock.calls[0]?.[0])).toContain("borderStyle")
   // Still updated in the object, so the next React render is correct.
-  expect(animated.style.backgroundColor).toBe("#0000ff")
+  expect(animated.style.borderStyle).toBe("dotted")
+})
+
+test("a layout property is refused in its own words, naming the transform to use", () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+  const animated = createAnimatedStyle({ width: 40, height: 20, flex: 1 })
+
+  animated.apply({ width: 60, height: 30, flex: 2 })
+
+  expect(warn).toHaveBeenCalledTimes(3)
+  const messages = warn.mock.calls.map((call) => String(call[0]))
+  const width = messages.find((message) => message.includes("`width`"))!
+  expect(width).toContain("LAYOUT property")
+  expect(width).toContain("scaleX")
+  expect(width).toContain("Yoga")
+  expect(messages.find((message) => message.includes("`height`"))).toContain(
+    "scaleY",
+  )
+  // No transform stands in for `flex`, so none is suggested — but it is still
+  // refused as layout rather than as "cannot be written".
+  const flex = messages.find((message) => message.includes("`flex`"))!
+  expect(flex).toContain("LAYOUT property")
+  expect(flex).not.toContain("scaleX")
 })
 
 test("an unchanged undriveable property is not a warning", () => {
