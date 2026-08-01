@@ -798,6 +798,9 @@ next render.
 | `Animated.View`                                                                                                  | The platform's own, unchanged. Takes a `ref` giving `measure`/`measureInWindow`/`measureLayout`.                                                                                                                                                                                                                                                                                                                                 |
 | `Animated.Text`, `Animated.Image`, `Animated.ScrollView`                                                         | `createAnimatedComponent` over the platform's own components — no subclass and no special case. All three forward the `ref` through, so `useAnimatedRef` + `measure()` works on them.                                                                                                                                                                                                                                            |
 | `createAnimatedComponent`                                                                                        | **Adds no widget to the tree.** It renders the wrapped component itself and reaches its widget through the ref that component already exposes, so the GTK output is what the unwrapped component produces. Wrap anything that takes a `ref` giving the geometry methods; anything else gets a named warning rather than a silent no-op.                                                                                          |
+| `entering`, `exiting`, `layout`                                                                                  | On every animated component, not only `Animated.View` — see the layout-animation section below. `exiting` keeps the widget on screen after React has removed it.                                                                                                                                                                                                                                                                 |
+| `FadeIn`, `FadeOut`, `LinearTransition`, `Layout`, `Keyframe`                                                    | The four builders in scope, with upstream's fluent surface (`.duration()`, `.delay()`, `.easing()`, `.springify()` and the spring parameters, `.withInitialValues()`, `.withCallback()`), usable as the class or as an instance. `Layout` is upstream's own deprecated alias of `LinearTransition`.                                                                                                                              |
+| `BaseAnimationBuilder`, `ComplexAnimationBuilder`                                                                | One class under both names — upstream splits the plain chain from the spring parameters, this platform does not — so a library subclassing either keeps working.                                                                                                                                                                                                                                                                 |
 | `GentleSpringConfig` and the other seven spring presets, `ReduceMotion`, `ReanimatedLogLevel`, `isSharedValue`   | Plain data, mirrored exactly.                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `isConfigured`, `isReanimated3`, `makeShareableCloneRecursive`, `isWorkletFunction`, `configureReanimatedLogger` | Present. Cloning is identity (nothing leaves the runtime it was made in); `configureReanimatedLogger` is accepted and does nothing, because there is no second logger to configure.                                                                                                                                                                                                                                              |
 
@@ -834,6 +837,66 @@ const Pulse = () => {
 }
 ```
 
+### Layout animations, and the one primitive they needed
+
+```tsx
+<Animated.View
+  entering={FadeIn.duration(300)}
+  exiting={FadeOut}
+  layout={LinearTransition.springify()}
+/>
+```
+
+All three work on every animated component — `Animated.View`,
+`Animated.Text`, `Animated.Image`, `Animated.ScrollView` and anything through
+`createAnimatedComponent` — because they are added by wrapping rather than by
+subclassing, and the wrapper adds no widget to the tree any more than
+`createAnimatedComponent` does.
+
+`entering` and `layout` needed nothing new. `entering` writes the builder's
+initial values in the commit that mounts the widget (so it is never drawn
+un-faded, not even for a frame) and animates from there. `layout` watches for
+the layout engine committing a **different rect** for that child and walks it
+from where it was to where the engine put it.
+
+**`layout` animates the position, and applies the size.** Upstream's
+`LinearTransition` animates `originX`/`originY`/`width`/`height`; all four are
+still produced here, and the origins are honoured as a **translation** — the
+same paint-only write a `transform` uses, composed with whatever transform the
+style already has, so a row that scales while the list reorders does both. A
+size change lands immediately instead, for the reason the boundary section
+above already gives: animating a size means a Yoga pass per frame whose cost
+is the tree's rather than the animated value's.
+
+**`exiting` is the one that needed a new primitive**, and it is the reason
+this slice exists. An exit animation has to keep drawing a widget React has
+already reconciled away, and React's deletion is neither asynchronous nor
+negotiable: in one synchronous commit it runs the unmounting subtree's
+cleanups and unparents its topmost widget. So the platform grew a **widget
+retention** primitive, generalised from the one
+`react-native-gtkx/adw`'s `NavigationStack` already used for pages — hold what
+is leaving, drop it on the real end signal, and arm a timer in case that
+signal never comes:
+
+- The widget is put back into the same container, **at the end of the child
+  list**, so it draws over the siblings closing the gap rather than under
+  them.
+- Its Yoga node leaves the shadow tree immediately, so an exiting view does
+  **not** hold its space — the row below it moves up at once, and the fade
+  happens over the top.
+- Every container in the retained subtree keeps its layout manager until the
+  animation ends, so the exiting view's own children stay exactly where the
+  engine put them.
+- **A fallback timer always runs**, armed from the animation's declared
+  length. Whichever arrives first — the animation's end or the timer — drops
+  the widget, so a spring that never settles, a frame source that dies, or an
+  animation that was never started cannot leak a widget that is still
+  parented, drawn and hit-testable.
+
+`exiting` is skipped when the component's own container is unmounting in the
+same commit: there is no container left to hold the widget, and an exit
+animation inside a disappearing parent is not one anybody sees.
+
 ### Differences from `react-native-reanimated`
 
 | Behaviour                          | Here                                                                                                                                                                                                                                                                                                 |
@@ -850,11 +913,19 @@ const Pulse = () => {
 | `withDecay` config validation      | Throws at the `withDecay()` call rather than on the animation's first frame. Same errors (`clamp` shape, `velocityFactor > 0`, `rubberBandEffect` needing a `clamp`), one line earlier.                                                                                                              |
 | `ReduceMotion`, `useReducedMotion` | The enum is mirrored and every value behaves as `Never`; `useReducedMotion()` is always false. GNOME's `gtk-enable-animations` is not read yet.                                                                                                                                                      |
 | `reanimatedVersion`                | The upstream version this surface mirrors, not a claim to be that package.                                                                                                                                                                                                                           |
+| `LinearTransition` size changes    | The position animates (as a translation); a width or height change lands immediately. Animating a size is a Yoga pass per frame — the same measured refusal `useAnimatedStyle` makes for layout properties.                                                                                          |
+| Layout-animation properties        | `opacity`, `transform` and position. `width`/`height` are applied rather than driven (above); anything else a builder asks for is named once, by property, in a warning.                                                                                                                             |
+| Builder methods                    | `.restDisplacementThreshold()` and `.restSpeedThreshold()` are accepted and ignored — this platform's spring derives its rest condition from the same energy budget instead (see the row above). `.reduceMotion()` is accepted and ignored for the reason `useReducedMotion()` is always false.      |
+| `entering` / `exiting` ownership   | A layout animation owns `opacity` and `transform` for as long as it runs, so a `useAnimatedStyle` driving the same property on the same view during a fade is two writers on one slot. Upstream has the same rule.                                                                                   |
+| The layout-animation catalog       | `FadeIn`, `FadeOut`, `LinearTransition`/`Layout` and `Keyframe` are implemented. The other ~90 preset builders are not, and throw by name — they are presets over the same two animations and the same built config, so they are cheap to add and simply have not been.                              |
 
 ### Not implemented — throws, naming itself
 
-`Animated.FlatList`; layout animations (`entering`/`exiting`/`layout`,
-`FadeIn`, `LinearTransition`, `Keyframe` and the ~90 preset builders);
+`Animated.FlatList`; the ~90 preset layout-animation builders (`BounceIn*`,
+`FlipIn*`, `Pinwheel*`, `Roll*`, `Slide*`, `Stretch*`, `ZoomIn*` and the
+rest), `LayoutAnimationConfig` and the non-linear transitions
+(`CurvedTransition`, `SequencedTransition`, `JumpingTransition`,
+`FadingTransition`, `EntryExitTransition`);
 `processColor` and `DynamicColorIOS`; `useEvent`/`useHandler`,
 `useAnimatedScrollHandler`, `useScrollOffset`, `useFrameCallback`,
 `useTimestamp`; sensors, the keyboard hook, screen and shared-element
@@ -875,10 +946,10 @@ Put the animated style on an `Animated.View` around the list, or use
 `Animated.ScrollView` when the list does not need virtualization.
 
 The throw is the point, and it is the same discipline as the RNGH shim: a
-`FadeIn` that mounted without fading is the trap
+`BounceIn` that mounted without bouncing is the trap
 [research/gestures.md](research/gestures.md) records `Animated.View` falling
 into — compiled, ran, did nothing. The stand-ins fail on call, on render and
-on property access (`FadeIn.duration(300)`, `css.create`), while still
+on property access (`BounceIn.duration(300)`, `css.create`), while still
 answering the introspection React and `console.log` do first. A symbol not
 listed at all fails earlier still, at bundle time.
 
