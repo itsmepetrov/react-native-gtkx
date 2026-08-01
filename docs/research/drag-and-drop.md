@@ -79,11 +79,19 @@ Not optional, not soft. Static, module-scope imports in twelve files:
 `react-native-gesture-handler` in `useDraggable.ts`, `useSortable.ts`,
 `useGridSortable.ts`, `useHorizontalSortable.ts`, `Draggable.tsx`,
 `Sortable.tsx`, `SortableItem.tsx`, `SortableGrid*.tsx`;
-`react-native-worklets` (`scheduleOnRN`, `scheduleOnUI`) in the four
-gesture hooks. There is no `try { require(...) } catch` anywhere, unlike
-RNGH's own `reanimatedWrapper.ts`. The failure is at **import**, not at
-runtime — the same thing `docs/research/gestures.md` measured for the whole
-RNGH-based ecosystem.
+`react-native-worklets` in five hooks. There is no
+`try { require(...) } catch` anywhere, unlike RNGH's own
+`reanimatedWrapper.ts`. The failure is at **import**, not at runtime — the
+same thing `docs/research/gestures.md` measured for the whole RNGH-based
+ecosystem.
+
+The worklets import list was re-counted against the **published** 2.0.0
+tarball when that package was aliased (`react-native-gtkx/worklets`), because
+that is the code a consumer's bundler actually resolves: it is exactly two
+symbols, `scheduleOnRN` and `scheduleOnUI`, across `useDraggable.js`,
+`useDroppable.js`, `useSortable.js`, `useHorizontalSortable.js` and
+`useGridSortable.js` — five files, not four. Nothing else in the package
+touches that module, and no type is imported from it.
 
 **Reanimated is the state medium and the layout, not the animation.** This
 is the measurement that actually decides it. Symbol counts across the

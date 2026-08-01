@@ -28,7 +28,10 @@ let makeMutable: MakeMutable
 
 beforeEach(() => {
   manual = createManualScheduler()
-  makeMutable = createMakeMutable(createAnimated(manual.scheduler))
+  makeMutable = createMakeMutable(
+    createAnimated(manual.scheduler),
+    manual.scheduler,
+  )
 })
 
 test("writes publish to listeners in both calling conventions", () => {

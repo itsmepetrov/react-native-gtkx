@@ -36,6 +36,8 @@ const REANIMATED_DND = "react-native-reanimated-dnd"
 const REACT_NATIVE_GTKX_DND = "react-native-gtkx/dnd"
 const REANIMATED = "react-native-reanimated"
 const REACT_NATIVE_GTKX_REANIMATED = "react-native-gtkx/reanimated"
+const WORKLETS = "react-native-worklets"
+const REACT_NATIVE_GTKX_WORKLETS = "react-native-gtkx/worklets"
 const GESTURE_HANDLER = "react-native-gesture-handler"
 const GTKX_GESTURE_HANDLER = "react-native-gtkx/gesture-handler"
 
@@ -83,6 +85,20 @@ export const rewriteReactNativeImport = (source: string): string | null => {
   }
   if (source.startsWith(`${REANIMATED}/`)) {
     return `${REACT_NATIVE_GTKX_REANIMATED}${source.slice(REANIMATED.length)}`
+  }
+  // Reanimated 4 moved the worklet surface into its own package, and
+  // libraries import it under that name: `react-native-reanimated-dnd` pulls
+  // `scheduleOnRN`/`scheduleOnUI` out of it at module scope in five hooks with
+  // no try/require guard, so an unaliased name fails at IMPORT. The guard
+  // earns its keep here more than anywhere else — `react-native-worklets-core`
+  // is a REAL and unrelated package (the VisionCamera one), so a loose prefix
+  // match would hijack it into `react-native-gtkx/worklets-core`, which does
+  // not exist. See src/worklets-compat/index.ts.
+  if (source === WORKLETS) {
+    return REACT_NATIVE_GTKX_WORKLETS
+  }
+  if (source.startsWith(`${WORKLETS}/`)) {
+    return `${REACT_NATIVE_GTKX_WORKLETS}${source.slice(WORKLETS.length)}`
   }
   if (source === GESTURE_HANDLER) {
     return GTKX_GESTURE_HANDLER
@@ -224,10 +240,13 @@ export const reactNativeGtkx = (
       // resolves natively, and ssr.external: true would hand Node a codebase
       // built around a Babel plugin and a worklet runtime before the alias
       // ever gets a chance to rewrite the import.
+      // "react-native-worklets" is the same case one package over — it is
+      // where that worklet runtime actually lives since Reanimated 4.
       noExternal: [
         "react-native-gtkx",
         "react-native",
         "react-native-reanimated",
+        "react-native-worklets",
         /^@react-navigation\//,
       ],
     },

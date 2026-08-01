@@ -117,6 +117,30 @@ describe("rewriteReactNativeImport", () => {
       rewriteReactNativeImport("react-native-reanimated-extras"),
     ).toBeNull()
   })
+
+  test("rewrites react-native-worklets to the worklets subpath", () => {
+    // Reanimated 4 moved the worklet surface into its own package, and
+    // libraries import it under that name at module scope with no
+    // try/require guard — so without this alias the wall is still there one
+    // package over, and it falls at IMPORT rather than at use.
+    expect(rewriteReactNativeImport("react-native-worklets")).toBe(
+      "react-native-gtkx/worklets",
+    )
+    expect(rewriteReactNativeImport("react-native-worklets/plugin")).toBe(
+      "react-native-gtkx/worklets/plugin",
+    )
+  })
+
+  test("leaves react-native-worklets-core, a real and unrelated package, alone", () => {
+    // The lookalike that makes this guard load-bearing rather than tidy:
+    // react-native-worklets-core is the VisionCamera worklets library, not a
+    // subpath of anything, and a loose prefix match would send it to
+    // `react-native-gtkx/worklets-core`, which does not exist.
+    expect(rewriteReactNativeImport("react-native-worklets-core")).toBeNull()
+    expect(
+      rewriteReactNativeImport("react-native-worklets-core/src/index"),
+    ).toBeNull()
+  })
 })
 
 describe("splitQuery", () => {

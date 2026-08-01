@@ -24,10 +24,15 @@
 // silently, which this repo treats as the worst outcome. The convention is
 // picked from what actually arrived, and the two id spaces are kept apart so
 // a caller-chosen numeric id cannot collide with a generated one.
-import type { AnimatedApi, AnimatedValue } from "../animated/index"
+import type {
+  AnimatedApi,
+  AnimatedValue,
+  FrameScheduler,
+} from "../animated/index"
 import {
   buildAnimation,
   isAnimationSpec,
+  type AnimationEngine,
   type AnimationSpec,
 } from "./animation"
 import { trackRead, type Mapper, type Trackable } from "./tracking"
@@ -59,7 +64,15 @@ export type DerivedValue<T = unknown> = Readonly<SharedValue<T>>
 
 type RunningAnimation = { stop(): void }
 
-export const createMakeMutable = (api: AnimatedApi) => {
+export const createMakeMutable = (
+  api: AnimatedApi,
+  scheduler: FrameScheduler,
+) => {
+  // Both halves of the one clock: the api for the animations the platform
+  // already implements, the scheduler for `withDecay`, whose per-frame step is
+  // Reanimated's own rather than RN's. See animation.ts.
+  const engine: AnimationEngine = { api, scheduler }
+
   const makeMutable = <T>(initial: T): SharedValue<T> => {
     let current = initial
     const mappers = new Set<Mapper>()
@@ -107,7 +120,7 @@ export const createMakeMutable = (api: AnimatedApi) => {
       const driverListener = driver.addListener(({ value }) => {
         commit(value as T)
       })
-      const animation = buildAnimation(api, driver, spec)
+      const animation = buildAnimation(engine, driver, spec)
       const handle: RunningAnimation = { stop: () => animation.stop() }
       running = handle
       animation.start(() => {
