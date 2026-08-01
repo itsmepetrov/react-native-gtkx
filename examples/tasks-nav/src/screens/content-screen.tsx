@@ -14,33 +14,33 @@
 // list, a plain title for Trash, and a back/star/trash editor header for
 // an open task.
 //
-// The BODY is built from the same Adwaita widgets examples/tasks-app uses
-// — AdwClamp, a `.boxed-list` GtkListBox, AdwEntryRow, AdwActionRow — not
-// from React Native View/Text. That is deliberate, and it is the point of
-// the example: the navigator supplies the chrome (pages, HeaderBars, the
-// split view's collapse behaviour) while the pane inside keeps full
-// Adwaita fidelity. RN primitives render flat rows with no list frame, no
-// hover and no row activation — visibly worse than the platform's own, for
-// no portability gain in an app that is Linux-only by design.
+// The BODY is React Native — `ScrollView`, `View`, `Text`, `TextInput` and
+// `common`'s `List`/`ListRow`, styled with `StyleSheet`. It used to be the
+// same Adwaita widget tree examples/tasks-app is built from (AdwClamp, a
+// `.boxed-list` GtkListBox, AdwActionRow), and `contentLayout: "widget"`
+// exists because of it.
+//
+// What changed is not taste. docs/research/react-native-first-showcase.md
+// measured the gap between the two and found it was mostly styling this
+// example never did, plus `boxShadow` (the card frame is a shadow, not a
+// border) — and one thing that was genuinely impossible: the rows carried
+// drag-reorder through GTK event controllers, and a `Pressable` had no way
+// to hold one. That is now `ListRow`'s `reorderId`, over `Controllers` from
+// react-native-gtkx/gtk. `examples/tasks-app` still stands next door as the
+// hand-built Adwaita comparison, which is what makes the claim checkable.
+//
+// A few GTK widgets stay, each for a reason RN cannot argue with: the
+// checkbox and the flat icon buttons inside a row (components/task-row.tsx),
+// and the segmented filter control in the header (`AdwToggleGroup`).
 import { useEffect, useMemo, useState } from "react"
+import { ScrollView, StyleSheet, TextInput, View } from "react-native"
 import {
-  AdwClamp,
-  AdwEntryRow,
-  AdwStatusPage,
   AdwToggle,
   AdwToggleGroup,
   AdwWindowTitle,
 } from "react-native-gtkx/adw"
-import {
-  Gtk,
-  GtkBox,
-  GtkButton,
-  GtkListBox,
-  GtkScrolledWindow,
-  GtkSearchBar,
-  GtkSearchEntry,
-  GtkToggleButton,
-} from "react-native-gtkx/gtk"
+import { List, ListRow, rowPosition } from "react-native-gtkx/common"
+import { GtkButton, GtkToggleButton } from "react-native-gtkx/gtk"
 import type {
   SidebarNavigationOptions,
   SidebarScreenProps,
@@ -48,7 +48,7 @@ import type {
 import { useRequestDeleteTask } from "../components/dialogs"
 import { MainMenu } from "../components/main-menu"
 import { TaskDetail } from "../components/task-detail"
-import { TaskRow } from "../components/task-row"
+import { EmptyState, TaskRow } from "../components/task-row"
 import { useSortOrder } from "../hooks/use-sort-order"
 import {
   addTargetListId,
@@ -83,10 +83,14 @@ export const ContentScreen = ({ route, navigation }: SidebarScreenProps) => {
     setSearchMode,
     setSearchQuery,
     setActiveRoute,
+    reorder,
   } = useStore()
   const requestDeleteTask = useRequestDeleteTask()
   const [filter, setFilter] = useState<Filter>("all")
   const [sortOrder] = useSortOrder()
+  // The add field is local: it is a draft, not app state, and it should not
+  // survive switching to another list.
+  const [draft, setDraft] = useState("")
 
   // The split view's own back button/Escape/back gesture (narrow window)
   // hides content and shows the sidebar again — a presentation change with
@@ -270,72 +274,104 @@ export const ContentScreen = ({ route, navigation }: SidebarScreenProps) => {
   })
   const empty = emptyState(selection, searchQuery)
 
+  // The add row is a row of the list, so it counts for the corner radii —
+  // Adwaita rounds the FIRST row, whichever one that is.
+  const addRow = isTrash ? 0 : 1
+  const rowCount = addRow + visible.length
+
   return (
-    <GtkBox
-      orientation={Gtk.Orientation.VERTICAL}
-      vexpand
-    >
-      <GtkSearchBar
-        searchModeEnabled={searchMode}
-        onNotifySearchModeEnabled={(enabled) => setSearchMode(enabled ?? false)}
+    <View style={styles.screen}>
+      {/* GtkSearchBar's reveal animation is the one thing lost in the
+          rewrite: it is a widget behaviour, and a `Widget` around it would
+          have to be re-measured on every animation frame. Ctrl+F and Escape
+          are window shortcuts (components/app-shortcuts.tsx), so the field
+          itself is just a field. */}
+      {searchMode ? (
+        <View style={styles.searchBar}>
+          <TextInput
+            style={styles.searchField}
+            placeholder="Search tasks…"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+        </View>
+      ) : null}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
       >
-        <GtkSearchEntry
-          placeholderText="Search tasks…"
-          text={searchQuery}
-          onSearchChanged={(self) => setSearchQuery(self.text)}
-        />
-      </GtkSearchBar>
-      <GtkScrolledWindow vexpand>
-        <AdwClamp
-          maximumSize={640}
-          marginTop={12}
-          marginBottom={12}
-          marginStart={12}
-          marginEnd={12}
-        >
-          <GtkBox
-            orientation={Gtk.Orientation.VERTICAL}
-            spacing={12}
+        {/* AdwClamp, in two style properties: cap the width and centre what
+            is left. */}
+        <View style={styles.clamp}>
+          <List
+            testID="task-list"
+            // Dropped entirely when the view cannot express an order — see
+            // selectors.ts's `isReorderable`. With no handler, `ListRow`
+            // attaches no drag controllers at all.
+            onReorder={reorderable ? reorder : undefined}
           >
-            <GtkListBox
-              selectionMode={Gtk.SelectionMode.NONE}
-              cssClasses={["boxed-list"]}
-            >
-              {/* Trash is a graveyard, not a place to file new work — an
-                  add row there would have nowhere sensible to put a task. */}
-              {isTrash ? null : (
-                <AdwEntryRow
-                  title="Add a task…"
-                  onEntryActivated={(self) => {
-                    if (addListId) {
-                      addTask(addListId, self.text)
-                    }
-                    self.text = ""
-                  }}
-                />
-              )}
-              {visible.map((task) => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  list={lists.find((entry) => entry.id === task.listId)}
-                  isTrash={isTrash}
-                  reorderable={reorderable}
-                  showListName={selection.kind !== "list"}
-                />
-              ))}
-            </GtkListBox>
-            {visible.length === 0 ? (
-              <AdwStatusPage
-                cssClasses={["compact"]}
-                iconName={empty.icon}
-                title={empty.title}
-                description={empty.description}
+            {/* Trash is a graveyard, not a place to file new work — an add
+                row there would have nowhere sensible to put a task. */}
+            {isTrash ? null : (
+              <ListRow
+                position={rowPosition(0, rowCount)}
+                title={
+                  // AdwEntryRow's floating label is a composed widget with
+                  // its own state machine, not a look; RN's answer to the
+                  // same job is a placeholder, and that is the honest
+                  // difference rather than an imitation of it.
+                  <TextInput
+                    style={styles.addField}
+                    placeholder="Add a task…"
+                    value={draft}
+                    onChangeText={setDraft}
+                    onSubmitEditing={() => {
+                      if (addListId && draft.trim()) {
+                        addTask(addListId, draft.trim())
+                      }
+                      setDraft("")
+                    }}
+                  />
+                }
               />
-            ) : null}
-          </GtkBox>
-        </AdwClamp>
-      </GtkScrolledWindow>
-    </GtkBox>
+            )}
+            {visible.map((task, index) => (
+              <TaskRow
+                key={task.id}
+                task={task}
+                list={lists.find((entry) => entry.id === task.listId)}
+                isTrash={isTrash}
+                position={rowPosition(addRow + index, rowCount)}
+                reorderable={reorderable}
+                showListName={selection.kind !== "list"}
+              />
+            ))}
+          </List>
+          {visible.length === 0 ? (
+            <EmptyState
+              icon={empty.icon}
+              title={empty.title}
+              description={empty.description}
+            />
+          ) : null}
+        </View>
+      </ScrollView>
+    </View>
   )
 }
+
+const styles = StyleSheet.create({
+  screen: { flex: 1 },
+  // GtkSearchBar's own chrome: a bar the width of the pane with the field
+  // centred in it.
+  searchBar: { padding: 6, alignItems: "center" },
+  searchField: { width: "100%", maxWidth: 400 },
+  scroll: { flex: 1 },
+  // AdwClamp's own margins, transcribed.
+  scrollContent: { padding: 12, alignItems: "center" },
+  clamp: { width: "100%", maxWidth: 640, gap: 12 },
+  // Adwaita draws a row's entry with no frame of its own — the card IS the
+  // frame. GtkEntry's default filled look would put a grey bar across the
+  // top of the list.
+  addField: { backgroundColor: "transparent", borderWidth: 0 },
+})
