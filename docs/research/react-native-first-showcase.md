@@ -206,16 +206,31 @@ These are the ones where reaching for `StyleSheet` would be forcing it.
 
 ## What shipped, and what is left
 
-The list chrome now lives in `react-native-gtkx/common` as `List`, `ListRow`,
-`ListSeparator` and `rowPosition`, with `Icon` for named theme icons. Nothing
-in them creates a widget an app could not have created itself — they are
-`View`, `Pressable` and `Text` with the numbers above baked in — which is the
-point: an app should not have to re-derive libadwaita's metrics, and it should
-not have to re-derive them again when libadwaita moves.
+The list chrome shipped as `List`, `ListRow`, `ListSeparator` and
+`rowPosition` in `react-native-gtkx/common`, with `Icon` for named theme
+icons. Nothing in them created a widget an app could not have created itself
+— they are `View`, `Pressable` and `Text` with the numbers above baked in.
 
-`examples/adwaita-primitives` uses them, and its article list (which was a
-hand-styled `Pressable` with a hover tint, and did not look like GNOME) is now
-the real thing:
+**They are not platform surface any more, and the reasoning is worth
+recording next to the measurement that produced them.** The case for shipping
+them was that a screen shared with iOS and Android could not import
+`react-native-gtkx/adw`; that case is wrong, because `react-native-gtkx/common`
+does not resolve on iOS or Android either. Either import needs a `.linux.tsx`
+split or a `Platform` check, so `List` bought a consumer nothing over
+`AdwActionRow` while committing this repo to a hand-maintained copy of the
+metrics measured below — which move when libadwaita moves. They now live in
+`examples/tasks-nav/src/components/list.tsx`, to copy; `examples/adwaita-primitives`
+uses a `GtkListBox` with `.boxed-list` and `AdwActionRow`s, which is what that
+example is for. See
+[platform-layer.md](../platform-layer.md#listlistrowlistseparator-were-here-and-are-not-any-more).
+
+**What this document measured is unaffected, and is still platform surface:**
+`boxShadow`, `outline*` and `textDecorationLine`. Those three style props are
+what make an Adwaita-looking list expressible in `StyleSheet` at all, and they
+are the finding — not the components that were built on them.
+
+The article list, which was a hand-styled `Pressable` with a hover tint and
+did not look like GNOME, became the real thing here:
 
 ![](../shots/rn-first/common-list.png)
 
@@ -255,8 +270,14 @@ It is closed by `Controllers` from `react-native-gtkx/gtk` — the
 the enclosing view's widget. A prop on `View` was rejected for being
 invisible off Linux; the reasoning is in
 [platform-layer.md](../platform-layer.md#controllers--a-gtk-event-controller-on-a-react-native-component).
-`List`'s `onReorder` and `ListRow`'s `reorderId` package it, and are written
-on top of it.
+`List`'s `onReorder` and `ListRow`'s `reorderId` packaged it at the time,
+written on top of it. Both are gone now — `examples/tasks-nav` uses
+[`react-native-gtkx/dnd`](../api.md#drag-and-drop-react-native-gtkxdnd)
+directly, so there is one drag-and-drop API rather than two, and `List`
+itself is an app component in that example rather than platform surface
+(see [platform-layer.md](../platform-layer.md#listlistrowlistseparator-were-here-and-are-not-any-more)).
+What this section measured is unaffected: the blocker was that a `Pressable`
+had no widget to hold a controller, and `Controllers` is still the answer.
 
 ### And the bug underneath that
 
@@ -275,11 +296,11 @@ assertions are about the RECTS, since the widget order was already right.
 
 ## The rewrite, and the proof
 
-|                                                                                                                                                                                            |                                         |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------- |
-| **`examples/tasks-nav`, body rewritten in React Native** — `ScrollView`/`View`/`Text`/`TextInput` plus `common`'s `List`/`ListRow`                                                         | ![](../shots/rn-first/rn-rows.png)      |
-| **`examples/tasks-app` beside it, unchanged** — the hand-built Adwaita comparison that makes the claim checkable                                                                           | ![](../shots/rn-first/adwaita-app.png)  |
-| **Mid-drag, driven by a real `zwlr_virtual_pointer_v1`**: GDK's own drag icon (a `Gtk.WidgetPaintable` of the row) under the cursor, and the accent drop-target ring on the row it is over | ![](../shots/rn-first/rn-rows-drag.png) |
+|                                                                                                                                                                                                       |                                         |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| **`examples/tasks-nav`, body rewritten in React Native** — `ScrollView`/`View`/`Text`/`TextInput` plus the boxed list (then `common`'s `List`/`ListRow`, now the example's own `components/list.tsx`) | ![](../shots/rn-first/rn-rows.png)      |
+| **`examples/tasks-app` beside it, unchanged** — the hand-built Adwaita comparison that makes the claim checkable                                                                                      | ![](../shots/rn-first/adwaita-app.png)  |
+| **Mid-drag, driven by a real `zwlr_virtual_pointer_v1`**: GDK's own drag icon (a `Gtk.WidgetPaintable` of the row) under the cursor, and the accent drop-target ring on the row it is over            | ![](../shots/rn-first/rn-rows-drag.png) |
 
 The drag is also a test, not only a screenshot:
 `tests/gtk/common/list-reorder.gtk.test.tsx` drives a real virtual pointer

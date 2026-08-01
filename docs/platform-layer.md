@@ -122,54 +122,11 @@ widget then hands out.
 
 The opposite direction from everything above: these create no widget an app
 could not have created itself, because what they encode is a **look**, not a
-behaviour. `docs/research/react-native-first-showcase.md` measured Adwaita's
-`.boxed-list` out of libadwaita's own compiled stylesheet and found it is a
-rounded, shadowed card whose rows carry a hairline separator, a hover tint
-and a press tint — every one of which is a React Native style prop. What an
-app should not have to do is rediscover the numbers, which are not obvious
-(the frame is a three-part `box-shadow`, not a border; the corner radii live
-on the first and last ROW, not on the container) and which move when
-libadwaita moves.
+behaviour.
 
-| Export          | What it is                                                                                      |
-| --------------- | ----------------------------------------------------------------------------------------------- |
-| `List`          | the `.boxed-list` frame — a `View` with the card background, radius and shadow                  |
-| `ListRow`       | `AdwActionRow`'s layout and states (`title`/`subtitle`/`prefix`/`suffix`), on a `Pressable`     |
-| `ListSeparator` | the hairline, for a `FlatList`'s `ItemSeparatorComponent`                                       |
-| `rowPosition`   | `(index, count)` → `"first"` / `"middle"` / `"last"` / `"only"`, since RN has no `:first-child` |
-| `Icon`          | a **named** icon from the desktop icon theme                                                    |
-
-**Drag-to-reorder** is `List`'s `onReorder` plus a `reorderId` on each row —
-GDK's own drag-and-drop underneath, with the real drag icon (a snapshot of
-the row), the correct cursors and content negotiation for free:
-
-```tsx
-<List onReorder={(dragged, target) => move(dragged, target)}>
-  {tasks.map((task, index) => (
-    <ListRow
-      key={task.id}
-      reorderId={task.id}
-      title={task.title}
-      position={rowPosition(index, tasks.length)}
-      onPress={() => open(task)}
-    />
-  ))}
-</List>
-```
-
-Ids rather than indices, because the rows are React children and a `List`
-cannot see their order. A row with no `reorderId`, or a list with no
-`onReorder`, attaches no drag controllers at all — so a view that cannot
-express an order simply drops the handler. Underneath, `ListRow` uses
-`react-native-gtkx/dnd` — the same module `Draggable` and `Sortable` are
-built from — which in turn uses `Controllers` from `react-native-gtkx/gtk`
-(below): nothing here is reachable only from inside the platform.
-
-**When to reach for `Sortable` instead.** `List`'s `onReorder` takes row
-**ids**, because a `List`'s rows are React children and it cannot see their
-order. `Sortable` in [`react-native-gtkx/dnd`](api.md#drag-and-drop-react-native-gtkxdnd)
-owns an array and reports positions, and is the one to use for a list that
-is not Adwaita chrome — or for anything with a drop zone in it.
+| Export | What it is                                   |
+| ------ | -------------------------------------------- |
+| `Icon` | a **named** icon from the desktop icon theme |
 
 `Icon` is not `Image`: RN's `Image` takes a file path or URI, because on iOS
 and Android an icon is a bundled asset. Here it is a _name_ resolved against
@@ -179,14 +136,51 @@ express that. The shape is the one RN apps already use
 (`<Icon name size />`), with the desktop icon theme behind it instead of a
 bundled font.
 
-An activatable `ListRow` is **focusable**: Tab and the arrow keys move
-between rows through GTK's own keynav, Enter and Space activate the focused
-one, and the ring is Adwaita's (`outline`, 2px, inset by 2). That used to be
-the one `GtkListBox` behaviour a hand-built list had to give up; it is now
-`Pressable`'s `focusable` and its `focused` state, on the portable component
-(see [api.md](api.md)). The only part of Adwaita's rule not reproduced is its
-`color-mix(…50%)` on the ring colour — RN's colour contract has no
-`color-mix`, so the ring reads slightly stronger than the widget's.
+#### `List`/`ListRow`/`ListSeparator` were here, and are not any more
+
+They were Adwaita's `.boxed-list` re-implemented in React Native — the frame,
+the separators, the corner radii, both tints — plus an id-keyed
+drag-to-reorder. Both halves are gone, for two separate reasons, and the
+reasoning is here rather than in a changelog because it is the general rule
+for what belongs in this subpath.
+
+**The components.** The argument for shipping them was that a screen shared
+with iOS and Android could not import `react-native-gtkx/adw`. That argument
+does not survive contact with the resolver: **`react-native-gtkx/common` does
+not resolve on iOS or Android either.** Either import needs a `.linux.tsx`
+split or a `Platform` check, so `List` bought a shared screen nothing over
+`AdwActionRow` — while costing a hand-maintained copy of libadwaita's own
+metrics that drifts every time libadwaita moves. And the widget is better
+where it works: GTK's real keynav, focus and accessibility, with the numbers
+coming from the system theme instead of from our source. They had exactly one
+consumer in this repo.
+
+So:
+
+- **want a native list** → `AdwActionRow`, `AdwEntryRow` and friends from
+  [`react-native-gtkx/adw`](api.md), in a `GtkListBox` with
+  `cssClasses={["boxed-list"]}` — see `examples/adwaita-primitives`;
+- **want that look written in React Native** → copy
+  [`examples/tasks-nav/src/components/list.tsx`](../examples/tasks-nav/src/components/list.tsx).
+  It is 200 lines of `View`, `Pressable`, `Text` and `StyleSheet` with the
+  measurements in comments, and it is meant to be copied.
+
+What survives from the change that introduced them (#47) is the part that
+mattered, and it is still platform surface: **`boxShadow`, `outline*` and
+`textDecorationLine` in the style layer**. Those are what make an
+Adwaita-looking list expressible in `StyleSheet` at all — the frame is a
+three-part `box-shadow` rather than a border, and the focus ring is an
+`outline`, which takes no layout space. The finding was the style props, not
+the components built on them.
+
+**The reorder.** `onReorder`/`reorderId` was a second, id-keyed entry point
+into the same module `Draggable` and `Sortable` come from — two ways to drag,
+one of them shaped like nothing an RN developer had seen. There is now one:
+[`react-native-gtkx/dnd`](api.md#drag-and-drop-react-native-gtkxdnd), which
+mirrors `react-native-reanimated-dnd`. An id-keyed reorder is a `Droppable`
+around a `Draggable` per row inside one `DropProvider`;
+`examples/tasks-nav/src/components/task-row.tsx` is that, and says in a
+comment what it costs against the two lines it replaced.
 
 ### GTK widgets, driven by React Native
 
@@ -485,9 +479,8 @@ For drag-and-drop specifically there is a whole module above this:
 presets alias the package name onto it — and `react-native-gesture-handler`
 onto a shim that keeps `GestureHandlerRootView` working — so a ported app
 keeps its source unchanged.
-`List`/`ListRow` in `react-native-gtkx/common` package the id-keyed reorder
-on top of the same module. All of it is written on top of `Controllers`, not
-around it — which is the property that makes this subpath worth having.
+All of it is written on top of `Controllers`, not around it — which is the
+property that makes this subpath worth having.
 
 ### GSettings
 

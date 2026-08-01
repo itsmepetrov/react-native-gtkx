@@ -68,20 +68,46 @@ Every one of the three gaps `examples/tasks-app`'s README named, closed on
 ## Drag-and-drop reorder
 
 Rows are dragged into a new order with GTK4's own drag-and-drop, and the
-rows themselves are **written in React Native** — `List`'s `onReorder` plus
-a `reorderId` per `ListRow` (`src/components/task-row.tsx`), with
-`GtkDragSource`/`GtkDropTarget` hidden inside `react-native-gtkx/common`.
-The drag icon is `Gtk.WidgetPaintable` of the row itself, the payload is the
-task id as a `GObject` string value, and the drop calls the store's
-`reorder`.
+rows themselves are **written in React Native** — a `Droppable` around a
+`Draggable` per row (`src/components/task-row.tsx`) inside one
+`DropProvider`, all from
+[`react-native-gtkx/dnd`](../../docs/api.md#drag-and-drop-react-native-gtkxdnd),
+which mirrors `react-native-reanimated-dnd`. The drag icon is
+`Gtk.WidgetPaintable` of the row itself, the payload is the task id as a
+`GObject` string value, and the drop calls the store's `reorder`.
+
+It used to be two lines — `onReorder` on a `List` and `reorderId` per
+`ListRow` — and those are gone, deliberately. They were a second entry
+point into the same module `Draggable` and `Sortable` come from, so an app
+had two unrelated-looking ways to start a drag. **This is more code, and
+that is the trade:** about a dozen lines here instead of two, in exchange
+for the only drag-and-drop API in the platform being the one an RN
+developer already knows. `src/components/task-row.tsx` says the same thing
+at the call site.
+
+Why the id-keyed pair rather than `Sortable`: `Sortable` owns an array and
+renders its own `ScrollView`, and this screen's order lives in the store,
+which filters and sorts it — and the list already sits inside a `ScrollView`
+with an "Add a task" row above it that must not be draggable. Ids are what
+this app can express.
 
 That combination did not exist when this example first shipped: a
 `Pressable` exposes no widget, so a GTK event controller could not be
 attached to a React Native row at all, and the rows had to be
 `AdwActionRow`s. `Controllers` from `react-native-gtkx/gtk` is the door that
-closed it, and `List`/`ListRow` are written on top of it — see
+closed it, and `react-native-gtkx/dnd` is written on top of it — see
 `docs/platform-layer.md` and
 `docs/research/react-native-first-showcase.md`.
+
+**The boxed list itself is an app component now.** `src/components/list.tsx`
+is `List`/`ListRow`/`ListSeparator` — the `.boxed-list` frame, the
+separators, the corner radii, both tints and the focus ring, measured out of
+libadwaita's own stylesheet and written in `View`/`Pressable`/`Text`. It used
+to live in `react-native-gtkx/common`; it does not, because that subpath does
+not resolve on iOS or Android either, so it bought a shared screen nothing
+over `AdwActionRow` while costing a hand-maintained copy of metrics that move
+with libadwaita. Copy the file if you want this look; reach for
+`react-native-gtkx/adw` if you want the real widget.
 
 | ![The task list before the drag: Water the plants, Renew passport, Book dentist appointment, Review the navigation-depth-2 PR, Update the sprint board.](../../docs/shots/tasks-nav-dnd-before.png) | ![The same list after dragging the last row onto the first: Update the sprint board is now at the top.](../../docs/shots/tasks-nav-dnd-after.png) |
 | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: | :-----------------------------------------------------------------------------------------------------------------------------------------------: |
@@ -111,9 +137,9 @@ escape hatch beneath it is imported from `react-native-gtkx/gtk`, so a file
 that cannot run on iOS says so in its imports rather than compiling and
 quietly doing nothing.
 
-**When dragging is off.** `isReorderable` (`src/selectors.ts`) drops the
-`List`'s `onReorder` — and with it every drag controller — everywhere a drop
-would not mean anything: manual sort order, no active
+**When dragging is off.** `isReorderable` (`src/selectors.ts`) makes each row
+render bare — no `Droppable`, no `Draggable`, and so no drag controllers at
+all — everywhere a drop would not mean anything: manual sort order, no active
 search, not Trash. A drop under "sort by due date" would be overwritten by
 the sort on the very next render; a search result is a projection with gaps,
 so "put it here" has no single answer; and Trash is not a place to arrange

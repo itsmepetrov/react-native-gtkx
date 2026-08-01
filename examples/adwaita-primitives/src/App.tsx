@@ -11,24 +11,31 @@
 //   - React Native content inside an AdwHeaderBar slot (IntrinsicContent);
 //   - a raw GTK widget in the header, because nothing is filtered;
 //   - the escape hatch: a ref to the Adw.NavigationView itself;
-//   - List/ListRow: Adwaita's boxed list, drawn entirely from React Native
-//     style. Its rows ARE Pressables — the hover and press tints come from
-//     the state callback — and the article list below used to be a
-//     hand-styled version of the same thing that did not look like GNOME.
+//   - the boxed list, the way a GNOME app writes it: a GtkListBox with
+//     `.boxed-list` and AdwActionRows. This used to be `List`/`ListRow`
+//     from react-native-gtkx/common — Adwaita's boxed list re-implemented
+//     in React Native style — which is no longer platform surface. It never
+//     resolved on ios/android either, so it bought a shared screen nothing
+//     over the real widget, while the real widget brings GTK's own keynav,
+//     focus and accessibility and takes its metrics from the system theme.
+//     The React Native version of the same look lives in
+//     examples/tasks-nav/src/components/list.tsx, to copy.
 import { useRef, useState } from "react"
 import { Pressable, StyleSheet, Text, View } from "react-native"
-import { Adw, AdwHeaderBar, AdwToolbarView } from "react-native-gtkx/adw"
 import {
-  Icon,
+  Adw,
+  AdwActionRow,
+  AdwHeaderBar,
+  AdwToolbarView,
+} from "react-native-gtkx/adw"
+import {
   IntrinsicContent,
-  List,
-  ListRow,
   NavigationStack,
   NavigationStackPage,
-  rowPosition,
   SlotContent,
+  Widget,
 } from "react-native-gtkx/common"
-import { GtkButton, GtkEntry } from "react-native-gtkx/gtk"
+import { Gtk, GtkButton, GtkEntry, GtkListBox } from "react-native-gtkx/gtk"
 
 const ARTICLES = [
   { tag: "wayland", title: "Wayland", body: "The display protocol." },
@@ -107,21 +114,25 @@ const App = () => {
                   label="Go"
                 />
               </View>
-              {/* The `.boxed-list` a GNOME app would use, with no GtkListBox
-                  and no AdwActionRow: the frame, the separators, the corner
-                  radii and both tints are React Native style. */}
-              <List>
-                {ARTICLES.map((article, index) => (
-                  <ListRow
-                    key={article.tag}
-                    title={article.title}
-                    subtitle={article.body}
-                    position={rowPosition(index, ARTICLES.length)}
-                    onPress={() => push(article.tag)}
-                    suffix={<Icon name="go-next-symbolic" />}
-                  />
-                ))}
-              </List>
+              {/* The `.boxed-list` a GNOME app would use — the frame, the
+                  separators, the corner radii, both tints, the focus ring
+                  and the keynav all come from the theme and the widget. */}
+              <Widget>
+                <GtkListBox
+                  selectionMode={Gtk.SelectionMode.NONE}
+                  cssClasses={["boxed-list"]}
+                >
+                  {ARTICLES.map((article) => (
+                    <AdwActionRow
+                      key={article.tag}
+                      title={article.title}
+                      subtitle={article.body}
+                      activatable
+                      onActivated={() => push(article.tag)}
+                    />
+                  ))}
+                </GtkListBox>
+              </Widget>
             </View>
           </SlotContent>
         </AdwToolbarView>
