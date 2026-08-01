@@ -295,14 +295,37 @@ missing is a way to _test_ it, and that is the same shape of gap as touch:
 it needs a real device on a seated session, not a code change. Until then
 `Pinch`/`Rotation` should keep throwing by name.
 
-## Probe 5: the spike
+## Probe 5: the spike — which has since shipped
 
-`spike/gesture-detector/` — a flattened `Gesture.Pan()` + `GestureDetector`
-(`src/flat-gesture.tsx`, ~340 lines) over the **shipped** responder system,
-plus a probe app written against the plain
-`react-native-gesture-handler` + `react-native-reanimated` call shape.
-`bash spike/gesture-detector/run-headless.sh` in the VM runs both probes
-under a private headless sway and prints:
+**Superseded, and deliberately deleted.** Slice 1 turned this probe into the
+module: `packages/react-native-gtkx/src/gesture-handler-compat/`, with its
+nine assertions rewritten as real tests against the real code —
+`tests/unit/gesture-handler/recognizer.test.ts` for the state machine and
+`tests/gtk/gesture-handler/gesture-detector.gtk.test.tsx` for the same claims
+under real pointer injection. `examples/gesture-detector` is the app to drag
+by hand. The spike's own `flat-gesture.tsx` and `spike.tsx` are gone, because
+a second implementation of a shipped module next to the shipped one only
+rots; probes 1 and 4 stay, because nothing else reproduces what they measured.
+What follows is what the spike established, kept as the record of why the
+epic went ahead.
+
+Two of its numbers changed when the code shipped, both for the same reason —
+slice 1 added the out-of-event grant channel the section below asks for, so
+`activateAfterLongPress` now activates ON the timer rather than on the first
+move after it:
+
+- the 105-out-of-120 measurement is now the full travel, because the
+  activation point and the press point coincide when nothing has moved;
+- the "lifted" visual appears when the press matures, which is what
+  `react-native-reanimated-dnd` wants and what the spike could not do.
+
+One of its assertions was also wrong and is corrected in the module: the spike
+treated any `failOffset*` as a custom activation criterion, which pinned
+`minDistance` at infinity, so `Pan().failOffsetY(...)` alone could never
+activate. Upstream counts only `activeOffset*` and `minVelocity*`.
+
+`bash spike/gesture-detector/run-headless.sh` in the VM ran both probes
+under a private headless sway and printed:
 
 ```
 [gd-spike] PASS activateAfterLongPress refuses a drag that starts immediately — trace=[drag:begin drag:finalize(false)] pageY 124 -> 124
@@ -349,7 +372,7 @@ passing are the two about the animation path and the negative control, which
 that mutation does not touch. The assertions are sensitive to the thing they
 claim to measure.
 
-## The one extension the epic needs
+## The one extension the epic needs — built in slice 1
 
 `activateAfterLongPress` and `Gesture.LongPress` activate **on a timer**, not
 on an event. RN's responder system negotiates only inside a touch event, so
@@ -367,6 +390,13 @@ is precedent recorded two doors down — react-native-web added
 because its platform needed negotiation channels RN lacks. This is the same
 move, and it is small: `terminate()` already synthesizes an event from
 `session.lastTouch` for exactly this reason.
+
+**Built, as `ResponderSystem.requestResponder(host)`.** It reuses
+`negotiateAndTransfer` unchanged, so capture still beats bubble and an
+ancestor can still win; it dispatches no fabricated move afterwards; and it
+refuses a node off the interaction's path, which the touch entry points get
+for free and this one has to check. Documented as an extension with its reason
+in `docs/research/gestures.md`.
 
 ## The slices
 

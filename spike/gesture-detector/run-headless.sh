@@ -9,21 +9,16 @@
 #
 # usage (VM), after `npm install && npm run build` in this directory:
 #
-#   bash spike/gesture-detector/run-headless.sh          # both probes
-#   bash spike/gesture-detector/run-headless.sh gtk      # probe 1 and 4
-#   bash spike/gesture-detector/run-headless.sh spike    # probe 5
-#   GD_BREAK=1 bash spike/gesture-detector/run-headless.sh spike
+#   bash spike/gesture-detector/run-headless.sh          # probes 1 and 4
 #
-# The last one is the mutation run: GD_BREAK makes the detector take the
-# responder on press and activate immediately (the naive implementation), and
-# six of the spike's nine checks must fail. See
-# docs/research/gesture-detector.md for what all of it establishes.
+# Probe 5 (the GestureDetector spike) shipped and is gone; its assertions are
+# tests now — see src/index.tsx. What is left measures GTK itself, which no
+# test in the suite reproduces. See docs/research/gesture-detector.md.
 #
 # Logs and screenshots land in /tmp/gd-spike/.
 set -euo pipefail
 export XDG_RUNTIME_DIR="/run/user/$(id -u)"
 DIR="$(cd "$(dirname "$0")" && pwd)"
-WHICH="${1:-all}"
 OUT=/tmp/gd-spike
 mkdir -p "$OUT"
 
@@ -43,7 +38,7 @@ run_probe() {
   socket=$(grep -o "wayland display '[^']*'" "/tmp/sway-gd-$probe.log" | cut -d"'" -f2 | head -1)
 
   (
-    cd "$DIR" && GD_PROBE="$probe" GD_BREAK="${GD_BREAK:-0}" WAYLAND_DISPLAY="$socket" \
+    cd "$DIR" && GD_PROBE="$probe" WAYLAND_DISPLAY="$socket" \
       DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent \
       node dist/bundle.js >"$OUT/$probe.log" 2>&1
   ) &
@@ -67,10 +62,5 @@ run_probe() {
   grep "\[gd-" "$OUT/$probe.log" || echo "NO MARKERS — see $OUT/$probe.log"
 }
 
-if [ "$WHICH" = "all" ] || [ "$WHICH" = "gtk" ]; then
-  run_probe gtk
-fi
-if [ "$WHICH" = "all" ] || [ "$WHICH" = "spike" ]; then
-  run_probe spike
-fi
+run_probe gtk
 echo "=== logs and shots: $OUT ==="

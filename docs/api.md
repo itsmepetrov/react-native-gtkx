@@ -610,27 +610,85 @@ below follows from that one fact.
 
 ## `react-native-gesture-handler` (`react-native-gtkx/gesture-handler`)
 
-**Not a port of RNGH.** It stays out of scope for the reasons in
-[research/gestures.md](research/gestures.md) — gestures on this platform are
-React Native's own responder system and `PanResponder`. This subpath exists
-for one narrow reason: `GestureHandlerRootView` is the single RNGH symbol
-that shows up in apps using none of the rest of RNGH, because
-`react-native-reanimated-dnd`'s quick start puts it at the root of the tree.
-Both presets alias the package name onto this shim, so that wrapper needs no
-edit.
+**Not a port of RNGH.** The semantics are reimplemented over this platform's
+own responder system, the same way `react-native-gtkx/reanimated` and
+`react-native-gtkx/dnd` are — upstream's implementation is the blueprint, not
+a dependency. Two of the four reasons
+[research/gestures.md](research/gestures.md) originally gave for refusing RNGH
+expired when Reanimated shipped; the other two (no `exports` map on its
+`src/web/`, and a react-native-windows precedent that has been a literal
+`// NO-OP` since 2.8.0) stand, which is why nothing is vendored.
+[research/gesture-detector.md](research/gesture-detector.md) has the
+measurements the design rests on.
 
-| Export                   | Behaviour                                                                                                                                                                                                                                                                                                                                                                          |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GestureHandlerRootView` | **Implemented, faithfully.** A `View` with `style ?? { flex: 1 }` — note that an explicit `style` _replaces_ the default rather than merging with it, which is what upstream does in all three of its implementations. Its other job, marking the subtree as gesture-arbitrating, is already this platform's: the responder system's lock is global, so there is nothing to scope. |
-| everything else          | **Throws**, naming the symbol and pointing at the replacement. `Gesture`, `GestureDetector`, `PanGestureHandler`, `State`, `RectButton`, the `use*Gesture` hooks — all of them.                                                                                                                                                                                                    |
+Both presets alias the package name onto this subpath, so a ported app changes
+nothing in its source.
 
-The throw is the point. A `PanGestureHandler` that quietly rendered its
+```tsx
+import { Gesture, GestureDetector } from "react-native-gesture-handler"
+
+const offset = useSharedValue(0)
+const start = useSharedValue(0)
+
+const pan = Gesture.Pan()
+  .activeOffsetY([-10, 10])
+  // Capture where the view already is. `translationY` is measured from where
+  // THIS gesture activated, so it starts at zero on every new grab — writing
+  // `offset.value = event.translationY` instead would throw away everything
+  // the view had accumulated and snap it back toward its origin the second
+  // time you grab it.
+  .onStart(() => {
+    start.value = offset.value
+  })
+  .onUpdate((event) => {
+    offset.value = start.value + event.translationY
+  })
+
+;<GestureDetector gesture={pan}>
+  <Animated.View style={[styles.card, animatedStyle]} />
+</GestureDetector>
+```
+
+| Export                               | Behaviour                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GestureHandlerRootView`             | **Implemented, faithfully.** A `View` with `style ?? { flex: 1 }` — note that an explicit `style` _replaces_ the default rather than merging with it, which is what upstream does in all three of its implementations. Its other job, marking the subtree as gesture-arbitrating, is already this platform's: the responder system's lock is global, so there is nothing to scope.                                                    |
+| `GestureDetector`                    | **Implemented, and it adds no widget.** It renders its single child unchanged and reaches that child's widget through the handle the child already exposes, the same seam `createAnimatedComponent` uses. Its recognizer's responder props are merged into the child's, so a child with its own `onTouchStart` keeps working. `userSelect`, `touchAction` and `enableContextMenu` are Web-only upstream and are accepted and ignored. |
+| `Gesture.Pan()`                      | **Implemented.** See the table below for the config surface.                                                                                                                                                                                                                                                                                                                                                                          |
+| `usePanGesture()`                    | **Implemented**, over the same recognizer. Upstream deprecated all twelve `Gesture.*` statics in 3.1.0 in favour of hooks, and its hook renamed the callbacks: `onStart` → `onActivate`, `onEnd` → `onDeactivate`, `onTouchesCancelled` → `onTouchesCancel`, no `onChange`, and `canceled` on the ending event instead of a second `success` argument. Both spellings are honoured as written.                                        |
+| the other eleven `Gesture.*` statics | **Throw**, each naming itself — `Gesture.Pinch()` reports `Gesture.Pinch`, not `Gesture`.                                                                                                                                                                                                                                                                                                                                             |
+| `State`                              | **Throws.** It is only meaningful compared against an event from a handler that does not exist here yet; it lands with `Tap` and `LongPress`.                                                                                                                                                                                                                                                                                         |
+| everything else                      | **Throws**, naming the symbol. `PanGestureHandler` and the legacy handler components, `RectButton` and the button family, the re-exported `ScrollView`/`FlatList`, the other `use*Gesture` hooks.                                                                                                                                                                                                                                     |
+
+### `Gesture.Pan()` — the config surface
+
+| Method                                                                                                                  | Behaviour                                                                                                                                                                                                                                                                |
+| ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `activeOffsetX` / `activeOffsetY` / `failOffsetX` / `failOffsetY`                                                       | **Implemented.** A single number is DIRECTIONAL, by its sign — `activeOffsetX(20)` bounds the positive side only. Failure is tested before activation, and with strict comparisons where activation uses non-strict ones, so a translation exactly on a bound activates. |
+| `minDistance`, `minVelocity`, `minVelocityX`, `minVelocityY`, `minPointers`, `maxPointers`                              | **Implemented.** `minDistance` defaults to 10 unless an `activeOffset*` or `minVelocity*` is set, in which case those are the criteria and distance stops applying.                                                                                                      |
+| `activateAfterLongPress`                                                                                                | **Implemented, and it activates on the timer** rather than on the next pointer movement — see the responder-model extension in [research/gestures.md](research/gestures.md).                                                                                             |
+| `enabled`, `shouldCancelWhenOutside`, `manualActivation`                                                                | **Implemented.**                                                                                                                                                                                                                                                         |
+| `hitSlop`                                                                                                               | **Implemented**, in RNGH's gesture spelling rather than RN's `View` one: it can SHRINK the area (negative values), and `{ left: 0, width: 32 }` anchors a strip to one edge.                                                                                             |
+| the callbacks                                                                                                           | **Implemented**: `onBegin`, `onStart`, `onUpdate`, `onChange`, `onEnd`, `onFinalize`, `onTouchesDown`, `onTouchesMove`, `onTouchesUp`, `onTouchesCancelled`.                                                                                                             |
+| `runOnJS`                                                                                                               | **Accepted, and does nothing** — correctly. It asks for the JS runtime; there is exactly one runtime here, so every callback already runs where it is asking.                                                                                                            |
+| `averageTouches`, `enableTrackpadTwoFingerGesture`, `cancelsTouchesInView`, `activeCursor`, `mouseButton`, `withTestId` | **Accepted, inert** — each is platform-specific upstream too, and inert off its platform there.                                                                                                                                                                          |
+| `simultaneousWithExternalGesture`, `requireExternalGestureToFail`, `blocksExternalGesture`                              | **Throw.** Cross-gesture relations need the arbitration registry, which is a later slice. Silently ignoring a relation would let two gestures that were meant to cooperate race instead, with no error.                                                                  |
+
+**Differences from `react-native-gesture-handler`.** `numberOfPointers` is
+always 1 and `pointerType` is always `MOUSE`: the responder system fabricates
+one touch per pointer, and wlroots offers no virtual-touch protocol, so a
+`minPointers(2)` gesture is unreachable rather than merely untested. Nothing
+is simultaneous yet — one interaction has one holder — so two detectors over
+the same pointer do not both activate. `Pinch` and `Rotation` are a later
+increment for a measured reason: GTK feeds touchpad gestures properly and
+better than RNGH's own web path does, but nothing in this rig can produce one
+to test against.
+
+The throws are the point. A `PanGestureHandler` that quietly rendered its
 children without gestures is exactly the trap
 [research/gestures.md](research/gestures.md) records `Animated.View` falling
 into — compiled, ran, did nothing. The stand-ins fail on call, on render and
-on property access (`Gesture.Pan()`, `State.ACTIVE`), while still answering
-the introspection React and `console.log` do first, so the message that
-surfaces is the precise one.
+on property access, while still answering the introspection React and
+`console.log` do first, so the message that surfaces is the precise one.
 
 A symbol this shim does not list at all fails earlier still, at bundle time,
 with the bundler's own "no export named X".

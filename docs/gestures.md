@@ -8,11 +8,12 @@ ordinary `react-native` and the same file runs on iOS and Android.
 `react-native-reanimated` **does** work here — as
 [`react-native-gtkx/reanimated`](api.md#react-native-reanimated-react-native-gtkxreanimated),
 a reimplementation of its semantics on one runtime, aliased onto the package
-name. `react-native-gesture-handler` does not: its package name is aliased to
-a shim so that a ported app's root `GestureHandlerRootView` needs no edit, but
-that is the only symbol it implements. RNGH is now the platform's largest
-single portability gap on its own, and libraries needing `GestureDetector`
-stay blocked on it — see [Porting an app](#porting-an-app) below.
+name. So does `react-native-gesture-handler`, as far as `Pan` goes — as
+[`react-native-gtkx/gesture-handler`](api.md#react-native-gesture-handler-react-native-gtkxgesture-handler),
+which implements `GestureHandlerRootView`, `GestureDetector` and
+`Gesture.Pan()` (and `usePanGesture()`, the spelling upstream is migrating
+to) over the responder system described here. The recognizers that are not
+`Pan` throw by name — see [Porting an app](#porting-an-app) below.
 
 Why the responder system rather than RNGH, and every measurement behind the
 decisions on this page:
@@ -174,23 +175,35 @@ Android.
 
 ## Porting an app
 
-`react-native-gesture-handler` is not implemented.
-`react-native-reanimated` now is — as
-[`react-native-gtkx/reanimated`](api.md#react-native-reanimated-react-native-gtkxreanimated),
-a reimplementation of its semantics on one runtime, aliased onto the package
-name by both presets. That removes the _import_-time failure Reanimated used
-to cause, but it does not by itself unblock the libraries that were blocked
-by it: `react-native-draggable-flatlist`, `@gorhom/bottom-sheet` and
-`@react-navigation/drawer` all need `GestureDetector` as well, and that is
-still RNGH's.
+Both `react-native-reanimated` and `react-native-gesture-handler` are aliased
+onto reimplementations by both presets, so their imports resolve and their
+`Pan` code runs unedited. What is implemented of RNGH is
+`GestureHandlerRootView`, `GestureDetector`, `Gesture.Pan()` and
+`usePanGesture()` — the full `Pan` config surface, including all four offset
+knobs, `hitSlop`, `shouldCancelWhenOutside` and `activateAfterLongPress`. See
+[the API reference](api.md#react-native-gesture-handler-react-native-gtkxgesture-handler)
+for the table, and `examples/gesture-detector` for all four shapes running.
 
-`react-native-gesture-handler`'s package name _is_ aliased, onto
-[`react-native-gtkx/gesture-handler`](api.md#react-native-gesture-handler-react-native-gtkxgesture-handler):
-`GestureHandlerRootView` is implemented faithfully, because it is the one
-RNGH symbol that shows up in apps using none of the rest of it, and every
-other export throws where it is used rather than silently doing nothing.
+What is not implemented throws where it is used, naming itself, rather than
+silently doing nothing:
 
-What to do instead:
+- **`Tap`, `LongPress` and `State`** — the next increment. `State` is what
+  stops `@gorhom/bottom-sheet` and `react-native-draggable-flatlist` at
+  import today;
+- **cross-gesture relations** (`simultaneousWithExternalGesture`,
+  `requireExternalGestureToFail`, `blocksExternalGesture`) and the
+  `Race`/`Simultaneous`/`Exclusive` composers — these need an arbitration
+  registry separate from the responder lock, because the lock has one holder
+  by design and simultaneity is a set;
+- **`Gesture.Native()`** and RNGH's re-exported `ScrollView`/`FlatList`,
+  which `@gorhom/bottom-sheet` and `react-native-draggable-flatlist` render;
+- **`Pinch` and `Rotation`** — GTK feeds touchpad gestures properly, and
+  nothing in this project's test rig can produce one, so they wait for a
+  machine that can;
+- **`Fling`, `Hover`, `Manual`, `ForceTouch`**, the legacy `*GestureHandler`
+  components and the button family.
+
+What to do instead, where something is still missing:
 
 - a **drag** — `PanResponder` plus `Animated.ValueXY`, as above. Portable,
   and it is what most RNGH usage in the wild amounts to;

@@ -216,6 +216,19 @@ export const getCurrentResponder = (): ResponderHost | null =>
   responderSystem.getResponder()
 
 /**
+ * The out-of-event grant channel, for a recognizer whose mind was changed by
+ * a timer rather than by a pointer (`activateAfterLongPress`). See
+ * `ResponderSystem.requestResponder` for what it does and
+ * docs/research/gestures.md for why the model is extended at all.
+ *
+ * @internal Not part of the RN surface: an app writes responder props, and
+ * nothing in RN asks for the responder from outside an event. This exists for
+ * `GestureDetector`, whose recognizers do.
+ */
+export const requestResponder = (widget: Gtk.Widget): boolean =>
+  responderSystem.requestResponder(widget)
+
+/**
  * Attaches the responder event source to a component's widget, but only when
  * it actually declares responder props — RN never asks a view without
  * handlers, so a controller on every View would be pure cost.
