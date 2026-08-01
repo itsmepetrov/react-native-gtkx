@@ -4,9 +4,27 @@
 // have to stay right when the view is inside a scrolled viewport (GTK
 // folds the scroll offset into the child's transform, so compute_point is
 // what has to account for it — nothing here adds the offset by hand).
+//
+// Every test here has to wait for a non-zero ALLOCATION before measuring,
+// not merely for the label to appear. `measure`/`measureInWindow` go
+// through gtk_widget_compute_point(), which walks the allocated transform
+// chain, and a widget that is realized and mapped but not yet allocated
+// still carries an identity transform — compute_point succeeds and returns
+// the point unchanged, so a window coordinate silently comes back as a
+// local one. The layout phase runs on a later frame-clock tick than the
+// commit, and under load that tick lands after the measurement. This is the
+// same race that broke press-event.gtk.test.tsx on main; it reached these
+// tests too, as `expected 0 to be greater than or equal to 15`.
+//
+// Waiting on the allocated SIZE rather than on the position is deliberate:
+// GTK sets a widget's size and its transform in one gtk_widget_allocate()
+// call and allocation runs top-down, so the chain up to the root is placed
+// by the time the size is non-zero — and the assertions below stay able to
+// fail.
 import { act, render, screen, waitFor } from "@gtkx/testing"
 import { createRef } from "react"
 import { expect, it } from "vitest"
+import type { Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
 import {
   Root,
   ScrollView,
@@ -15,6 +33,13 @@ import {
   type ScrollViewHandle,
   type ViewHandle,
 } from "../../../src/index"
+
+const waitForAllocation = async (label: string): Promise<void> => {
+  await waitFor(() => {
+    const widget = screen.getByText(label) as unknown as GtkNs.Widget
+    expect(widget.getAllocatedWidth()).toBeGreaterThan(0)
+  })
+}
 
 it("measure reports parent-relative x/y and window-relative pageX/pageY", async () => {
   const inner = createRef<ViewHandle>()
@@ -38,9 +63,7 @@ it("measure reports parent-relative x/y and window-relative pageX/pageY", async 
       </Root>,
     )
   })
-  await waitFor(() => {
-    expect(screen.getByText("inner")).toBeTruthy()
-  })
+  await waitForAllocation("inner")
 
   let measured: {
     x: number
@@ -88,9 +111,7 @@ it("measureInWindow reports window coordinates and the layout size", async () =>
       </Root>,
     )
   })
-  await waitFor(() => {
-    expect(screen.getByText("box")).toBeTruthy()
-  })
+  await waitForAllocation("box")
 
   let result: {
     x: number
@@ -135,9 +156,7 @@ it("measureLayout reports the offset between two views", async () => {
       </Root>,
     )
   })
-  await waitFor(() => {
-    expect(screen.getByText("leaf")).toBeTruthy()
-  })
+  await waitForAllocation("leaf")
 
   let layout: {
     left: number
@@ -185,9 +204,7 @@ it("measureInWindow follows the content when the ScrollView scrolls", async () =
       </Root>,
     )
   })
-  await waitFor(() => {
-    expect(screen.getByText("row-0")).toBeTruthy()
-  })
+  await waitForAllocation("row-0")
 
   const windowY = (): number => {
     let value: number | null = null
