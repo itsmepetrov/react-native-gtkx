@@ -253,6 +253,41 @@ been making in shipped apps since the beginning, on the same widget class,
 which is why this was judged an acceptable gap rather than a blocker. Closing
 it properly is task 011.
 
+## What the gallery found, the first time this met a real screen
+
+Two defects that every test had missed, both found within minutes of
+pointing the gallery at a real window — and neither of them in the
+responder system itself.
+
+**`Animated.ValueXY` did not exist, so the canonical drag crashed.** The
+app died on `Animated.ValueXY is not a constructor`. Essentially every RN
+drag in the wild is `new Animated.ValueXY()` plus
+`pan.setValue({ x: gesture.dx, y: gesture.dy })`, with the transform from
+`getTranslateTransform()`. Shipping the responder system without it meant
+portable drag code still did not run — the gesture half worked and the
+value half was missing. `ValueXY` is now implemented as the thin composite
+over two `Value`s that it is upstream, which also required `setOffset` /
+`flattenOffset` / `extractOffset` on `AnimatedValue` (the continuing-drag
+idiom: fold where the gesture ended into the offset so the next `dx` starts
+at zero). Offsets default to 0, so nothing that existed before behaves
+differently.
+
+**`Animated.View` silently ignored the responder props.** Slice 2 added
+them to `View` only. `Animated.View` is a different component, and it is
+precisely where an idiomatic drag lands, because the dragged thing is
+animated by definition. Spreading `panHandlers` onto it **compiled without
+error** — TypeScript does not excess-property-check a spread of a variable —
+and did nothing at runtime. No type error, no warning, no effect: the worst
+possible failure mode, and one no unit test would ever catch because the
+test would have been written against `View`.
+
+The general lesson is worth stating: a prop set that only some components
+accept is a trap when the idiomatic call site is one of the ones that do
+not. `docs/api.md` now says which components take responder props.
+
+`Animated.event` remains unimplemented; writing the value directly is what
+it would do anyway, and that is documented rather than hidden.
+
 ## Landmines other platforms hit
 
 - **Timestamp resolution is load-bearing.** `ResponderTouchHistoryStore`

@@ -21,3 +21,5 @@ export type {
   ValueListener,
 } from "./types"
 export { AnimatedInterpolation, AnimatedValue } from "./value"
+export { AnimatedValueXY } from "./value-xy"
+export type { ValueXYListener, ValueXYLiteral } from "./value-xy"

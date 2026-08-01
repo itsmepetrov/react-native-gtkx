@@ -31,6 +31,12 @@ const numeric = (value: number | string): number =>
 
 export class AnimatedValue {
   private _value: number
+  // RN splits a value into an animated part and a static offset: a drag sets
+  // the offset to where the last gesture ended, so dx/dy can keep starting
+  // from zero. Everything observable is the SUM; the animation runner only
+  // ever drives `_value`, so an untouched offset (0) leaves behaviour
+  // byte-identical to before it existed.
+  private _offset = 0
   private readonly _startingValue: number
   private readonly _listeners = new Map<string, ValueListener>()
   private _nextListenerId = 1
@@ -46,6 +52,26 @@ export class AnimatedValue {
   setValue(value: number): void {
     this._animation?.stop()
     this.__updateValue(value)
+  }
+
+  /** Sets the static part. The animated part is left where it is. */
+  setOffset(offset: number): void {
+    this._offset = offset
+    this.__notify()
+  }
+
+  /** Folds the offset into the value, leaving the sum unchanged. */
+  flattenOffset(): void {
+    this._value += this._offset
+    this._offset = 0
+    this.__notify()
+  }
+
+  /** The mirror of flattenOffset: moves the value into the offset. */
+  extractOffset(): void {
+    this._offset += this._value
+    this._value = 0
+    this.__notify()
   }
 
   addListener(listener: ValueListener): string {
@@ -67,7 +93,7 @@ export class AnimatedValue {
   // { finished: false }.
   stopAnimation(callback?: (value: number) => void): void {
     this._animation?.stop()
-    callback?.(this._value)
+    callback?.(this.__getValue())
   }
 
   // Stops any running animation, then snaps back to the construction-time
@@ -84,12 +110,18 @@ export class AnimatedValue {
   }
 
   __getValue(): number {
-    return this._value
+    return this._value + this._offset
   }
 
   /** @internal Called by the animation runner on every frame. */
   __updateValue(value: number): void {
     this._value = value
+    this.__notify()
+  }
+
+  /** @internal Publishes the current sum to every listener. */
+  private __notify(): void {
+    const value = this.__getValue()
     for (const listener of [...this._listeners.values()]) {
       listener({ value })
     }
