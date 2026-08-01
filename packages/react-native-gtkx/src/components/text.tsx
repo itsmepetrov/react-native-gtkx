@@ -140,20 +140,19 @@ export const Text = ({
     [numberOfLines, onLayout],
   )
 
+  // RN text clips to its box: an under-allocated GtkLabel would otherwise
+  // paint its full text past the allocation (spike finding). Unlike a
+  // container, whose `overflow` style now decides this, a text leaf clips
+  // unconditionally — `alwaysClips` says so in the one place that writes the
+  // widget's overflow.
   const { node, cssClass, flat } = useLayoutChild(widgetRef, {
     style,
     onLayout: layoutWithLines,
     measure,
+    alwaysClips: true,
   })
 
   useImperativeHandle(ref, () => createMeasureHandle(widgetRef, node), [node])
-
-  // RN text clips to its box: an under-allocated GtkLabel would otherwise
-  // paint its full text past the allocation (spike finding). Containers keep
-  // overflow VISIBLE (paint-overflow); the text leaf clips.
-  useLayoutEffect(() => {
-    widgetRef.current?.setOverflow(Gtk.Overflow.HIDDEN)
-  }, [])
 
   // Keep the probe in sync with everything that affects metrics, then
   // invalidate the Yoga leaf so the next pass re-measures.

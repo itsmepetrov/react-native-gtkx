@@ -12,12 +12,12 @@ import {
 import { splitStyle, StyleSheet } from "../style/index"
 import type { StyleProp } from "../contracts"
 import {
-  Gtk,
   GtkBox,
   GtkScrolledWindow,
   queueAllocate,
   queueResize,
   useSignal,
+  type Gtk,
 } from "../gtkx/bridge/index"
 import {
   ensurePerfReporter,
@@ -183,6 +183,13 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
         { overflow: "scroll", flexDirection: horizontal ? "row" : "column" },
       ],
       onLayout,
+      // RN semantics: a ScrollView CLIPS its content. Containers paint-
+      // overflow by default, so without this the scrolled-away content (e.g.
+      // the original of a pinned sticky header) keeps drawing past the scroll
+      // area's edges. The `overflow: "scroll"` above would now clip the
+      // viewport on its own, but a viewport that clips only while nobody
+      // overrides the style is not a contract.
+      alwaysClips: true,
     })
 
     const [contentNode] = useState(() => host.engine.createNode())
@@ -197,14 +204,6 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
         }
       },
     })
-
-    // RN semantics: a ScrollView CLIPS its content. Branch B made containers
-    // paint-overflow by default, so without this the scrolled-away content
-    // (e.g. the original of a pinned sticky header) keeps drawing past the
-    // scroll area's edges.
-    useLayoutEffect(() => {
-      outerRef.current?.setOverflow(Gtk.Overflow.HIDDEN)
-    }, [])
 
     useLayoutEffect(() => {
       outerNode.insertChild(contentNode, 0)

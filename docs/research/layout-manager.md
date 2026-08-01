@@ -53,7 +53,10 @@ edge over the neighboring box's background — paint-overflow like RN).
 4. **An under-allocated GtkLabel draws its FULL text past the allocation**
    (the two labels in the spike overlapped). RN text semantics require clipping
    to the own box → text leaves get `gtk_widget_set_overflow(HIDDEN)`
-   (paint clip); containers keep VISIBLE (paint overflow).
+   (paint clip); containers DEFAULT to VISIBLE (paint overflow). Their
+   `overflow` style decides it now — for a long time it reached only Yoga, so
+   `overflow: "hidden"` on a container was accepted and clipped nothing
+   (`tests/gtk/style/overflow.gtk.test.tsx`).
 5. **SHRINK without the wrapper**: the floating window accepted
    setDefaultSize(200,150) exactly; children minimums (507px) do not interfere —
    the ratchet is eliminated by the manager itself. sway-IPC resizing was not

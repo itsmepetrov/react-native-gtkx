@@ -36,6 +36,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
+    // The box is a transform away from wherever the pointer takes it, and a
+    // transform is paint-only — without this it draws over the caption under
+    // the arena, exactly as it would in RN. `overflow: "hidden"` is the
+    // portable answer and it is the one this platform used to accept and
+    // ignore; it clips to the rounded shape above, corners included.
+    overflow: "hidden",
   },
   box: {
     width: BOX,
@@ -127,6 +133,16 @@ export const DragPanel = () => (
     <Caption>
       Grab the box with the mouse and throw it around. Let go and `withSpring`
       returns it — an underdamped spring, so it overshoots home and settles.
+    </Caption>
+    <Caption>
+      Drag it past an edge and it is CUT OFF at the arena, rounded corners and
+      all, instead of sliding over this caption: the platform honouring the
+      arena&apos;s `overflow: &quot;hidden&quot;` — the RN style it used to
+      accept and ignore — with paint and hit-testing stopping at the same clip.
+      Clamping the shared value in the gesture (`clamp()` ships here) would keep
+      the box in too, but that is an app choosing where a drag ENDS rather than
+      the platform obeying a style, and it would leave nothing here for the clip
+      to show.
     </Caption>
     <Caption>
       Honest note: this is NOT `GestureDetector`. `Gesture.Pan()` and

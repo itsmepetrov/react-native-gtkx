@@ -167,8 +167,8 @@ matching leave when a touch ends so no phantom hover sticks, and GTK's own
 widget out in its own window.
 
 **`hitSlop` stops at a clip.** GTK stops picking at a clipping ancestor, so
-slop cannot escape a `ScrollView` viewport — the same limit RN documents on
-Android.
+slop cannot escape a `ScrollView` viewport, or any view whose style says
+`overflow: "hidden"` — the same limit RN documents on Android.
 
 **No `Animated.event`.** Write the value directly
 (`pan.setValue({x: gesture.dx, y: gesture.dy})`), which is what it would do.
