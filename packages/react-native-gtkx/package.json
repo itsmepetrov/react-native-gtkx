@@ -71,6 +71,10 @@
       "types": "./dist/gesture-handler-compat/index.d.ts",
       "default": "./dist/gesture-handler-compat/index.js"
     },
+    "./reanimated": {
+      "types": "./dist/reanimated-compat/index.d.ts",
+      "default": "./dist/reanimated-compat/index.js"
+    },
     "./mcp": {
       "types": "./dist/mcp/index.d.ts",
       "default": "./dist/mcp/index.js"

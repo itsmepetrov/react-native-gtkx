@@ -90,7 +90,32 @@ describe("rewriteReactNativeImport", () => {
     expect(
       rewriteReactNativeImport("react-native-reanimated-dnd-extras"),
     ).toBeNull()
-    expect(rewriteReactNativeImport("react-native-reanimated")).toBeNull()
+  })
+
+  test("rewrites react-native-reanimated to the compat subpath", () => {
+    expect(rewriteReactNativeImport("react-native-reanimated")).toBe(
+      "react-native-gtkx/reanimated",
+    )
+    expect(rewriteReactNativeImport("react-native-reanimated/lib/Easing")).toBe(
+      "react-native-gtkx/reanimated/lib/Easing",
+    )
+  })
+
+  test("keeps react-native-reanimated and its -dnd lookalike apart", () => {
+    // Both directions, because both are now real aliases and the failure is
+    // silent either way: a loose prefix match would send
+    // `react-native-reanimated-dnd` to `react-native-gtkx/reanimated-dnd`,
+    // which does not exist, and an alias for the shorter name placed first
+    // would swallow the longer one. Exact-or-slash-prefix guards, not order.
+    expect(rewriteReactNativeImport("react-native-reanimated-dnd")).toBe(
+      "react-native-gtkx/dnd",
+    )
+    expect(
+      rewriteReactNativeImport("react-native-reanimated-dnd/lib/index"),
+    ).toBe("react-native-gtkx/dnd/lib/index")
+    expect(
+      rewriteReactNativeImport("react-native-reanimated-extras"),
+    ).toBeNull()
   })
 })
 

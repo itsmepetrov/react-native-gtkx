@@ -634,3 +634,114 @@ surfaces is the precise one.
 
 A symbol this shim does not list at all fails earlier still, at bundle time,
 with the bundler's own "no export named X".
+
+## `react-native-reanimated` (`react-native-gtkx/reanimated`)
+
+Reanimated's **semantics**, reimplemented on a platform that has none of its
+architecture — because it needs none of it. Both presets alias the bare
+package name onto this subpath, so an app keeps its source:
+
+```tsx
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated"
+```
+
+**Why the architecture is gone.** Reanimated exists to cross a thread
+boundary. Here GTK's main loop _is_ the JS thread — a widget call is a
+synchronous C call on the same stack — so a worklet is an ordinary function,
+`measure()` is synchronous, and a shared value is an observable box. That is
+not this project's reinterpretation: upstream ships the flattened version
+itself, selects it with `SHOULD_BE_USE_WEB`, and routes react-native-windows
+(no DOM, no second runtime) down it. Full evidence, and what it costs, in
+[research/reanimated.md](research/reanimated.md).
+
+**Why a reimplementation and not the library.** ~35,700 lines of `src/`, 21
+DOM-bound files, and a `Platform.OS` gate that does not know about `linux`;
+running it would mean maintaining a fork of a fast-moving dependency. The web
+path is the blueprint — every behaviour here was read off it — and its pure
+parts (`interpolate`, `Easing`, the spring config maths) are ported.
+
+**The Babel plugin is not needed, and not assumed.** Its output is an ordinary
+lexical closure with metadata and no injected runtime import, so `'worklet'`
+is an inert directive. This platform never runs Babel (vite/rolldown; the
+Metro path uses the app's own stock preset), while an app that also targets
+iOS or Android keeps the plugin for those builds — so both configurations
+work. Dependency tracking here is **dynamic**: a mapper subscribes to the
+shared values it actually reads, which is more precise than a static
+`__closure` scan (a conditional read is tracked correctly) and needs no build
+step. `dependencies` arrays are accepted and control only when a mapper is
+rebuilt.
+
+### The boundary: what can be animated
+
+This is the honest limit of the surface, and it is not a runtime limit. This
+platform can write exactly two things to a mounted widget without a React
+render:
+
+| Style property                                                      | How it reaches GTK                                                      |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `opacity`                                                           | `gtk_widget_set_opacity`, straight from the animation frame.            |
+| `transform` (`translateX/Y`, `scale`, `scaleX/Y`, `rotate`, `skew`) | The rect store plus one queued allocation, applied as a `GskTransform`. |
+
+Everything else — every colour, border, radius, and all of layout — reaches
+GTK as a CSS class computed during render, and layout properties additionally
+need a Yoga pass. A `useAnimatedStyle` returning `backgroundColor` or `width`
+therefore **cannot** be driven at frame rate here yet. It is not dropped
+silently: the property is named in a one-per-session warning, and its latest
+value is applied on the next React render. Closing that gap is separate work
+(see the research doc's "animatable-property gap").
+
+### Implemented
+
+| Export                                                                                                           | Behaviour                                                                                                                                                                           |
+| ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `useSharedValue`, `makeMutable`, `isSharedValue`, `cancelAnimation`                                              | Full. A shared value is also a platform animated node, so it can be handed to `Animated.View`'s style directly as well as through `useAnimatedStyle`.                               |
+| `useAnimatedStyle`                                                                                               | Full for `opacity` and `transform` — see the boundary above. A style whose _shape_ changes between runs costs exactly one React render and rebinds; a running animation costs none. |
+| `useDerivedValue`, `useAnimatedReaction`, `startMapper`, `stopMapper`                                            | Full. Mappers are torn down on unmount.                                                                                                                                             |
+| `withTiming`, `withSpring`, `withSequence`, `withRepeat`, `withDelay`                                            | Full for numeric values, on upstream's defaults (timing 300 ms / `inOut(quad)`, spring `GentleSpringConfig`), driven by the platform's own frame scheduler.                         |
+| `interpolate`, `clamp`, `Extrapolation`, `Extrapolate`, `Easing`                                                 | Full, including per-edge extrapolation and `Easing.bezier`'s factory shape.                                                                                                         |
+| `useAnimatedRef`, `measure`                                                                                      | Full, and callable from anywhere — there is no worklet to be inside of. Returns `null` before the first committed layout, which is RN's own contract.                               |
+| `runOnUI`, `runOnJS`, `scheduleOnUI`, `scheduleOnRN`                                                             | Deferred, not inlined — see below.                                                                                                                                                  |
+| `Animated.View`                                                                                                  | The platform's own, unchanged. Takes a `ref` giving `measure`/`measureInWindow`/`measureLayout`.                                                                                    |
+| `GentleSpringConfig` and the other seven spring presets, `ReduceMotion`, `ReanimatedLogLevel`, `isSharedValue`   | Plain data, mirrored exactly.                                                                                                                                                       |
+| `isConfigured`, `isReanimated3`, `makeShareableCloneRecursive`, `isWorkletFunction`, `configureReanimatedLogger` | Present. Cloning is identity (nothing leaves the runtime it was made in); `configureReanimatedLogger` is accepted and does nothing, because there is no second logger to configure. |
+
+### Differences from `react-native-reanimated`
+
+| Behaviour                          | Here                                                                                                                                                                                                                                                                                                 |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Animatable properties              | `opacity` and `transform` only — see the boundary table. Anything else warns once by name and lands on the next render.                                                                                                                                                                              |
+| Animated values                    | Numbers only. `withTiming("#ff0000")` and animated arrays/objects throw rather than animating nothing; colours are the property gap above.                                                                                                                                                           |
+| `runOnUI` / `runOnJS`              | Schedule rather than run inline, and return `void` — matching upstream's own single-runtime path (`react-native-worklets/src/threads.ts`: a microtask plus one frame for `runOnUI`, a microtask for `runOnJS`). They _could_ be direct calls here; code written for Reanimated assumes they are not. |
+| `SharedValue.addListener`          | Accepts upstream's `(listenerID, listener)` **and** this platform's animated-node `(callback) => id`. Both callers are real, and supporting only one fails silently.                                                                                                                                 |
+| Worklet closure capture            | Live lexical capture, not the plugin's by-value snapshot. Only observable for a worklet closing over a reassigned plain `let`, which is already a bug on mobile.                                                                                                                                     |
+| `withSpring` rest condition        | Upstream stops on remaining energy relative to initial energy; the platform's solver stops on displacement and speed thresholds, derived here from the same energy budget. The stopping point differs by well under a pixel.                                                                         |
+| `ReduceMotion`, `useReducedMotion` | The enum is mirrored and every value behaves as `Never`; `useReducedMotion()` is always false. GNOME's `gtk-enable-animations` is not read yet.                                                                                                                                                      |
+| `reanimatedVersion`                | The upstream version this surface mirrors, not a claim to be that package.                                                                                                                                                                                                                           |
+
+### Not implemented — throws, naming itself
+
+`Animated.Text`, `Animated.ScrollView`, `Animated.Image`, `Animated.FlatList`
+and `createAnimatedComponent`; layout animations (`entering`/`exiting`/
+`layout`, `FadeIn`, `LinearTransition`, `Keyframe` and the ~90 preset
+builders); `interpolateColor` and the colour helpers; `useAnimatedProps`,
+`useEvent`/`useHandler`, `useAnimatedScrollHandler`, `useScrollOffset`,
+`useFrameCallback`, `useTimestamp`; sensors, the keyboard hook, screen and
+shared-element transitions; Reanimated 4's CSS animations (`css.create`,
+`css.keyframes`); `withDecay`, `withClamp`; `createWorkletRuntime` and
+`runOnRuntime`; the Jest helpers.
+
+The throw is the point, and it is the same discipline as the RNGH shim: a
+`FadeIn` that mounted without fading is the trap
+[research/gestures.md](research/gestures.md) records `Animated.View` falling
+into — compiled, ran, did nothing. The stand-ins fail on call, on render and
+on property access (`FadeIn.duration(300)`, `css.create`), while still
+answering the introspection React and `console.log` do first. A symbol not
+listed at all fails earlier still, at bundle time.
+
+**This does not unblock `@gorhom/bottom-sheet` and friends.** They need
+`GestureDetector` from `react-native-gesture-handler`, which remains
+unimplemented and is its own piece of work.

@@ -199,6 +199,26 @@ export const withLinuxPlatform = <T extends MetroLikeConfig>(
         platform,
       )
     }
+    // And Reanimated itself. Ordered AFTER the -dnd block above, and note
+    // that the guard is exact-match-or-slash-prefix rather than a bare
+    // startsWith: `react-native-reanimated-dnd` is a lookalike of this
+    // specifier, and an anchored replace on a loose prefix would rewrite it
+    // to `react-native-gtkx/reanimated-dnd`, which does not exist. The two
+    // aliases have to stay distinguishable in both directions.
+    // See src/reanimated-compat/index.tsx.
+    if (
+      moduleName === "react-native-reanimated" ||
+      moduleName.startsWith("react-native-reanimated/")
+    ) {
+      return fallback(
+        context,
+        moduleName.replace(
+          /^react-native-reanimated/,
+          "react-native-gtkx/reanimated",
+        ),
+        platform,
+      )
+    }
     // And the gesture-handler shim. Not a port of RNGH — that stays out of
     // scope (docs/research/gestures.md). It supplies `GestureHandlerRootView`,
     // the one RNGH symbol that appears in apps which otherwise use none of it

@@ -391,9 +391,13 @@ already know.
 
 ## Honest gaps for a ported app
 
-- An app that imports `react-native-reanimated` **directly** (its own
+- ~~An app that imports `react-native-reanimated` **directly** (its own
   `useSharedValue`, its own `useAnimatedStyle`) still does not build. The
-  alias replaces the DnD library, not Reanimated.
+  alias replaces the DnD library, not Reanimated.~~ **Closed.** Reanimated's
+  semantics are implemented and its package name aliased —
+  [research/reanimated.md](reanimated.md) and
+  [api.md](../api.md#react-native-reanimated-react-native-gtkxreanimated).
+  The gap that remains is which style properties can be driven per frame.
 - Any RNGH import beyond `GestureHandlerRootView` throws when it runs. That
   is deliberate — see the shim above — but it does mean an app that mixes
   real RNGH gestures into its drag-and-drop screens has work to do that no

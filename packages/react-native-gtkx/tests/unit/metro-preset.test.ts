@@ -84,6 +84,27 @@ test("redirects react-native-reanimated-dnd to the dnd subpath on linux", () => 
   ])
 })
 
+test("redirects react-native-reanimated to the compat subpath on linux", () => {
+  // The two reanimated aliases are lookalikes of each other, so this asserts
+  // both directions in one place: `-dnd` must still reach /dnd, and must be
+  // matched on its own name rather than swallowed by the shorter prefix —
+  // an anchored replace on a loose match would produce
+  // `react-native-gtkx/reanimated-dnd`, which does not exist.
+  const { context, calls } = makeContext()
+  resolve(context, "react-native-reanimated", "linux")
+  resolve(context, "react-native-reanimated/lib/Easing", "linux")
+  resolve(context, "react-native-reanimated-dnd", "linux")
+  resolve(context, "react-native-reanimated-extras", "linux")
+  expect(calls).toEqual([
+    ["react-native-gtkx/reanimated", "linux"],
+    ["react-native-gtkx/reanimated/lib/Easing", "linux"],
+    // the lookalike that IS aliased, to its own subpath.
+    ["react-native-gtkx/dnd", "linux"],
+    // the lookalike that is not: left untouched.
+    ["react-native-reanimated-extras", "linux"],
+  ])
+})
+
 test("redirects react-native-gesture-handler to the shim on linux", () => {
   // Not a port of RNGH: the shim implements GestureHandlerRootView and makes
   // every other export throw. The alias exists so a ported app does not have
