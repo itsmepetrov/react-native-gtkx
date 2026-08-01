@@ -263,10 +263,11 @@ export const RefusalsPanel = () => {
         Not everything refused is a layout property. `borderRadius` gets the
         other message: it can be written, but only as a CSS class computed
         during render, so it too lands on the next render. `Animated.FlatList`
-        and the whole layout-animation catalogue (`FadeIn`, `LinearTransition`,
-        `Keyframe`, ~90 preset builders) do not warn at all — they throw, naming
-        themselves, because a `FadeIn` that mounted without fading is worse than
-        one that failed.
+        does not warn at all — it throws, naming itself, because a list that
+        mounted without animating is worse than one that failed. Layout
+        animations are no longer on this list: `FadeIn`, `FadeOut`,
+        `LinearTransition` and `Keyframe` are implemented, and the ~90 preset
+        builders around them are still refusals.
       </Caption>
     </Panel>
   )
