@@ -15,6 +15,9 @@
 // drag-begin on press with no threshold of its own, which is exactly what
 // RN wants — the responder system has no threshold either, and PanResponder
 // users apply their own inside onMoveShouldSetPanResponder.
+//
+// The terminations that are not pointer events (watchTerminations, below)
+// were expected to need that raw tap after all. Measurement said otherwise.
 import { useLayoutEffect, useRef, type RefObject } from "react"
 import { createTouch } from "../components/press-event"
 import { Gtk } from "../gtkx/bridge/index"
@@ -25,6 +28,20 @@ import { hasResponderProps, type ResponderProps } from "./types"
 // GTK claim on the right one.
 const gestures = new WeakMap<ResponderHost, Gtk.Gesture>()
 
+/** Whether `widget` is `ancestor` or sits underneath it. */
+const contains = (ancestor: Gtk.Widget, widget: object): boolean => {
+  for (
+    let current = widget as Gtk.Widget | null;
+    current !== null;
+    current = current.getParent()
+  ) {
+    if (current === ancestor) {
+      return true
+    }
+  }
+  return false
+}
+
 /**
  * One lock for the process, as in RN. What is island-scoped is the
  * negotiation PATH, not the lock: `parentOf` walks the GTK widget tree and
@@ -33,13 +50,98 @@ const gestures = new WeakMap<ResponderHost, Gtk.Gesture>()
  */
 const responderSystem = createResponderSystem({
   parentOf: (host) => (host as Gtk.Widget).getParent(),
-  onGrant: (host) => {
+  onClaim: (source) => {
     // GTK's only arbitration primitive, used the only way it can honestly be
     // used: a final one-way declaration AFTER JS has decided. There is no
     // un-claim, so nothing may depend on taking it back.
-    gestures.get(host)?.setState(Gtk.EventSequenceState.CLAIMED)
+    //
+    // On the SOURCE's gesture — the one the interaction is arriving through
+    // — never on the granted view's. Claiming denies the sequence on every
+    // gesture above the claimer and cancels it on everything below, so
+    // claiming on an ancestor kills the source and the drag goes silent
+    // after the grant. Slice 2 did exactly that, and the common
+    // onMoveShouldSetPanResponder shape never received a single move.
+    gestures.get(source)?.setState(Gtk.EventSequenceState.CLAIMED)
   },
 })
+
+/**
+ * Everything that ends a gesture without being a pointer event, connected
+ * for the length of one interaction and torn down with it.
+ *
+ * The plan for this task called for a single `GtkEventControllerLegacy` on
+ * the toplevel in the capture phase — react-native-web's shape, on the
+ * reasoning that a raw event tap is the only way to see terminations that
+ * are not pointer events. Measured against GTK, it buys nothing here. Each
+ * of the two triggers that survive has a first-class signal that says
+ * exactly what we need to know and nothing else, and the rest of RNW's list
+ * turned out to arrive as an ordinary gesture `::cancel` (see
+ * `TerminationReason`). A legacy controller would have re-derived all of it
+ * from a stream of raw events, and its one advantage — hearing events on a
+ * sequence GTK has already denied us — matters only for triggers that no
+ * longer exist.
+ */
+const watchTerminations = (source: Gtk.Widget): (() => void) => {
+  const disposers: (() => void)[] = []
+
+  // Window blur. GTK's `is-active` on the toplevel is the same thing the DOM
+  // reports as a window `blur` — the window stopped being the active one,
+  // which on a desktop usually means the user alt-tabbed mid-drag.
+  const root = source.getRoot()
+  if (root instanceof Gtk.Window) {
+    const onActive = (): void => {
+      if (!root.isActive()) {
+        responderSystem.terminate("blur")
+      }
+    }
+    root.on("notify::is-active", onActive)
+    disposers.push(() => {
+      root.off("notify::is-active", onActive)
+    })
+  }
+
+  // An ancestor scrolling. RNW's rule exactly: the scroller has to CONTAIN
+  // the responder and not BE it — a ScrollView that holds the responder
+  // itself keeps it, and a sibling list scrolling is none of our business.
+  // Watching the adjustments rather than a scroll controller is what makes
+  // that precise: it fires for a wheel, for a keyboard scroll and for
+  // kinetic deceleration alike, and only for this scroller.
+  for (
+    let widget = source.getParent();
+    widget !== null;
+    widget = widget.getParent()
+  ) {
+    if (!(widget instanceof Gtk.ScrolledWindow)) {
+      continue
+    }
+    const scroller = widget
+    const onScrolled = (): void => {
+      const holder = responderSystem.getResponder()
+      if (
+        holder !== null &&
+        holder !== scroller &&
+        contains(scroller, holder)
+      ) {
+        responderSystem.terminate("scroll")
+      }
+    }
+    for (const adjustment of [
+      scroller.getHadjustment(),
+      scroller.getVadjustment(),
+    ]) {
+      adjustment.on("value-changed", onScrolled)
+      disposers.push(() => {
+        adjustment.off("value-changed", onScrolled)
+      })
+    }
+  }
+
+  return () => {
+    for (const dispose of disposers) {
+      dispose()
+    }
+  }
+}
 
 /** Exposed for tests and for future ScrollView arbitration. */
 export const getCurrentResponder = (): ResponderHost | null =>
@@ -81,11 +183,23 @@ export const useResponder = (
     // coordinates — the start has to be carried.
     let startX = 0
     let startY = 0
+    let stopWatching: (() => void) | null = null
+
+    const endInteraction = (): void => {
+      stopWatching?.()
+      stopWatching = null
+    }
 
     drag.on("drag-begin", (x: number, y: number) => {
       startX = x
       startY = y
       responderSystem.touchStart(widget, createTouch(widget, x, y))
+      // Every ancestor's gesture reports the same press; only the one that
+      // opened the interaction owns it, and asking the system afterwards is
+      // the cheapest way to find out which that was.
+      if (responderSystem.getSource() === widget) {
+        stopWatching = watchTerminations(widget)
+      }
     })
     drag.on("drag-update", (offsetX: number, offsetY: number) => {
       responderSystem.touchMove(
@@ -98,17 +212,22 @@ export const useResponder = (
         widget,
         createTouch(widget, startX + offsetX, startY + offsetY),
       )
+      endInteraction()
     })
-    // GTK cancels a sequence when something upstream claims it — a native
-    // ancestor scrolling, say. RN calls that a termination, and it is the
-    // one termination trigger we get for free.
+    // GTK cancels a sequence when something takes it away from us: a native
+    // ancestor claiming it, a `GtkDragSource` attached through `Controllers`
+    // reaching its threshold, a second mouse button going down for a context
+    // menu. RN calls all of that a termination, and unlike RNW we never get
+    // to ask first — by the time GTK tells us, the sequence is gone.
     drag.on("cancel", () => {
       responderSystem.touchCancel(widget, createTouch(widget, startX, startY))
+      endInteraction()
     })
 
     widget.addController(drag)
 
     return () => {
+      endInteraction()
       widget.removeController(drag)
       gestures.delete(widget)
       unregister()
