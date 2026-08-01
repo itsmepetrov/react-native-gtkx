@@ -30,8 +30,48 @@ const ZERO_OFFSET: StoredOffset = { dx: 0, dy: 0, matrix: null }
 const rects = new WeakMap<object, StoredRect>()
 const offsets = new WeakMap<object, StoredOffset>()
 
+/**
+ * Told when a child's committed rect changes, which is the only moment a
+ * layout transition can know it has something to animate: a moved child is
+ * exactly a child whose engine rect is not the one it had.
+ *
+ * A WeakMap plus a counter rather than a Map, because the key is a widget and
+ * an observer must never be the reason one stays alive; the counter is what
+ * keeps `setStoredRect` free (one integer compare) for the overwhelming
+ * majority of children, which have no observer.
+ */
+export type RectObserver = (
+  next: StoredRect,
+  previous: StoredRect | undefined,
+) => void
+
+const rectObservers = new WeakMap<object, RectObserver>()
+let rectObserverCount = 0
+
+/** Subscribes to `widget`'s committed rect. Returns the unsubscribe. */
+export const observeStoredRect = (
+  widget: object,
+  observer: RectObserver,
+): (() => void) => {
+  if (!rectObservers.has(widget)) {
+    rectObserverCount += 1
+  }
+  rectObservers.set(widget, observer)
+  return () => {
+    if (rectObservers.delete(widget)) {
+      rectObserverCount -= 1
+    }
+  }
+}
+
 export const setStoredRect = (widget: object, rect: StoredRect): void => {
+  if (rectObserverCount === 0) {
+    rects.set(widget, rect)
+    return
+  }
+  const previous = rects.get(widget)
   rects.set(widget, rect)
+  rectObservers.get(widget)?.(rect, previous)
 }
 
 export const getStoredRect = (widget: object): StoredRect | undefined =>
@@ -46,8 +86,78 @@ export const setStoredOffset = (
   offsets.set(widget, { dx, dy, matrix })
 }
 
-export const getStoredOffset = (widget: object): StoredOffset =>
-  offsets.get(widget) ?? ZERO_OFFSET
+// The SECOND translation layer, and the reason there are two.
+//
+// The offset above belongs to the style: whatever `transform` the component
+// declared, animated or not, and there is exactly one writer for it. A layout
+// transition (Reanimated's `layout`/`LinearTransition`) is a different claim
+// on the same child — "draw it where it used to be and walk it to where Yoga
+// just put it" — and it has to survive alongside a style transform rather
+// than overwrite it, because a reordering list whose rows also scale is not
+// an exotic case. Composed here, in the one place both are read, so the
+// allocate hook still does a single lookup per child and neither writer has
+// to know the other exists.
+//
+// Translation only. A layout transition that changed a child's SIZE would
+// need a Yoga pass per frame, which is refused on measured grounds
+// (docs/research/animated-colors.md); the size lands immediately and the
+// position is what animates.
+const layoutOffsets = new WeakMap<object, { dx: number; dy: number }>()
+let layoutOffsetCount = 0
+
+export const setStoredLayoutOffset = (
+  widget: object,
+  dx: number,
+  dy: number,
+): void => {
+  if (!layoutOffsets.has(widget)) {
+    layoutOffsetCount += 1
+  }
+  layoutOffsets.set(widget, { dx, dy })
+}
+
+export const clearStoredLayoutOffset = (widget: object): void => {
+  if (layoutOffsets.delete(widget)) {
+    layoutOffsetCount -= 1
+  }
+}
+
+/**
+ * Where a layout transition currently has this child, relative to the rect
+ * the engine gave it. Read when a transition is INTERRUPTED by another one:
+ * the new run has to start from where the child is being drawn, not from
+ * where it was before the first run began.
+ */
+export const getStoredLayoutOffset = (
+  widget: object,
+): { dx: number; dy: number } => layoutOffsets.get(widget) ?? { dx: 0, dy: 0 }
+
+export const getStoredOffset = (widget: object): StoredOffset => {
+  const base = offsets.get(widget) ?? ZERO_OFFSET
+  if (layoutOffsetCount === 0) {
+    return base
+  }
+  const extra = layoutOffsets.get(widget)
+  if (extra === undefined) {
+    return base
+  }
+  if (base.matrix === null) {
+    return { dx: base.dx + extra.dx, dy: base.dy + extra.dy, matrix: null }
+  }
+  // Added to the composed matrix's translation, which allocateChild applies
+  // last and in the PARENT's coordinate space — so a rotated child still
+  // slides along the parent's axes, which is what "it moved in the list"
+  // means.
+  return {
+    dx: 0,
+    dy: 0,
+    matrix: {
+      ...base.matrix,
+      dx: base.matrix.dx + extra.dx,
+      dy: base.matrix.dy + extra.dy,
+    },
+  }
+}
 
 /**
  * Stores a child's whole RN `transform` array, split the way the allocate

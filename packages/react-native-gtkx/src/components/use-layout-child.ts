@@ -34,6 +34,7 @@ import {
   setStoredRect,
   setStoredTransform,
 } from "./rect-store"
+import { deferUntilReleased } from "./widget-retention"
 
 export type LayoutEvent = {
   nativeEvent: {
@@ -258,6 +259,12 @@ export const useLayoutChild = (
         nodesByWidget.delete(widget)
       }
       node.setCommit(null)
+      // Removed from the shadow tree and freed even when the widget is being
+      // RETAINED for an exit animation (see ./widget-retention): the siblings
+      // must close the gap immediately — an exiting widget does not hold its
+      // space, it draws over the space closing behind it — and the rect its
+      // container keeps reporting afterwards is `lastRect`, a plain JS value
+      // that outlives the Yoga node it came from.
       parent.removeChild(node)
       node.free()
     }
@@ -416,7 +423,13 @@ export const useRnContainer = (
       },
     })
     return () => {
-      detachRnLayout(widget)
+      // Deferred inside a retained subtree for the same reason the Yoga node
+      // is: without its RnGtkxLayout the container falls back to GtkBox's own
+      // layout and the children of a widget that is still visible re-stack
+      // themselves mid-animation.
+      if (!deferUntilReleased(widget, () => detachRnLayout(widget))) {
+        detachRnLayout(widget)
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

@@ -31,7 +31,10 @@
 //
 // WHAT IS AND IS NOT HERE. Shared values, animations, the mapper core,
 // `useAnimatedStyle`, `useAnimatedProps`, `interpolateColor`,
-// `createAnimatedComponent` and `Animated.View`/`Text`/`Image`/`ScrollView`
+// `createAnimatedComponent`, `Animated.View`/`Text`/`Image`/`ScrollView` and
+// the `entering`/`exiting`/`layout` props with `FadeIn`/`FadeOut`/
+// `LinearTransition`/`Keyframe` (the other ~90 preset builders are presets
+// over the same two animations and are not here yet)
 // are implemented. Everything else throws through the `unsupported()` proxy,
 // naming itself. The boundary is `opacity`, `transform` and colours — the
 // things this platform can write to a mounted widget without a React render
@@ -41,7 +44,7 @@
 // costs rather than what the animated value costs, so it is refused by name
 // with the transform to use instead. Both halves of that are measured in
 // docs/research/animated-colors.md. See docs/api.md.
-import type { ReactNode } from "react"
+import type { ElementType, ReactNode } from "react"
 import { Animated as PlatformAnimated } from "../components/animated"
 import type {
   AnimatedViewStyle,
@@ -79,6 +82,17 @@ import {
 import { Easing } from "./easing"
 import { createHooks } from "./hooks"
 import { clamp, Extrapolation, interpolate } from "./interpolation"
+import {
+  FadeIn,
+  FadeOut,
+  Keyframe,
+  AnimationBuilder as LayoutAnimationBuilder,
+  LinearTransition,
+} from "./layout-animation"
+import {
+  withLayoutAnimations,
+  type LayoutAnimationProps,
+} from "./layout-animation-view"
 import { cancelAnimation, createMakeMutable, isSharedValue } from "./mutable"
 import type { StyleObject } from "./style"
 import { isWorkletFunction } from "./threads"
@@ -165,6 +179,13 @@ export type { DependencyList } from "./hooks"
 export type { ExtrapolationConfig, ExtrapolationType } from "./interpolation"
 export type { DerivedValue, SharedValue } from "./mutable"
 export type { PropsObject as AnimatedProps } from "./props"
+export type {
+  KeyframeDefinitions,
+  LayoutAnimationCallback,
+  BuiltLayoutAnimation,
+  LayoutAnimationValues,
+} from "./layout-animation"
+export type { LayoutAnimationProps } from "./layout-animation-view"
 
 /** Deprecated upstream alias of {@link Extrapolation}, kept for source parity. */
 export const Extrapolate = Extrapolation
@@ -283,28 +304,38 @@ export type AnimatedStyleProp = StyleObject
 
 type StyleEntry = AnimatedViewStyle | AnimatedStyleProp
 
-export type AnimatedViewProps = Omit<PlatformAnimatedViewProps, "style"> & {
-  style?: StyleEntry | readonly (StyleEntry | false | null | undefined)[]
-}
+export type AnimatedViewProps = Omit<PlatformAnimatedViewProps, "style"> &
+  LayoutAnimationProps & {
+    style?: StyleEntry | readonly (StyleEntry | false | null | undefined)[]
+  }
 
 /**
- * The platform's own `Animated.View`, unchanged and untouched.
+ * The platform's own `Animated.View`, with `entering`/`exiting`/`layout`
+ * added around it.
  *
- * This is the load-bearing discovery of the epic: `isAnimatedNode` in
- * src/components/animated.tsx recognises an animated node STRUCTURALLY
+ * The style half is the load-bearing discovery of the epic: `isAnimatedNode`
+ * in src/components/animated.tsx recognises an animated node STRUCTURALLY
  * (`addListener` + `__getValue`), so the nodes `useAnimatedStyle` produces
  * already ARE animated nodes and reach GTK through the path that has always
  * been there — `setStoredTransform` plus `queueAllocate` for transforms,
  * `widget.setOpacity` for opacity. No new view layer, and no React render per
  * frame.
+ *
+ * The layout-animation half adds no widget either: `withLayoutAnimations`
+ * renders the component it wraps and reaches the widget through the ref that
+ * component already exposes. See layout-animation-view.tsx for why `exiting`
+ * has to live one component ABOVE the one that owns the widget.
  */
-const View = PlatformAnimated.View as (props: AnimatedViewProps) => ReactNode
+const View = withLayoutAnimations(PlatformAnimated.View) as (
+  props: AnimatedViewProps,
+) => ReactNode
 
 const unsupported = createUnsupportedFactory(
   "react-native-reanimated",
   "Implemented here: shared values, useAnimatedStyle/useAnimatedProps/useDerivedValue/useAnimatedReaction, " +
     "withTiming/withSpring/withDecay/withClamp/withSequence/withRepeat/withDelay, interpolate, " +
     "interpolateColor, Easing, useAnimatedRef + measure, runOnUI/runOnJS, " +
+    "the entering/exiting/layout props with FadeIn/FadeOut/LinearTransition/Keyframe, " +
     "Animated.View/Text/Image/ScrollView and createAnimatedComponent. " +
     "See docs/api.md for what is not, and why.",
 )
@@ -318,6 +349,15 @@ const unsupported = createUnsupportedFactory(
  */
 const addWhitelistedNativeProps = (): void => {}
 const addWhitelistedUIProps = (): void => {}
+
+/**
+ * Wrapping in the layout-animation half is what makes `entering`/`exiting`/
+ * `layout` work on ANY animated component rather than only on
+ * `Animated.View`. Neither wrapper adds a widget: both render what they were
+ * given and reach the real widget through the ref it already exposes.
+ */
+const createLayoutAnimatedComponent = (component: ElementType) =>
+  withLayoutAnimations(PlatformAnimated.createAnimatedComponent(component))
 
 /**
  * The rest of the host components, and the factory behind them. All four are
@@ -335,19 +375,18 @@ const addWhitelistedUIProps = (): void => {}
  */
 const Animated = {
   View,
-  Text: PlatformAnimated.Text as any,
-  ScrollView: PlatformAnimated.ScrollView as any,
-  Image: PlatformAnimated.Image as any,
+  Text: withLayoutAnimations(PlatformAnimated.Text) as any,
+  ScrollView: withLayoutAnimations(PlatformAnimated.ScrollView) as any,
+  Image: withLayoutAnimations(PlatformAnimated.Image) as any,
   FlatList: PlatformAnimated.FlatList as any,
-  createAnimatedComponent: PlatformAnimated.createAnimatedComponent as any,
+  createAnimatedComponent: createLayoutAnimatedComponent as any,
   addWhitelistedNativeProps,
   addWhitelistedUIProps,
 }
 
 export default Animated
 
-export const createAnimatedComponent: any =
-  PlatformAnimated.createAnimatedComponent
+export const createAnimatedComponent: any = createLayoutAnimatedComponent
 
 // --- the refusals -------------------------------------------------------
 //
@@ -371,15 +410,20 @@ export const defineAnimation: any = unsupported("defineAnimation")
 export const processColor: any = unsupported("processColor")
 export const DynamicColorIOS: any = unsupported("DynamicColorIOS")
 
-// --- layout animations (entering/exiting/layout) and the preset catalog ---
+// --- layout animations: the four that are implemented ---
+//
+// `BaseAnimationBuilder` and `ComplexAnimationBuilder` are upstream's two
+// halves of one hierarchy — the plain chain and the chain plus the spring
+// parameters — and this platform has a single class doing both, exported
+// under both names so a library subclassing either one keeps working.
+export { FadeIn, FadeOut, Keyframe, LinearTransition }
+export const BaseAnimationBuilder = LayoutAnimationBuilder
+export const ComplexAnimationBuilder = LayoutAnimationBuilder
+/** Upstream's own deprecated alias of {@link LinearTransition}. */
+export const Layout = LinearTransition
+
+// --- layout animations: the rest of the catalog ---
 export const LayoutAnimationConfig: any = unsupported("LayoutAnimationConfig")
-export const BaseAnimationBuilder: any = unsupported("BaseAnimationBuilder")
-export const ComplexAnimationBuilder: any = unsupported(
-  "ComplexAnimationBuilder",
-)
-export const Keyframe: any = unsupported("Keyframe")
-export const Layout: any = unsupported("Layout")
-export const LinearTransition: any = unsupported("LinearTransition")
 export const CurvedTransition: any = unsupported("CurvedTransition")
 export const EntryExitTransition: any = unsupported("EntryExitTransition")
 export const FadingTransition: any = unsupported("FadingTransition")
@@ -389,12 +433,10 @@ export const SharedTransition: any = unsupported("SharedTransition")
 export const SharedTransitionBoundary: any = unsupported(
   "SharedTransitionBoundary",
 )
-export const FadeIn: any = unsupported("FadeIn")
 export const FadeInDown: any = unsupported("FadeInDown")
 export const FadeInLeft: any = unsupported("FadeInLeft")
 export const FadeInRight: any = unsupported("FadeInRight")
 export const FadeInUp: any = unsupported("FadeInUp")
-export const FadeOut: any = unsupported("FadeOut")
 export const FadeOutDown: any = unsupported("FadeOutDown")
 export const FadeOutLeft: any = unsupported("FadeOutLeft")
 export const FadeOutRight: any = unsupported("FadeOutRight")
