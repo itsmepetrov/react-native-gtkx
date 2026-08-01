@@ -142,26 +142,28 @@ export const useLayoutChild = (
         return
       }
       const previous = getStoredRect(widget)
-      // A commit does not imply a change. The engine filters unchanged nodes
-      // out of the walk, EXCEPT nodes carrying a measure function — every
-      // Text leaf, every intrinsic widget — which it must still visit. Those
-      // then arrive here with the rect they already have, and queueing an
-      // allocation for them makes GTK re-allocate and re-snapshot the whole
-      // container for nothing.
+      // A commit does not imply a change. The engine may hand us the rect a
+      // widget already has — nodes carrying a measure function are visited
+      // even when Yoga did not move them — and queueing an allocation for
+      // those makes GTK re-allocate and re-snapshot the container for nothing.
       //
-      // The cost of that is not academic: it scales with children × painted
-      // area. Measured on a 500-row list, maximized, windowSize 11 — 801
-      // live nodes — the frame average was 40.4 ms against 15.7 ms windowed,
-      // while neither 777 nodes in a small window nor 205 nodes maximized
-      // cost anything. Only the product hurts, and this is where we inflate
-      // the first factor.
-      if (
-        previous &&
+      // `rect.skip` counts how often this guard actually fires and
+      // `rect.change` how often it does not, because a guard nobody can see
+      // firing is a guard nobody can attribute a measurement to: this one was
+      // once credited with a large maximized-window win that a later, properly
+      // geometry-controlled run could not reproduce (docs/research/
+      // scroll-performance.md, round six). Keep it — it is correct and free —
+      // but read the counter before crediting it with anything.
+      const unchanged =
+        previous !== undefined &&
         previous.x === rect.x &&
         previous.y === rect.y &&
         previous.width === rect.width &&
         previous.height === rect.height
-      ) {
+      if (perfEnabled) {
+        perfCount(unchanged ? "rect.skip" : "rect.change")
+      }
+      if (unchanged) {
         return
       }
       setStoredRect(widget, rect)
