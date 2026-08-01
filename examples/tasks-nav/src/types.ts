@@ -1,7 +1,7 @@
-// The domain: smart views (All/Important/Trash) + user-created colored
-// lists + tasks, the same shape gtkx's own tutorial app (and this repo's
-// examples/tasks-app port of it) uses. Task storage stays in memory — that
-// is the one thing this example still leaves to tasks-app (see README).
+// The domain: smart views (All/Today/Important/Trash) + user-created
+// colored lists + tasks, the same shape gtkx's own tutorial app (and this
+// repo's examples/tasks-app port of it) uses. Tasks are persisted to a file
+// between runs — see src/storage.ts.
 export type TaskList = {
   id: string
   name: string
@@ -12,6 +12,9 @@ export type Task = {
   id: string
   title: string
   listId: string
+  /** Free-form body text, edited in the task editor's Notes field. Searched
+   *  alongside the title, the same as examples/tasks-app. */
+  notes: string
   done: boolean
   important: boolean
   deleted: boolean
@@ -22,6 +25,9 @@ export type Task = {
   position: number
   /** ISO timestamp — what `sortOrder === "created"` sorts on. */
   createdAt: string
+  /** ISO timestamp of when the task was last marked done, or null while it
+   *  is open. Cleared again when a done task is reopened. */
+  completedAt: string | null
 }
 
 export type Filter = "all" | "open" | "done"
@@ -29,7 +35,7 @@ export type Filter = "all" | "open" | "done"
 // A sidebar screen is either a fixed smart view or one user list — the
 // route name (`smart:<view>` / `list:<id>`) is how the shared content
 // screen tells the two families apart. See src/app.tsx.
-export type SmartView = "all" | "important" | "trash"
+export type SmartView = "all" | "today" | "important" | "trash"
 
 export type Selection =
   { kind: "smart"; view: SmartView } | { kind: "list"; listId: string }
@@ -46,4 +52,4 @@ export enum SortValue {
 export type SortOrder = keyof typeof SortValue
 
 export type DialogKind =
-  "none" | "about" | "shortcuts" | "preferences" | "delete-task"
+  "none" | "about" | "shortcuts" | "preferences" | "new-list" | "delete-task"

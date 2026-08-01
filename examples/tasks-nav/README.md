@@ -12,9 +12,11 @@ one does not depend on it, copy from it, or share a directory name with it.
 It is independent: the same application twice, one built by hand from
 Adwaita widgets and one from the navigator, which is only a useful
 comparison if they are actually the same application — so the features
-that were parked while the navigator was still being proven (drag-reorder,
-due dates, sorting, dialogs, shortcuts) are here too now. See
-"Out of scope" for the short list that remains deliberately tasks-app's.
+that were parked while the navigator was still being proven are here too
+now: drag-reorder, due dates, sorting, dialogs and shortcuts first, then
+file-backed storage, reminders, toasts, a "New List" dialog, a "Today"
+smart view and task notes. See "Where it still differs from tasks-app"
+for what is left, and why each difference is deliberate.
 
 | ![Tasks (nav): a sidebar with smart views and colored lists next to a task list with a filter toggle group.](../../docs/shots/tasks-nav.png) | ![The same window narrower than 500sp, collapsed to the sidebar alone.](../../docs/shots/tasks-nav-collapsed.png) |
 | :------------------------------------------------------------------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------------------------------------: |
@@ -39,11 +41,14 @@ Every one of the three gaps `examples/tasks-app`'s README named, closed on
   Smart views (All Tasks, Important, Trash) carry an Adwaita symbolic icon;
   user lists carry a colored dot instead; every row's count is a live badge
   recomputed from the store on every render.
-- **Dynamic screens**: user lists are genuinely dynamic — pressing the "New
-  List" button (content HeaderBar, top-right) adds a `Sidebar.Screen` the
-  very next render. `createSidebarNavigator` is built on `TabRouter`, and
-  this is the proof it tolerates a changing screen set, not just a fixed
-  tab bar.
+- **Dynamic screens**: user lists are genuinely dynamic — the "New List"
+  dialog (the `+` in the SIDEBAR header) adds a `Sidebar.Screen` the very
+  next render. `createSidebarNavigator` is built on `TabRouter`, and this
+  is the proof it tolerates a changing screen set, not just a fixed tab
+  bar.
+- **A customizable sidebar header**: that `+` sits in the sidebar pane's
+  own `AdwHeaderBar` through `sidebarHeaderLeft` — see "The sidebar
+  header" below for why it used to be somewhere much worse.
 - **Native collapse**: `collapseWidth={500}` — below 500sp the split view
   collapses to one column through a native `Adw.Breakpoint`, not a
   `useWindowDimensions` conditional (see `docs/platform-layer.md`, "Two
@@ -103,49 +108,100 @@ things. Same three conditions as `examples/tasks-app`'s own predicate, and
 they are unit-tested (`tests/unit/selectors.test.ts`) rather than left to a
 screenshot.
 
-## Out of scope
+## Persistence
 
-Still deliberately smaller than `examples/tasks-app` — but only where the
-difference is tasks-app's own subject rather than the navigator's:
+Tasks survive a restart, in `$XDG_DATA_HOME/dev.rngtkx.tasksnav/tasks.json`
+(`src/storage.ts`). Preferences keep going through GSettings — a SETTINGS
+store and a DOCUMENT store are different things, and dconf is not a place
+to put user data.
 
-- No desktop notifications, reminders or toasts.
-- No "New List" dialog with a text field — a new list gets an
-  auto-generated name and the next color in a fixed palette
-  (`src/store.ts`'s `LIST_COLOR_PALETTE`), added immediately. The point
-  being proven is that adding a screen at runtime works, not dialog UX.
-- No "Today" smart view — only All Tasks, Important and Trash, plus user
-  lists. Three smart views is already enough to show icon rows distinct
-  from colored-dot rows, and tasks have due dates now regardless.
-- No task notes, and no created/completed timestamps in the editor.
-- Task storage is in-memory (see `src/store.ts`) — closing the app loses
-  the tasks. PREFERENCES do persist, through GSettings
-  (`data/dev.rngtkx.tasksnav.gschema.xml`): theme and sort order are
-  settings, which is a different thing from the document being edited.
-  `examples/tasks-app` demonstrates file-backed task persistence; that is
-  not what this example is about.
+Three failure modes get deliberate handling, because each one silently
+destroys a user's tasks if left to chance:
 
-## What this could not do
+- **A crash mid-write.** The naive `writeFileSync(file, json)` truncates
+  first and writes second, so a crash between the two leaves a zero-length
+  file and the next launch seeds over the top of it. Every save writes a
+  sibling temp file and `rename(2)`s it over the real one; rename is
+  atomic within a filesystem, so the next launch sees either the complete
+  old file or the complete new one, never a torn one. Deliberately NOT
+  `fsync`ed first: that buys power-loss durability rather than
+  crash-atomicity, and costs a disk flush on every keystroke in the Notes
+  field. Crash-atomicity is the failure this app can actually hit.
+- **No file, or a broken one.** First run, a half-copied file, a
+  hand-edited one: every read path returns null and the app seeds instead
+  of throwing. An app that cannot read its save file must still start.
+- **A schema that moves.** The payload sits in a versioned envelope, and
+  every field is revived individually with a default rather than trusted —
+  so a file written before `notes` and `completedAt` existed still loads.
+  A file from a FUTURE version is refused outright, because half-reading a
+  format written by a newer build is worse than starting fresh.
+
+Only the document is written, and only when it actually changed: typing in
+the search field or opening a dialog are state changes too, and none of
+them should touch the disk.
+
+One consequence worth naming: **ids had to stop being a counter.** A
+counter is only safe while state starts empty every run — once the
+document is restored from disk, a fresh `task-1` on the next launch
+collides with the `task-1` the previous launch saved, and `tasks.find(id)`
+matches whichever came first. That is the same defect #33 found with seed
+data, now reachable with no fixture at all. `crypto.randomUUID()` removes
+the class rather than dodging it, and is what `examples/tasks-app` already
+used.
+
+## Where it still differs from tasks-app
+
+Two rows exist in this app's task editor that tasks-app has no need for,
+and both are consequences of the navigator rather than taste:
+
+- **Done.** tasks-app completes a task with the row's checkbox, which
+  stays on screen because its editor sits in a pane beside the list. Here
+  the editor REPLACES the list inside one screen, so that checkbox is not
+  reachable while a task is open — without the switch there would be no
+  way to complete the task you are looking at.
+- **List.** Smart views mix lists together, and in the list body that is
+  covered by the row subtitle. The editor has no subtitle to borrow.
+
+Everything else — notifications and reminders, toasts, file-backed
+storage, the "New List" dialog, the "Today" smart view, notes and the
+created/completed timestamps — now matches.
+
+## The sidebar header
 
 Everything the PRD's checklist named — row metadata, a dynamically
 changing screen set, native collapse, and a per-selection content
 header — was expressible through `createSidebarNavigator`'s options after
-this epic's work.
+the `navigation-depth-2` epic.
 
-One smaller thing was not, and this app worked around it rather than
-leaving it unmentioned: **the sidebar PANE's own chrome is not
-customizable** — its `AdwToolbarView`'s `AdwHeaderBar` is hard-coded
-(`<AdwHeaderBar />`, no props), so the only thing a navigator consumer can
-set on it at all is `sidebarTitle` (a plain string). This app's "New List"
-action wanted to live there (matching upstream's own tutorial, where the
-sidebar header carries the "add list" button) but had to go on the
-CONTENT header instead, via the navigator-level `headerButtons` prop
-(shows on every screen, which is a reasonable place for a persistent
-global action, just not where this app would have put it first). Recorded
-in `docs/research/navigation-extensibility.md` as an open item; not fixed
-here because it was not on the PRD's checklist and a workaround existed.
-Still true after the `sidebar-open-api` epic's `sidebarRow`/`sidebarContent`
-shipped — both replace the pane's BODY, not its `AdwHeaderBar` (see
-docs/api.md's sidebar section); neither was ever aimed at this gap.
+One smaller thing was not, and this app worked around it: **the sidebar
+PANE's own chrome was not customizable.** Its `AdwToolbarView`'s
+`AdwHeaderBar` was hard-coded (`<AdwHeaderBar />`, no props), so the only
+thing a navigator consumer could set on it at all was `sidebarTitle` (a
+plain string). This app's "New List" action wanted to live there —
+matching upstream's own tutorial, and `examples/tasks-app`'s
+`SidebarHeader`, where the sidebar header carries the "add list" button —
+and had to go on the CONTENT header instead.
+
+That workaround turned out to be worse than "not where we'd have put it".
+The content header already carries **New Task**, also a `+`, so the window
+showed **two identical plus buttons side by side** with nothing to tell
+them apart — one adding a task, one adding a list. A user reported exactly
+that.
+
+Fixed in the navigator rather than worked around again here:
+`sidebarHeaderLeft` / `sidebarHeaderRight` / `sidebarHeaderTitle`
+(navigator props, `() => ReactNode`), mirroring the content header's own
+`headerLeft`/`headerRight`/`headerTitle` instead of inventing a narrower
+shape. Note this is a different axis from the `sidebar-open-api` epic's
+`sidebarRow`/`sidebarContent`: those replace the pane's BODY, and
+neither was ever aimed at its `AdwHeaderBar`.
+
+They take arbitrary content, not a button list — a sidebar header
+is also where a search entry, a menu or a spinner would go, and a
+`HeaderButton[]` convenience could not express any of those. They are
+navigator PROPS rather than screen options because there is one sidebar
+pane shared by every screen, which is the same level `sidebarTitle` and
+`sidebarContent` already sit at. See `docs/api.md`.
 
 ## Verified live
 
@@ -270,6 +326,63 @@ afterwards.
    a real constraint on any app that wants window actions, and one
    `examples/tasks-app` never met because zustand is module-global anyway.
    Worth a line in `docs/api.md` if it bites a third app.
+
+### The second parity pass (storage, reminders, toasts, New List, Today, notes)
+
+Driven in the VM's real GNOME session, keyboard where possible (a shared
+VM with five other agents on it kept stealing pointer focus mid-sequence,
+so anything that could be done with a key was):
+
+- **The two plus buttons**: the sidebar `+` now sits in the sidebar
+  header, next to "Tasks (nav)", with New Task on the content header —
+  the placement the tutorial and `examples/tasks-app` both use.
+- **Persistence, across a real process restart**, not a mocked one:
+  `Ctrl+N` added a task, `Delete` trashed it, then the app was stopped and
+  started again. Trash came back reading **2** where the first launch had
+  read 1, and the save file on disk carried the versioned envelope with no
+  `.tmp` left beside it. The seed fixture was NOT re-applied.
+- **Toasts**: `"New Task" moved to Trash` with an **Undo** button,
+  raised by the **Delete key** — which lives in `AppShortcuts`,
+  mounted as `windowControllers` OUTSIDE the app's tree. That is the case
+  a React context could not have served (see `src/toast.ts`), so it is the
+  one worth showing.
+- **The task editor**: Notes and the Created timestamp render, and
+  `Ctrl+N` opened the task it had just created rather than a seeded one —
+  the id-collision fix from #33 still holding now that ids are random.
+- **The "New List" dialog**: heading, name entry, six color swatches and
+  Cancel/Add. This is where a real bug turned up — see below.
+- **Reminders**: a task patched to fall inside the 30-minute lead window
+  produced a genuine GNOME notification banner — "Tasks (nav) · Just now /
+  Water the plants / Due Aug 1, 2026, 10:32 AM".
+
+**Found live, fixed:** the New List dialog first came up as a bare entry
+and six swatches — **no heading and no Cancel/Add buttons at all**.
+`AdwAlertDialog` composes its own layout (heading, body, responses) into
+`Adw.Dialog:child`, which is what plain JSX children bind to, so passing
+children REPLACES that whole layout. libadwaita's own slot for extra
+content is `extra-child`, exposed by the bindings as `extraChild`. Not a
+platform gap — the right prop already existed — but the failure is silent
+and total. `examples/tasks-app`'s copy of this dialog had the identical
+defect, never having been opened on screen in any verification pass; fixed
+there too.
+
+**Not verified live:** clicking **Add** to actually create a list.
+Another session's app on the shared VM reclaimed pointer focus on every
+attempt, so the keystrokes landed in the wrong window (confirmed by
+reading the save file back — no list was created). The dialog itself is
+screenshotted above, and `addList`'s behaviour, including its rejection of
+an empty name, is unit-tested; the final click is not proven on screen.
+
+**A deployment requirement, found the hard way:** the reminder fired only
+after installing a `~/.local/share/applications/dev.rngtkx.tasksnav.desktop`
+entry. GNOME Shell's `org.gtk.Notifications` implementation silently drops
+notifications from an application id with no matching desktop entry —
+nothing is logged, the call simply has no effect. The first attempt showed
+"No Notifications" in the tray with a clean app journal, which is exactly
+how this looks when it bites. Anything shipping `GNotification` needs a
+desktop entry installed; neither example installs one, so a developer
+running either from source will see reminders do nothing until they add
+it.
 
 ## Attribution
 

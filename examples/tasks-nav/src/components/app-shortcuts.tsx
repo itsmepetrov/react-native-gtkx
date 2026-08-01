@@ -11,7 +11,8 @@
 // documented in the README would quietly stop working.
 import type { ReactElement } from "react"
 import { Gtk, GtkShortcut, GtkShortcutController } from "react-native-gtkx/gtk"
-import { useStore } from "../store"
+import { getStore, useStore } from "../store"
+import { requestDeleteTask } from "./dialogs"
 
 const shortcut = (
   accelerator: string,
@@ -32,8 +33,7 @@ const shortcut = (
 )
 
 export const AppShortcuts = () => {
-  const { selectedTaskId, searchMode, openTask, setSearchMode, moveToTrash } =
-    useStore()
+  const { selectedTaskId, searchMode, openTask, setSearchMode } = useStore()
 
   const escape = (): void => {
     if (selectedTaskId !== null) {
@@ -53,8 +53,17 @@ export const AppShortcuts = () => {
           {shortcut(
             "Delete",
             () => {
-              if (selectedTaskId !== null) {
-                moveToTrash(selectedTaskId)
+              // Through the same helper the row's trash button uses, so the
+              // keyboard path gets the undo toast too. `getStore()` rather
+              // than the destructured state above: this controller is
+              // mounted outside the app's tree, and the task has to be
+              // looked up at press time regardless.
+              const store = getStore()
+              const task = store.tasks.find(
+                (candidate) => candidate.id === store.selectedTaskId,
+              )
+              if (task) {
+                requestDeleteTask(task)
               }
             },
             selectedTaskId !== null,

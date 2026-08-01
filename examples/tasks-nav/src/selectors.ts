@@ -3,6 +3,7 @@
 // particular is the gate on drag-and-drop, and a predicate that decides
 // whether a drag is even possible deserves a test rather than a live
 // screenshot.
+import { isToday } from "./format"
 import type { Filter, Selection, SmartView, SortOrder, Task } from "./types"
 
 /** Route names encode which family a screen belongs to (see src/app.tsx);
@@ -27,7 +28,14 @@ const inSelection = (task: Task, selection: Selection): boolean => {
   if (selection.kind === "list") {
     return task.listId === selection.listId
   }
-  return selection.view === "important" ? task.important : true
+  switch (selection.view) {
+    case "today":
+      return isToday(task.due)
+    case "important":
+      return task.important
+    default:
+      return true
+  }
 }
 
 const matchesFilter = (task: Task, filter: Filter): boolean => {
@@ -86,7 +94,12 @@ export const visibleTasks = (
     .filter(
       (task) =>
         inSelection(task, selection) &&
-        (!needle || task.title.toLowerCase().includes(needle)) &&
+        // Notes are searched alongside the title — a task whose body
+        // mentions the needle is a match even when its title does not,
+        // same as examples/tasks-app.
+        (!needle ||
+          task.title.toLowerCase().includes(needle) ||
+          task.notes.toLowerCase().includes(needle)) &&
         // Trash has no All/Open/Done toggle group in its header, so the
         // filter left over from another view must not silently apply here.
         (isTrashSelection(selection) || matchesFilter(task, filter)),
@@ -125,6 +138,13 @@ export const emptyState = (selection: Selection, query: string): EmptyState => {
       icon: "user-trash-symbolic",
       title: "Trash Is Empty",
       description: "Deleted tasks show up here.",
+    }
+  }
+  if (selection.kind === "smart" && selection.view === "today") {
+    return {
+      icon: "x-office-calendar-symbolic",
+      title: "Nothing Due Today",
+      description: "Tasks due today show up here.",
     }
   }
   if (selection.kind === "smart" && selection.view === "important") {

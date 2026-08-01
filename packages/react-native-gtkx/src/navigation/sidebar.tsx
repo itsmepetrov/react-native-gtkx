@@ -250,6 +250,36 @@ type SidebarNavigatorProps = {
   screenOptions?: SidebarNavigationOptions
   /** Title of the sidebar pane's AdwHeaderBar. */
   sidebarTitle?: string
+  /**
+   * Content packed at the START of the SIDEBAR pane's AdwHeaderBar — the
+   * "new item" action a GNOME sidebar puts next to its title, a search
+   * toggle, anything the pane's chrome needs.
+   *
+   * The content header's `headerLeft`/`headerRight`/`headerTitle` are
+   * screen OPTIONS because that header changes with the focused screen.
+   * The sidebar's does not: one pane, shared by every screen, so its
+   * chrome belongs to the navigator — the same level `sidebarTitle` and
+   * `sidebarContent` already sit at. Hence the `sidebar` prefix on
+   * otherwise identical names.
+   *
+   * Mounted through the same `HeaderSlotContent` root the content header
+   * uses, so a slot of React Native content lays out as a horizontal,
+   * content-hugging cluster flush with natively packed buttons.
+   */
+  sidebarHeaderLeft?: () => ReactNode
+  /** Content packed at the END of the sidebar AdwHeaderBar — a primary
+   *  menu, say. Same contract as {@link sidebarHeaderLeft}. */
+  sidebarHeaderRight?: () => ReactNode
+  /**
+   * Replaces the sidebar AdwHeaderBar's title WIDGET — a search entry, a
+   * switcher, anything the plain `sidebarTitle` string cannot express.
+   *
+   * `sidebarTitle` sets the pane's `AdwNavigationPage` title, which the
+   * HeaderBar renders by default; this overrides what is drawn there,
+   * exactly as a screen's `headerTitle` overrides its page `title`. Left
+   * unset, `sidebarTitle` shows as before.
+   */
+  sidebarHeaderTitle?: () => ReactNode
   /** Buttons packed at the end of the content AdwHeaderBar. */
   headerButtons?: HeaderButton[]
   /**
@@ -317,6 +347,9 @@ const SidebarNavigator = ({
   initialRouteName,
   screenOptions,
   sidebarTitle = "Sidebar",
+  sidebarHeaderLeft,
+  sidebarHeaderRight,
+  sidebarHeaderTitle,
   headerButtons,
   collapseWidth,
   minWidth = DEFAULT_MIN_WIDTH,
@@ -518,7 +551,40 @@ const SidebarNavigator = ({
           title={sidebarTitle}
           tag="sidebar"
         >
-          <AdwToolbarView topBar={<AdwHeaderBar />}>
+          <AdwToolbarView
+            topBar={
+              // The sidebar pane's own chrome, mounted exactly the way the
+              // content HeaderBar below mounts its slots. It used to be a
+              // bare `<AdwHeaderBar />` with nothing an app could reach:
+              // `examples/tasks-nav` wanted its "New List" button here
+              // (where GNOME — and the gtkx tutorial this app family is
+              // modelled on — puts a sidebar's add action) and had to move
+              // it onto the CONTENT header instead, next to that header's
+              // own "New Task" +, leaving the user with two identical plus
+              // buttons and no way to tell them apart.
+              <AdwHeaderBar
+                titleWidget={
+                  sidebarHeaderTitle ? (
+                    <HeaderSlotContent>
+                      {sidebarHeaderTitle()}
+                    </HeaderSlotContent>
+                  ) : undefined
+                }
+                start={
+                  sidebarHeaderLeft ? (
+                    <HeaderSlotContent>{sidebarHeaderLeft()}</HeaderSlotContent>
+                  ) : undefined
+                }
+                end={
+                  sidebarHeaderRight ? (
+                    <HeaderSlotContent>
+                      {sidebarHeaderRight()}
+                    </HeaderSlotContent>
+                  ) : undefined
+                }
+              />
+            }
+          >
             {sidebarContent ? (
               // The whole pane is the app's, mounted the way a page body
               // is: a layout root that FILLS the pane, so React Native

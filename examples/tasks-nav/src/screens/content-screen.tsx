@@ -45,6 +45,7 @@ import type {
   SidebarNavigationOptions,
   SidebarScreenProps,
 } from "react-native-gtkx/navigation"
+import { requestDeleteTask } from "../components/dialogs"
 import { MainMenu } from "../components/main-menu"
 import { TaskDetail } from "../components/task-detail"
 import { TaskRow } from "../components/task-row"
@@ -79,7 +80,6 @@ export const ContentScreen = ({ route, navigation }: SidebarScreenProps) => {
     addTask,
     openTask,
     toggleImportant,
-    moveToTrash,
     setSearchMode,
     setSearchQuery,
     setActiveRoute,
@@ -171,7 +171,7 @@ export const ContentScreen = ({ route, navigation }: SidebarScreenProps) => {
             <GtkButton
               iconName="user-trash-symbolic"
               tooltipText="Delete (Delete)"
-              onClicked={() => moveToTrash(openedTask.id)}
+              onClicked={() => requestDeleteTask(openedTask)}
             />
             <MainMenu />
           </>
@@ -249,7 +249,6 @@ export const ContentScreen = ({ route, navigation }: SidebarScreenProps) => {
     openTask,
     setSearchMode,
     toggleImportant,
-    moveToTrash,
   ])
 
   if (openedTask) {

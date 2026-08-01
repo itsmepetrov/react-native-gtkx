@@ -33,6 +33,7 @@ import {
 import { escapeMarkup, formatDue } from "../format"
 import { useStore } from "../store"
 import type { Task, TaskList } from "../types"
+import { requestDeleteTask } from "./dialogs"
 
 /** Due date first, then the list name when the current view mixes lists —
  *  AdwActionRow has exactly one subtitle line, so the two share it. */
@@ -56,15 +57,7 @@ export const TaskRow = ({
   reorderable: boolean
   showListName: boolean
 }) => {
-  const {
-    toggleDone,
-    toggleImportant,
-    moveToTrash,
-    restore,
-    reorder,
-    openTask,
-    askDeleteTask,
-  } = useStore()
+  const { toggleDone, toggleImportant, restore, reorder, openTask } = useStore()
 
   const title = task.done
     ? `<s>${escapeMarkup(task.title)}</s>`
@@ -103,7 +96,10 @@ export const TaskRow = ({
               tooltipText="Delete Permanently"
               accessibleLabel="Delete permanently"
               cssClasses={["flat"]}
-              onClicked={() => askDeleteTask(task.id)}
+              // Already in Trash, so this is the irreversible one and gets
+              // a confirmation rather than an undo toast — the asymmetry
+              // `requestDeleteTask` exists to keep in one place.
+              onClicked={() => requestDeleteTask(task)}
             />
           </>
         ) : (
@@ -123,7 +119,8 @@ export const TaskRow = ({
               iconName="user-trash-symbolic"
               accessibleLabel="Delete task"
               cssClasses={["flat"]}
-              onClicked={() => moveToTrash(task.id)}
+              // Reversible, so this raises an "Undo" toast instead.
+              onClicked={() => requestDeleteTask(task)}
             />
           </>
         )

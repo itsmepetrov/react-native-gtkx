@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Preferences only. Tasks themselves stay in memory (see README) — this is
-  the app's SETTINGS store, which is a different thing from its document
-  store, and GSettings is what a GNOME app uses for it.
+  Preferences only. The tasks themselves are a DOCUMENT and live in a JSON
+  file (src/storage.ts) — dconf is not a place to put user data. This is the
+  app's SETTINGS store, which is what GSettings is for.
 -->
 <schemalist>
   <enum id="dev.rngtkx.tasksnav.SortOrder">
@@ -26,6 +26,12 @@
       <default>'default'</default>
       <summary>Color scheme</summary>
       <description>Follow the system theme or force light or dark</description>
+    </key>
+    <key name="reminder-minutes" type="i">
+      <range min="0" max="1440"/>
+      <default>30</default>
+      <summary>Reminder lead time</summary>
+      <description>Minutes before a due time to show a reminder notification</description>
     </key>
   </schema>
 </schemalist>

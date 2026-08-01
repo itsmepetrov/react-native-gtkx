@@ -125,12 +125,70 @@ describe("tasks", () => {
     expect(task?.important).toBe(true)
   })
 
+  it("stamps a completion time on done, and clears it on reopening", () => {
+    // The editor shows a "Completed" row off this field, so a stale value
+    // would outlive the state it describes.
+    const done = run([{ type: "toggleDone", id: "seed-1" }])
+    expect(
+      done.tasks.find((task) => task.id === "seed-1")?.completedAt,
+    ).toEqual(expect.any(String))
+    const reopened = run([{ type: "toggleDone", id: "seed-1" }], done)
+    expect(
+      reopened.tasks.find((task) => task.id === "seed-1")?.completedAt,
+    ).toBeNull()
+  })
+
+  it("edits notes", () => {
+    const state = run([
+      { type: "setNotes", id: "seed-2", notes: "renew before the trip" },
+    ])
+    expect(state.tasks.find((task) => task.id === "seed-2")?.notes).toBe(
+      "renew before the trip",
+    )
+  })
+
   it("sets and clears a due date", () => {
     const iso = new Date(2026, 5, 1, 18, 0, 0).toISOString()
     const set = run([{ type: "setDue", id: "seed-3", due: iso }])
     expect(set.tasks.find((task) => task.id === "seed-3")?.due).toBe(iso)
     const cleared = run([{ type: "setDue", id: "seed-3", due: null }], set)
     expect(cleared.tasks.find((task) => task.id === "seed-3")?.due).toBeNull()
+  })
+})
+
+describe("restoring a saved document", () => {
+  it("uses the saved lists and tasks instead of the seed fixture", () => {
+    const persisted = {
+      lists: [{ id: "list-x", name: "Restored", color: "#2ec27e" }],
+      tasks: [
+        {
+          id: "task-x",
+          title: "From disk",
+          listId: "list-x",
+          notes: "",
+          done: false,
+          important: false,
+          deleted: false,
+          due: null,
+          position: 0,
+          createdAt: "2026-07-01T09:00:00.000Z",
+          completedAt: null,
+        },
+      ],
+    }
+    const state = createInitialState(persisted)
+    expect(state.lists).toEqual(persisted.lists)
+    expect(ids(state)).toEqual(["task-x"])
+  })
+
+  it("never restores UI state, only the document", () => {
+    // A window that reopened mid-search, or with a dialog up, would be a
+    // bug — those are not part of the document.
+    const state = createInitialState({ lists: [], tasks: [] })
+    expect(state.searchMode).toBe(false)
+    expect(state.searchQuery).toBe("")
+    expect(state.selectedTaskId).toBeNull()
+    expect(state.dialog).toBe("none")
   })
 })
 
