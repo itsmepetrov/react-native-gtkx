@@ -12,6 +12,8 @@
 // - line-height: supported since GTK 4.6 (we target 4.20+);
 // - text-align does NOT exist in GTK CSS — textAlign is applied by the Text
 //   component via widget properties (justify/xalign), so it is skipped here;
+// - text-decoration does not exist for GTK widgets either: Pango carries it,
+//   and the Text component applies textDecorationLine as label attributes;
 // - transform does NOT exist as a widget property in GTK4 CSS either: it is
 //   composed into a matrix by ./transform.ts and applied as the GskTransform
 //   of the child's allocation, so it is skipped here as well.
@@ -209,7 +211,8 @@ export const visualStyleToCss = (visual: VisualStyle): string => {
     decls.push(`line-height: ${px(visual.lineHeight)};`)
   }
 
-  // visual.textAlign, visual.transform: intentionally not CSS (see header).
+  // visual.textAlign, visual.textDecorationLine, visual.transform:
+  // intentionally not CSS (see header).
 
   return decls.join("\n")
 }

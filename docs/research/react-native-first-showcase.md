@@ -170,8 +170,46 @@ These are the ones where reaching for `StyleSheet` would be forcing it.
 | **Keyboard navigation between rows** (Up/Down moving a cursor through the list) | `GtkListBox` implements this as a widget behaviour. RN's `View` is not focusable and RN has no focus-traversal model on the desktop at all. | `react-native-gtkx/common` |
 | **Focus state** | The *ring* is now drawable (above), but nothing tells a `View` it is focused: `Pressable`'s state callback is `{pressed, hovered}` with no `focused`, and there is no `onFocus`/`onBlur` outside `TextInput`. | `react-native-gtkx/common` — a row component that owns focus and hands the style layer an `outline*` |
 | **`AdwEntryRow`'s inline editing** (the "Add a task…" row: a label that floats up into a title when the field has text, with an apply affordance) | This is a composed widget with its own state machine, not a look. RN has `TextInput` and a placeholder, which is a different interaction. | `react-native-gtkx/common`, or accept the difference |
-| **Named theme icons** (`starred-symbolic`, `user-trash-symbolic`) | RN's `Image` takes a file path or a URI. An icon *name* resolved against the desktop icon theme has no RN equivalent — RN apps bundle assets or use `react-native-vector-icons`. | `react-native-gtkx/common`, an `Icon`-shaped component (this is the shape every RN app already uses) |
-| Strikethrough on a completed task | `textDecorationLine` is outside the contract, and GTK draws it through Pango attributes rather than CSS. Out of scope here; noted so it is not mistaken for the list gaps. | — |
+| **Named theme icons** (`starred-symbolic`, `user-trash-symbolic`) | RN's `Image` takes a file path or a URI. An icon *name* resolved against the desktop icon theme has no RN equivalent — RN apps bundle assets or use `react-native-vector-icons`. | `react-native-gtkx/common` — **now `Icon`**, the shape every RN app already uses |
+| Strikethrough on a completed task | Found here, closed as a style after all: `textDecorationLine` is an RN prop we did not have, and GTK draws it through **Pango attributes** rather than CSS — the same path `textAlign` already takes. Added alongside the two above. | the style/component layer |
+
+## What shipped, and what is left
+
+The list chrome now lives in `react-native-gtkx/common` as `List`, `ListRow`,
+`ListSeparator` and `rowPosition`, with `Icon` for named theme icons. Nothing
+in them creates a widget an app could not have created itself — they are
+`View`, `Pressable` and `Text` with the numbers above baked in — which is the
+point: an app should not have to re-derive libadwaita's metrics, and it should
+not have to re-derive them again when libadwaita moves.
+
+`examples/adwaita-primitives` uses them, and its article list (which was a
+hand-styled `Pressable` with a hover tint, and did not look like GNOME) is now
+the real thing:
+
+![](../shots/rn-first/common-list.png)
+
+**Two things are deliberately not done yet, and both are worth naming.**
+
+1. **Keyboard navigation and the focus ring on `ListRow`.** The ring is now
+   drawable, but nothing tells a `View` it is focused. Closing this means
+   giving the row real focus — which is a platform decision about whether
+   `Pressable` grows a `focused` state (RN has none) or whether `common` owns
+   a focusable row of its own.
+
+2. **`examples/tasks-nav`'s own rewrite**, which is what all of this was for.
+   It is blocked on one specific thing rather than on effort: the task rows
+   carry **drag-and-drop reorder**, attached as `GtkDragSource`/`GtkDropTarget`
+   controllers on the `AdwActionRow`. A `Pressable` exposes no widget — its
+   `ref` is RN's `ViewHandle` (measure methods), correctly, because that is
+   RN's contract — so there is currently no way to attach a GTK controller to
+   a row written in React Native. Rewriting the rows without solving that
+   would silently drop a feature two earlier PRs added, which is worse than
+   leaving the example as it is for one more slice.
+
+   The shape of the answer is a `common`-level escape hatch (`ListRow` taking
+   `controllers`, the way every gtkx widget element already does), or
+   `common` owning drag-reorder outright. That is a design call about where
+   the GTK boundary sits, not a bug, and it should be made deliberately.
 
 ## What this says about the showcase
 

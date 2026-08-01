@@ -56,6 +56,8 @@ const LAYOUT_KEYS: Record<keyof LayoutStyle, true> = {
   width: true,
 }
 
+// Note: `textDecorationLine` and `textAlign` are visual by contract but never
+// reach CSS — Pango carries both, and the Text component applies them.
 // Note: `transform` is visual by contract — it is applied as the
 // GskTransform of the child's allocation, not through CSS, and is passed
 // through here untouched.
@@ -91,6 +93,7 @@ const VISUAL_KEYS: Record<keyof VisualStyle, true> = {
   outlineStyle: true,
   outlineWidth: true,
   textAlign: true,
+  textDecorationLine: true,
   transform: true,
 }
 

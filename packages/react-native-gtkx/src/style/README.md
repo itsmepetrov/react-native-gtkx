@@ -42,6 +42,7 @@ All `LayoutStyle` keys from `contracts.ts` are classified into `layout` unchange
 | `letterSpacing`                                                                                       | supported | `letter-spacing` in px                                                                                                                                                                                                                                                                                                                              |
 | `lineHeight`                                                                                          | partial   | `line-height` in px (GTK ≥ 4.6); the RN "line height in pt" semantics matches, RN multipliers are not supported                                                                                                                                                                                                                                     |
 | `textAlign`                                                                                           | partial   | applied by the `Text` component, not CSS (GTK4 CSS has no `text-align`): the pure helper `textAlignToLabelProps` from `style/text-align.ts` yields `{ xalign, justification }` for GtkLabel                                                                                                                                                         |
+| `textDecorationLine`                                                                                  | partial   | applied by the `Text` component, not CSS (GTK4 has no widget `text-decoration`): Pango carries it, so the pure helper `textDecorationToAttrs` from `style/text-decoration.ts` says which of `underline` / `strikethrough` to put in the label's attribute list. The attributes go on the measuring probe too — Pango reserves room below the baseline for an underline |
 | `transform`                                                                                           | partial   | classified into `visual.transform` as-is, never reaches CSS (GTK4 has no widget `transform` property): `style/transform.ts` folds the array into one matrix and the container's layout manager hands it to `gtk_widget_allocate`. `translateX/Y`, `scale`, `scaleX`, `scaleY`, `rotate`/`rotateZ` only — no 3D, skew, `matrix` or `transformOrigin` |
 
 ## Colors
@@ -59,5 +60,5 @@ All `LayoutStyle` keys from `contracts.ts` are classified into `layout` unchange
 ## Ignored (outside the frozen contract)
 
 Any key not present in `LayoutStyle`/`VisualStyle` (`elevation`, `zIndex`, `filter`,
-`mixBlendMode`, `textDecorationLine`, `textTransform`, `tintColor`, …) — `console.warn` once per key,
+`mixBlendMode`, `textTransform`, `tintColor`, …) — `console.warn` once per key,
 the value is dropped. Extending the set is done only by changing `contracts.ts` via the orchestrator.

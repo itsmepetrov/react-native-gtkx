@@ -118,6 +118,42 @@ a Yoga leaf at its natural size until the style says otherwise); the wrapper
 inside each content area is the CONTENT's size inside the rectangle that
 widget then hands out.
 
+### Adwaita chrome, written in React Native
+
+The opposite direction from everything above: these create no widget an app
+could not have created itself, because what they encode is a **look**, not a
+behaviour. `docs/research/react-native-first-showcase.md` measured Adwaita's
+`.boxed-list` out of libadwaita's own compiled stylesheet and found it is a
+rounded, shadowed card whose rows carry a hairline separator, a hover tint
+and a press tint — every one of which is a React Native style prop. What an
+app should not have to do is rediscover the numbers, which are not obvious
+(the frame is a three-part `box-shadow`, not a border; the corner radii live
+on the first and last ROW, not on the container) and which move when
+libadwaita moves.
+
+| Export          | What it is                                                                       |
+| --------------- | -------------------------------------------------------------------------------- |
+| `List`          | the `.boxed-list` frame — a `View` with the card background, radius and shadow    |
+| `ListRow`       | `AdwActionRow`'s layout and states (`title`/`subtitle`/`prefix`/`suffix`), on a `Pressable` |
+| `ListSeparator` | the hairline, for a `FlatList`'s `ItemSeparatorComponent`                         |
+| `rowPosition`   | `(index, count)` → `"first" | "middle" | "last" | "only"`, since RN has no `:first-child` |
+| `Icon`          | a **named** icon from the desktop icon theme                                     |
+
+`Icon` is not `Image`: RN's `Image` takes a file path or URI, because on iOS
+and Android an icon is a bundled asset. Here it is a *name* resolved against
+the current icon theme at paint time, which recolours itself with the label
+colour and follows the user's theme — nothing in `Image`'s contract can
+express that. The shape is the one RN apps already use
+(`<Icon name size />`), with the desktop icon theme behind it instead of a
+bundled font.
+
+`ListRow` does **not** yet do keyboard navigation between rows or draw a
+focus ring. `GtkListBox` implements both as widget behaviour, and RN has no
+focus model for `View` to hang them on — `Pressable`'s state callback is
+`{pressed, hovered}` with no `focused`. The ring itself is drawable
+(`outlineWidth`/`outlineColor`/`outlineStyle`/`outlineOffset`, see the style
+table); what is missing is the state, not the paint.
+
 ### GTK widgets, driven by React Native
 
 Every `GtkWidget` subclass gtkx binds — 86 of them at last count, from

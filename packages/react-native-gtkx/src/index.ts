@@ -103,6 +103,7 @@ export type {
   LayoutStyle,
   PointerEventsValue,
   StyleProp,
+  TextDecorationLine,
   TransformPart,
   VisualStyle,
 } from "./contracts"

@@ -5,7 +5,7 @@ import {
   useState,
   type ReactNode,
 } from "react"
-import { textAlignToLabelProps } from "../style/index"
+import { textAlignToLabelProps, textDecorationToAttrs } from "../style/index"
 import type { MeasureFn, StyleProp } from "../contracts"
 import {
   createTextProbe,
@@ -138,6 +138,31 @@ export const Text = ({
   }, [probe, node, text, numberOfLines, cssClass])
 
   const align = textAlignToLabelProps(flat.textAlign)
+
+  // textDecorationLine goes through Pango, not CSS: GTK4 has no widget
+  // `text-decoration`. Built here rather than in the style module so that
+  // module stays bridge-free and unit-testable off Linux — the same split
+  // textAlign already uses.
+  //
+  // The attribute list is applied to the PROBE as well, because it is what
+  // Yoga measures: Pango reserves room for an underline below the baseline,
+  // so a decorated label measured undecorated would be a pixel short.
+  const decoration = textDecorationToAttrs(flat.textDecorationLine)
+  const decorated = decoration.underline || decoration.strikethrough
+  useLayoutEffect(() => {
+    const attrs = decorated ? Pango.AttrList.new() : null
+    if (attrs) {
+      if (decoration.underline) {
+        attrs.insert(Pango.attrUnderlineNew(Pango.Underline.SINGLE))
+      }
+      if (decoration.strikethrough) {
+        attrs.insert(Pango.attrStrikethroughNew(true))
+      }
+    }
+    widgetRef.current?.setAttributes(attrs)
+    probe.setAttributes(attrs)
+    node.markDirty()
+  }, [probe, node, decorated, decoration.underline, decoration.strikethrough])
 
   return (
     <GtkLabel
