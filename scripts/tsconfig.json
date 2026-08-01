@@ -14,6 +14,14 @@
   // - verbatimModuleSyntax: forces `import type` to be written explicitly,
   //   so a type-only import can't be silently stripped into a dangling
   //   runtime import of a name that was never a value.
+  //
+  // rootDir reaches one directory outside `scripts/` on purpose:
+  // `shot-example-drag.ts` drives a real Wayland pointer, and the
+  // implementation of that is `tests/gtk/support/virtual-pointer.ts` — a
+  // hand-rolled wire client the GTK tests already depend on. Copying it here
+  // would be two implementations of one protocol; importing it is one. The
+  // `include` below still names only this directory, so nothing else in the
+  // package is dragged into the project.
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "module": "nodenext",
@@ -22,7 +30,7 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "noEmit": true,
-    "rootDir": "."
+    "rootDir": ".."
   },
   "include": ["**/*.ts"]
 }

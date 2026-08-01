@@ -41,13 +41,27 @@ export {
 
 export { Icon, type IconProps } from "./icon"
 
-export {
-  List,
-  ListRow,
-  ListSeparator,
-  rowPosition,
-  type ListProps,
-  type ListReorderHandler,
-  type ListRowPosition,
-  type ListRowProps,
-} from "./list"
+// REMOVED: `List`, `ListRow`, `ListSeparator`, `rowPosition`.
+//
+// They were Adwaita's boxed list re-implemented in React Native, and the
+// argument for shipping them was that a screen shared with iOS and Android
+// could not import `react-native-gtkx/adw`. That argument does not hold —
+// **this subpath does not resolve on iOS or Android either.** Either import
+// needs a `.linux.tsx` split or a `Platform` check, so `List` bought a
+// consumer nothing over `AdwActionRow`, while costing a hand-maintained copy
+// of libadwaita's metrics that drifts with every release of it. And
+// `AdwActionRow` is better where it works: real keynav, focus and
+// accessibility, with the metrics coming from the system theme instead of
+// numbers baked into our source. They had exactly one consumer.
+//
+// Want a native list → `react-native-gtkx/adw`. Want that LOOK written in
+// React Native → `examples/tasks-nav/src/components/list.tsx`, which is the
+// same file, to copy.
+//
+// What stays public is the part of #47 that mattered: `boxShadow`,
+// `outline*` and `textDecorationLine` in the style layer, which are what
+// made an Adwaita-looking list expressible in `StyleSheet` at all.
+//
+// Reorder went with them, and separately: `onReorder`/`reorderId` was a
+// second, id-keyed entry point into the same module `Draggable` and
+// `Sortable` come from. One way to drag now — `react-native-gtkx/dnd`.

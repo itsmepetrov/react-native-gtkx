@@ -60,8 +60,6 @@ type SortableContextValue = {
 
 const SortableContext = createContext<SortableContextValue | null>(null)
 
-const stretchRows = { alignItems: "stretch" } as const
-
 const keyOf = <TData extends SortableData>(
   item: TData,
   index: number,
@@ -313,14 +311,15 @@ export const Sortable = <TData extends SortableData>({
     <SortableContext.Provider value={contextValue}>
       <ScrollView
         style={style}
-        // Rows are full width unless the app says otherwise. Upstream gets
-        // this for free — its rows are `position: absolute; left: 0; right: 0`
-        // — and this platform's ScrollView content container is
-        // `alignItems: "flex-start"`, so without the override a row shrinks to
-        // its intrinsic width and any `flex: 1` inside it collapses to zero.
-        // Found by pointing the gallery at a real window; see
-        // docs/research/drag-and-drop.md.
-        contentContainerStyle={[stretchRows, contentContainerStyle]}
+        // No `alignItems: "stretch"` override here any more. It used to be
+        // needed because this platform's ScrollView content container
+        // defaulted to `flex-start`, which shrank every row to its intrinsic
+        // width and collapsed the `flex: 1` text column inside it. That
+        // default was a parity bug — RN's content container is a plain
+        // `View`, whose default is `stretch` — and it is fixed at the source
+        // now (components/scroll-view.tsx), so a `Sortable` gets full-width
+        // rows the same way any other RN list does.
+        contentContainerStyle={contentContainerStyle}
         testID={testID}
       >
         {items.map((item, index) =>

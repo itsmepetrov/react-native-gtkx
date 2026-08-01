@@ -90,6 +90,7 @@ export {
   type DimensionKey,
   type DimensionsPayload,
   type InteractionPromise,
+  type PlatformOSType,
   type PlatformSelectSpec,
   type ScaledSize,
 } from "./apis/index"
@@ -100,11 +101,14 @@ export type {
   BoxShadowValue,
   DimensionValue,
   FlatStyle,
+  ImageStyle,
   LayoutStyle,
   PointerEventsValue,
   StyleProp,
   TextDecorationLine,
+  TextStyle,
   TransformPart,
+  ViewStyle,
   VisualStyle,
 } from "./contracts"
 

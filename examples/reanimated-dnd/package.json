@@ -1,0 +1,20 @@
+{
+  "name": "reanimated-dnd-example",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "gtkx dev",
+    "build": "gtkx build",
+    "start": "node dist/bundle.js"
+  },
+  "dependencies": {
+    "@react-navigation/native": "8.0.0-alpha.40",
+    "react": "^19.2.0",
+    "react-native-gtkx": "0.2.0-alpha.2"
+  },
+  "devDependencies": {
+    "@gtkx/cli": "1.0.0-rc.3",
+    "@gtkx/config": "1.0.0-rc.3"
+  }
+}

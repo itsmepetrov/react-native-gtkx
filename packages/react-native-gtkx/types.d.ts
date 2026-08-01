@@ -48,8 +48,17 @@ declare module "react-native" {
   // OPTIONAL on purpose: an app sharing one component with ios/android
   // gets `undefined` there, and the type should say so — write
   // `hovered && styles.hovered`, which is correct on every platform.
+  //
+  // `focused` is here for the same reason and was missing: this platform
+  // reports it (GTK owns keyboard focus, and an activatable row draws
+  // Adwaita's focus ring from it — see docs/api.md), the stock type does
+  // not carry it, and an app that renders a focus ring in shared code had
+  // no way to name it. Found by moving `examples/tasks-nav`'s boxed list
+  // out of the platform package and into the app, where it stopped being
+  // typed by this package and started being typed by the stock types.
   interface PressableStateCallbackType {
     hovered?: boolean
+    focused?: boolean
   }
 }
 

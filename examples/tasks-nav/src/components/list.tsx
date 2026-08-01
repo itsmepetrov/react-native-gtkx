@@ -1,39 +1,49 @@
-// Adwaita's boxed list, for code written in React Native.
+// Adwaita's boxed list, written in React Native — an APP component.
 //
-// WHY this is here rather than in an app. `.boxed-list` is the single most
-// recognisable piece of GNOME chrome, and docs/research/react-native-first-showcase.md
-// measured what it actually is: a rounded, shadowed card whose rows carry
-// hairline separators, a hover tint and a press tint. Every one of those is a
-// style — there is no widget BEHAVIOUR in the look at all. So an app can build
-// it from `View` and `Pressable`, and `examples/tasks-nav` proves it.
+// This used to be `List`/`ListRow`/`ListSeparator` in
+// `react-native-gtkx/common`, and the argument for it being platform surface
+// was that a screen shared with iOS and Android could not import
+// `react-native-gtkx/adw`. That argument is wrong, and the reason is worth
+// keeping here rather than in a changelog: **`react-native-gtkx/common` does
+// not resolve on iOS or Android either.** Either import needs a
+// `.linux.tsx` split or a `Platform` check, so this bought a consumer
+// nothing over reaching for `AdwActionRow` directly — while costing a
+// hand-maintained copy of Adwaita's own metrics that drifts every time
+// libadwaita moves. It had exactly one consumer: this app.
 //
-// What an app should not have to do is rediscover the numbers. They come from
-// libadwaita's own compiled stylesheet, they are not obvious (the frame is a
-// three-part `box-shadow`, not a border; the first and last rows carry the
-// corner radii, not the container), and they move when libadwaita moves. That
-// is a platform's job, which is what this subpath is.
+// So the rule is now the simple one:
 //
-// Everything below is portable React Native underneath — no widget is created
-// that an app could not have created itself. Compare `Widget`/`SlotContent`
-// next door, which exist precisely because they CANNOT be written in RN.
+//   want a native list  → `AdwActionRow` etc. from `react-native-gtkx/adw`,
+//                         which brings GTK's real keynav, focus and
+//                         accessibility and takes its metrics from the
+//                         system theme;
+//   want THIS look in    → copy this file. It is 200 lines of `View`,
+//   React Native            `Pressable`, `Text` and `StyleSheet`, and that
+//                           is the whole point of it.
+//
+// What survives from the change that introduced it (#47) is the part that
+// mattered and is still platform surface: `boxShadow`, `outline*` and
+// `textDecorationLine` in the style layer. Those are what make an
+// Adwaita-looking list expressible in `StyleSheet` at all. The components
+// built on top of them are an app's business.
+//
+// Reordering is NOT here any more either. It used to be `List`'s
+// `onReorder` plus `ListRow`'s `reorderId` — a second, id-keyed entry point
+// into the same drag-and-drop module `Draggable`/`Sortable` come from, and
+// two ways to do one thing. `screens/content-screen.tsx` now uses
+// `react-native-gtkx/dnd` directly, which is the API an RN developer
+// already knows.
+import { type ReactNode } from "react"
 import {
-  createContext,
-  useContext,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react"
-import { useColorScheme } from "../apis/index"
-import { Pressable } from "../components/pressable"
-import { Text } from "../components/text"
-import { View } from "../components/view"
-import { PlatformColor, StyleSheet } from "../style/index"
-import type { StyleProp } from "../contracts"
-import {
-  DragSourceControllers,
-  DropTargetControllers,
-} from "../dnd/gtk-controllers"
-import { nextDraggableId } from "../dnd/payload"
+  PlatformColor,
+  Pressable,
+  StyleSheet,
+  Text,
+  useColorScheme,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native"
 
 /**
  * Where a row sits in its list, which is what decides its corner radii and
@@ -118,8 +128,7 @@ const styles = StyleSheet.create({
   // The theme font is `Adwaita Sans 11`, i.e. 11pt = 14.67px, and Adwaita sets
   // the subtitle to `font-size: smaller` — Pango's one-step-down, 1/1.2. RN's
   // fontSize is numeric only (there is no `smaller`, no em, no inherited
-  // percentage), so the computed value is what an app can write. Documented
-  // in docs/api.md rather than hidden here.
+  // percentage), so the computed value is what an app can write.
   title: { fontSize: 14.7 },
   // `row label.subtitle { opacity: var(--dim-opacity) }`, 55% in the light
   // Adwaita palette.
@@ -143,79 +152,24 @@ const TINTS = {
   },
 } as const
 
-/**
- * Where a row reports a completed drag, plus the scope that keeps one list's
- * rows from being dropped into another's. Carried through context so an app
- * writes the handler once on the `List` and an id per `ListRow`, instead of
- * threading a callback through whatever component renders its rows.
- */
-const ReorderContext = createContext<{
-  onReorder: ListReorderHandler
-  scope: string
-} | null>(null)
-
-export type ListReorderHandler = (draggedId: string, targetId: string) => void
-
 export type ListProps = {
   children?: ReactNode
-  /**
-   * Enables drag-to-reorder for every {@link ListRow} that carries a
-   * `reorderId`. Called with the id of the row being dragged and the id of
-   * the row it was dropped on; the dragged row belongs in front of that one.
-   *
-   * Ids, not indices, on purpose: the rows are React children, so a `List`
-   * cannot see their order, and an app that reorders by id never has to
-   * reconcile an index against a list that filtering or sorting has already
-   * changed underneath it.
-   */
-  onReorder?: ListReorderHandler
-  style?: StyleProp
+  style?: StyleProp<ViewStyle>
   testID?: string
 }
 
 /**
  * The `.boxed-list` frame: a rounded, shadowed card. Put `ListRow`s in it
  * directly, or a `FlatList` whose `renderItem` returns them.
- *
- * ```tsx
- * <List>
- *   {tasks.map((task, index) => (
- *     <ListRow
- *       key={task.id}
- *       title={task.title}
- *       position={rowPosition(index, tasks.length)}
- *       onPress={() => open(task)}
- *     />
- *   ))}
- * </List>
- * ```
  */
-export const List = ({
-  children,
-  onReorder,
-  style,
-  testID,
-}: ListProps): ReactNode => {
-  // One scope per List, so a row dragged out of this list is refused by every
-  // other list and by every `Droppable` — the same namespacing `Sortable`
-  // uses, from the same module.
-  const [scope] = useState(() => `list-${nextDraggableId()}`)
-  const reorder = useMemo(
-    () => (onReorder ? { onReorder, scope } : null),
-    [onReorder, scope],
-  )
-
-  return (
-    <ReorderContext.Provider value={reorder}>
-      <View
-        testID={testID}
-        style={[styles.list, style]}
-      >
-        {children}
-      </View>
-    </ReorderContext.Provider>
-  )
-}
+export const List = ({ children, style, testID }: ListProps): ReactNode => (
+  <View
+    testID={testID}
+    style={[styles.list, style]}
+  >
+    {children}
+  </View>
+)
 
 export type ListRowProps = {
   /** Primary line. A string renders with the row's own typography; a node is
@@ -239,17 +193,10 @@ export type ListRowProps = {
    *  the last — set it false when the list supplies its own separators (a
    *  `FlatList`'s `ItemSeparatorComponent`, say). */
   separator?: boolean
-  /**
-   * Identifies this row for drag-to-reorder, and enables it. Both halves at
-   * once: the row becomes a drag SOURCE carrying this id, and a drop TARGET
-   * that reports the id it received to the enclosing `List`'s `onReorder`.
-   *
-   * Without a `List` `onReorder` above it, nothing is attached — an id with
-   * no handler cannot mean anything, and the rows of a list that is not
-   * reorderable should not offer a drag.
-   */
-  reorderId?: string
-  style?: StyleProp
+  /** Content rendered inside the row before everything else — where the
+   *  drag-and-drop controllers go now that the row does not own them. */
+  children?: ReactNode
+  style?: StyleProp<ViewStyle>
   testID?: string
 }
 
@@ -270,59 +217,16 @@ const focusRing = {
 } as const
 
 /**
- * The GTK half of drag-to-reorder, kept in one place so a row can stay a
- * `Pressable` with children.
- *
- * WHY this is nine lines rather than its own implementation: it is the
- * `react-native-gtkx/dnd` module underneath — the same `GtkDragSource` and
- * `GtkDropTarget` wrappers `Draggable`, `Droppable` and `SortableItem` are
- * built from, with the same payload encoding and the same drag icon (a
- * `Gtk.WidgetPaintable` of the row, lifted at the grab point).
- *
- * What `List` keeps that `Sortable` cannot is the shape of its API: it takes
- * row **ids**, not indices, because a `List`'s rows are React children and it
- * cannot see their order. `Sortable` owns an array and so reports positions.
- * Two genuinely different jobs; one implementation.
- */
-const ReorderControllers = ({
-  id,
-  scope,
-  onReorder,
-}: {
-  id: string
-  scope: string
-  onReorder: ListReorderHandler
-}): ReactNode => (
-  <>
-    <DragSourceControllers payload={{ scope, id }} />
-    <DropTargetControllers
-      // A row dropped on itself is a no-op, not a reorder — and GTK will
-      // happily deliver one. Refusing it here means the cursor says so.
-      accepts={(payload) => payload.scope === scope && payload.id !== id}
-      onDrop={(payload) => onReorder(payload.id, id)}
-    />
-  </>
-)
-
-/**
  * One row of a {@link List} — `AdwActionRow`'s layout and states, built from
  * `Pressable`, `View` and `Text`.
  *
  * Hover and press come from `Pressable`'s state callback, so they cost what
  * they cost anywhere else in this platform: the hover path swaps a CSS class
- * on the widget without a React render (see components/pressable.tsx).
+ * on the widget without a React render.
  *
  * An activatable row is **focusable** — Tab and the arrow keys move between
  * rows through GTK's own keynav, Enter and Space activate the focused one,
- * and the focus ring is Adwaita's (`outline`, 2px, inset by 2). That is the
- * `GtkListBox` behaviour a hand-built list used to have to give up.
- *
- * **Drag-to-reorder** arrives with `reorderId` plus the enclosing `List`'s
- * `onReorder`, using GDK's real drag-and-drop under the covers — through
- * `react-native-gtkx/dnd`, the same module `Draggable` and `Sortable` are
- * built from, which in turn goes through `Controllers` from
- * `react-native-gtkx/gtk`. Nothing here is reachable only from inside the
- * platform.
+ * and the focus ring is Adwaita's (`outline`, 2px, inset by 2).
  */
 export const ListRow = ({
   title,
@@ -332,7 +236,7 @@ export const ListRow = ({
   onPress,
   position = "middle",
   separator,
-  reorderId,
+  children,
   style,
   testID,
 }: ListRowProps): ReactNode => {
@@ -341,19 +245,10 @@ export const ListRow = ({
   const isFirst = position === "first" || position === "only"
   const isLast = position === "last" || position === "only"
   const drawSeparator = separator ?? !isLast
-  const reorderContext = useContext(ReorderContext)
-  const reorder =
-    reorderId !== undefined && reorderContext !== null ? (
-      <ReorderControllers
-        id={reorderId}
-        scope={reorderContext.scope}
-        onReorder={reorderContext.onReorder}
-      />
-    ) : null
 
   const body = (
     <>
-      {reorder}
+      {children}
       {prefix}
       <View style={styles.titleBox}>
         {typeof title === "string" ? (

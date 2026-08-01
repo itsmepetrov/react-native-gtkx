@@ -39,13 +39,14 @@ import {
   AdwToggleGroup,
   AdwWindowTitle,
 } from "react-native-gtkx/adw"
-import { List, ListRow, rowPosition } from "react-native-gtkx/common"
+import { DropProvider } from "react-native-gtkx/dnd"
 import { GtkButton, GtkToggleButton } from "react-native-gtkx/gtk"
 import type {
   SidebarNavigationOptions,
   SidebarScreenProps,
 } from "react-native-gtkx/navigation"
 import { useRequestDeleteTask } from "../components/dialogs"
+import { List, ListRow, rowPosition } from "../components/list"
 import { MainMenu } from "../components/main-menu"
 import { TaskDetail } from "../components/task-detail"
 import { EmptyState, TaskRow } from "../components/task-row"
@@ -303,13 +304,12 @@ export const ContentScreen = ({ route, navigation }: SidebarScreenProps) => {
         {/* AdwClamp, in two style properties: cap the width and centre what
             is left. */}
         <View style={styles.clamp}>
-          <List
-            testID="task-list"
-            // Dropped entirely when the view cannot express an order — see
-            // selectors.ts's `isReorderable`. With no handler, `ListRow`
-            // attaches no drag controllers at all.
-            onReorder={reorderable ? reorder : undefined}
-          >
+          {/* One `DropProvider` scopes the whole list, exactly as
+              `react-native-reanimated-dnd`'s own quick start does. The rows
+              underneath are `Draggable` + `Droppable` pairs — see
+              components/task-row.tsx for what that costs against the
+              `onReorder`/`reorderId` pair it replaced. */}
+          <List testID="task-list">
             {/* Trash is a graveyard, not a place to file new work — an add
                 row there would have nowhere sensible to put a task. */}
             {isTrash ? null : (
@@ -335,17 +335,20 @@ export const ContentScreen = ({ route, navigation }: SidebarScreenProps) => {
                 }
               />
             )}
-            {visible.map((task, index) => (
-              <TaskRow
-                key={task.id}
-                task={task}
-                list={lists.find((entry) => entry.id === task.listId)}
-                isTrash={isTrash}
-                position={rowPosition(addRow + index, rowCount)}
-                reorderable={reorderable}
-                showListName={selection.kind !== "list"}
-              />
-            ))}
+            <DropProvider style={styles.rows}>
+              {visible.map((task, index) => (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  list={lists.find((entry) => entry.id === task.listId)}
+                  isTrash={isTrash}
+                  position={rowPosition(addRow + index, rowCount)}
+                  reorderable={reorderable}
+                  onReorder={reorder}
+                  showListName={selection.kind !== "list"}
+                />
+              ))}
+            </DropProvider>
           </List>
           {visible.length === 0 ? (
             <EmptyState
@@ -362,6 +365,10 @@ export const ContentScreen = ({ route, navigation }: SidebarScreenProps) => {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  // DropProvider renders a View (it needs a widget for `onDragging`), and
+  // its default is `flex: 1` — inside the list's own column that would make
+  // it eat the remaining height, so it sizes to its rows instead.
+  rows: { flexGrow: 0 },
   // GtkSearchBar's own chrome: a bar the width of the pane with the field
   // centred in it.
   searchBar: { padding: 6, alignItems: "center" },

@@ -224,6 +224,18 @@ export interface SortableItemPlumbing {
   itemHeight?: number
   /** Accepted and ignored, same reason. */
   estimatedItemHeight?: number
+  /**
+   * Accepted and ignored. Upstream needs the container's height to know
+   * when a dragged row has reached an edge and autoscroll should start;
+   * there is no autoscroll here (docs/research/drag-and-drop.md), and the
+   * rows are in flow layout inside a real `ScrollView` that already knows
+   * its own size.
+   *
+   * Kept because upstream's own example app passes it on every
+   * `SortableItem` — a mirror that drops it turns a literal port into an
+   * edit, which is the one thing this module exists to avoid.
+   */
+  containerHeight?: number
   /** Accepted and ignored, same reason. */
   isDynamicHeight?: boolean
   scheduleHeightUpdate?: (id: string, height: number) => void

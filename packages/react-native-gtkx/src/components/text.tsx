@@ -1,4 +1,5 @@
 import {
+  isValidElement,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -25,11 +26,37 @@ export type TextProps = {
 }
 
 const flattenToString = (children: ReactNode): string => {
-  if (children === null || children === undefined || children === false) {
+  if (
+    children === null ||
+    children === undefined ||
+    typeof children === "boolean"
+  ) {
+    // RN renders neither `true` nor `false`; the old code only dropped
+    // `false`, so `{condition && x}` was safe but `{Boolean(x)}` printed
+    // "true".
     return ""
   }
   if (Array.isArray(children)) {
     return children.map(flattenToString).join("")
+  }
+  if (isValidElement(children)) {
+    // A NESTED `<Text>` — `<Text>a <Text style={bold}>b</Text> c</Text>`,
+    // which is how RN marks up a run inside a paragraph, and how every
+    // `Text` with an interpolated span is written.
+    //
+    // This used to fall through to `String(children)` below and render
+    // "[object Object]". docs/api.md has always said nested `Text` elements
+    // are "concatenated without per-span styles" — the second half was true
+    // and the first was not. Found by porting
+    // `react-native-reanimated-dnd`'s example app, whose DroppedItemsMap
+    // screen reads `<Text>{id} is dropped on <Text>{zone}</Text></Text>` and
+    // rendered "[object Object] is dropped on [object Object]" on screen.
+    //
+    // Per-span styling is still not reproduced (one `GtkLabel`, one CSS
+    // class), which is the documented difference; the TEXT is not optional.
+    return flattenToString(
+      (children.props as { children?: ReactNode }).children,
+    )
   }
   return String(children)
 }

@@ -354,15 +354,40 @@ container is a plain `View`, whose default `alignItems` is `stretch`, so
 a choice. Changing a shared default under every existing example is not this
 epic's business, so it is recorded rather than acted on.
 
-## What happens to `List`'s `onReorder`
+**Update — it was acted on.** Porting upstream's own example app
+(`examples/reanimated-dnd`) hit the same default in seventeen screens at
+once, none of them sortable: every `ScrollView` in it laid its content out
+at intrinsic width, so every screen rendered as a narrow column jammed
+against the left edge. At that point "a ported app changes nothing in its
+source" was simply false, and the default was the thing that was wrong.
+`components/scroll-view.tsx` now defaults the content container to
+`alignItems: "stretch"`, as RN does; `Sortable`'s own override is gone with
+it. The full suite is unchanged by the switch (117 files, 956 passing + 1
+expected fail), and the gallery and `examples/tasks-nav` were re-shot on the
+same rig to confirm nothing moved.
 
-It stays, and becomes a nine-line wrapper over `Sortable`'s machinery
-rather than a second implementation of it. It earns its place for one
-reason: it takes **ids**, not indices, because a `List`'s rows are React
-children and it cannot see their order — the opposite of `Sortable`, which
-owns an array. Two different jobs; one implementation underneath.
+## What happened to `List`'s `onReorder` (updated)
 
-`examples/tasks-nav` keeps using it and does not change.
+The first pass kept it, as a nine-line wrapper over `Sortable`'s machinery
+rather than a second implementation of it, on the grounds that it takes
+**ids** rather than indices and therefore does a different job.
+
+**It is gone.** The job is real, the second entry point was not worth it:
+having two ways to start a drag — one of them shaped like nothing an RN
+developer had ever seen — is precisely the "nobody will understand this"
+complaint that started this epic. An id-keyed reorder is a `Droppable`
+around a `Draggable` per row inside one `DropProvider`, which is more lines
+and one fewer concept.
+
+`examples/tasks-nav` does exactly that now
+(`src/components/task-row.tsx`), and its comment states the trade honestly
+rather than claiming a win: about a dozen lines where there were two, in
+exchange for the only drag-and-drop API in the platform being the one apps
+already know.
+
+`List`/`ListRow`/`ListSeparator` themselves left
+`react-native-gtkx/common` at the same time and for a separate reason — see
+[platform-layer.md](../platform-layer.md#listlistrowlistseparator-were-here-and-are-not-any-more).
 
 ## Honest gaps for a ported app
 

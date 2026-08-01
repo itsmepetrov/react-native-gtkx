@@ -100,8 +100,10 @@ import { Controllers, GtkDragSource } from "react-native-gtkx/gtk"
 </Pressable>
 ```
 
-See [the platform layer](platform-layer.md). For reorderable lists,
-`react-native-gtkx/common`'s `List`/`ListRow` already wrap this.
+See [the platform layer](platform-layer.md). For drag-and-drop of any
+shape, including a reorderable list,
+[`react-native-gtkx/dnd`](api.md#drag-and-drop-react-native-gtkxdnd) already
+wraps this.
 
 ## How the negotiation works
 
@@ -187,9 +189,6 @@ What to do instead:
   [`react-native-gtkx/dnd`](api.md#drag-and-drop-react-native-gtkxdnd)
   mirrors `react-native-reanimated-dnd`'s API on GTK's own drag-and-drop,
   and both presets alias that package name onto it;
-- a **reorderable list** on Linux — `List`/`ListRow` from
-  `react-native-gtkx/common`, which gives you GDK's own drag icon and drop
-  targets;
 - **swipeable rows / bottom sheets** — `PanResponder` plus `Animated`
   by hand today.
 
