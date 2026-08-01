@@ -215,8 +215,40 @@ export type RecognizerCallbacks = {
   ) => void
 }
 
+/**
+ * How one gesture names another in a relation.
+ *
+ * Upstream's `GestureRef`, in all three of its spellings: the other gesture
+ * itself, a ref built with `withRef()` holding it, or a raw handler tag. A
+ * composed gesture stands for every gesture inside it.
+ *
+ * The reference is deliberately not a tag: a tag identifies a MOUNTED
+ * gesture, and an app writes its relations against gesture objects it built
+ * itself, often before either end is mounted. ./relations resolves the two.
+ */
+export type GestureRef = AnyGestureSpec | { current: unknown } | number
+
+/** The three relation maps, as one gesture's share of them. */
+export type GestureRelations = {
+  waitFor: readonly GestureRef[]
+  simultaneousHandlers: readonly GestureRef[]
+  blocksHandlers: readonly GestureRef[]
+}
+
 /** Everything every spelling of every kind configures, normalised. */
 export type RecognizerConfig = RecognizerCallbacks & {
+  // --- the relations, in the names the three maps carry ---
+  //
+  // Config rather than behaviour, like everything else here: both spellings
+  // write these lists and the orchestrator reads them. `waitFor` is
+  // `requireExternalGestureToFail`, `simultaneousHandlers` is
+  // `simultaneousWithExternalGesture`, `blocksHandlers` is
+  // `blocksExternalGesture` — and `Exclusive` and `Simultaneous` fill the
+  // first two without adding a mechanism of their own.
+  waitFor?: readonly GestureRef[]
+  simultaneousHandlers?: readonly GestureRef[]
+  blocksHandlers?: readonly GestureRef[]
+
   // --- common to all three kinds ---
   enabled?: boolean
   hitSlop?: GestureHitSlop
@@ -320,6 +352,30 @@ export type GestureSpec = {
   readonly config: RecognizerConfig
 }
 
+/** Which of the three ways a group of gestures was put together. */
+export type ComposedGestureKind = "race" | "simultaneous" | "exclusive"
+
+/**
+ * What `Gesture.Race()`, `Gesture.Simultaneous()` and `Gesture.Exclusive()`
+ * produce — a LIST and a label, with no mechanism in it.
+ *
+ * The composers are list-builders over the three relation maps and nothing
+ * else: `Race` adds no relation at all because racing IS the default,
+ * `Simultaneous` is a pairwise fill of `simultaneousHandlers`, and
+ * `Exclusive` is a chain fill of `waitFor` where every group waits for all
+ * the groups before it. See ./composition, which is where that is spelled
+ * out, and note there is no third state and no second arbitration path.
+ */
+export type ComposedGestureSpec = {
+  readonly composed: ComposedGestureKind
+  readonly gestures: readonly AnyGestureSpec[]
+  /** Upstream's flattening hook: every single gesture, composition removed. */
+  toGestureArray: () => GestureSpec[]
+}
+
+/** What a `GestureDetector` accepts: one gesture, or a composition of them. */
+export type AnyGestureSpec = GestureSpec | ComposedGestureSpec
+
 let nextHandlerTag = 1
 
 /** RNGH's `handlerTag`: an identity for one mounted gesture. */
@@ -329,9 +385,27 @@ export const mintHandlerTag = (): number => {
   return tag
 }
 
-/** Whether a value is something a `GestureDetector` can drive. */
+/** Whether a value is one recognizer rather than a composition of them. */
 export const isGestureSpec = (value: unknown): value is GestureSpec =>
   typeof value === "object" &&
   value !== null &&
   KINDS.has((value as GestureSpec).kind) &&
   typeof (value as GestureSpec).config === "object"
+
+export const isComposedGestureSpec = (
+  value: unknown,
+): value is ComposedGestureSpec =>
+  typeof value === "object" &&
+  value !== null &&
+  Array.isArray((value as ComposedGestureSpec).gestures) &&
+  typeof (value as ComposedGestureSpec).composed === "string"
+
+/** Whether a value is something a `GestureDetector` can drive. */
+export const isAnyGestureSpec = (value: unknown): value is AnyGestureSpec =>
+  isGestureSpec(value) || isComposedGestureSpec(value)
+
+/** Every single gesture in a composition, in the order they were written. */
+export const flattenGestures = (gesture: AnyGestureSpec): GestureSpec[] =>
+  isComposedGestureSpec(gesture)
+    ? gesture.gestures.flatMap(flattenGestures)
+    : [gesture]

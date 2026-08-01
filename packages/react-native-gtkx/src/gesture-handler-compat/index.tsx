@@ -41,9 +41,12 @@ import { createUnsupportedFactory } from "../unsupported-export"
 import { Gesture } from "./builder"
 import { GestureDetector } from "./detector"
 import {
+  useCompetingGestures,
+  useExclusiveGestures,
   useLongPressGesture,
   useNativeGesture,
   usePanGesture,
+  useSimultaneousGestures,
   useTapGesture,
 } from "./hooks"
 import { GESTURE_STATE } from "./types"
@@ -51,9 +54,12 @@ import { GESTURE_STATE } from "./types"
 export {
   Gesture,
   GestureDetector,
+  useCompetingGestures,
+  useExclusiveGestures,
   useLongPressGesture,
   useNativeGesture,
   usePanGesture,
+  useSimultaneousGestures,
   useTapGesture,
 }
 export {
@@ -70,10 +76,15 @@ export type {
   TapGestureHookConfig,
 } from "./hooks"
 export type {
+  AnyGestureSpec,
+  ComposedGestureKind,
+  ComposedGestureSpec,
   GestureEndEventPayload,
   GestureEventPayload,
   GestureHitSlop,
   GestureKind,
+  GestureRef,
+  GestureRelations,
   GestureSpec,
   GestureStateManagerApi,
   GestureTouchData,
@@ -126,8 +137,8 @@ const unsupported = createUnsupportedFactory(
   "react-native-gesture-handler",
   "Implemented: GestureHandlerRootView, GestureDetector, `State`, the re-exported " +
     "ScrollView/FlatList/TextInput/Switch and the three Touchables, and Pan, Tap, LongPress " +
-    "and Native in both spellings (`Gesture.Pan()` and `usePanGesture()`, and so on). " +
-    "Cross-gesture relations and the composers need the orchestrator; Pinch and Rotation " +
+    "and Native in both spellings (`Gesture.Pan()` and `usePanGesture()`, and so on), plus " +
+    "the three cross-gesture relations and the three composers. Pinch and Rotation " +
     "need a machine that can produce a touchpad gesture to test them on. RN's own responder " +
     "system and PanResponder also work (docs/api.md); drag-and-drop is react-native-gtkx/dnd.",
 )
@@ -165,26 +176,21 @@ export const legacy_createNativeWrapper: any = unsupported(
 )
 
 // --- the new (v3) gesture API ---
-// `Gesture`, `GestureDetector` and the three implemented hooks are re-exported
-// at the top of this file. `Gesture` is a real namespace whose nine
-// unimplemented statics throw individually, so `Gesture.Pinch()` still names
-// itself.
+// `Gesture`, `GestureDetector`, the four implemented gesture hooks and the
+// three composer hooks are re-exported at the top of this file. `Gesture` is a
+// real namespace whose five unimplemented statics throw individually, so
+// `Gesture.Pinch()` still names itself.
 export const GestureDetectorType: any = unsupported("GestureDetectorType")
 export const GestureStateManager: any = unsupported("GestureStateManager")
 export const InterceptingGestureDetector: any = unsupported(
   "InterceptingGestureDetector",
 )
 export const VirtualGestureDetector: any = unsupported("VirtualGestureDetector")
-export const useCompetingGestures: any = unsupported("useCompetingGestures")
-export const useExclusiveGestures: any = unsupported("useExclusiveGestures")
 export const useFlingGesture: any = unsupported("useFlingGesture")
 export const useHoverGesture: any = unsupported("useHoverGesture")
 export const useManualGesture: any = unsupported("useManualGesture")
 export const usePinchGesture: any = unsupported("usePinchGesture")
 export const useRotationGesture: any = unsupported("useRotationGesture")
-export const useSimultaneousGestures: any = unsupported(
-  "useSimultaneousGestures",
-)
 
 // --- enums and constants ---
 // These are plain data upstream, so throwing on them looks harsh. It is not:

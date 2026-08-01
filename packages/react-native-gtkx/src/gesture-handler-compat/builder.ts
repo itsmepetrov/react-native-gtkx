@@ -20,10 +20,18 @@
 // spelling dropped — is an ordinary callback over the same payload, because
 // the payload already carries `changeX`/`changeY`.
 import { createUnsupportedFactory } from "../unsupported-export"
+import {
+  exclusiveGestures,
+  raceGestures,
+  simultaneousGestures,
+} from "./composition"
 import type {
+  AnyGestureSpec,
+  ComposedGestureSpec,
   GestureEventPayload,
   GestureHitSlop,
   GestureKind,
+  GestureRef,
   GestureSpec,
   GestureStateManagerApi,
   GestureTouchEvent,
@@ -38,31 +46,18 @@ type TouchHandler = (
 
 const unsupported = createUnsupportedFactory(
   "react-native-gesture-handler",
-  "Pan, Tap, LongPress, Native and GestureDetector are implemented; " +
-    "cross-gesture relations and the composers arrive with the arbitration registry. " +
-    "See docs/api.md.",
+  "Pan, Tap, LongPress, Native, GestureDetector, the cross-gesture relations and the " +
+    "three composers are implemented. See docs/api.md.",
 )
 
 /**
- * Refuses one relation method, naming it and the gestures it was handed —
- * which is how an app finds WHICH pairing it was relying on when several are
- * configured across a screen.
- */
-const refuseRelation = (name: string, gestures: unknown[]): never => {
-  // The stand-in is deliberately `any` so an app's call still type-checks
-  // against the real package; naming its return type here is what lets the
-  // builder methods keep declaring `this`.
-  const fail = unsupported(`PanGesture.${name}`) as (
-    ...args: unknown[]
-  ) => never
-  return fail(...gestures)
-}
-
-/**
  * Everything upstream's `BaseGesture` has, which is everything the three
- * implemented kinds share. Not a port of it: it holds no handler tag, no
- * relation bookkeeping and no worklet machinery, because on this platform
- * there is one runtime and the arbitration registry does not exist yet.
+ * implemented kinds share. Not a port of it: it holds no handler tag and no
+ * worklet machinery, because on this platform there is one runtime and a
+ * handler tag identifies a MOUNTED gesture rather than a built one. The
+ * relations it does hold are lists of references and nothing else — the maps
+ * that read them live in ./relations, and the loop that acts on them in
+ * ./orchestrator.
  *
  * `onUpdate` and `onChange` are deliberately NOT here. Upstream puts them on
  * `ContinousBaseGesture`, which `Tap` and `LongPress` do not extend — they are
@@ -187,20 +182,38 @@ abstract class BaseGestureBuilder implements GestureSpec {
     return [this]
   }
 
-  // --- the relations, which are a later slice ---
+  // --- the relations ---
   //
-  // Stored nowhere and refused loudly. A relation that silently did nothing
-  // would produce exactly the failure this repo refuses elsewhere: two
-  // gestures that were meant to cooperate racing instead, with no error and
-  // a drag that works on mobile and not here.
-  simultaneousWithExternalGesture(...gestures: unknown[]): this {
-    return refuseRelation("simultaneousWithExternalGesture", gestures)
+  // Three methods, three lists, one place they are read: the maps in
+  // ./relations. Each of them writes a list of REFERENCES rather than tags —
+  // an app names another gesture with the gesture object it built, and the
+  // tag that identifies a mounted one does not exist until a detector mounts
+  // it. `withRef()` and a raw tag are accepted in the same position, as
+  // upstream's `GestureRef` is.
+  //
+  // Appending rather than replacing: `.simultaneousWithExternalGesture(a)`
+  // followed by `.simultaneousWithExternalGesture(b)` means both, which is
+  // what chaining reads like. The builder is rebuilt every render by every
+  // app that follows upstream's own advice, so nothing accumulates across
+  // renders — and composition computes rather than writes back here, so it
+  // cannot accumulate either.
+  simultaneousWithExternalGesture(...gestures: GestureRef[]): this {
+    this.config.simultaneousHandlers = [
+      ...(this.config.simultaneousHandlers ?? []),
+      ...gestures,
+    ]
+    return this
   }
-  requireExternalGestureToFail(...gestures: unknown[]): this {
-    return refuseRelation("requireExternalGestureToFail", gestures)
+  requireExternalGestureToFail(...gestures: GestureRef[]): this {
+    this.config.waitFor = [...(this.config.waitFor ?? []), ...gestures]
+    return this
   }
-  blocksExternalGesture(...gestures: unknown[]): this {
-    return refuseRelation("blocksExternalGesture", gestures)
+  blocksExternalGesture(...gestures: GestureRef[]): this {
+    this.config.blocksHandlers = [
+      ...(this.config.blocksHandlers ?? []),
+      ...gestures,
+    ]
+    return this
   }
 }
 
@@ -382,23 +395,28 @@ export class NativeGestureBuilder extends BaseGestureBuilder {
 /**
  * `Gesture`, the namespace of statics.
  *
- * `Pan`, `Tap`, `LongPress` and `Native` are real. The other eight throw by
- * name, and that is the point: docs/research/gestures.md records the failure
- * mode this repo most wants to avoid — a component that accepts its props,
- * renders, and does nothing.
+ * `Pan`, `Tap`, `LongPress`, `Native` and the three composers are real. The
+ * other five throw by name, and that is the point: docs/research/gestures.md
+ * records the failure mode this repo most wants to avoid — a component that
+ * accepts its props, renders, and does nothing.
  */
 export const Gesture = {
   Pan: (): PanGestureBuilder => new PanGestureBuilder(),
   Tap: (): TapGestureBuilder => new TapGestureBuilder(),
   LongPress: (): LongPressGestureBuilder => new LongPressGestureBuilder(),
   Native: (): NativeGestureBuilder => new NativeGestureBuilder(),
+  // List-builders over the same three maps the relation methods write, with
+  // no mechanism of their own — see ./composition.
+  Race: (...gestures: AnyGestureSpec[]): ComposedGestureSpec =>
+    raceGestures(...gestures),
+  Simultaneous: (...gestures: AnyGestureSpec[]): ComposedGestureSpec =>
+    simultaneousGestures(...gestures),
+  Exclusive: (...gestures: AnyGestureSpec[]): ComposedGestureSpec =>
+    exclusiveGestures(...gestures),
   Pinch: unsupported("Gesture.Pinch"),
   Rotation: unsupported("Gesture.Rotation"),
   Fling: unsupported("Gesture.Fling"),
   Hover: unsupported("Gesture.Hover"),
   Manual: unsupported("Gesture.Manual"),
   ForceTouch: unsupported("Gesture.ForceTouch"),
-  Race: unsupported("Gesture.Race"),
-  Simultaneous: unsupported("Gesture.Simultaneous"),
-  Exclusive: unsupported("Gesture.Exclusive"),
 }

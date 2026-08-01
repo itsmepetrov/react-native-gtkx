@@ -419,7 +419,8 @@ in `docs/research/gestures.md`.
 3. **The orchestrator.** The three relation maps, `tryActivate`/`makeActive`,
    the awaiting list, and `Race`/`Simultaneous`/`Exclusive` as list-builders
    over them. This is where cross-component relations live and it is the
-   slice with real difficulty in it.
+   slice with real difficulty in it. **Shipped**, and the section below
+   records what building it changed about the specification above.
 4. **`Gesture.Native()` and the scrollable re-exports.** `Native` over the
    scroll-arbitration work that already exists, plus RNGH's `ScrollView` and
    `FlatList` re-exports (two of the four consumers render them) and the
@@ -483,6 +484,101 @@ Two smaller things this slice settled:
 Refusals that stand: `Fling`, `Hover`, `Manual`, `ForceTouch`, the legacy
 `*GestureHandler` components, `RectButton` and the button family beyond the
 `Touchable` re-exports slice 4 needs. All keep throwing by name.
+
+## What building slice 3 changed about the specification above
+
+Four things, all of them corrections to this file rather than to upstream.
+
+**The two locks meet in one function, and it is not where this file
+predicted.** "A `GestureDetector` takes the responder when its recognizer
+first activates" is right; what the section above left out is _who asks_. The
+loop is what decides, and it hands the recognizer one boolean —
+"another gesture already holds the interaction" — which is the entire
+interface between the JS registry and the responder lock. `true` and the
+gesture asks for the lock as slice 1 did; `false` and it goes ACTIVE without
+touching it. There is no other seam, and the registry still imports nothing
+from the platform.
+
+**The out-of-event grant channel is now used from inside events too.** Slice 1
+could leave an in-event activation to the negotiation the responder system
+runs after the touch props, because only one gesture was ever asking. With
+two, both defer into the same negotiation, exactly one wins it, and the loser
+sits authorized and never activates — so `Simultaneous` would silently have
+been a race. Asking for the lock from `authorize()` settles it before the
+second gesture is consulted, which is what lets that one be told the
+interaction is already taken. Same negotiation either way: capture still
+beats bubble, and an ancestor can still win.
+
+**Mutual exclusion is enforced at activation, not at authorization.**
+Upstream's `makeActive` cancels the losers and sends `ACTIVE` in one
+synchronous breath, because it has no lock to wait for. Here a gesture that
+has to take the responder becomes ACTIVE only if the negotiation grants it,
+and an ancestor can still win — so the broadcast cancel runs from the moment
+the gesture really is ACTIVE. Same rule, applied at the only instant it is
+true.
+
+**`Gesture.Native()` turned out to settle a question the loop asks in two
+directions.** "Another gesture already holds the interaction" is not "another
+gesture is active": a `Native` is ACTIVE and holds nothing on purpose, so a
+pan activating beside it still has a lock to take. Nor is holding a per-kind
+fact — a `Pan` that lost the lock to a simultaneous partner is a claiming kind
+that does not hold it either. So the loop asks the participant, and the answer
+is per interaction. Both halves of upstream's `Native` rule are reachable now
+and both are tested: an active `Native` refuses an ordinary gesture's
+activation, and a `simultaneousWithExternalGesture` between them lets it
+through, which is `@gorhom/bottom-sheet`'s exact configuration.
+
+**Upstream's third cancellation branch has no reachable case here, and this
+file's rule 3 should say so.** "Two handlers that share no pointer and sit on
+different views are only in conflict if a tracked pointer lies inside both
+views' bounds" is arithmetic over a multi-pointer tracker. There is one
+pointer, one interaction and one fabricated touch, and a gesture is recorded
+only when that touch reaches it — so every pair of recorded gestures shares
+it, and what upstream computes, this platform knows by construction. The
+branch is not implemented; the comment where it would have gone says why.
+
+### The islands question, answered
+
+Asked by the PRD ("crux 5") and answered here rather than discovered later.
+
+The responder lock is one per process; the negotiation path is whatever GTK
+widget chain the interaction arrives on. The arbitration registry is also
+process-wide and has **no tree knowledge at all** — three maps keyed by
+handler tag. What makes that safe is _when_ a gesture enters it: **on the
+press, not on mount.**
+
+- Two `Root`s that **nest** — `NestedRoot`/`IntrinsicRoot` mounting an island
+  inside another island's view — are one GTK widget chain. Both gestures are
+  on one interaction path and every relation behaves exactly as it does inside
+  a single `Root`. Native widgets in between take no part and do not break the
+  chain.
+- Two `Root`s that are **disjoint** — separate windows, sibling islands —
+  can never have both gestures live in one interaction, because there is one
+  pointer and one session. The relation is expressible, resolves to a real
+  handler tag, and never has an occasion to apply. Not an error, and no
+  warning: an inert relation is exactly as harmful as an unused one.
+- **`requireExternalGestureToFail` across disjoint `Root`s does not
+  deadlock**, and that is the whole reason for recording on the press.
+  Parking only ever happens against a gesture that is live in the interaction
+  under way. Recording on mount would have turned a relation across two
+  islands into a gesture held in `BEGAN` for ever, with nothing to release it
+  — the failure this question was asked to avoid.
+
+The same reasoning covers two gestures in one `Root` that the pointer cannot
+reach together: siblings never see each other's interaction, so a relation
+between siblings is inert for the same reason and by the same mechanism.
+`tests/unit/gesture-handler/orchestrator.test.ts` drives all three cases.
+
+### What could not be checked here either
+
+- **Two gestures on two pointers.** Everything above is one pointer, because
+  that is all `zwlr_virtual_pointer_v1` and this platform's responder system
+  have. Upstream's pointer-sharing branch is unreachable for that reason, and
+  it will stay unreachable until there is multi-touch to reach it with.
+- **Two gestures on two views the pointer cannot reach together.** Siblings
+  never see each other's interaction, so a relation between them is inert by
+  construction rather than by test. The islands answer above says the same
+  thing about `Root`s and for the same reason.
 
 ## What could not be checked, and will not be here
 

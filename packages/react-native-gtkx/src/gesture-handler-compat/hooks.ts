@@ -17,18 +17,41 @@
 //     event rather than a second `success` parameter;
 //   - there is no `onChange` at all — `changeX`/`changeY` are always on the
 //     update payload instead.
+import {
+  exclusiveGestures,
+  raceGestures,
+  simultaneousGestures,
+} from "./composition"
 import type {
+  AnyGestureSpec,
+  ComposedGestureSpec,
   GestureEndEventPayload,
   GestureEventPayload,
   GestureHitSlop,
+  GestureRef,
   GestureSpec,
   GestureTouchEvent,
   OffsetBound,
   RecognizerConfig,
 } from "./types"
 
+/**
+ * The relations, in the hook spelling's names.
+ *
+ * The same three lists the builder's three methods write, renamed and moved
+ * into the config object — `simultaneousWithExternalGesture` is
+ * `simultaneousWith`, `requireExternalGestureToFail` is `requireToFail`, and
+ * `blocksExternalGesture` is `block`. One gesture or several, because
+ * upstream accepts both and an app writing one should not have to wrap it.
+ */
+type RelationHookConfig = {
+  simultaneousWith?: GestureRef | GestureRef[]
+  requireToFail?: GestureRef | GestureRef[]
+  block?: GestureRef | GestureRef[]
+}
+
 /** What every hook spelling accepts, which is upstream's `CommonGestureConfig`. */
-type CommonGestureHookConfig = {
+type CommonGestureHookConfig = RelationHookConfig & {
   enabled?: boolean
   hitSlop?: GestureHitSlop
   shouldCancelWhenOutside?: boolean
@@ -43,6 +66,15 @@ type CommonGestureHookConfig = {
   onTouchesMove?: (event: GestureTouchEvent) => void
   onTouchesUp?: (event: GestureTouchEvent) => void
   onTouchesCancel?: (event: GestureTouchEvent) => void
+}
+
+const asList = (
+  value: GestureRef | GestureRef[] | undefined,
+): GestureRef[] | undefined => {
+  if (value === undefined) {
+    return undefined
+  }
+  return Array.isArray(value) ? value : [value]
 }
 
 /** The config object `usePanGesture` accepts. */
@@ -147,6 +179,13 @@ const adaptCommon = (config: CommonGestureHookConfig): RecognizerConfig => {
     testId: config.testID,
     onBegin: config.onBegin,
     onActivate: config.onActivate,
+    // The relations land in the map names, from either spelling. That both
+    // spellings normalise onto one set of lists rather than each carrying its
+    // own is the same claim slice 1 made about the callbacks, tested the same
+    // way: one orchestrator test drives both.
+    simultaneousHandlers: asList(config.simultaneousWith),
+    waitFor: asList(config.requireToFail),
+    blocksHandlers: asList(config.block),
   }
 
   // The ending callbacks are the one place the two spellings disagree about
@@ -281,3 +320,23 @@ export const useNativeGesture = (
     onUpdate: config.onUpdate,
   },
 })
+
+// --- the composers, in the hook spelling ---
+//
+// Not hooks in any real sense — upstream's are not either, past a `useMemo`
+// it does not need — and exported under these names because that is what
+// upstream's `src/v3` calls them and what an app migrating off the deprecated
+// statics will write. `useCompetingGestures` is `Gesture.Race()` under the
+// better name: the gestures compete, and they would have anyway.
+
+export const useCompetingGestures = (
+  ...gestures: AnyGestureSpec[]
+): ComposedGestureSpec => raceGestures(...gestures)
+
+export const useSimultaneousGestures = (
+  ...gestures: AnyGestureSpec[]
+): ComposedGestureSpec => simultaneousGestures(...gestures)
+
+export const useExclusiveGestures = (
+  ...gestures: AnyGestureSpec[]
+): ComposedGestureSpec => exclusiveGestures(...gestures)

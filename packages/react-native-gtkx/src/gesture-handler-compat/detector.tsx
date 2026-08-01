@@ -31,11 +31,12 @@ import {
   type ReactNode,
   type Ref,
 } from "react"
-import { createDetectorRuntime } from "./detector-runtime"
-import { isGestureSpec, mintHandlerTag, type GestureSpec } from "./types"
+import { prepareGestures } from "./composition"
+import { createDetectorRuntime, PREDICATES } from "./detector-runtime"
+import { isAnyGestureSpec, type AnyGestureSpec } from "./types"
 
 export type GestureDetectorProps = {
-  gesture: GestureSpec
+  gesture: AnyGestureSpec
   children?: ReactNode
   /**
    * Web-only upstream, and inert here — there is no text selection to
@@ -46,12 +47,6 @@ export type GestureDetectorProps = {
   enableContextMenu?: boolean
   touchAction?: string
 }
-
-/** The two responder props that answer a question rather than take an event. */
-const PREDICATES = new Set([
-  "onStartShouldSetResponder",
-  "onMoveShouldSetResponder",
-])
 
 /**
  * Not a view: exactly one child, whose props it extends.
@@ -69,13 +64,13 @@ export const GestureDetector = ({
       "react-native-gtkx: `GestureDetector` must have a gesture prop provided.",
     )
   }
-  if (!isGestureSpec(gesture)) {
+  if (!isAnyGestureSpec(gesture)) {
     throw new Error(
       "react-native-gtkx: `GestureDetector` was given something that is not a gesture. " +
         "Build one with `Gesture.Pan()`, `Gesture.Tap()`, `Gesture.LongPress()` or " +
-        "`Gesture.Native()` — or the hook spelling of any of the four. The remaining " +
-        "recognizers and the composers are not implemented yet and throw by name. " +
-        "See docs/api.md.",
+        "`Gesture.Native()` — or the hook spelling of any of the four — or compose several " +
+        "with `Gesture.Race()`, `Gesture.Simultaneous()` or `Gesture.Exclusive()`. The " +
+        "remaining recognizers are not implemented yet and throw by name. See docs/api.md.",
     )
   }
   if (!isValidElement(children)) {
@@ -86,17 +81,17 @@ export const GestureDetector = ({
     )
   }
 
-  // One tag, and one runtime, for as long as this detector is mounted.
-  // Upstream reassigns tags when the gesture object changes; here the object
-  // is not the identity — both spellings rebuild it every render — the
-  // mounted detector is.
-  // The KIND is fixed for the detector's life along with the tag, because it
-  // decides which predicates the recognizer was built with. Swapping a `Pan`
-  // for a `Tap` on the same detector is a different gesture, not a config
-  // change, and upstream mints a new handler for it too.
-  const [runtime] = useState(() =>
-    createDetectorRuntime(mintHandlerTag(), gesture.kind, gesture.config),
-  )
+  // One runtime, and one handler tag per recognizer in it, for as long as this
+  // detector is mounted. Upstream reassigns tags when the gesture object
+  // changes; here the object is not the identity — both spellings rebuild it
+  // every render — the mounted detector is, and ./relations is what maps an
+  // app's gesture object onto the tag that identity minted.
+  const [runtime] = useState(createDetectorRuntime)
+
+  // A composition is flattened to the recognizers it contains, each carrying
+  // the relations composition gave it. `Race`, `Simultaneous` and `Exclusive`
+  // do all of their work here and contribute no mechanism past this point.
+  const prepared = prepareGestures(gesture)
 
   const childProps = children.props as Record<string, unknown>
   // React 19 made `ref` an ordinary prop, and reading `element.ref` warns that
@@ -108,10 +103,10 @@ export const GestureDetector = ({
   // that hands over a fresh gesture object takes effect without swapping the
   // handler set mid-drag.
   useLayoutEffect(() => {
-    runtime.sync(gesture.config, childRef)
+    runtime.sync(prepared, childRef)
   })
 
-  useLayoutEffect(() => runtime.recognizer.dispose, [runtime])
+  useLayoutEffect(() => runtime.dispose, [runtime])
 
   // A silent no-op is the failure this repo refuses. Checked after the child's
   // own layout effects have run, which is where its `useImperativeHandle`
@@ -121,7 +116,7 @@ export const GestureDetector = ({
   })
 
   const merged: Record<string, unknown> = { ref: runtime.assignHandle }
-  for (const [name, own] of Object.entries(runtime.recognizer.handlers)) {
+  for (const [name, own] of Object.entries(runtime.handlers)) {
     const childHandler = childProps[name] as
       ((event: never) => boolean | void) | undefined
     if (!childHandler) {

@@ -675,7 +675,9 @@ const hold = Gesture.LongPress()
 | `GestureDetector`                                                                   | **Implemented, and it adds no widget.** It renders its single child unchanged and reaches that child's widget through the handle the child already exposes, the same seam `createAnimatedComponent` uses. Its recognizer's responder props are merged into the child's, so a child with its own `onTouchStart` keeps working. `userSelect`, `touchAction` and `enableContextMenu` are Web-only upstream and are accepted and ignored.                                                                                                                                                                                                                                                                                             |
 | `Gesture.Pan()`, `Gesture.Tap()`, `Gesture.LongPress()`, `Gesture.Native()`         | **Implemented**, all three over one state machine — the same event stream, the same grant channel, different predicates. See the config tables below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `usePanGesture()`, `useTapGesture()`, `useLongPressGesture()`, `useNativeGesture()` | **Implemented**, over the same recognizers. Upstream deprecated all twelve `Gesture.*` statics in 3.1.0 in favour of hooks, and its hook renamed the callbacks: `onStart` → `onActivate`, `onEnd` → `onDeactivate`, `onTouchesCancelled` → `onTouchesCancel`, no `onChange`, and `canceled` on the ending event instead of a second `success` argument. Both spellings are honoured as written.                                                                                                                                                                                                                                                                                                                                   |
-| the other eight `Gesture.*` statics                                                 | **Throw**, each naming itself — `Gesture.Pinch()` reports `Gesture.Pinch`, not `Gesture`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `Gesture.Race()`, `Gesture.Simultaneous()`, `Gesture.Exclusive()`                   | **Implemented as list-builders** over the three relation maps, with no mechanism of their own — see [the relations](#cross-gesture-relations) below. One `GestureDetector` may hold a composition, which mounts several recognizers on the one child and still adds no widget.                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `useCompetingGestures()`, `useSimultaneousGestures()`, `useExclusiveGestures()`     | **Implemented**, the hook spelling of the same three, over the same lists. `useCompetingGestures` is `Gesture.Race()` under upstream's better name.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| the other five `Gesture.*` statics                                                  | **Throw**, each naming itself — `Gesture.Pinch()` reports `Gesture.Pinch`, not `Gesture`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `State`                                                                             | **Implemented**, as the plain enum it is upstream: `UNDETERMINED` 0, `FAILED` 1, `BEGAN` 2, `CANCELLED` 3, `ACTIVE` 4, `END` 5. Every payload carries a faithful `state`, and two of the libraries this targets compare it by value, so all six numbers are pinned by a test against 3.1.0 — a silently different one would go on compiling and quietly answer false.                                                                                                                                                                                                                                                                                                                                                             |
 | `ScrollView`, `FlatList`, `TextInput`, `Switch`, `Pressable`                        | **Implemented as the platform's own components, by identity.** Upstream builds each with `createNativeWrapper(RN.X, { disallowInterruption: true, shouldCancelWhenOutside: false })` — an RN component with a `NativeViewGestureHandler` attached, so its arbitration knows about the native scrolling underneath. Here the responder system IS that arbitration, every one of these already speaks it, and `Gesture.Native()` is how a gesture is declared over one explicitly — so the wrapper has nothing to add and the re-export is the component itself. They are here because they are RENDERED: two of the three measured consumers hand `FlatList`/`ScrollView` to `Animated.createAnimatedComponent()` at module scope. |
 | `TouchableOpacity`, `TouchableHighlight`, `TouchableWithoutFeedback`                | **Implemented as the platform's own**, same reasoning. Out of scope by preference and unavoidable in fact: `@gorhom/bottom-sheet` re-exports all three from its own public entry as `BottomSheetTouchable` on every platform except iOS, so it is upstream's export rather than an app's choice.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
@@ -693,12 +695,97 @@ const hold = Gesture.LongPress()
 | the callbacks                                                                                                           | **Implemented**: `onBegin`, `onStart`, `onUpdate`, `onChange`, `onEnd`, `onFinalize`, `onTouchesDown`, `onTouchesMove`, `onTouchesUp`, `onTouchesCancelled`.                                                                                                             |
 | `runOnJS`                                                                                                               | **Accepted, and does nothing** — correctly. It asks for the JS runtime; there is exactly one runtime here, so every callback already runs where it is asking.                                                                                                            |
 | `averageTouches`, `enableTrackpadTwoFingerGesture`, `cancelsTouchesInView`, `activeCursor`, `mouseButton`, `withTestId` | **Accepted, inert** — each is platform-specific upstream too, and inert off its platform there.                                                                                                                                                                          |
-| `simultaneousWithExternalGesture`, `requireExternalGestureToFail`, `blocksExternalGesture`                              | **Throw.** Cross-gesture relations need the arbitration registry, which is a later slice. Silently ignoring a relation would let two gestures that were meant to cooperate race instead, with no error.                                                                  |
+| `simultaneousWithExternalGesture`, `requireExternalGestureToFail`, `blocksExternalGesture`                              | **Implemented** — see [cross-gesture relations](#cross-gesture-relations).                                                                                                                                                                                               |
 
 The common configuration and the callbacks above are shared by all three
 recognizers, minus `onUpdate` and `onChange`: upstream puts those on
 `ContinousBaseGesture`, which `Tap` and `LongPress` do not extend. A discrete
 gesture has no travel to report and the methods are not offered.
+
+### Cross-gesture relations
+
+Three relations, three maps keyed by handler tag, and the composers are sugar
+over them. That is upstream's shape and it is reproduced because it is the
+right one — 159 lines of list-building over three primitives.
+
+| Relation                                                            | Means                                  |
+| ------------------------------------------------------------------- | -------------------------------------- |
+| `requireExternalGestureToFail(other)` — hook: `requireToFail`       | this gesture waits for `other` to fail |
+| `simultaneousWithExternalGesture(other)` — hook: `simultaneousWith` | both may be ACTIVE at once             |
+| `blocksExternalGesture(other)` — hook: `block`                      | `other` waits for **this** one         |
+
+```tsx
+const scroll = Gesture.Pan().activeOffsetX([-10, 10]).failOffsetY([-25, 25])
+
+const sheet = Gesture.Pan()
+  .activeOffsetY([-10, 10])
+  // Held in BEGAN — taking nothing, claiming nothing — until `scroll` fails.
+  .requireExternalGestureToFail(scroll)
+```
+
+A relation names the other gesture with the gesture **object**, a
+`withRef()` handle to it, or a raw handler tag, exactly as upstream's
+`GestureRef` does. Memoize the gesture you point AT (`useMemo`, a ref, or a
+context value): both spellings rebuild their object every render, and a
+relation written against a stale object of a gesture that has since been
+rebuilt cannot be resolved. Upstream has the same constraint and the same
+advice.
+
+**Two locks, at two levels, and they are deliberately not merged.** The
+responder lock keeps its one job — this interaction belongs to React Native,
+one holder, one irrevocable `CLAIMED` on the source. Gesture arbitration is a
+second, JS-only registry that never talks to GTK, so every relation resolves
+before anything is claimed. The consequences are observable:
+
+- **`Simultaneous` really means two ACTIVE gestures**, each getting its own
+  `onStart`/`onUpdate`/`onEnd` for the same pointer — and there is still
+  exactly ONE responder while that happens, claimed once. The gesture that did
+  not win the lock is driven from the touch props, which fire regardless of
+  responder status; the holder reads `onResponderMove`.
+- **Mutual exclusion is the default.** Without a relation the first gesture to
+  activate cancels every other gesture watching the same interaction. A
+  gesture that is already ACTIVE, or parked waiting for another, is cancelled
+  by nothing except an active `Gesture.Native()` — upstream's rule, and the
+  reason `Native` is special rather than just another recognizer.
+- **`END` and `FAILED` are not the same release.** A gesture waiting on
+  another is released when that one FAILS or is CANCELLED, and **cancelled**
+  when it ENDS: the thing it was deferring to actually happened, so its turn
+  never comes.
+
+`Race` adds no relation at all, because racing is what happens anyway;
+`Simultaneous` is a pairwise fill of the second map; `Exclusive` is a chain
+fill of the first, where every group waits for all the groups before it. A
+nested `Exclusive` inside a `Simultaneous` stays exclusive.
+
+#### Relations across `Root`s
+
+The responder lock is one per process, but the negotiation PATH is whatever
+GTK widget chain the interaction arrives on, and `NestedRoot`/`IntrinsicRoot`
+put native widgets both above and below RN views. The arbitration registry is
+also process-wide and has **no tree knowledge at all** — it is keyed by
+handler tag. What makes that safe is when a gesture enters it: **on the press,
+not on mount.**
+
+So:
+
+- **Two `Root`s that nest** — an island mounted inside another island's view —
+  are one GTK widget chain, so both gestures are on one interaction path and
+  every relation behaves exactly as it does inside a single `Root`. Native
+  widgets in between take no part in the negotiation and do not break the
+  chain.
+- **Two `Root`s that are disjoint** — separate windows, or sibling islands —
+  can never have both gestures live in one interaction: there is one pointer
+  and one session. A relation between them is expressible, resolves to a real
+  handler tag, and simply never has an occasion to apply. It is not an error
+  and it does not warn.
+- **`requireExternalGestureToFail` across disjoint `Root`s does not
+  deadlock.** Parking only ever happens against a gesture that is live in the
+  interaction under way, so a gesture in another `Root` is never waited for.
+  Recording on mount instead would have made exactly this a permanent hang.
+
+The same reasoning covers two gestures in one `Root` that the pointer cannot
+reach together: siblings never see each other's interaction, so a relation
+between siblings is inert for the same reason.
 
 ### `Gesture.Tap()` — the config surface
 
@@ -736,12 +823,8 @@ would mean waiting forever for a press-and-hold.
 pointer, and wlroots offers no virtual-touch protocol, so `minPointers(2)`,
 `numberOfPointers(2)` and every other multi-touch configuration is unreachable
 rather than merely untested — those gestures simply never activate, which is
-the honest outcome rather than a silently single-finger one. Nothing is
-simultaneous yet — one interaction has one holder — so two detectors over the
-same pointer do not both activate, and a `Tap` and a `Pan` cannot yet share a
-view — `Gesture.Native()` is the one exception, and only because it never
-takes the interaction in the first place. `Pinch` and `Rotation` are a later
-increment for a measured reason: GTK
+the honest outcome rather than a silently single-finger one.
+`Pinch` and `Rotation` are a later increment for a measured reason: GTK
 feeds touchpad gestures properly and better than RNGH's own web path does, but
 nothing in this rig can produce one to test against.
 
@@ -818,12 +901,12 @@ the same shape: the thing that stops these libraries is not in this surface.
   (`hooks/useGestureEventsHandlersDefault`, `hooks/useScrollableSetter`,
   `utilities/findNodeHandle`, `components/bottomSheetScrollable`). Every symbol
   it takes from this surface now resolves — `Gesture.Native()`, `State`, the
-  `Touchable` family it re-exports as `BottomSheetTouchable`, `TextInput`. What
-  is still missing from THIS surface is the cross-gesture relations its pan
-  chains configure, `simultaneousWithExternalGesture` and
-  `requireExternalGestureToFail` (`BottomSheetDraggableView.tsx`,
-  `BottomSheetHandleContainer.tsx`, `createBottomSheetScrollableComponent.tsx`),
-  which are the orchestrator's.
+  `Touchable` family it re-exports as `BottomSheetTouchable`, `TextInput`. The
+  cross-gesture relations its pan chains configure —
+  `simultaneousWithExternalGesture` and `requireExternalGestureToFail`
+  (`BottomSheetDraggableView.tsx`, `BottomSheetHandleContainer.tsx`,
+  `createBottomSheetScrollableComponent.tsx`) — resolve now too, so nothing in
+  THIS surface is left.
 - **`react-native-reanimated-dnd` 2.0.0 — never loads, by design.** Both
   presets alias the package name onto
   [`react-native-gtkx/dnd`](#drag-and-drop-react-native-gtkxdnd), which mirrors
@@ -1201,9 +1284,10 @@ listed at all fails earlier still, at bundle time.
 **This does not unblock `@gorhom/bottom-sheet` and friends on its own.** They
 need `react-native-gesture-handler`, which is
 [its own surface](#react-native-gesture-handler-react-native-gtkxgesture-handler)
-— `GestureDetector`, `Pan`, `Tap`, `LongPress` and `State` ship there; the
-cross-gesture relations and `Gesture.Native()` that `@gorhom/bottom-sheet`
-needs do not yet.
+— `GestureDetector`, `Pan`, `Tap`, `LongPress`, `Native`, `State` and the
+cross-gesture relations all ship there now; what stops those libraries is
+measured in that section, and it is `react-native` and Reanimated rather than
+this surface.
 
 ## `react-native-worklets` (`react-native-gtkx/worklets`)
 
@@ -1225,8 +1309,9 @@ than their docs:
   — `scheduleOnRN` and `scheduleOnUI`, both implemented here.
 - **`@gorhom/bottom-sheet` 5.2.14 imports none.** It reaches `runOnJS` and
   `runOnUI` through `react-native-reanimated`, and does not depend on
-  `react-native-worklets` at all. What blocks it is the cross-gesture
-  relations and `Gesture.Native()`, as above. `react-native-gesture-handler` 3.1.0 does use this package
+  `react-native-worklets` at all. What blocks it is measured in the
+  `react-native-gesture-handler` section, and it is not this package.
+  `react-native-gesture-handler` 3.1.0 does use this package
   (`scheduleOnUI`), but behind a `try { require } catch`, so it never had this
   failure mode.
 
