@@ -14,9 +14,11 @@ import type {
   TimingConfig,
 } from "./types"
 import { AnimatedValue } from "./value"
+import { AnimatedValueXY } from "./value-xy"
 
 export type AnimatedApi = {
   Value: typeof AnimatedValue
+  ValueXY: typeof AnimatedValueXY
   timing(value: AnimatedValue, config: TimingConfig): CompositeAnimation
   spring(value: AnimatedValue, config: SpringConfig): CompositeAnimation
   sequence(animations: CompositeAnimation[]): CompositeAnimation
@@ -30,6 +32,7 @@ export type AnimatedApi = {
 
 export const createAnimated = (scheduler: FrameScheduler): AnimatedApi => ({
   Value: AnimatedValue,
+  ValueXY: AnimatedValueXY,
   timing: (value, config) => createTiming(scheduler, value, config),
   spring: (value, config) => createSpring(scheduler, value, config),
   sequence,

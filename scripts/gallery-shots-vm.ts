@@ -110,6 +110,7 @@ for (const id of [
   "lists",
   "toggles",
   "animated",
+  "gestures",
   "modal",
   "apis",
 ]) {

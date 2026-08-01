@@ -2,6 +2,8 @@ import { useLayoutEffect, useRef, type ReactNode } from "react"
 import { createAnimated, type FrameScheduler } from "../animated/index"
 import type { FlatStyle, StyleProp, TransformPart } from "../contracts"
 import { GLib, GtkBox, queueAllocate, type Gtk } from "../gtkx/bridge/index"
+import type { ResponderProps } from "../responder/types"
+import { useResponder } from "../responder/use-responder"
 import { HostNodeContext } from "./host-node"
 import { setStoredTransform } from "./rect-store"
 import {
@@ -82,7 +84,10 @@ export type AnimatedViewStyle = Omit<FlatStyle, "opacity" | "transform"> & {
   transform?: (TransformPart | AnimatedTransformPart)[]
 }
 
-export type AnimatedViewProps = {
+// Animated.View is where a PanResponder drag lands in idiomatic RN — the
+// dragged box is animated by definition — so it takes the responder props
+// exactly as View does.
+export type AnimatedViewProps = ResponderProps & {
   style?: AnimatedViewStyle | AnimatedViewStyle[]
   children?: ReactNode
   onLayout?: (event: LayoutEvent) => void
@@ -148,6 +153,7 @@ const AnimatedView = ({
   children,
   onLayout,
   testID,
+  ...responderProps
 }: AnimatedViewProps) => {
   const widgetRef = useRef<Gtk.Box | null>(null)
   const { staticStyle, opacity, slots } = splitAnimated(style)
@@ -157,6 +163,7 @@ const AnimatedView = ({
     onLayout,
   })
   useRnContainer(widgetRef, node)
+  useResponder(widgetRef, responderProps)
 
   // The effect reads the slots of the render that (re)armed it; the values
   // inside are then owned by the listeners.

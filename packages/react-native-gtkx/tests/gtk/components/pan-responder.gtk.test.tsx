@@ -8,7 +8,7 @@
 import { act, render, screen, userEvent, waitFor } from "@gtkx/testing"
 import { expect, it, vi } from "vitest"
 import type { Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
-import { PanResponder, Root, Text, View } from "../../../src/index"
+import { Animated, PanResponder, Root, Text, View } from "../../../src/index"
 import type { PanResponderGestureState } from "../../../src/index"
 
 const viewFor = (label: string): GtkNs.Widget =>
@@ -203,4 +203,53 @@ it("touch props fire regardless of who holds the responder", async () => {
   expect(onTouchEnd).toHaveBeenCalledTimes(1)
   expect(onTouchStart.mock.calls[0]![0].nativeEvent.touches).toHaveLength(1)
   expect(onTouchEnd.mock.calls[0]![0].nativeEvent.touches).toHaveLength(0)
+})
+
+// Regression: Animated.View accepted the responder props but did nothing with
+// them, because only View was wired. Spreading panHandlers onto it compiled
+// (TypeScript does not excess-property-check a spread of a variable) and had
+// no effect at runtime — no error, no warning. Since the idiomatic drag
+// target IS an Animated.View, that made portable drag code silently dead.
+it("Animated.View honors the responder props, not just View", async () => {
+  const onGrant = vi.fn()
+  const moves: number[] = []
+
+  const Draggable = () => {
+    const pan = PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderGrant: onGrant,
+      onPanResponderMove: (_event, gestureState) => {
+        moves.push(gestureState.dx)
+      },
+    })
+    return (
+      <Animated.View
+        {...pan.panHandlers}
+        style={{ width: 120, height: 60 }}
+      >
+        <Text>animated-handle</Text>
+      </Animated.View>
+    )
+  }
+
+  await act(async () => {
+    await render(
+      <Root
+        width={300}
+        height={300}
+      >
+        <Draggable />
+      </Root>,
+    )
+  })
+  await waitFor(() => {
+    expect(screen.getByText("animated-handle")).toBeTruthy()
+  })
+
+  await act(async () => {
+    await userEvent.drag(viewFor("animated-handle"), 40, 0, { steps: 3 })
+  })
+
+  expect(onGrant).toHaveBeenCalledTimes(1)
+  expect(moves.at(-1)).toBeCloseTo(40, 0)
 })

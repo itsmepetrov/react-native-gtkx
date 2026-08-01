@@ -16,6 +16,7 @@ export const SECTION_IDS = [
   "media",
   "svg",
   "animated",
+  "gestures",
   "modal",
   "apis",
 ] as const
