@@ -93,7 +93,7 @@ export const Pressable = ({
     hovered: hoveredRef.current,
   }
 
-  // Gestures are attached imperatively even though rc.2 has a declarative
+  // Gestures are attached imperatively even though rc.3 has a declarative
   // `controllers` slot: the controllers are wired exactly once per widget and
   // the handlers read the latest props through a ref, so a re-render never
   // detaches and re-adds a gesture mid-press.

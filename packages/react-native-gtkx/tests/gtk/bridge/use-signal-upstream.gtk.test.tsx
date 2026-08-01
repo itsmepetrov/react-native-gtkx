@@ -17,7 +17,7 @@
 // (src/gtkx/bridge/use-signal.ts); this test calls gtkx's hook DIRECTLY on a
 // memoized component, so it keeps failing until upstream ships a stable
 // React 19.3. When it starts passing, the wrapper and its
-// RC2-WORKAROUND(use-signal-stale-handler) row can go.
+// RC3-WORKAROUND(use-signal-stale-handler) row can go.
 import * as Gtk from "@gtkx/gi/gtk"
 import { GtkBox, GtkLabel } from "@gtkx/jsx/gtk"
 import { useSignal } from "@gtkx/react"

@@ -91,7 +91,7 @@ it("mounts a GMenu inside a GtkMenuButton's menuModel without crashing", async (
 // the condition is simply never evaluated as true. Whether this is specific
 // to the @gtkx/vitest headless sway compositor (no fractional-scale/
 // xdg-output protocol, or some other missing piece `Adw.BreakpointCondition`
-// needs) or a genuine gtkx rc.2 gap is still open — examples/tasks-app is
+// needs) or a genuine gtkx rc.3 gap is still open — examples/tasks-app is
 // where it gets a real GNOME session to run in, and that is the actual
 // authority on whether AdwBreakpoint works on this platform at all.
 it("mounts an AdwBreakpoint through a bin's breakpoints prop without crashing", async () => {

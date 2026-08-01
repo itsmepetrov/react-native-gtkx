@@ -16,8 +16,8 @@
     "react-native-gtkx": "0.2.0-alpha.1"
   },
   "devDependencies": {
-    "@gtkx/cli": "1.0.0-rc.2",
-    "@gtkx/config": "1.0.0-rc.2",
+    "@gtkx/cli": "1.0.0-rc.3",
+    "@gtkx/config": "1.0.0-rc.3",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "typescript": "^5.9.0",

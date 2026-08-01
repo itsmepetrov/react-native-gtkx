@@ -30,7 +30,7 @@ export const buildGtkxConfigModule = async (
   appRoot: string,
 ): Promise<string> => {
   const loader = createConfigLoader()
-  const config = await loader(appRoot).catch((error: unknown) => {
+  const config = await loader.resolve(appRoot).catch((error: unknown) => {
     throw new Error(`${CONFIG_REQUIRED}\n${String(error)}`)
   })
   if (!config.applicationId) {

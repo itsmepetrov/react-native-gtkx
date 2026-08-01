@@ -464,17 +464,8 @@ const Icon = () => (
 stopOpacity>` children (`offset` accepts `0.5` or `"50%"`). `Defs` must be
   a direct child of `Svg` (nested `Defs` are not scanned). No
   `gradientTransform`, no `spreadMethod` beyond the default pad behavior.
-  **Known limitation**: constructing a `Gsk.ColorStop` currently crashes in
-  gtkx-rc2's native addon — verified through three independent construction
-  paths (the generated constructor, its property setters, and a bypass that
-  skips `ColorStop` entirely), all failing in the same compiled native code,
-  so this is not fixable from application code. A gradient reference
-  degrades to painting nothing for that fill/stroke (the same safe path as
-  an unresolvable `url(#id)`) rather than crashing the app; the coordinate
-  math itself is unaffected and unit-tested
-  (`packages/react-native-gtkx/tests/unit/svg/gradient-geometry.test.ts`) —
-  gradients will render as soon as this is fixed upstream, with no changes
-  needed on either side.
+  An unresolvable `url(#id)` paints nothing for that fill/stroke rather
+  than throwing.
 - **Animated**: the numeric props above (shape geometry, `opacity`,
   `strokeWidth`, `strokeDashoffset`) accept an `Animated.Value`/
   interpolation in place of a number. A tick mutates the widget's paint

@@ -62,9 +62,11 @@ const CONFIG_REQUIRED =
   '(export default defineConfig({ applicationId: "...", libraries: [...] })).'
 const { createConfigLoader } = await import("@gtkx/config/internal")
 // The loader validates the config, so a missing or malformed one throws.
-const gtkxConfig = await createConfigLoader()(process.cwd()).catch(
-  (error: unknown) => fail(`${CONFIG_REQUIRED}\n${String(error)}`),
-)
+// rc.3 turned the loader from a bare function into `{ load, resolve }`;
+// `resolve` is the runtime projection this module needs.
+const gtkxConfig = await createConfigLoader()
+  .resolve(process.cwd())
+  .catch((error: unknown) => fail(`${CONFIG_REQUIRED}\n${String(error)}`))
 if (!gtkxConfig.applicationId) {
   fail(CONFIG_REQUIRED)
 }

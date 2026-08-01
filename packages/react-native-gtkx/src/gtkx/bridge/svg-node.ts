@@ -180,40 +180,8 @@ type GradientEntry = {
   stops: Gsk.ColorStop[]
 }
 
-// RC2-WORKAROUND(gsk-colorstop-boxed-write) — row in docs/gtkx-rc2-notes.md.
-// Writing a Gdk.RGBA into a Gsk.ColorStop's `color` field crashes in the
-// native addon (@gtkx/native)
-// with "Expected an Object for Boxed field write type, got Object" —
-// verified through THREE independent paths, all hitting the same native
-// code: the generated constructor (uses the wrong of two RGBA descriptors,
-// _desc1 instead of the inline _desc2 — a real codegen bug), the property
-// setter (uses the documented-correct _desc2 descriptor and STILL fails,
-// which rules out a simple descriptor mix-up as the whole story), and a
-// bypass that skips ColorStop construction and hands appendLinearGradient a
-// plain {offset, color} object array instead (fails differently, with "No
-// native handle associated with Object" — the array marshaling genuinely
-// requires a native-backed instance per element, so there is no JS-level
-// escape hatch). This is a native-addon bug, not something fixable from
-// application code.
-//
-// Rather than crash every app that uses a gradient, or drop the gradient
-// components from the API while their descriptor-building is fully correct
-// and tested, a stop that fails to construct is treated exactly like a
-// missing gradient reference (see the url(#missing) test): the shape using
-// it simply paints no fill/stroke for that paint, instead of throwing.
-const makeColorStop = (
-  offset: number,
-  color: Gdk.RGBA,
-): Gsk.ColorStop | null => {
-  try {
-    const stop = new Gsk.ColorStop()
-    stop.offset = offset
-    stop.color = color
-    return stop
-  } catch {
-    return null
-  }
-}
+const makeColorStop = (offset: number, color: Gdk.RGBA): Gsk.ColorStop =>
+  new Gsk.ColorStop({ offset, color })
 
 const collectStops = (gradientWidget: Gtk.Widget): Gsk.ColorStop[] => {
   const stops: Gsk.ColorStop[] = []
@@ -221,10 +189,7 @@ const collectStops = (gradientWidget: Gtk.Widget): Gsk.ColorStop[] => {
   while (child) {
     const descriptor = nodeDescriptors.get(child)
     if (descriptor?.kind === "stop") {
-      const stop = makeColorStop(descriptor.offset, descriptor.color)
-      if (stop) {
-        stops.push(stop)
-      }
+      stops.push(makeColorStop(descriptor.offset, descriptor.color))
     }
     child = child.getNextSibling()
   }
@@ -271,19 +236,14 @@ const appendGradient = (
   if (entry.stops.length === 0) {
     return
   }
-  const rescaled =
+  // fillOpacity/strokeOpacity < 1 on a gradient re-builds each stop with a
+  // scaled alpha.
+  const stops =
     opacity >= 1
       ? entry.stops
-      : entry.stops
-          .map((stop) =>
-            makeColorStop(stop.offset, scaledAlpha(stop.color, opacity)),
-          )
-          .filter((stop): stop is Gsk.ColorStop => stop !== null)
-  // fillOpacity/strokeOpacity < 1 on a gradient re-builds each stop with a
-  // scaled alpha (see makeColorStop's WORKAROUND note); if that rebuild
-  // itself fails, fall back to the already-working full-opacity stops
-  // rather than losing the gradient entirely over an opacity nuance.
-  const stops = rescaled.length > 0 ? rescaled : entry.stops
+      : entry.stops.map((stop) =>
+          makeColorStop(stop.offset, scaledAlpha(stop.color, opacity)),
+        )
   const [hasBounds, tightBounds] = path.getBounds()
   const bounds = hasBounds ? tightBounds : Graphene.Rect.zero()
   const box = asBoundingBox(bounds)
@@ -540,17 +500,14 @@ const ensureRegistered = (): new () => Gtk.Widget => {
         descriptor.preserveAspectRatio,
       )
       const gradients = collectGradients(this)
-      // RC2-WORKAROUND(graphene-rect-nested-boxed-props) — row in
-      // docs/gtkx-rc2-notes.md. `new Graphene.Rect({ origin: new
-      // Graphene.Point(...), size: new Graphene.Size(...) })` hits the same
-      // native "Expected an Object for Boxed field write type, got Object"
-      // as Gsk.ColorStop's `color` field (see makeColorStop below) — Rect
-      // has a working escape hatch, `.alloc().init(x, y, w, h)`, that
-      // ColorStop does not.
-      //
       // SVG clips to the viewport by default (no overflow:visible opt-out
       // in this API — deliberate cut, see epic.md).
-      snapshot.pushClip(Graphene.Rect.alloc().init(0, 0, width, height))
+      snapshot.pushClip(
+        new Graphene.Rect({
+          origin: new Graphene.Point({ x: 0, y: 0 }),
+          size: new Graphene.Size({ width, height }),
+        }),
+      )
       snapshot.save()
       snapshot.translate(
         new Graphene.Point({

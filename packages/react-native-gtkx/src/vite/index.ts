@@ -187,7 +187,7 @@ export const reactNativeGtkx = (
       noExternal: ["react-native-gtkx", "react-native", /^@react-navigation\//],
     },
     resolve: {
-      // RC2-WORKAROUND(runtime-dedupe): see docs/gtkx-rc2-notes.md
+      // RC3-WORKAROUND(runtime-dedupe): see docs/gtkx-rc3-notes.md
       // The gtkx runtime and react are single-instance hosts: when the app
       // and react-native-gtkx resolve them from different node_modules
       // (file:-installed package, nested installs), two bundled copies

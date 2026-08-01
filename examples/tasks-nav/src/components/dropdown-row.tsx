@@ -1,6 +1,6 @@
-// A small id/value binding over AdwComboRow. The generic version of this
-// (`<DropDown component={AdwComboRow} items=… />`) lives in
-// `@gtkx/components`, a package this repository does not depend on;
+// A small id/value binding over AdwComboRow. The ready-made version of this
+// (`<ComboRow items=… />`) lives in `@gtkx/components/adw`, a package this
+// repository does not depend on;
 // AdwComboRow itself is a plain react-native-gtkx/adw export, so only the
 // list bookkeeping had to be written. Same one-off as
 // examples/tasks-app's own dropdown-row.tsx.

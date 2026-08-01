@@ -355,7 +355,7 @@ export const SvgSection = () => (
 
     <DemoCard
       title="Gradients (Defs/LinearGradient/RadialGradient/Stop)"
-      hint="known limitation: constructing a Gsk.ColorStop crashes in gtkx-rc2's native addon regardless of how it is built (verified 3 independent ways) — the shape below degrades to its stroke outline only, no crash, until upstream fixes it; the coordinate math is unit-tested and ready"
+      hint="objectBoundingBox coordinates by default (0–1 fractions of the shape's own bounds); gradientUnits=userSpaceOnUse takes them as-is"
     >
       <Svg
         width={140}

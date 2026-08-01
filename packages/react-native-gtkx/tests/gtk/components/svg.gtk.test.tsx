@@ -250,16 +250,12 @@ describe("<Svg> rendering", () => {
     ).toBe(true)
   })
 
-  // KNOWN LIMITATION (upstream gtkx-rc2 bug, see the WORKAROUND note on
-  // makeColorStop in svg-node.ts): constructing a Gsk.ColorStop crashes in
-  // the native addon regardless of how it is built. Every Stop therefore
-  // fails to construct, the gradient ends up with zero usable stops, and
-  // paintFill/paintStroke degrade to "paint nothing" for that shape — the
-  // same path already exercised by url(#missing) — instead of crashing the
-  // whole render. This test locks in that degraded-but-safe behavior; the
-  // coordinate math itself (untouched by the bug) is covered directly by
-  // tests/unit/svg/gradient-geometry.test.ts.
-  it("fill=url(#id) degrades to no paint (blocked on gtkx-rc2's Gsk.ColorStop bug)", async () => {
+  // The gradient really paints: the stops reach Gsk with their authored
+  // offsets and colors, and the geometry resolves against the shape's own
+  // bounding box. (Until gtkx 1.0.0-rc.3 this asserted the opposite —
+  // constructing a Gsk.ColorStop threw in the native addon, so a gradient
+  // degraded to "paint nothing". Fixed upstream in gtkx-org/gtkx#473.)
+  it("fill=url(#id) paints a linear gradient with the authored stops", async () => {
     await render(
       <Root
         width={100}
@@ -308,12 +304,30 @@ describe("<Svg> rendering", () => {
       (widget as WidgetWithSnapshot).snapshot(snapshot),
     ).not.toThrow()
 
+    // A gradient fill is the gradient node, not a flat appendFill.
     expect(appendFill).not.toHaveBeenCalled()
-    // pushFill/pop still bracket the attempt (the gradient reference DID
-    // resolve) — only the append call for the broken stops is skipped.
     expect(pushFill).toHaveBeenCalledTimes(1)
-    expect(appendLinearGradient).not.toHaveBeenCalled()
     expect(pop).toHaveBeenCalled()
+    expect(appendLinearGradient).toHaveBeenCalledTimes(1)
+
+    const [bounds, start, end, stops] = appendLinearGradient.mock.calls[0]!
+    // The 100x50 rect's own bounds, and objectBoundingBox coordinates
+    // (x1,y1)=(0,0) → (x2,y2)=(1,0) resolved against them.
+    expect(bounds.size.width).toBeCloseTo(100)
+    expect(bounds.size.height).toBeCloseTo(50)
+    expect(start.x).toBeCloseTo(0)
+    expect(start.y).toBeCloseTo(0)
+    expect(end.x).toBeCloseTo(100)
+    expect(end.y).toBeCloseTo(0)
+
+    // The colors survive the trip into Gsk — the whole point of the fix.
+    expect(stops).toHaveLength(2)
+    expect(stops[0]!.offset).toBeCloseTo(0)
+    expect(isRed(stops[0]!.color)).toBe(true)
+    expect(stops[1]!.offset).toBeCloseTo(1)
+    expect(stops[1]!.color.blue).toBeCloseTo(1)
+    expect(stops[1]!.color.red).toBeCloseTo(0)
+    expect(stops[1]!.color.alpha).toBeCloseTo(1)
   })
 
   it("fill=url(#missing) paints nothing rather than throwing", async () => {
@@ -346,8 +360,7 @@ describe("<Svg> rendering", () => {
     expect(appendFill).not.toHaveBeenCalled()
   })
 
-  // Same known limitation as the linear gradient test above.
-  it("radial gradient reference also degrades to no paint safely", async () => {
+  it("radial gradient reference paints with its stops too", async () => {
     await render(
       <Root
         width={100}
@@ -386,7 +399,17 @@ describe("<Svg> rendering", () => {
     expect(() =>
       (widget as WidgetWithSnapshot).snapshot(snapshot),
     ).not.toThrow()
-    expect(appendRadialGradient).not.toHaveBeenCalled()
+    expect(appendRadialGradient).toHaveBeenCalledTimes(1)
+
+    // (bounds, center, hradius, vradius, start, end, stops)
+    const [bounds, , , , , , stops] = appendRadialGradient.mock.calls[0]!
+    expect(bounds.size.width).toBeCloseTo(80)
+    expect(bounds.size.height).toBeCloseTo(40)
+    expect(stops).toHaveLength(2)
+    expect(stops[0]!.color.red).toBeCloseTo(1)
+    expect(stops[0]!.color.green).toBeCloseTo(1)
+    expect(stops[1]!.color.red).toBeCloseTo(0)
+    expect(stops[1]!.color.green).toBeCloseTo(0)
   })
 })
 
