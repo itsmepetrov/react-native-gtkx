@@ -65,6 +65,60 @@ export type LayoutChild = {
   cssClass: string | null
 }
 
+// Which Yoga node lays out which widget. The reconciler talks in widgets and
+// the shadow tree talks in nodes, and syncChildOrder below is the one place
+// that has to translate between them.
+const nodesByWidget = new WeakMap<Gtk.Widget, LayoutNode>()
+
+/**
+ * Puts a container's shadow tree back into its widgets' order.
+ *
+ * WHY this is needed, and why insertion order alone was not enough. A child
+ * picks its Yoga index once, on mount, from where the reconciler put its
+ * widget — which is right for a child that APPEARS mid-list, and blind to a
+ * child that MOVES. React reorders keyed siblings by moving the existing
+ * fibers, so nothing mounts and nothing unmounts: the widgets end up in the
+ * new order and the Yoga nodes stay in the old one, and since the rects come
+ * from the nodes, the rows redraw exactly where they were. Every list that
+ * can be sorted, filtered into a different order, or dragged into one was
+ * silently affected — found by dragging a row in `examples/tasks-nav` after
+ * its rows were rewritten in React Native (a `GtkListBox` was doing its own
+ * layout before, so nothing had ever exercised this).
+ *
+ * Runs after every commit of the container, and does nothing at all unless
+ * the two orders actually disagree — one pointer comparison per child.
+ */
+const syncChildOrder = (parentWidget: Gtk.Widget, parent: LayoutNode): void => {
+  const ordered: LayoutNode[] = []
+  let moved = false
+  let child = parentWidget.getFirstChild()
+  while (child !== null) {
+    const node = nodesByWidget.get(child)
+    // Widgets that are not layout children of THIS container are skipped in
+    // both orders: a nested layout root, or a raw GTK widget a slot holds.
+    if (node !== undefined && node.parent === parent) {
+      if (parent.children[ordered.length] !== node) {
+        moved = true
+      }
+      ordered.push(node)
+    }
+    child = child.getNextSibling()
+  }
+  // A disagreement in COUNT is not a reorder — it means a child is
+  // mid-mount, or something in this container lays itself out. Re-sorting
+  // against a partial view would be worse than leaving it alone.
+  if (!moved || ordered.length !== parent.children.length) {
+    return
+  }
+  for (let index = 0; index < ordered.length; index += 1) {
+    const node = ordered[index]!
+    if (parent.children[index] !== node) {
+      parent.removeChild(node)
+      parent.insertChild(node, index)
+    }
+  }
+}
+
 // Shared plumbing for every leaf/container component: owns one LayoutNode,
 // keeps it in the parent's shadow tree for the component lifetime, applies
 // the layout half of the style and commits Yoga rects into the rect store,
@@ -123,6 +177,16 @@ export const useLayoutChild = (
     const widget = widgetRef.current
     const parentWidget = host.widgetRef.current
     let index = parent.children.length
+    if (widget) {
+      // Published so the container can put the shadow tree back into widget
+      // order after React has MOVED an existing child — see syncChildOrder.
+      // Outside the `parentWidget` guard below on purpose: on a first mount
+      // the PARENT's ref is not attached yet (React attaches host refs
+      // bottom-up, so a child's layout effect runs before its container's
+      // widget exists), and a registration skipped there would never happen
+      // again — the effect runs once.
+      nodesByWidget.set(widget, node)
+    }
     if (widget && parentWidget) {
       let position = 0
       let sibling = parentWidget.getFirstChild()
@@ -187,6 +251,12 @@ export const useLayoutChild = (
       }
     })
     return () => {
+      // `widget`, not `widgetRef.current`: by cleanup time the ref may
+      // already have been detached, and the entry to drop is the one this
+      // effect registered.
+      if (widget) {
+        nodesByWidget.delete(widget)
+      }
       node.setCommit(null)
       parent.removeChild(node)
       node.free()
@@ -283,6 +353,18 @@ export const useRnContainer = (
 ): void => {
   const optionsRef = useRef<RnContainerOptions | undefined>(options)
   optionsRef.current = options
+
+  // Deliberately no dependency array: a MOVE mounts nothing and unmounts
+  // nothing, so there is no other commit this could key off. Children's
+  // layout effects run before their container's, so by the time this fires
+  // every child of this commit has registered its node. See syncChildOrder.
+  useLayoutEffect(() => {
+    const widget = widgetRef.current
+    if (widget) {
+      syncChildOrder(widget, node)
+    }
+  })
+
   useLayoutEffect(() => {
     const widget = widgetRef.current
     if (!widget) {

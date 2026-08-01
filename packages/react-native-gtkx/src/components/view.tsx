@@ -17,6 +17,7 @@ import type { ResponderProps } from "../responder/types"
 import { useResponder } from "../responder/use-responder"
 import { HostNodeContext } from "./host-node"
 import { createMeasureHandle, type MeasureHandle } from "./measure"
+import { useFocusable, useFocusController } from "./use-focus"
 import {
   useLayoutChild,
   useRnContainer,
@@ -31,6 +32,15 @@ export type ViewProps = ResponderProps & {
   // RN pointerEvents; the prop wins over style.pointerEvents (RN 0.71+).
   pointerEvents?: PointerEventsValue
   onLayout?: (event: LayoutEvent) => void
+  // RN's own prop (Android, Windows): puts the view into the keyboard focus
+  // chain. Off by default, as it is in RN — a desktop's Tab order is the
+  // app's to decide, not something a layout box should join by existing.
+  focusable?: boolean
+  // react-native-web and react-native-windows both put these on View; RN
+  // core has them on TextInput and the touchables. No argument, matching
+  // this platform's own TextInput.
+  onFocus?: () => void
+  onBlur?: () => void
   children?: ReactNode
   testID?: string
   // React 19 takes `ref` as an ordinary prop, which is what we want here:
@@ -56,6 +66,9 @@ export const View = ({
   style,
   pointerEvents,
   onLayout,
+  focusable = false,
+  onFocus,
+  onBlur,
   children,
   testID,
   ref,
@@ -69,6 +82,9 @@ export const View = ({
   useRnContainer(widgetRef, node)
 
   useImperativeHandle(ref, () => createMeasureHandle(widgetRef, node), [node])
+
+  useFocusable(widgetRef, focusable)
+  useFocusController(widgetRef, onFocus, onBlur)
 
   // Spreading PanResponder's panHandlers onto a View is the portable RN
   // idiom, so every responder prop arrives here as a rest prop.

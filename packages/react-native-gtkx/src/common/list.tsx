@@ -16,13 +16,21 @@
 // Everything below is portable React Native underneath — no widget is created
 // that an app could not have created itself. Compare `Widget`/`SlotContent`
 // next door, which exist precisely because they CANNOT be written in RN.
-import { type ReactNode } from "react"
+import { createContext, useContext, type ReactNode } from "react"
 import { useColorScheme } from "../apis/index"
 import { Pressable } from "../components/pressable"
 import { Text } from "../components/text"
 import { View } from "../components/view"
 import { PlatformColor, StyleSheet } from "../style/index"
 import type { StyleProp } from "../contracts"
+import { Controllers } from "../gtk/controllers"
+import {
+  Gdk,
+  GObject,
+  Gtk,
+  GtkDragSource,
+  GtkDropTarget,
+} from "../gtkx/bridge/index"
 
 /**
  * Where a row sits in its list, which is what decides its corner radii and
@@ -132,8 +140,28 @@ const TINTS = {
   },
 } as const
 
+/**
+ * Where a row reports a completed drag. Carried through context so an app
+ * writes the handler once on the `List` and an id per `ListRow`, instead of
+ * threading a callback through whatever component renders its rows.
+ */
+const ReorderContext = createContext<ListReorderHandler | null>(null)
+
+export type ListReorderHandler = (draggedId: string, targetId: string) => void
+
 export type ListProps = {
   children?: ReactNode
+  /**
+   * Enables drag-to-reorder for every {@link ListRow} that carries a
+   * `reorderId`. Called with the id of the row being dragged and the id of
+   * the row it was dropped on; the dragged row belongs in front of that one.
+   *
+   * Ids, not indices, on purpose: the rows are React children, so a `List`
+   * cannot see their order, and an app that reorders by id never has to
+   * reconcile an index against a list that filtering or sorting has already
+   * changed underneath it.
+   */
+  onReorder?: ListReorderHandler
   style?: StyleProp
   testID?: string
 }
@@ -155,13 +183,20 @@ export type ListProps = {
  * </List>
  * ```
  */
-export const List = ({ children, style, testID }: ListProps): ReactNode => (
-  <View
-    testID={testID}
-    style={[styles.list, style]}
-  >
-    {children}
-  </View>
+export const List = ({
+  children,
+  onReorder,
+  style,
+  testID,
+}: ListProps): ReactNode => (
+  <ReorderContext.Provider value={onReorder ?? null}>
+    <View
+      testID={testID}
+      style={[styles.list, style]}
+    >
+      {children}
+    </View>
+  </ReorderContext.Provider>
 )
 
 export type ListRowProps = {
@@ -186,9 +221,96 @@ export type ListRowProps = {
    *  the last — set it false when the list supplies its own separators (a
    *  `FlatList`'s `ItemSeparatorComponent`, say). */
   separator?: boolean
+  /**
+   * Identifies this row for drag-to-reorder, and enables it. Both halves at
+   * once: the row becomes a drag SOURCE carrying this id, and a drop TARGET
+   * that reports the id it received to the enclosing `List`'s `onReorder`.
+   *
+   * Without a `List` `onReorder` above it, nothing is attached — an id with
+   * no handler cannot mean anything, and the rows of a list that is not
+   * reorderable should not offer a drag.
+   */
+  reorderId?: string
   style?: StyleProp
   testID?: string
 }
+
+// libadwaita 1.9: `row:focus:focus-visible { outline-color: color-mix(in
+// srgb, var(--accent-color) 50%, transparent); outline-width: 2px;
+// outline-offset: -2px }`. An outline takes no layout space, so drawing it
+// only while focused never moves anything — the reason `outline*` is the
+// right prop for a focus ring and `border*` is not.
+//
+// The 50% mix is the one part not reproduced: RN's colour contract has no
+// `color-mix`, and adding one would be inventing non-RN surface (the same
+// call already made for the hover tint above). The ring reads slightly
+// stronger than Adwaita's own as a result.
+const focusRing = {
+  outlineWidth: 2,
+  outlineOffset: -2,
+  outlineColor: PlatformColor("accent-color"),
+} as const
+
+/**
+ * The GTK half of drag-to-reorder, kept in one place so a row can stay a
+ * `Pressable` with children.
+ *
+ * WHY GTK's own drag-and-drop and not a JS one. Every RN drag-reorder list
+ * (`react-native-draggable-flatlist` and its relatives) is built on
+ * react-native-gesture-handler + react-native-reanimated, and this platform
+ * implements neither (docs/research/gestures.md). GDK's is right there, and
+ * it brings a real drag icon, the correct cursors and content negotiation
+ * with other applications for free.
+ *
+ * The payload is the row id as a plain GObject string, the shape
+ * `tests/gtk/bridge/auxiliary-elements.gtk.test.tsx` already exercises.
+ * Every row is both a source (of its own id) and a target (put the dragged
+ * row in front of me).
+ */
+const ReorderControllers = ({
+  id,
+  onReorder,
+}: {
+  id: string
+  onReorder: ListReorderHandler
+}): ReactNode => (
+  <Controllers>
+    <GtkDragSource
+      actions={Gdk.DragAction.MOVE}
+      onPrepare={(x, y, self) => {
+        // The drag icon is a snapshot of the row itself, offset by where
+        // inside it the drag began — so the row appears to lift off under
+        // the cursor rather than jumping to it.
+        const row = self.getWidget()
+        if (row) {
+          self.setIcon(
+            Gtk.WidgetPaintable.new(row),
+            Math.round(x),
+            Math.round(y),
+          )
+        }
+        return Gdk.ContentProvider.newForValue(
+          GObject.buildValue(GObject.TYPE_STRING, (value) =>
+            value.setString(id),
+          ),
+        )
+      }}
+    />
+    <GtkDropTarget
+      actions={Gdk.DragAction.MOVE}
+      types={[GObject.TYPE_STRING]}
+      onDrop={(value) => {
+        const draggedId = value.getString()
+        // A row dropped on itself is a no-op, not a reorder — GTK will
+        // happily deliver one.
+        if (draggedId && draggedId !== id) {
+          onReorder(draggedId, id)
+        }
+        return true
+      }}
+    />
+  </Controllers>
+)
 
 /**
  * One row of a {@link List} — `AdwActionRow`'s layout and states, built from
@@ -198,11 +320,15 @@ export type ListRowProps = {
  * they cost anywhere else in this platform: the hover path swaps a CSS class
  * on the widget without a React render (see components/pressable.tsx).
  *
- * **Not yet:** keyboard navigation between rows and a focus ring.
- * `GtkListBox` implements those as widget behaviour and RN has no focus model
- * for `View` to hang them on — `Pressable`'s state is `{pressed, hovered}`
- * with no `focused`. The ring itself is now drawable (`outlineWidth` and
- * friends), so what is missing is the state, not the paint.
+ * An activatable row is **focusable** — Tab and the arrow keys move between
+ * rows through GTK's own keynav, Enter and Space activate the focused one,
+ * and the focus ring is Adwaita's (`outline`, 2px, inset by 2). That is the
+ * `GtkListBox` behaviour a hand-built list used to have to give up.
+ *
+ * **Drag-to-reorder** arrives with `reorderId` plus the enclosing `List`'s
+ * `onReorder`, using GDK's real drag-and-drop under the covers — and doing
+ * so through `Controllers` from `react-native-gtkx/gtk`, the same public
+ * door an app would use for a controller this component does not offer.
  */
 export const ListRow = ({
   title,
@@ -212,6 +338,7 @@ export const ListRow = ({
   onPress,
   position = "middle",
   separator,
+  reorderId,
   style,
   testID,
 }: ListRowProps): ReactNode => {
@@ -220,9 +347,18 @@ export const ListRow = ({
   const isFirst = position === "first" || position === "only"
   const isLast = position === "last" || position === "only"
   const drawSeparator = separator ?? !isLast
+  const onReorder = useContext(ReorderContext)
+  const reorder =
+    reorderId !== undefined && onReorder !== null ? (
+      <ReorderControllers
+        id={reorderId}
+        onReorder={onReorder}
+      />
+    ) : null
 
   const body = (
     <>
+      {reorder}
       {prefix}
       <View style={styles.titleBox}>
         {typeof title === "string" ? (
@@ -266,10 +402,11 @@ export const ListRow = ({
       // The tint goes on the ROW, which is why the corner radii above have to
       // be on the row too: a hovered first row must round its own top corners
       // or the highlight paints square over the card's rounded ones.
-      style={({ hovered, pressed }) => [
+      style={({ hovered, pressed, focused }) => [
         ...base,
         hovered && { backgroundColor: tints.hover },
         pressed && { backgroundColor: tints.press },
+        focused && focusRing,
       ]}
     >
       {body}

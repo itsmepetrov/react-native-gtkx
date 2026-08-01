@@ -43,6 +43,13 @@ export {
   type WindowControllersProps,
 } from "./window-actions"
 
+// The same idea one level down: event controllers attached to the widget of
+// the enclosing React Native component, so a row written in View/Pressable
+// can still carry GTK drag-and-drop. The door onto GTK behaviour that no RN
+// prop expresses — deliberately an element in THIS subpath rather than a
+// prop on `View`, see controllers.tsx.
+export { Controllers, type ControllersProps } from "./controllers"
+
 // GSettings: reads and writes backed by a compiled `.gschema.xml` schema.
 // `useSetting`/`useBindSetting` come straight from @gtkx/react; loading a
 // `.gschema.xml` file into the `SettingsSchema` object they expect is a

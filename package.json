@@ -9,6 +9,7 @@
   "scripts": {
     "codegen": "gtkx codegen",
     "typecheck": "tsc -p packages/react-native-gtkx && tsc -p scripts",
+    "typecheck:examples": "node scripts/typecheck-examples.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

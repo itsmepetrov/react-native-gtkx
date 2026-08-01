@@ -196,13 +196,13 @@ Both are in `style/README.md` now, and both are covered by
 
 These are the ones where reaching for `StyleSheet` would be forcing it.
 
-| Gap                                                                                                                                               | Why no style closes it                                                                                                                                                                                                               | Where it belongs                                                                                     |
-| ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| **Keyboard navigation between rows** (Up/Down moving a cursor through the list)                                                                   | `GtkListBox` implements this as a widget behaviour. RN's `View` is not focusable and RN has no focus-traversal model on the desktop at all.                                                                                          | `react-native-gtkx/common`                                                                           |
-| **Focus state**                                                                                                                                   | The _ring_ is now drawable (above), but nothing tells a `View` it is focused: `Pressable`'s state callback is `{pressed, hovered}` with no `focused`, and there is no `onFocus`/`onBlur` outside `TextInput`.                        | `react-native-gtkx/common` — a row component that owns focus and hands the style layer an `outline*` |
-| **`AdwEntryRow`'s inline editing** (the "Add a task…" row: a label that floats up into a title when the field has text, with an apply affordance) | This is a composed widget with its own state machine, not a look. RN has `TextInput` and a placeholder, which is a different interaction.                                                                                            | `react-native-gtkx/common`, or accept the difference                                                 |
-| **Named theme icons** (`starred-symbolic`, `user-trash-symbolic`)                                                                                 | RN's `Image` takes a file path or a URI. An icon _name_ resolved against the desktop icon theme has no RN equivalent — RN apps bundle assets or use `react-native-vector-icons`.                                                     | `react-native-gtkx/common` — **now `Icon`**, the shape every RN app already uses                     |
-| Strikethrough on a completed task                                                                                                                 | Found here, closed as a style after all: `textDecorationLine` is an RN prop we did not have, and GTK draws it through **Pango attributes** rather than CSS — the same path `textAlign` already takes. Added alongside the two above. | the style/component layer                                                                            |
+| Gap                                                                                                                                               | Why no style closes it                                                                                                                                                                                                               | Where it belongs                                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| ~~**Keyboard navigation between rows**~~ **— closed**                                                                                             | `GtkListBox` implements this as a widget behaviour. RN's `View` is not focusable and RN has no focus-traversal model on the desktop at all.                                                                                          | Neither, in the end: `focusable` puts the widget in GTK's own focus chain, and GTK's directional keynav does the traversal — see below       |
+| ~~**Focus state**~~ **— closed**                                                                                                                  | The _ring_ is now drawable (above), but nothing tells a `View` it is focused: `Pressable`'s state callback is `{pressed, hovered}` with no `focused`, and there is no `onFocus`/`onBlur` outside `TextInput`.                        | The portable components, not `common`: `focusable`/`onFocus`/`onBlur` and a `focused` state, all shapes RN already has elsewhere — see below |
+| **`AdwEntryRow`'s inline editing** (the "Add a task…" row: a label that floats up into a title when the field has text, with an apply affordance) | This is a composed widget with its own state machine, not a look. RN has `TextInput` and a placeholder, which is a different interaction.                                                                                            | `react-native-gtkx/common`, or accept the difference                                                                                         |
+| **Named theme icons** (`starred-symbolic`, `user-trash-symbolic`)                                                                                 | RN's `Image` takes a file path or a URI. An icon _name_ resolved against the desktop icon theme has no RN equivalent — RN apps bundle assets or use `react-native-vector-icons`.                                                     | `react-native-gtkx/common` — **now `Icon`**, the shape every RN app already uses                                                             |
+| Strikethrough on a completed task                                                                                                                 | Found here, closed as a style after all: `textDecorationLine` is an RN prop we did not have, and GTK draws it through **Pango attributes** rather than CSS — the same path `textAlign` already takes. Added alongside the two above. | the style/component layer                                                                                                                    |
 
 ## What shipped, and what is left
 
@@ -219,28 +219,80 @@ the real thing:
 
 ![](../shots/rn-first/common-list.png)
 
-**Two things are deliberately not done yet, and both are worth naming.**
+**Two things were left open here, and both are now closed** — keyboard
+navigation with a focus ring on `ListRow`, and `examples/tasks-nav`'s own
+rewrite. The second turned out to be blocked on something this document had
+not named at all, and on a bug underneath that.
 
-1. **Keyboard navigation and the focus ring on `ListRow`.** The ring is now
-   drawable, but nothing tells a `View` it is focused. Closing this means
-   giving the row real focus — which is a platform decision about whether
-   `Pressable` grows a `focused` state (RN has none) or whether `common` owns
-   a focusable row of its own.
+### Focus: RN already had the shape
 
-2. **`examples/tasks-nav`'s own rewrite**, which is what all of this was for.
-   It is blocked on one specific thing rather than on effort: the task rows
-   carry **drag-and-drop reorder**, attached as `GtkDragSource`/`GtkDropTarget`
-   controllers on the `AdwActionRow`. A `Pressable` exposes no widget — its
-   `ref` is RN's `ViewHandle` (measure methods), correctly, because that is
-   RN's contract — so there is currently no way to attach a GTK controller to
-   a row written in React Native. Rewriting the rows without solving that
-   would silently drop a feature two earlier PRs added, which is worse than
-   leaving the example as it is for one more slice.
+Nothing was invented. `focusable` is on RN's own `View` (Android, Windows);
+`onFocus`/`onBlur` are on `View` in react-native-web and
+react-native-windows; and react-native-web's `Pressable` state callback is
+`{focused, hovered, pressed}` — `hovered` was already a documented extension
+here for exactly that reason, so `focused` is the same move. Enter and Space
+activate a focused `Pressable`, as they do on web and Android, because
+`focusable` without that is decorative.
 
-   The shape of the answer is a `common`-level escape hatch (`ListRow` taking
-   `controllers`, the way every gtkx widget element already does), or
-   `common` owning drag-reorder outright. That is a design call about where
-   the GTK boundary sits, not a bug, and it should be made deliberately.
+The traversal half needed nothing of ours: `gtk_widget_set_focusable` puts
+the widget into GTK's focus chain, and GTK's directional keynav then moves
+between focusable siblings. The claim above that "RN has no focus-traversal
+model on the desktop" was true and beside the point — GTK has one, and
+`focusable` is the whole of the connection to it.
+
+### The one that was not on the list: drag-reorder
+
+Found by trying the rewrite rather than by reading the screen. `tasks-nav`'s
+rows carried drag-and-drop through `GtkDragSource`/`GtkDropTarget` in an
+`AdwActionRow`'s `controllers` slot (#33, #39), and **a `Pressable` exposes
+no widget** — its `ref` is a `ViewHandle`, which is right and deliberate. So
+there was no way to attach a GTK event controller to a row written in React
+Native, and rewriting the rows would have silently dropped a shipped
+feature. That, not the styling, was the actual blocker.
+
+It is closed by `Controllers` from `react-native-gtkx/gtk` — the
+`WindowControllers` idea one level down: declare in the app tree, attach to
+the enclosing view's widget. A prop on `View` was rejected for being
+invisible off Linux; the reasoning is in
+[platform-layer.md](../platform-layer.md#controllers--a-gtk-event-controller-on-a-react-native-component).
+`List`'s `onReorder` and `ListRow`'s `reorderId` package it, and are written
+on top of it.
+
+### And the bug underneath that
+
+With the drag delivering correctly, the rows still did not move. A layout
+child chose its Yoga index once, **on mount**, from where the reconciler had
+put its widget — right for a child that appears mid-list, blind to one that
+_moves_. React reorders keyed siblings by moving the existing fibers, so
+nothing mounts and nothing unmounts: the widgets ended up in the new order
+while the shadow tree kept the old one, and the rects come from the shadow
+tree. Every list that can be sorted, filtered into a different order or
+dragged into one was affected. Nothing had ever exercised it, because the
+only reorderable list in the repo was a `GtkListBox` doing its own layout.
+Fixed by re-syncing the shadow tree to widget order after each commit of a
+container, and pinned by `tests/gtk/layout/child-order.gtk.test.tsx` — whose
+assertions are about the RECTS, since the widget order was already right.
+
+## The rewrite, and the proof
+
+|                                                                                                                                                                                            |                                         |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------- |
+| **`examples/tasks-nav`, body rewritten in React Native** — `ScrollView`/`View`/`Text`/`TextInput` plus `common`'s `List`/`ListRow`                                                         | ![](../shots/rn-first/rn-rows.png)      |
+| **`examples/tasks-app` beside it, unchanged** — the hand-built Adwaita comparison that makes the claim checkable                                                                           | ![](../shots/rn-first/adwaita-app.png)  |
+| **Mid-drag, driven by a real `zwlr_virtual_pointer_v1`**: GDK's own drag icon (a `Gtk.WidgetPaintable` of the row) under the cursor, and the accent drop-target ring on the row it is over | ![](../shots/rn-first/rn-rows-drag.png) |
+
+The drag is also a test, not only a screenshot:
+`tests/gtk/common/list-reorder.gtk.test.tsx` drives a real virtual pointer
+through press-move-release over two `ListRow`s and asserts both the callback
+ids and that the rows changed places.
+
+What did not survive the rewrite, stated rather than glossed: `GtkSearchBar`'s
+reveal animation (a widget behaviour; a `Widget` wrapper around it would need
+re-measuring every animation frame) and `AdwEntryRow`'s floating label, which
+is the composed-widget difference this document already named. The checkbox
+and the two flat icon buttons inside a row are still real widgets in React
+Native layout — RN has no checkbox at all, and a tooltip and an accessible
+label are worth keeping.
 
 ## What this says about the showcase
 
@@ -248,12 +300,18 @@ The honest summary is that **the example was under-styled, and the platform was
 missing one prop that mattered and three that will.** Not "React Native cannot
 look native here".
 
-That reframes the rewrite: `tasks-nav`'s body can be `View` / `Text` /
-`Pressable` / `FlatList` / `StyleSheet` plus a small `common` list-and-row pair
-for the parts above that are genuinely widget behaviour, and it should reach
-`examples/tasks-app`'s appearance rather than approach it. `tasks-app` stays
-exactly as it is — the hand-built Adwaita comparison is what makes the claim
-checkable.
+That reframed the rewrite, and the rewrite has since happened:
+`tasks-nav`'s body is `View` / `Text` / `Pressable` / `TextInput` /
+`ScrollView` / `StyleSheet` plus `common`'s list-and-row pair, and it reaches
+`examples/tasks-app`'s appearance rather than approaching it. `tasks-app`
+stays exactly as it is — the hand-built Adwaita comparison is what makes the
+claim checkable.
+
+One correction to the original framing, worth making explicitly: the
+platform was missing **one prop that mattered, three that would, and one
+thing that was not a prop at all** — a door onto GTK behaviour from a React
+Native component. The styling half of this document was right; it was not
+the whole answer.
 
 `contentLayout: "widget"` stays too. An app whose body really is a widget tree
 is a legitimate thing to be, and `sidebarContent`/`sidebarRow` rest on the same
@@ -261,17 +319,25 @@ idea. What changes is which of the two the project's showcase demonstrates.
 
 ## Notes for whoever runs this again
 
-- **Hover and press cannot be screenshotted on the headless rig**, and it is
-  worth not re-discovering why. A wlroots seat started with
+- **Pointer input on the headless rig CAN be screenshotted — this document
+  used to say it could not, and that was wrong in an instructive way.** The
+  diagnosis was right: a wlroots seat started with
   `WLR_LIBINPUT_NO_DEVICES=1` has no pointer capability at all
-  (`swaymsg -t get_seats` → `capabilities: 0, devices: []`), so no `wl_pointer`
-  is ever advertised and no client can receive an enter. sway's
-  `seat - cursor set X Y` answers `success: true` and changes nothing.
-  `wlrctl`'s `wlr-virtual-pointer` does reach the compositor, but each
-  invocation creates and destroys its own device, so the capability appears and
-  disappears faster than a frame. The hover fast path is covered by
-  `tests/gtk/components/pressable-hover.gtk.test.tsx` instead, which drives the
-  real `EventControllerMotion` signal.
+  (`swaymsg -t get_seats` → `capabilities: 0, devices: []`), so no
+  `wl_pointer` is advertised; sway's `seat - cursor set X Y` answers
+  `success: true` and changes nothing; and `wlrctl`'s `wlr-virtual-pointer`
+  creates and destroys its device per invocation, so the capability appears
+  and disappears faster than a frame. The conclusion drawn from it — that no
+  pointer is possible here — did not follow. **Hold the connection open.** A
+  process that binds `zwlr_virtual_pointer_manager_v1` itself, creates one
+  device and keeps it for the whole session gets a seat with a real pointer
+  capability for as long as it lives; `wlrctl`'s problem was its lifetime,
+  not the protocol. `tests/gtk/support/virtual-pointer.ts` is ~300 lines of
+  hand-rolled Wayland that does exactly this, and the mid-drag screenshot
+  above was taken with it against a running `gtkx dev`.
+  `tests/gtk/components/pressable-hover.gtk.test.tsx` still drives the
+  `EventControllerMotion` signal directly, which is cheaper and remains the
+  right tool for the hover fast path.
 - The examples persist to `~/.local/share/dev.rngtkx.tasks{,nav}/tasks.json`.
   Remove it before a comparison run or you are shooting the previous run's
   state.

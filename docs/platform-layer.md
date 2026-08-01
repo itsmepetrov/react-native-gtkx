@@ -131,13 +131,38 @@ app should not have to do is rediscover the numbers, which are not obvious
 on the first and last ROW, not on the container) and which move when
 libadwaita moves.
 
-| Export          | What it is                                                                                  |
-| --------------- | ------------------------------------------------------------------------------------------- |
-| `List`          | the `.boxed-list` frame — a `View` with the card background, radius and shadow              |
-| `ListRow`       | `AdwActionRow`'s layout and states (`title`/`subtitle`/`prefix`/`suffix`), on a `Pressable` |
-| `ListSeparator` | the hairline, for a `FlatList`'s `ItemSeparatorComponent`                                   |
-| `rowPosition`   | `(index, count)` → `"first"                                                                 | "middle" | "last" | "only"`, since RN has no `:first-child` |
-| `Icon`          | a **named** icon from the desktop icon theme                                                |
+| Export          | What it is                                                                                      |
+| --------------- | ----------------------------------------------------------------------------------------------- |
+| `List`          | the `.boxed-list` frame — a `View` with the card background, radius and shadow                  |
+| `ListRow`       | `AdwActionRow`'s layout and states (`title`/`subtitle`/`prefix`/`suffix`), on a `Pressable`     |
+| `ListSeparator` | the hairline, for a `FlatList`'s `ItemSeparatorComponent`                                       |
+| `rowPosition`   | `(index, count)` → `"first"` / `"middle"` / `"last"` / `"only"`, since RN has no `:first-child` |
+| `Icon`          | a **named** icon from the desktop icon theme                                                    |
+
+**Drag-to-reorder** is `List`'s `onReorder` plus a `reorderId` on each row —
+GDK's own drag-and-drop underneath, with the real drag icon (a snapshot of
+the row), the correct cursors and content negotiation for free:
+
+```tsx
+<List onReorder={(dragged, target) => move(dragged, target)}>
+  {tasks.map((task, index) => (
+    <ListRow
+      key={task.id}
+      reorderId={task.id}
+      title={task.title}
+      position={rowPosition(index, tasks.length)}
+      onPress={() => open(task)}
+    />
+  ))}
+</List>
+```
+
+Ids rather than indices, because the rows are React children and a `List`
+cannot see their order. A row with no `reorderId`, or a list with no
+`onReorder`, attaches no drag controllers at all — so a view that cannot
+express an order simply drops the handler. Underneath, `ListRow` uses
+`Controllers` from `react-native-gtkx/gtk` (below): nothing here is reachable
+only from inside the platform.
 
 `Icon` is not `Image`: RN's `Image` takes a file path or URI, because on iOS
 and Android an icon is a bundled asset. Here it is a _name_ resolved against
@@ -147,12 +172,14 @@ express that. The shape is the one RN apps already use
 (`<Icon name size />`), with the desktop icon theme behind it instead of a
 bundled font.
 
-`ListRow` does **not** yet do keyboard navigation between rows or draw a
-focus ring. `GtkListBox` implements both as widget behaviour, and RN has no
-focus model for `View` to hang them on — `Pressable`'s state callback is
-`{pressed, hovered}` with no `focused`. The ring itself is drawable
-(`outlineWidth`/`outlineColor`/`outlineStyle`/`outlineOffset`, see the style
-table); what is missing is the state, not the paint.
+An activatable `ListRow` is **focusable**: Tab and the arrow keys move
+between rows through GTK's own keynav, Enter and Space activate the focused
+one, and the ring is Adwaita's (`outline`, 2px, inset by 2). That used to be
+the one `GtkListBox` behaviour a hand-built list had to give up; it is now
+`Pressable`'s `focusable` and its `focused` state, on the portable component
+(see [api.md](api.md)). The only part of Adwaita's rule not reproduced is its
+`color-mix(…50%)` on the ring colour — RN's colour contract has no
+`color-mix`, so the ring reads slightly stronger than the widget's.
 
 ### GTK widgets, driven by React Native
 
@@ -383,6 +410,70 @@ through the widget hierarchy up to that same window. One consequence worth
 knowing: react-navigation keeps a popped screen mounted until its exit
 transition ends, so a screen's actions outlive the pop by the length of the
 animation.
+
+### `Controllers` — a GTK event controller on a React Native component
+
+The same idea one level down. `<Controllers>` attaches its children to the
+widget of the **enclosing React Native component** — `View`, `Pressable`,
+`ScrollView`, `Animated.View`, any of them:
+
+```tsx
+<Pressable onPress={open}>
+  <Controllers>
+    <GtkDragSource
+      actions={Gdk.DragAction.MOVE}
+      onPrepare={(x, y, self) =>
+        Gdk.ContentProvider.newForValue(
+          GObject.buildValue(GObject.TYPE_STRING, (v) => v.setString(id)),
+        )
+      }
+    />
+  </Controllers>
+  <Text>{title}</Text>
+</Pressable>
+```
+
+**Why it exists.** A `Pressable`'s `ref` is a `ViewHandle` —
+`measure`/`measureInWindow`/`measureLayout` — and that is correct: React
+Native's contract says nothing about widgets, and an app reaching through a
+ref to a `Gtk.Widget` would pin every internal of this platform as public
+API. But GTK carries behaviour no style and no RN prop expresses,
+drag-and-drop above all, and before this there was simply no way to reach it
+from a row written in React Native. `examples/tasks-nav`'s rows could not be
+rewritten because of it (see
+[the showcase research](research/react-native-first-showcase.md)).
+
+**Why a component here and not a `controllers` prop on `View`.** A prop
+would have been three lines, and it would sit on the two components an app
+shares with iOS and Android, imported from the _portable_ entry point: the
+file would still compile everywhere, the prop would be ignored off Linux,
+and the feature would vanish with no diagnostic. On this platform **the
+import is the signal** — `react-native-gtkx/gtk` is the line an app knows it
+is crossing. An element is also something an RN developer already knows how
+to put behind a `Platform.OS` check or a `.linux.tsx` split, and its absence
+is visible in the tree.
+
+Two properties follow from it being a portal, and both matter:
+
+- **it composes with context** — the handler that reorders a list is written
+  where that list's state already is;
+- **it is lifecycle-bound** — attached on mount, removed on unmount, so a
+  screen's controllers leave with the screen.
+
+One caveat, stated rather than hidden: the controllers attach **one commit
+after mount**. React attaches host refs bottom-up, so the enclosing view's
+widget does not exist yet when a child's layout effects run. For an event
+controller this is unobservable — no pointer reaches a widget in its first
+frame — and it is the same delay `WindowActions` has. It does mean a test
+that aims a synthetic pointer at a fresh tree has to let one commit land.
+
+Inside a GTK widget's own slot there is no enclosing React Native component
+and nothing is attached; pass `controllers={…}` to the widget itself there,
+which is the prop this substitutes for.
+
+For drag-reorder specifically, `List`/`ListRow` in
+`react-native-gtkx/common` already package this — and they are written on
+top of `Controllers`, not around it.
 
 ### GSettings
 

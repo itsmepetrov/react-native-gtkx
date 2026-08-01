@@ -118,9 +118,9 @@ const usageColor = (used: number): string => {
 const osPrettyName = (): string => {
   try {
     const release = readFileSync("/etc/os-release", "utf8")
-    const match = /^PRETTY_NAME="?([^"\n]+)"?/m.exec(release)
-    if (match) {
-      return match[1]
+    const name = /^PRETTY_NAME="?([^"\n]+)"?/m.exec(release)?.[1]
+    if (name) {
+      return name
     }
   } catch {
     // Fall through to the generic label.

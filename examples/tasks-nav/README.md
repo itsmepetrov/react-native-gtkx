@@ -67,11 +67,21 @@ Every one of the three gaps `examples/tasks-app`'s README named, closed on
 
 ## Drag-and-drop reorder
 
-Rows are dragged into a new order with GTK4's own drag-and-drop —
-`GtkDragSource`/`GtkDropTarget` on each `AdwActionRow`, reached through
-`react-native-gtkx/gtk` (`src/components/task-row.tsx`). The drag icon is
-`Gtk.WidgetPaintable` of the row itself, the payload is the task id as a
-`GObject` string value, and the drop calls the store's `reorder`.
+Rows are dragged into a new order with GTK4's own drag-and-drop, and the
+rows themselves are **written in React Native** — `List`'s `onReorder` plus
+a `reorderId` per `ListRow` (`src/components/task-row.tsx`), with
+`GtkDragSource`/`GtkDropTarget` hidden inside `react-native-gtkx/common`.
+The drag icon is `Gtk.WidgetPaintable` of the row itself, the payload is the
+task id as a `GObject` string value, and the drop calls the store's
+`reorder`.
+
+That combination did not exist when this example first shipped: a
+`Pressable` exposes no widget, so a GTK event controller could not be
+attached to a React Native row at all, and the rows had to be
+`AdwActionRow`s. `Controllers` from `react-native-gtkx/gtk` is the door that
+closed it, and `List`/`ListRow` are written on top of it — see
+`docs/platform-layer.md` and
+`docs/research/react-native-first-showcase.md`.
 
 | ![The task list before the drag: Water the plants, Renew passport, Book dentist appointment, Review the navigation-depth-2 PR, Update the sprint board.](../../docs/shots/tasks-nav-dnd-before.png) | ![The same list after dragging the last row onto the first: Update the sprint board is now at the top.](../../docs/shots/tasks-nav-dnd-after.png) |
 | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: | :-----------------------------------------------------------------------------------------------------------------------------------------------: |
@@ -94,13 +104,16 @@ Even with both available, GTK's own drag-and-drop would still be the right
 call for this app: it brings a real drag icon, correct cursors and GDK's
 content negotiation (so a drop can cross widgets, or come from another
 application) for free. The honest cost is portability — this path is
-Linux-only, and an app sharing this screen with iOS/Android would have to
-take the RN route instead. It costs this example nothing, because its whole
-body is already a GTK widget tree (`contentLayout: "widget"`), but that is
-a property of this app, not a general argument.
+Linux-only, and an app sharing this screen with iOS/Android would take the
+RN route instead. What the platform now guarantees is that the cost is
+_visible_: the reorder lives behind `react-native-gtkx/common`, and the
+escape hatch beneath it is imported from `react-native-gtkx/gtk`, so a file
+that cannot run on iOS says so in its imports rather than compiling and
+quietly doing nothing.
 
-**When dragging is off.** `isReorderable` (`src/selectors.ts`) attaches the
-controllers only where a drop means something: manual sort order, no active
+**When dragging is off.** `isReorderable` (`src/selectors.ts`) drops the
+`List`'s `onReorder` — and with it every drag controller — everywhere a drop
+would not mean anything: manual sort order, no active
 search, not Trash. A drop under "sort by due date" would be overwritten by
 the sort on the very next render; a search result is a projection with gaps,
 so "put it here" has no single answer; and Trash is not a place to arrange
