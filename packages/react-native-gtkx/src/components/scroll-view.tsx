@@ -44,6 +44,11 @@ export type ScrollEvent = {
   nativeEvent: {
     contentOffset: { x: number; y: number }
     contentSize: { width: number; height: number }
+    // RN's viewport size. GTK's adjustments call it the page size, which is
+    // the same thing: the extent the scrolled window shows at once. Without
+    // it nothing can compute "how far from the end am I" — autoscroll during
+    // a drag, custom end-reached logic — which is why RN carries it.
+    layoutMeasurement: { width: number; height: number }
   }
 }
 
@@ -368,13 +373,19 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       if (!widget || !contentRect) {
         return
       }
+      const hadjustment = widget.getHadjustment()
+      const vadjustment = widget.getVadjustment()
       onScroll({
         nativeEvent: {
           contentOffset: {
-            x: widget.getHadjustment()?.getValue() ?? 0,
-            y: widget.getVadjustment()?.getValue() ?? 0,
+            x: hadjustment?.getValue() ?? 0,
+            y: vadjustment?.getValue() ?? 0,
           },
           contentSize: { width: contentRect.width, height: contentRect.height },
+          layoutMeasurement: {
+            width: hadjustment?.getPageSize() ?? 0,
+            height: vadjustment?.getPageSize() ?? 0,
+          },
         },
       })
     }

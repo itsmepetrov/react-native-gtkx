@@ -1,78 +1,274 @@
-# Touch and gestures: RN parity on GTK4 for embedded/touch devices
+# Touch and gestures: what they should be on this platform
 
-Research snapshot (2026-07-30) behind the gestures PRD. Target: apps on
-embedded touchscreen devices; gesture support "like in react-native".
+Research behind the gestures decision. First pass 2026-07-30 (touch parity
+on GTK4 for embedded touchscreens); revised 2026-08-01 after building
+drag-and-drop for `examples/tasks-nav`, which turned the question from "how
+faithful can we be" into "which of three directions do we take".
+
+**Decision: reimplement RN's own Gesture Responder System in JS on top of
+GTK4 event controllers, mouse-first, in three slices.**
+`react-native-gesture-handler` and `react-native-reanimated` are out of
+scope. GTK's own controllers stay the documented Linux-only escape hatch
+they already are.
+
+## Where we started
+
+Building drag-reorder for `tasks-nav` established the position concretely.
+RNGH and Reanimated are not implemented, shimmed or aliased anywhere — the
+presets alias `react-native` and `react-native-svg` and nothing else — so
+libraries built on them fail at _import_, not at runtime. One level down, a
+hand-rolled JS gesture was blocked too: `View` had no touch or responder
+props, `PressEvent` was `{x, y}`, there was no `measure()`, and
+`ScrollEvent` had no `layoutMeasurement`, so even autoscroll-during-drag had
+nothing to read. The feature shipped on `GtkDragSource`/`GtkDropTarget` —
+correct for a Linux-only app, but an escape hatch, not a story.
 
 ## The RN surface to be faithful to
 
-- **The Gesture Responder System** is a single global interaction lock
-  with capture-then-bubble negotiation (deepest-wins bubble, parent-wins
-  capture), transfer only to ancestors via LCA renegotiation, and a
-  voluntary-release protocol (`onResponderTerminationRequest`).
-  Notably, reactnative.dev does NOT call it legacy and does not
-  recommend react-native-gesture-handler — that framing is RNGH's own.
-  View touch props (`onTouchStart/Move/End/Cancel`) fire independently
-  of responder status. `PanResponder` wraps the responder props with
-  centroid-based `gestureState` math. Even under Fabric, responder
-  negotiation runs in JS — the same execution model we already have, so
-  v1 needs no new threading machinery.
-- **RNGH**: native recognition + an orchestrator with explicit relation
-  maps (`waitFor`/`simultaneous`/`blocks`) over a six-state machine.
-  Reanimated is a SOFT dependency (try/catch require; degrades to
-  JS-thread callbacks) — the trap is ecosystem packages (drawer,
-  bottom-sheet, draggable-flatlist) that hard-require Reanimated.
-  RNGH's web implementation is pure TypeScript with a small
-  `GestureHandlerDelegate` porting seam — exactly how react-native-macos
-  bootstrapped (web fallback in 2.5.0, native in 2.15.0).
-  react-native-windows only ever got a no-op stub.
+The **Gesture Responder System** is a single global interaction lock with
+capture-then-bubble negotiation (deepest-wins on bubble, parent-wins on
+capture), transfer to ancestors via LCA renegotiation, and a voluntary
+release protocol (`onResponderTerminationRequest`). View touch props
+(`onTouchStart/Move/End/Cancel`) fire independently of responder status from
+the same event stream. `PanResponder` wraps the responder props with
+centroid-based `gestureState` maths.
 
-## The GTK4 side
+reactnative.dev does **not** call it legacy: the docs source
+(`facebook/react-native-website/docs/gesture-responder-system.md`) carries
+no deprecation notice, no admonition and no mention of RNGH. That framing is
+RNGH's own README. W3C pointer events (RN 0.71) were additive.
 
-- Controllers/gestures cover the inventory (Click/Drag/Pan/Swipe/Zoom/
-  Rotate/LongPress/Stylus + Scroll/Motion/Key controllers,
-  AdwSwipeTracker); all codegen-exposed. Phases (CAPTURE/TARGET/BUBBLE)
-  map onto RN's capture/bubble ask.
-- The arbitration primitive differs: per-sequence, one-directional
-  claim/deny (`EventSequenceState`), no "ask the holder to release",
-  no `waitFor`. RN's negotiation (and RNGH's orchestration) must
-  therefore run at OUR bridge layer, using `CLAIMED` only as the final
-  one-way declaration.
-- `GtkScrolledWindow` privately owns four grouped TOUCH-ONLY gestures
-  (drag/pan/swipe/long-press; pan in CAPTURE phase) — kinetic scroll
-  and scroll-vs-child arbitration come for free, but ONLY for
-  `GDK_SOURCE_TOUCHSCREEN` events. Consequences: mouse automation can
-  never exercise this path, and a child pan gesture needs its own
-  CAPTURE-phase presence plus a buffer-then-decide step to compete
-  ("pan inside scroll").
+Under Fabric the negotiation still runs in JS — native is dispatch-only, and
+the sole JS→native back-channel is `setIsJSResponder`.
 
-## The verification gate: simulating touch without hardware
+## The cheap path is closed for us
 
-- `GTK_DEBUG=touch-ui` does NOT make mouse act as touch for gestures
-  (only affects text selection handles); `touchOnly` checks the real
-  device source.
-- `ydotoold -T` enables MT axes but does NOT set `INPUT_PROP_DIRECT` —
-  udev likely classifies it as a touchpad, not a touchscreen. Must be
-  verified empirically before trusting it.
-- The reliable path: a purpose-built uinput touchscreen with
-  `INPUT_PROP_DIRECT` + MT axes via `evemu-tools` or `python3-evdev`
-  (both in apt, neither installed). `libinput record/replay` is the
-  long-term regression tool once real hardware exists.
+Every other platform gets the algorithm free: emit
+`topTouchStart/Move/End/Cancel` and let the stock renderer negotiate.
+`ResponderEventPlugin` (~800 lines) plus `ResponderTouchHistoryStore` —
+~1,300 lines in total — live in **`facebook/react`**, inside
+`packages/react-native-renderer`, and ship inside RN's `ReactFabric-*.js`
+bundles.
 
-## Plan shape (see the gestures PRD/epic)
+We render through `@gtkx/react`, which is built on `react-reconciler` — not
+`react-native-renderer`. There is no plugin seam to feed.
 
-Spike the touch simulation first — it gates all touch-only
-verification. v1: View touch events → responder-negotiation core (a
-port of ResponderEventPlugin's algorithm at the bridge layer) →
-PanResponder → ScrollView arbitration (the highest-risk piece) →
-box-only + Pressable hitSlop/pressRetentionOffset drift tolerance →
-docs. RNGH-compat subset (Pan/Tap/LongPress/Native + relations) is an
-explicitly separate stretch epic, justified only by a concrete consumer
-(JS-stack swipe-back, legacy Swipeable); full RNGH parity and
-Reanimated-dependent consumers are explicitly out of scope.
+So our situation is **react-native-web's exactly**: a foreign event model
+with no renderer hook. RNW's
+`packages/react-native-web/src/modules/useResponderEvents/` is **1,466
+lines** across six files, a deliberate clean-room rewrite (0.13.0 release
+notes: "rewritten from scratch in user space… the most accurate and well
+integrated implementation of any platform") that preserves the upstream
+lifecycle verbatim. Two consequences that cut our cost:
+
+- **`PanResponder` is vendorable unchanged.** RNW's
+  `src/exports/PanResponder/index.js` is four lines re-exporting Meta's own
+  file, header intact. It works because RNW reproduces the exact
+  `touchHistory` shape upstream expects (`touchBank` with `currentPageX/Y`,
+  `previousPageX/Y`, `startPageX/Y`, `*TimeStamp`, `touchActive`;
+  `numberActiveTouches`; `indexOfSingleActiveTouch`; `mostRecentTimeStamp`).
+- RNW also _added_ two negotiation channels RN lacks
+  (`onScrollShouldSetResponder`, `onSelectionChangeShouldSetResponder`) —
+  precedent that extending the model for a platform's realities is fine.
+
+## Why not react-native-gesture-handler
+
+The reuse thesis is technically sound. RNGH's `src/web/` is 6,505 LOC of
+pure TypeScript with no third-party deps as of 3.x; roughly 4,900 of it
+makes no DOM calls at all, including the 1,147-LOC `GestureHandler` state
+machine and the whole 401-LOC `GestureHandlerOrchestrator`, where
+multi-gesture arbitration actually lives. `AdaptedEvent` is a plain struct;
+`GestureHandlerDelegate` is 13 methods. A port is ~1,200–1,600 LOC against
+~9,000 LOC of native recognizers.
+
+We are still not doing it:
+
+1. **It unblocks almost nothing.** `react-native-draggable-flatlist`,
+   `@gorhom/bottom-sheet` and `@react-navigation/drawer` all list Reanimated
+   as a _hard_ peer dependency and import it at module scope. Reanimated
+   genuinely is a soft dependency of RNGH itself (3.1.0's
+   `peerDependencies` are exactly `react` and `react-native`; the
+   `try { require(...) } catch` in `reanimatedWrapper.ts` is real) — and a
+   hard one for everything built on it. "RNGH without Reanimated" buys
+   `@react-navigation/stack`'s swipe-back and nothing else.
+2. **RNGH 3.x closed even that.** PR #3734 (in 3.0.0) deleted the
+   Reanimated-free `Swipeable` and `DrawerLayout`; only
+   `ReanimatedSwipeable`/`ReanimatedDrawerLayout` survive, both with an
+   unconditional module-scope Reanimated import that bypasses RNGH's own
+   soft wrapper. In 2.x you could ship swipeable rows without Reanimated; in
+   3.x you cannot. Gesture-capable platform and Reanimated port are now one
+   milestone.
+3. **No supported seam.** `src/web/` and its two interfaces are unexported,
+   there is no `exports` map, and no out-of-tree platform story. Metro would
+   resolve `.linux.* → .native.* → .ts` onto the _native_ module. Realistic
+   budget: vendoring a private layer that 3.0 just rewrote.
+4. **The one precedent is a warning.** react-native-windows has shipped
+   `RNGestureHandlerModule.windows.ts` as a literal `// NO-OP` since 2.8.0
+   (Oct 2022), unchanged today; both tracking issues are closed as _not
+   planned_. macOS got real support only because RNGH's Objective-C could be
+   recompiled against AppKit through react-native-macos's `RCTUIKit` shim —
+   an option GTK does not have. Nobody has reused `src/web/`.
+
+RNGH also **layers on** the responder system rather than replacing it
+(`NativeDetector.tsx` sets `onStartShouldSetResponder`), so nothing built
+for the responder system is wasted if RNGH ever arrives.
+
+## Where GTK's model and RN's disagree
+
+### RN has one tree; we have islands
+
+`NestedRoot`/`IntrinsicRoot` mount a whole Yoga engine inside arbitrary
+native GTK slots — an `Adw.NavigationPage`, a `HeaderBar` slot, a sidebar
+row — so native widgets with their own gestures sit both above and below RN
+views. `tasks-nav` is mostly native widgets with RN inside them. macOS,
+Windows and Web all have a single RN-owned tree; we do not. The responder
+lock is therefore scoped to a `Root`, not the process, and events a native
+widget consumes never enter it at all.
+
+### There is no voluntary release
+
+`gtk_gesture_set_state(CLAIMED)` sets the sequence to `DENIED` on every
+gesture on _parent_ widgets and emits `::cancel` on everything _underneath_
+— and `::cancel` means "forget everything about this sequence".
+`Claimed → Denied` is legal but is not an undo; GTK compensates only in the
+narrow case of a capture-phase claim on press released before any movement.
+There is no way to ask a holder to yield, so
+`onResponderTerminationRequest` has no GTK analogue: negotiation runs
+entirely in JS and `CLAIMED` is only the final one-way declaration.
+
+Note the asymmetry: a parent stealing from a child maps onto capture-phase
+claiming; a child stealing from a claimed ancestor is not expressible.
+
+### RN is touch-first, GTK on the desktop is pointer-first
+
+`gdk_event_get_event_sequence()` returns `NULL` for every mouse event and
+non-NULL only for touch, so a sequence-keyed table must treat `NULL` as a
+legitimate key.
+
+And the finding that reorders the work: **all four gestures
+`GtkScrolledWindow` installs internally (drag, pan, swipe, long-press) are
+`touch_only = TRUE`** and grouped. With a mouse they never run, so a child
+pan inside a scrolling list never contends with scrolling — the only mouse
+path in is `GtkEventControllerScroll`, and a wheel is not a drag.
+**ScrollView arbitration is a touch-only problem**, and everything else is
+mouse-verifiable without touch hardware or a seated session.
+
+For touch, the levers are known:
+`gtk_scrolled_window_set_kinetic_scrolling(FALSE)` puts all four gestures in
+`GTK_PHASE_NONE` (the only lever without a race); the scrolled window claims
+only in `drag-update` after the drag threshold, so a child claiming on press
+wins; and its long-press handler unconditionally denies the whole grouped
+set — which is why long-press-then-drag works in native GTK lists.
+
+### Thresholds and delays are not where you would expect
+
+`GtkGestureDrag` has **no threshold** — it emits `drag-begin` on press;
+`gtk-dnd-drag-threshold` (8 px) is ours to apply.
+`GtkGestureLongPress`'s delay is `gtk-long-press-time` (500 ms) times a
+`delay-factor` clamped to [0.5, 2.0], so GTK can express only 250–1000 ms
+against RN's arbitrary `delayLongPress`. `Pressable` already uses a JS timer
+instead, and the gesture work keeps doing that.
+
+### Where they agree
+
+GTK's `CAPTURE → TARGET → BUBBLE` runs root→target then target→root, which
+is exactly RN's capture/bubble order. That is the one thing GTK hands us for
+free, and reimplementing it would be spending code to get it wrong.
+
+## Verifiability decides the implementation shape
+
+Two defensible shapes: per-View GTK gestures, or a single
+`GtkEventControllerLegacy` on the toplevel in `GTK_PHASE_CAPTURE` returning
+`FALSE`, with JS hit-testing via `gtk_widget_pick()` and dispatching the
+whole path — react-native-web's shape, and the architecturally cleaner one.
+
+`@gtkx/testing`'s `userEvent` drives **GtkGesture signals on the widget you
+name**: `userEvent.drag` calls `getAllControllers(widget, Gtk.GestureDrag)`
+and emits `drag-begin`/`drag-update`/`drag-end` with patched
+`getStartPoint`/`getOffset`. It never produces a `GdkEvent`. So per-View
+gestures are testable in the existing headless GTK suite today; the raw tap
+is not testable in the current harness at all, and would need real input
+injection — which the touch spike showed requires a seated session (headless
+sway over SSH cannot take real input devices).
+
+**The hybrid we take: GTK carries the events, JS owns the algorithm.** Views
+declaring responder props get a capture-phase controller for the `*Capture`
+props and a bubble-phase one for the rest; both only report "press/move/
+release at (x, y) on widget W" into one central module per `Root`, which
+owns the path walk, the negotiation and the touch history. A view with no
+responder props needs no controller, because RN only asks views that declare
+handlers. What this gives up: termination triggers that are not pointer
+events (window focus loss, context menu, ancestor scroll) need their own
+small per-`Root` listeners rather than falling out of one tap. That is slice
+3, where the raw tap gets revisited — and its prerequisite is event
+injection in `@gtkx/testing`.
+
+Two GTK details to build around: controllers on one widget run **LIFO**
+(`gtk_widget_add_controller` prepends), and a legacy controller returning
+`TRUE` also skips the remaining controllers on its own widget.
+
+## Landmines other platforms hit
+
+- **Timestamp resolution is load-bearing.** `ResponderTouchHistoryStore`
+  reads `timestamp` and `PanResponder`/`TouchHistoryMath` difference it for
+  velocity. A coarse or non-monotonic clock silently reports _zero_ movement
+  — the standing diagnosis for react-native-windows #14119 ("PanResponder
+  don't appear to work on New Architecture", open since 2024-11, still
+  reproducing on RN 0.83): `Date.now()` granularity meant consecutive frames
+  compared equal. Use a monotonic sub-millisecond clock.
+- **Design the ScrollView back-channel in from day one.**
+  `setIsJSResponder` — "JS took the interaction, native scroller stop
+  stealing the drag" — is the piece everyone gets wrong.
+  react-native-windows punted on it in 2017 and shipped a
+  `manipulationModes` prop as a workaround; nine years later it is still
+  paying.
+- **Terminate liberally.** RNW's predicate is the template: cancel-ish
+  events, context menu, window blur, ancestor scroll and selection change
+  all force `onResponderTerminate`; only the last three consult
+  `onResponderTerminationRequest`. Its README says it outright — the
+  responder "might have been taken by the browser without asking".
+  Substitute GTK.
+- **Mouse is one fabricated touch.** RN's own event plugin has always had a
+  `topMouseDown` path and RNW documents the conversion. Discriminate real
+  touch with `gdk_event_get_pointer_emulated()` plus
+  `GDK_SOURCE_TOUCHSCREEN`; `GDK_SOURCE_TOUCHPAD` is an _indirect_ device
+  and counts as mouse.
+
+## Simulating touch without hardware
+
+Verified 2026-07-30: a uinput device declaring `INPUT_PROP_DIRECT` plus MT
+axes is classified by udev as a real touchscreen (`ID_INPUT_TOUCHSCREEN=1`),
+and touch-only GTK gestures do receive its events. `ydotoold -T` is **not**
+usable — it enables `EV_ABS` but never sets `INPUT_PROP_DIRECT`.
+`GTK_DEBUG=touch-ui` does not help either (it only affects text selection
+handles). Headless sway over SSH cannot consume real input devices — no
+seat/VT — so touch verification needs a seated session. Full recipe in
+`spike/gestures/FINDINGS-touch.md`.
+
+This gates slice 3 only. Slices 1 and 2 are mouse-verifiable in CI.
+
+## The staging
+
+1. **Geometry and event shape** (direction-independent, shipped):
+   `measure`/`measureInWindow`/`measureLayout` on `View`,
+   `layoutMeasurement` on `ScrollEvent`, RN-shaped `PressEvent` with a
+   monotonic timestamp.
+2. **Pan and long-press on a View**: `View` responder props +
+   `PanResponder`, per-View gestures feeding one central JS module.
+3. **Full negotiation**: LCA transfer, termination, ScrollView arbitration —
+   behind an input-injection harness.
 
 ## Honest gaps for ported apps
 
-No hover on touch (HIG forbids relying on it), no enforced touch-target
-minimum yet (RN apps assume 44pt/48dp), multi-finger pinch/rotate
-deferred, Pressable is not keyboard-activatable (separate a11y gap),
-drawer/bottom-sheet/draggable-flatlist need Reanimated we don't have.
+No RNGH-based library works, and that is the largest single portability gap
+in the platform. Touch targets are not enforced at 44pt/48dp. Multi-finger
+pinch/rotate is deferred (GTK has `GtkGestureZoom`/`GtkGestureRotate`
+through the platform layer; RN has no portable API worth matching). Hover
+currently fires from touch — `GtkEventControllerMotion` does not filter by
+device source, and react-native-web explicitly drops non-`touch` pointer
+types in `useHover` for this reason. `Pressable` is still not
+keyboard-activatable (an accessibility gap, not a gesture one). Apps that
+need a drag today should keep using `GtkDragSource`/`GtkDropTarget` through
+`react-native-gtkx/gtk`: on Linux it is better than what slice 2 will give
+them — real drag icons, cursors, GDK content negotiation — and slice 2's
+value is that the same source also runs on iOS and Android.

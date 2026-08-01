@@ -24,6 +24,7 @@ export { Modal, type ModalProps } from "./modal"
 export {
   Pressable,
   TouchableOpacity,
+  type NativeTouch,
   type PressableProps,
   type PressableStateCallbackType,
   type PressEvent,
@@ -46,5 +47,17 @@ export {
 export { Switch, type SwitchProps } from "./switch"
 export { Text, type TextProps } from "./text"
 export { TextInput, type TextInputProps } from "./text-input"
-export { SafeAreaView, StatusBar, View, type ViewProps } from "./view"
+export {
+  SafeAreaView,
+  StatusBar,
+  View,
+  type ViewHandle,
+  type ViewProps,
+} from "./view"
+export type {
+  MeasureHandle,
+  MeasureInWindowOnSuccessCallback,
+  MeasureLayoutOnSuccessCallback,
+  MeasureOnSuccessCallback,
+} from "./measure"
 export { type LayoutEvent } from "./use-layout-child"
