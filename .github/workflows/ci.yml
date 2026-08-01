@@ -58,3 +58,9 @@ jobs:
             npm test
       - name: Package check (build:dist + are-the-types-wrong)
         run: runuser -u ci -- env HOME=/home/ci npm run check:package
+      - name: Typecheck the examples against the built package
+        # After check:package, which is what produces dist — the examples
+        # import react-native-gtkx through its `exports` map, so they cannot
+        # be checked before it exists. Nothing looked here until now, and
+        # main once shipped an example importing components that did not.
+        run: runuser -u ci -- env HOME=/home/ci npm run typecheck:examples

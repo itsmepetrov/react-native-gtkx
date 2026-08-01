@@ -18,7 +18,7 @@ import {
   Text,
   TextInput,
   View,
-  type ScrollViewHandle,
+  type FlatListHandle,
 } from "react-native"
 
 const styles = StyleSheet.create({
@@ -209,7 +209,7 @@ const App = () => {
   const [items, setItems] = useState(() =>
     Array.from({ length: 30 }, (_, i) => `Row #${i + 1}`),
   )
-  const listRef = useRef<ScrollViewHandle>(null)
+  const listRef = useRef<FlatListHandle>(null)
 
   return (
     <ScrollView
