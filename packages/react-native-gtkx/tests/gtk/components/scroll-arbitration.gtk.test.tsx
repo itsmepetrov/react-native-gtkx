@@ -54,9 +54,19 @@ const settle = async (): Promise<void> => {
 
 const fullscreenWindow = async (anyWidget: GtkNs.Widget): Promise<void> => {
   const root = anyWidget.getRoot()
-  if (root instanceof Gtk.Window) {
-    root.fullscreen()
+  if (!(root instanceof Gtk.Window)) {
+    return
   }
+  root.present()
+  root.fullscreen()
+  // Windows from earlier tests in this worker are still up, and sway stacks
+  // them: a pointer aimed at these coordinates would land on whichever one
+  // is on top, not on this one. Waiting for this window to be the active
+  // one is what makes the aim mean anything — the same reason every
+  // assertion below has a negative control.
+  await waitFor(() => {
+    expect(root.isActive()).toBe(true)
+  })
   await settle()
 }
 

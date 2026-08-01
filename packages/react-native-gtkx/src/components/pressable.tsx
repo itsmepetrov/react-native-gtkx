@@ -8,7 +8,13 @@ import {
 import { splitStyle, StyleSheet } from "../style/index"
 import { defaultCssRegistry } from "../style/registry.gtkx"
 import type { StyleProp } from "../contracts"
-import { Gtk, GtkBox } from "../gtkx/bridge/index"
+import {
+  getViewBoxComponent,
+  Gtk,
+  GtkBox,
+  setHitSlop,
+  type HitSlop,
+} from "../gtkx/bridge/index"
 import { perfAddTime, perfCount, perfEnabled, perfNow } from "../perf"
 import { HostNodeContext } from "./host-node"
 import { createPressEvent, createTouch, type PressEvent } from "./press-event"
@@ -49,8 +55,44 @@ export type PressableProps = {
   focusable?: boolean
   disabled?: boolean
   delayLongPress?: number
+  /** RN's hitSlop: how far OUTSIDE its bounds this pressable still counts
+   *  as pressed. A number is all four edges. Limited by an ancestor that
+   *  clips — a ScrollView's viewport, say — because GTK stops picking at
+   *  the clip, the same constraint RN documents on Android. */
+  hitSlop?: number | Partial<HitSlop>
+  /** RN's pressRetentionOffset: how far the pointer may drift outside the
+   *  hit rect after pressing and still activate on release. Defaults to
+   *  RN's own {top: 20, left: 20, right: 20, bottom: 30}. */
+  pressRetentionOffset?: number | Partial<HitSlop>
   onLayout?: (event: LayoutEvent) => void
   testID?: string
+}
+
+const NO_SLOP: HitSlop = { top: 0, right: 0, bottom: 0, left: 0 }
+
+/**
+ * RN's own DEFAULT_PRESS_RECT_OFFSETS, from Libraries/Pressability. The
+ * bottom edge is deliberately larger: a thumb rolls downwards off a target
+ * far more often than upwards.
+ */
+const DEFAULT_PRESS_RECT: HitSlop = { top: 20, right: 20, bottom: 30, left: 20 }
+
+const toRect = (
+  value: number | Partial<HitSlop> | undefined,
+  fallback: HitSlop,
+): HitSlop => {
+  if (value === undefined) {
+    return fallback
+  }
+  if (typeof value === "number") {
+    return { top: value, right: value, bottom: value, left: value }
+  }
+  return {
+    top: value.top ?? 0,
+    right: value.right ?? 0,
+    bottom: value.bottom ?? 0,
+    left: value.left ?? 0,
+  }
 }
 
 // Coordinates arrive from GtkGestureClick in the widget's own space, which
@@ -78,6 +120,8 @@ export const Pressable = ({
   focusable,
   disabled = false,
   delayLongPress = 500,
+  hitSlop,
+  pressRetentionOffset,
   onLayout,
   testID,
 }: PressableProps) => {
@@ -214,6 +258,30 @@ export const Pressable = ({
     }
   }
 
+  /**
+   * Whether a release at (x, y) — in the widget's own coordinates — still
+   * counts as pressing this control. RN's press rect is the hit rect plus
+   * pressRetentionOffset, and a release outside it is a cancel, not a
+   * press: dragging off a button to change your mind is how every toolkit
+   * works, GTK's own GtkButton included. GtkGestureClick keeps an implicit
+   * grab for the whole press, so `released` arrives here wherever the
+   * pointer ended up and the check has to be ours.
+   */
+  const withinPressRect = (x: number, y: number): boolean => {
+    const widget = widgetRef.current
+    if (!widget) {
+      return false
+    }
+    const slop = slopRef.current
+    const retention = retentionRef.current
+    return (
+      x >= -(slop.left + retention.left) &&
+      y >= -(slop.top + retention.top) &&
+      x < widget.getWidth() + slop.right + retention.right &&
+      y < widget.getHeight() + slop.bottom + retention.bottom
+    )
+  }
+
   const handleReleased = (_n: number, x: number, y: number): void => {
     if (disabled) {
       return
@@ -221,8 +289,10 @@ export const Pressable = ({
     clearLongPress()
     setPressed(false)
     const widget = widgetRef.current
+    // onPressOut fires either way — RN reports the end of the press whether
+    // it turned into an activation or not.
     onPressOut?.(pressEvent(widget, x, y))
-    if (!longPressFired.current) {
+    if (!longPressFired.current && withinPressRect(x, y)) {
       onPress?.(pressEvent(widget, x, y))
     }
   }
@@ -301,6 +371,25 @@ export const Pressable = ({
       : () => onPress(pressEvent(widgetRef.current, 0, 0)),
   )
 
+  // Read from the gesture handlers, which are installed once and must not
+  // close over a stale prop.
+  const slopRef = useRef(NO_SLOP)
+  const retentionRef = useRef(DEFAULT_PRESS_RECT)
+  slopRef.current = toRect(hitSlop, NO_SLOP)
+  retentionRef.current = toRect(pressRetentionOffset, DEFAULT_PRESS_RECT)
+
+  const slop = slopRef.current
+  useLayoutEffect(() => {
+    const widget = widgetRef.current
+    if (!widget) {
+      return
+    }
+    const empty =
+      slop.top === 0 && slop.right === 0 && slop.bottom === 0 && slop.left === 0
+    setHitSlop(widget, empty ? null : slop)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slop.top, slop.right, slop.bottom, slop.left])
+
   useLayoutEffect(() => {
     const widget = widgetRef.current
     if (!widget) {
@@ -316,6 +405,24 @@ export const Pressable = ({
     click.on("cancel", () => handlersRef.current.handleCancel())
     widget.addController(click)
 
+    // Hover fires from touch as well as from a mouse, and that is left
+    // alone deliberately. react-native-web filters it — `useHover` drops
+    // any event whose pointerType is "touch", because on a phone every tap
+    // would otherwise leave a view looking hovered. Three measurements say
+    // not to copy it here. GTK gives a crossing event no device at all:
+    // inside `enter` and `leave` both `get_current_event()` and
+    // `get_current_event_device()` are null, because GTK routes crossings
+    // through a path that never sets the controller's current event, so the
+    // filter would have to come from somewhere else entirely — a raw event
+    // tap on the toplevel recording the last input source, which is
+    // per-event JS work on every window for a filter nobody can check.
+    // GTK also sends a matching leave when a touch sequence ends, so the
+    // stuck phantom hover that motivates RNW's filter does not arise, and
+    // GTK's own CSS `:hover` lights up on touch — filtering would make this
+    // platform's Pressable behave unlike every widget beside it. And it
+    // cannot be verified either way here: there is no way to inject a touch
+    // on this rig (docs/research/gestures.md). Revisit with a touchscreen
+    // and a reason, not before.
     const motion = new Gtk.EventControllerMotion()
     motion.on("enter", () => handlersRef.current.handleEnter())
     motion.on("leave", () => handlersRef.current.handleLeave())
@@ -327,8 +434,12 @@ export const Pressable = ({
     }
   }, [])
 
+  // The same GtkBox subclass a View renders, for its contains() override:
+  // hitSlop is a picking change and nothing in JS can substitute for one,
+  // because a press outside the widget is never delivered to it at all.
+  const PressableBox = getViewBoxComponent() as typeof GtkBox
   return (
-    <GtkBox
+    <PressableBox
       ref={widgetRef}
       name={testID}
       cssClasses={cssClass ? [cssClass] : []}
@@ -338,7 +449,7 @@ export const Pressable = ({
       >
         {resolvedChildren}
       </HostNodeContext.Provider>
-    </GtkBox>
+    </PressableBox>
   )
 }
 
