@@ -1,0 +1,53 @@
+From 792432e78edfefd2182ae554b3084278e920fdea Mon Sep 17 00:00:00 2001
+From: Anton Petrov <anton@itsmepetrov.com>
+Date: Sat, 1 Aug 2026 10:38:18 +0300
+Subject: [PATCH 1/2] shortcuts-dialog: Sync navigation row visibility on init
+
+update_stack() (and the update_nav_visibility() it calls) only ran
+reactively, off items-changed/notify::n-items on the section list models.
+A dialog that never has a section added never gets that first change
+notification, so it stayed at the template's default state: nav_group
+visible with an empty nav_box inside it.
+
+The navigation row has a -12px top margin in its CSS
+(.navigation-box), meant to be absorbed by the row's own content; with
+zero children the row measures to 0, so GTK computed a combined
+negative minimum size the first time the dialog was measured and
+logged:
+
+  Gtk-WARNING: AdwWrapBox 0x... (wrap-box) reported min height -12,
+  but sizes must be >= 0
+
+Sync once at the end of init(), so a dialog that starts out empty
+reaches the same, already-correct hidden state a later mutation would
+put it in, instead of only reaching it reactively.
+---
+ src/adw-shortcuts-dialog.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/src/adw-shortcuts-dialog.c b/src/adw-shortcuts-dialog.c
+index 86c412b..20c0fd5 100644
+--- a/src/adw-shortcuts-dialog.c
++++ b/src/adw-shortcuts-dialog.c
+@@ -690,6 +690,18 @@ adw_shortcuts_dialog_init (AdwShortcutsDialog *self)
+   gtk_shortcut_controller_add_shortcut (GTK_SHORTCUT_CONTROLLER (controller), shortcut);
+   gtk_event_controller_set_propagation_phase (controller, GTK_PHASE_CAPTURE);
+   gtk_widget_add_controller (GTK_WIDGET (self), controller);
++
++  /* update_stack() (and the update_nav_visibility() it calls) otherwise only
++   * run reactively, off "items-changed"/"notify::n-items" on the section
++   * models. A dialog that never has a section added stays at the template's
++   * default state instead: nav_group visible with nav_box empty, which
++   * hits the -12px .navigation-box top margin with no content to absorb
++   * it, and GTK logs "AdwWrapBox … reported min height -12, but sizes must
++   * be >= 0" the first time it's measured. Sync once up front so an
++   * initially-empty dialog starts in the same state it would reach after
++   * any later mutation.
++   */
++  update_stack (self);
+ }
+ 
+ static void
+-- 
+2.53.0
+

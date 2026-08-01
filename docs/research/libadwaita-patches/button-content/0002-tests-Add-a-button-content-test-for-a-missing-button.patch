@@ -1,0 +1,55 @@
+From 8d8b98fc3c307d88734a2e8760730ddf0d22b51c Mon Sep 17 00:00:00 2001
+From: Anton Petrov <anton@itsmepetrov.com>
+Date: Sat, 1 Aug 2026 10:38:32 +0300
+Subject: [PATCH 2/2] tests: Add a button-content test for a missing button
+ ancestor
+
+Rooting an AdwButtonContent without a GtkButton ancestor used to log
+two failed GTK_IS_WIDGET assertions instead of a graceful no-op.
+---
+ tests/test-button-content.c | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
+
+diff --git a/tests/test-button-content.c b/tests/test-button-content.c
+index 27c75bb..96b6cdc 100644
+--- a/tests/test-button-content.c
++++ b/tests/test-button-content.c
+@@ -142,6 +142,27 @@ test_adw_button_content_style_class_split_button (void)
+   g_assert_finalize_object (window);
+ }
+ 
++static void
++test_adw_button_content_no_button_ancestor (void)
++{
++  GtkWidget *window = gtk_window_new ();
++  GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
++  AdwButtonContent *content = ADW_BUTTON_CONTENT (adw_button_content_new ());
++
++  g_assert_nonnull (content);
++
++  /* AdwButtonContent is documented to be used as a button's child, but
++   * nothing prevents rooting one without a GtkButton ancestor. It used to
++   * dereference the NULL result of gtk_widget_get_ancestor() in that case,
++   * logging two failed GTK_IS_WIDGET assertions instead of a graceful
++   * no-op. */
++  gtk_box_append (GTK_BOX (box), GTK_WIDGET (content));
++  gtk_window_set_child (GTK_WINDOW (window), box);
++  gtk_window_present (GTK_WINDOW (window));
++
++  g_assert_finalize_object (window);
++}
++
+ int
+ main (int   argc,
+       char *argv[])
+@@ -154,6 +175,7 @@ main (int   argc,
+   g_test_add_func ("/Adwaita/ButtonContent/use_underline", test_adw_button_content_use_underline);
+   g_test_add_func ("/Adwaita/ButtonContent/style_class_button", test_adw_button_content_style_class_button);
+   g_test_add_func ("/Adwaita/ButtonContent/style_class_split_button", test_adw_button_content_style_class_split_button);
++  g_test_add_func ("/Adwaita/ButtonContent/no_button_ancestor", test_adw_button_content_no_button_ancestor);
+ 
+   return g_test_run ();
+ }
+-- 
+2.53.0
+

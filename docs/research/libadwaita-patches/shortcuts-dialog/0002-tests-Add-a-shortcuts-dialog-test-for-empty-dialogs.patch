@@ -1,0 +1,94 @@
+From e098fcc40abf4a63ce606a0ff88adb60655d2646 Mon Sep 17 00:00:00 2001
+From: Anton Petrov <anton@itsmepetrov.com>
+Date: Sat, 1 Aug 2026 10:38:18 +0300
+Subject: [PATCH 2/2] tests: Add a shortcuts-dialog test for empty dialogs
+
+Presenting an AdwShortcutsDialog with no sections used to log a
+Gtk-WARNING about a negative minimum height the first time it was
+measured. Cover both the empty case and a single section, which was
+already silent.
+---
+ tests/meson.build             |  1 +
+ tests/test-shortcuts-dialog.c | 58 +++++++++++++++++++++++++++++++++++
+ 2 files changed, 59 insertions(+)
+ create mode 100644 tests/test-shortcuts-dialog.c
+
+diff --git a/tests/meson.build b/tests/meson.build
+index d513e87..1262f3a 100644
+--- a/tests/meson.build
++++ b/tests/meson.build
+@@ -77,6 +77,7 @@ test_names = [
+   'test-sidebar-item',
+   'test-sidebar-section',
+   'test-shortcut-label',
++  'test-shortcuts-dialog',
+   'test-spinner',
+   'test-spinner-paintable',
+   'test-spin-row',
+diff --git a/tests/test-shortcuts-dialog.c b/tests/test-shortcuts-dialog.c
+new file mode 100644
+index 0000000..2b60dbe
+--- /dev/null
++++ b/tests/test-shortcuts-dialog.c
+@@ -0,0 +1,58 @@
++/*
++ * Copyright (C) 2026 Anton Petrov <anton@itsmepetrov.com>
++ *
++ * SPDX-License-Identifier: LGPL-2.1-or-later
++ */
++
++#include <adwaita.h>
++
++static void
++test_adw_shortcuts_dialog_empty (void)
++{
++  GtkWidget *window = gtk_window_new ();
++  AdwShortcutsDialog *dialog = ADW_SHORTCUTS_DIALOG (adw_shortcuts_dialog_new ());
++
++  g_assert_nonnull (dialog);
++
++  gtk_window_present (GTK_WINDOW (window));
++
++  /* A dialog with no sections leaves its internal navigation AdwWrapBox
++   * with zero children. The navigation row's ".navigation-box" style has a
++   * -12px top margin that only actual content used to make up for, and
++   * nothing synced the row's visibility before the first size request, so
++   * presenting an empty dialog logged
++   * "AdwWrapBox … reported min height -12, but sizes must be >= 0" the
++   * moment it was measured, here.
++   */
++  adw_dialog_present (ADW_DIALOG (dialog), window);
++
++  g_assert_finalize_object (window);
++}
++
++static void
++test_adw_shortcuts_dialog_one_section (void)
++{
++  GtkWidget *window = gtk_window_new ();
++  AdwShortcutsDialog *dialog = ADW_SHORTCUTS_DIALOG (adw_shortcuts_dialog_new ());
++  AdwShortcutsSection *section = ADW_SHORTCUTS_SECTION (adw_shortcuts_section_new ("Test"));
++
++  adw_shortcuts_dialog_add (dialog, section);
++
++  gtk_window_present (GTK_WINDOW (window));
++  adw_dialog_present (ADW_DIALOG (dialog), window);
++
++  g_assert_finalize_object (window);
++}
++
++int
++main (int   argc,
++      char *argv[])
++{
++  gtk_test_init (&argc, &argv, NULL);
++  adw_init ();
++
++  g_test_add_func ("/Adwaita/ShortcutsDialog/empty", test_adw_shortcuts_dialog_empty);
++  g_test_add_func ("/Adwaita/ShortcutsDialog/one_section", test_adw_shortcuts_dialog_one_section);
++
++  return g_test_run ();
++}
+-- 
+2.53.0
+

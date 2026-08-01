@@ -1,0 +1,51 @@
+From 761a3e7f91c750b615d7c5f094161ab7e5b50d88 Mon Sep 17 00:00:00 2001
+From: Anton Petrov <anton@itsmepetrov.com>
+Date: Sat, 1 Aug 2026 10:38:32 +0300
+Subject: [PATCH 1/2] button-content: Do not crash without a button ancestor
+
+adw_button_content_root() looked up the button ancestor with
+gtk_widget_get_ancestor() and used the result unconditionally, assuming
+AdwButtonContent is always used the documented way (as a button child).
+Rooting one without a GtkButton ancestor leaves self->button NULL and
+the following calls dereference it:
+
+  gtk_widget_get_parent: assertion GTK_IS_WIDGET (widget) failed
+  gtk_widget_add_css_class: assertion GTK_IS_WIDGET (widget) failed
+
+adw_button_content_unroot() already treats the same self->button as
+nullable; root() needs the matching guard.
+---
+ src/adw-button-content.c | 16 +++++++++++-----
+ 1 file changed, 11 insertions(+), 5 deletions(-)
+
+diff --git a/src/adw-button-content.c b/src/adw-button-content.c
+index 678ec0f..b3ace10 100644
+--- a/src/adw-button-content.c
++++ b/src/adw-button-content.c
+@@ -107,12 +107,18 @@ adw_button_content_root (GtkWidget *widget)
+ 
+   self->button = gtk_widget_get_ancestor (GTK_WIDGET (self), GTK_TYPE_BUTTON);
+ 
+-  /* For AdwSplitButton we want to style the split button widget and not the
+-   * button inside. */
+-  if (ADW_IS_SPLIT_BUTTON (gtk_widget_get_parent (self->button)))
+-    self->button = gtk_widget_get_parent (self->button);
++  /* AdwButtonContent is documented to be used as a button's child; nothing
++   * enforces that, though, and gtk_widget_get_ancestor() returns NULL when
++   * there is no such ancestor to find. Mirror the NULL check unroot()
++   * already does for the same self->button below. */
++  if (self->button) {
++    /* For AdwSplitButton we want to style the split button widget and not the
++     * button inside. */
++    if (ADW_IS_SPLIT_BUTTON (gtk_widget_get_parent (self->button)))
++      self->button = gtk_widget_get_parent (self->button);
+ 
+-  gtk_widget_add_css_class (self->button, "image-text-button");
++    gtk_widget_add_css_class (self->button, "image-text-button");
++  }
+ }
+ 
+ static void
+-- 
+2.53.0
+
