@@ -10,7 +10,9 @@ import type { PointerEventsValue, StyleProp } from "../contracts"
 import {
   getViewBoxComponent,
   GtkBox,
+  setBoxOnly,
   setBoxPassthrough,
+  setPointerTarget,
   type Gtk,
 } from "../gtkx/bridge/index"
 import type { ResponderProps } from "../responder/types"
@@ -59,9 +61,11 @@ export type ViewProps = ResponderProps & {
 //   view-box.ts) — the box is never the pick target while children stay
 //   pickable, and toggling never remounts the subtree;
 // - box-only: direct children (and thus their subtrees) get
-//   can-target=false; restored when the mode changes. Nesting another
-//   pointerEvents INSIDE a box-only view is not supported (the restore
-//   pass cannot know about it).
+//   can-target=false, restored to what their OWN pointerEvents wants when
+//   the mode changes. That is why the bridge owns can-target rather than
+//   this component writing it: two things want the same boolean, and a
+//   blanket restore to `true` was what made nesting a pointerEvents inside
+//   a box-only view unsupported.
 export const View = ({
   style,
   pointerEvents,
@@ -98,12 +102,16 @@ export const View = ({
     if (!widget) {
       return
     }
-    widget.setCanTarget(mode !== "none")
+    setPointerTarget(widget, mode !== "none")
     setBoxPassthrough(widget, mode === "box-none")
   }, [mode])
 
-  // box-only walks the current children every commit (the set changes with
-  // renders) and restores once when the mode moves away.
+  // box-only re-runs every commit rather than on change, because the child
+  // set moves with the renders and a child that appears while the mode is on
+  // has to be masked too. Every View commits, and almost none of them are
+  // box-only, so the walk is skipped unless this view is masking now or was
+  // masking a moment ago — the one commit after the mode goes away is what
+  // gives the children their own modes back.
   const wasBoxOnly = useRef(false)
   useLayoutEffect(() => {
     const widget = widgetRef.current
@@ -112,11 +120,7 @@ export const View = ({
     }
     const boxOnly = mode === "box-only"
     if (boxOnly || wasBoxOnly.current) {
-      let child = widget.getFirstChild()
-      while (child) {
-        child.setCanTarget(!boxOnly)
-        child = child.getNextSibling()
-      }
+      setBoxOnly(widget, boxOnly)
     }
     wasBoxOnly.current = boxOnly
   })

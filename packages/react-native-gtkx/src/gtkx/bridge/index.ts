@@ -100,7 +100,14 @@ export { computePointIn, computePointInWindow, type Point } from "./geometry"
 // its controllers) rather than into its default child slot — see the file
 // for why gtkx's own createPortal is not enough on its own.
 export { createSlotPortal } from "./slot-portal"
-export { getViewBoxComponent, setBoxPassthrough } from "./view-box"
+export {
+  getViewBoxComponent,
+  setBoxOnly,
+  setBoxPassthrough,
+  setHitSlop,
+  setPointerTarget,
+  type HitSlop,
+} from "./view-box"
 export {
   getSvgNodeComponent,
   getSvgNodeDescriptor,

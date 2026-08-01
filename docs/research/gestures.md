@@ -460,16 +460,75 @@ This gates slice 3 only. Slices 1 and 2 are mouse-verifiable in CI.
 3. **Full negotiation**: LCA transfer, termination, ScrollView arbitration —
    behind an input-injection harness.
 
+## Two more things measurement found, neither of them in the plan
+
+**A Pressable activated from anywhere on screen.** Press a button, drag
+three hundred pixels away, release: `onPress` fired. `GtkGestureClick` holds
+an implicit grab for the whole press and reports `released` from wherever
+the pointer ended up, and nothing here checked. Dragging off a control to
+change your mind is how every toolkit works — GTK's own `GtkButton` checks
+whether the pointer is still inside before activating — so this was both an
+RN divergence and a GTK one. It is the same prop the task had listed for
+finger-drift tolerance, arriving from the other direction:
+`pressRetentionOffset` defines the rect a release has to land in, and
+`hitSlop` (new here too) is what that rect is measured from.
+
+Only a real pointer could find it. `userEvent` synthesizes a press and a
+release on the widget you name, so the release is always in the right place
+by construction.
+
+**`pointerEvents` had two writers for one boolean.** Nesting a
+`pointerEvents` inside a `box-only` view was documented as unsupported, and
+the reason was that lifting the mask restored every child to
+`can-target = true` — the restore pass could not know a child wanted to be
+untargetable for its own reasons. Recording what each widget's own prop
+wants, and deriving the mask from its live parent each time either changes,
+removes the restriction and also makes a widget React moves elsewhere
+impossible to strand.
+
+## Hover from touch: the filter we are not writing
+
+react-native-web's `useHover` explicitly drops any event whose pointer type
+is `touch`, and the reason is sound on a phone: without it every tap leaves
+the tapped view looking hovered. This platform was going to copy it. Three
+measurements say not to.
+
+**GTK gives a crossing event no device to filter on.** Inside
+`GtkEventControllerMotion`'s `enter` and `leave`, both
+`gtk_event_controller_get_current_event()` and
+`..._get_current_event_device()` return NULL — measured, and it is not a
+binding gap: GTK routes crossings through `handle_crossing`, which never
+sets the controller's current event. `motion` does carry a device
+(`GDK_SOURCE_MOUSE` here), but hover begins on `enter`, before any motion
+has been seen. So the filter cannot come from the hover controller at all;
+it would need a raw event tap on the toplevel recording the last input
+source — per-event JS work on every window, in the one area of this
+codebase that already had a performance epic of its own.
+
+**The problem it solves may not exist here.** GTK sends a matching `leave`
+when a touch sequence ends, so the stuck phantom hover that motivates RNW's
+filter does not arise.
+
+**And filtering would make Pressable behave unlike the widgets beside it.**
+GTK's own CSS `:hover` lights up on touch. A `Pressable` that refused to
+would be the odd one out in its own window.
+
+Finally, it cannot be checked either way on this rig — no touch can be
+injected at all (see the ScrollView section above). Shipping an
+unverifiable filter that costs every window a raw event tap, to fix a
+problem that may not occur, against the platform's own convention, is three
+reasons not to. It is a documented deviation in docs/api.md instead, and
+the note that would reopen it is a touchscreen plus a reported symptom.
+
 ## Honest gaps for ported apps
 
 No RNGH-based library works, and that is the largest single portability gap
-in the platform. Touch targets are not enforced at 44pt/48dp. Multi-finger
-pinch/rotate is deferred (GTK has `GtkGestureZoom`/`GtkGestureRotate`
-through the platform layer; RN has no portable API worth matching). Hover
-currently fires from touch — `GtkEventControllerMotion` does not filter by
-device source, and react-native-web explicitly drops non-`touch` pointer
-types in `useHover` for this reason. `Pressable` is still not
-keyboard-activatable (an accessibility gap, not a gesture one). Apps that
+in the platform. Touch targets are not enforced at 44pt/48dp, though
+`hitSlop` now exists to widen one by hand. Multi-finger pinch/rotate is
+deferred (GTK has `GtkGestureZoom`/`GtkGestureRotate` through the platform
+layer; RN has no portable API worth matching). Hover fires from touch as
+well as from a mouse, deliberately — see "Hover from touch" above. Apps
+that
 need a drag today should keep using `GtkDragSource`/`GtkDropTarget` through
 `react-native-gtkx/gtk`: on Linux it is better than what slice 2 will give
 them — real drag icons, cursors, GDK content negotiation — and slice 2's
