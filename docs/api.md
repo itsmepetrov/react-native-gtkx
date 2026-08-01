@@ -544,11 +544,12 @@ module scope in twelve of its files, its sort algorithm lives inside a
 and its public types are written in `SharedValue<T>`. Full evidence in
 [research/drag-and-drop.md](research/drag-and-drop.md).
 
-**The one thing a ported app must change.** `<GestureHandlerRootView>` —
-`react-native-gesture-handler` is not aliased (a partial shim would make
-every other RNGH import fail silently rather than loudly), so guard it with
-`Platform.OS` or a `.linux.tsx` split. `DropProvider` already renders the
-`flex: 1` box it was providing.
+**A ported app changes nothing in its source.** `<GestureHandlerRootView>` —
+the one non-drag-and-drop import such an app has, because upstream's quick
+start puts it at the root — is covered too: `react-native-gesture-handler` is
+aliased to [`react-native-gtkx/gesture-handler`](#react-native-gesture-handler-react-native-gtkxgesture-handler),
+a shim that implements that root faithfully and makes every other RNGH export
+throw where it is used.
 
 | Export                                                                                | Notes                                                                                                                                                                                         |
 | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -580,3 +581,30 @@ below follows from that one fact.
 | `SortableGrid`, `SortableGridItem`, `useGridSortable*`, `useHorizontalSortable*`, `SortableDirection.Horizontal` | **Not implemented.** Importing them fails at build time; passing `Horizontal` throws.                                                                               |
 | Autoscroll near a container edge during a drag                                                                   | Not implemented.                                                                                                                                                    |
 | Sortable list height                                                                                             | Rows are in flow layout, so the list is as tall as its rows — not `itemsCount × itemHeight`.                                                                        |
+
+## `react-native-gesture-handler` (`react-native-gtkx/gesture-handler`)
+
+**Not a port of RNGH.** It stays out of scope for the reasons in
+[research/gestures.md](research/gestures.md) — gestures on this platform are
+React Native's own responder system and `PanResponder`. This subpath exists
+for one narrow reason: `GestureHandlerRootView` is the single RNGH symbol
+that shows up in apps using none of the rest of RNGH, because
+`react-native-reanimated-dnd`'s quick start puts it at the root of the tree.
+Both presets alias the package name onto this shim, so that wrapper needs no
+edit.
+
+| Export                   | Behaviour                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GestureHandlerRootView` | **Implemented, faithfully.** A `View` with `style ?? { flex: 1 }` — note that an explicit `style` _replaces_ the default rather than merging with it, which is what upstream does in all three of its implementations. Its other job, marking the subtree as gesture-arbitrating, is already this platform's: the responder system's lock is global, so there is nothing to scope. |
+| everything else          | **Throws**, naming the symbol and pointing at the replacement. `Gesture`, `GestureDetector`, `PanGestureHandler`, `State`, `RectButton`, the `use*Gesture` hooks — all of them.                                                                                                                                                                                                    |
+
+The throw is the point. A `PanGestureHandler` that quietly rendered its
+children without gestures is exactly the trap
+[research/gestures.md](research/gestures.md) records `Animated.View` falling
+into — compiled, ran, did nothing. The stand-ins fail on call, on render and
+on property access (`Gesture.Pan()`, `State.ACTIVE`), while still answering
+the introspection React and `console.log` do first, so the message that
+surfaces is the precise one.
+
+A symbol this shim does not list at all fails earlier still, at bundle time,
+with the bundler's own "no export named X".

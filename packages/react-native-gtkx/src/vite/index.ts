@@ -34,6 +34,8 @@ const REACT_NATIVE_SVG = "react-native-svg"
 const REACT_NATIVE_GTKX_SVG = "react-native-gtkx/svg"
 const REANIMATED_DND = "react-native-reanimated-dnd"
 const REACT_NATIVE_GTKX_DND = "react-native-gtkx/dnd"
+const GESTURE_HANDLER = "react-native-gesture-handler"
+const GTKX_GESTURE_HANDLER = "react-native-gtkx/gesture-handler"
 
 /**
  * Maps `react-native` (and its subpaths) to `react-native-gtkx`,
@@ -68,6 +70,12 @@ export const rewriteReactNativeImport = (source: string): string | null => {
   }
   if (source.startsWith(`${REANIMATED_DND}/`)) {
     return `${REACT_NATIVE_GTKX_DND}${source.slice(REANIMATED_DND.length)}`
+  }
+  if (source === GESTURE_HANDLER) {
+    return GTKX_GESTURE_HANDLER
+  }
+  if (source.startsWith(`${GESTURE_HANDLER}/`)) {
+    return `${GTKX_GESTURE_HANDLER}${source.slice(GESTURE_HANDLER.length)}`
   }
   return null
 }

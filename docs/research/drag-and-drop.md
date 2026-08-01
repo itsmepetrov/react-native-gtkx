@@ -121,13 +121,13 @@ semantically — a JS timer plus `onMoveShouldSetPanResponder` is what
 (`<GestureDetector gesture={…}>` versus spread `panHandlers`), but that is
 fixable; what is not is everything left over:
 
-| Missing                                           | Why `PanResponder` does not help                                                                                                      |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| a worklet runtime (`react-native-worklets`)       | a second JS runtime over JSI; gtkx has one runtime and no JSI                                                                         |
-| Reanimated's mapper / dependency tracking         | `useAnimatedReaction` and `useAnimatedStyle` must re-run when a `SharedValue` is _written_; plain `{value}` boxes do not notify       |
-| Reanimated's `Animated.View`                      | must accept an `AnimatedStyle` whose members are `SharedValue`s; ours is RN's, driven by `Animated.Value`, transform and opacity only |
-| UI-thread `measure()`                             | ours is JS-side and callback-shaped                                                                                                   |
-| RNGH `GestureDetector` / `GestureHandlerRootView` | out of scope by the gestures decision                                                                                                 |
+| Missing                                     | Why `PanResponder` does not help                                                                                                      |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| a worklet runtime (`react-native-worklets`) | a second JS runtime over JSI; gtkx has one runtime and no JSI                                                                         |
+| Reanimated's mapper / dependency tracking   | `useAnimatedReaction` and `useAnimatedStyle` must re-run when a `SharedValue` is _written_; plain `{value}` boxes do not notify       |
+| Reanimated's `Animated.View`                | must accept an `AnimatedStyle` whose members are `SharedValue`s; ours is RN's, driven by `Animated.Value`, transform and opacity only |
+| UI-thread `measure()`                       | ours is JS-side and callback-shaped                                                                                                   |
+| RNGH `GestureDetector`                      | out of scope by the gestures decision (`GestureHandlerRootView` alone is shimmed — see below)                                         |
 
 Building the middle three _is_ porting Reanimated — the milestone
 `docs/research/gestures.md` ruled out. Category two, then: the whole
@@ -190,16 +190,27 @@ The alias is what makes the mirror worth having. Without it the app edits
 every import; with it the app edits none, and its iOS and Android builds go
 on using the real library with its real worklets.
 
-**One edit does survive, and it is not in the drag-and-drop code.**
-Upstream's own quick start wraps the app in
-`<GestureHandlerRootView style={{ flex: 1 }}>` from
-`react-native-gesture-handler` — a package the presets do not alias and
-which does not resolve here. Aliasing it to a stub was rejected: a partial
-RNGH shim would make every _other_ RNGH import fail silently rather than
-loudly, and RNGH is out of scope by an existing decision. So the honest
-claim is "no changes to your drag-and-drop code, one change to your app
-shell" — and `DropProvider` here already renders the `flex: 1` box that
-wrapper was providing.
+**The one edit that used to survive is gone too.** Upstream's own quick
+start wraps the app in `<GestureHandlerRootView style={{ flex: 1 }}>` from
+`react-native-gesture-handler`, so a ported app still had one line to change
+in its shell. The first pass rejected aliasing that package on the grounds
+that a partial RNGH shim would make every _other_ RNGH import fail silently
+rather than loudly — and that concern was right, but it argues for a
+particular shim rather than for none.
+
+`react-native-gtkx/gesture-handler` is that shim. It implements
+`GestureHandlerRootView` faithfully (upstream's `style ?? {flex: 1}`, so an
+explicit style replaces the default rather than merging — verified across all
+three of RNGH 3.1.0's implementations), and makes **every other export
+throw** where it is used, naming itself and pointing at the replacement. The
+loudness is preserved exactly; only the one symbol an app legitimately needs
+is answered.
+
+Nor is that root a stub. Upstream's does two things: it renders a `flex: 1`
+box, and it marks the subtree as gesture-arbitrating. The first is
+reproduced; the second is genuinely already this platform's job, because RN's
+own responder system is implemented here (#41) and its lock is global. So
+**a ported app now changes nothing in its source at all.**
 
 ## The implementation underneath is GTK's own drag-and-drop
 
@@ -358,9 +369,10 @@ owns an array. Two different jobs; one implementation underneath.
 - An app that imports `react-native-reanimated` **directly** (its own
   `useSharedValue`, its own `useAnimatedStyle`) still does not build. The
   alias replaces the DnD library, not Reanimated.
-- `<GestureHandlerRootView>` has to go behind a `Platform.OS` check or a
-  `.linux.tsx` split — the one source edit, and it is in the app shell, not
-  in the drag-and-drop code.
+- Any RNGH import beyond `GestureHandlerRootView` throws when it runs. That
+  is deliberate — see the shim above — but it does mean an app that mixes
+  real RNGH gestures into its drag-and-drop screens has work to do that no
+  alias can absorb.
 - `positions.value` and friends can be **read** (they are real `{ value }`
   boxes here — see `SharedValueLike`), but writing one animates nothing.
 - **Rows are in flow layout, not absolutely positioned.** Upstream's row

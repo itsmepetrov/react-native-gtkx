@@ -67,6 +67,10 @@
       "types": "./dist/dnd/index.d.ts",
       "default": "./dist/dnd/index.js"
     },
+    "./gesture-handler": {
+      "types": "./dist/gesture-handler-compat/index.d.ts",
+      "default": "./dist/gesture-handler-compat/index.js"
+    },
     "./mcp": {
       "types": "./dist/mcp/index.d.ts",
       "default": "./dist/mcp/index.js"

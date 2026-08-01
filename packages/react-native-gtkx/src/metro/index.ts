@@ -199,6 +199,25 @@ export const withLinuxPlatform = <T extends MetroLikeConfig>(
         platform,
       )
     }
+    // And the gesture-handler shim. Not a port of RNGH — that stays out of
+    // scope (docs/research/gestures.md). It supplies `GestureHandlerRootView`,
+    // the one RNGH symbol that appears in apps which otherwise use none of it
+    // (every react-native-reanimated-dnd app has it at the root), and makes
+    // every other export throw where it is used rather than arrive as
+    // undefined. See src/gesture-handler-compat/index.tsx.
+    if (
+      moduleName === "react-native-gesture-handler" ||
+      moduleName.startsWith("react-native-gesture-handler/")
+    ) {
+      return fallback(
+        context,
+        moduleName.replace(
+          /^react-native-gesture-handler/,
+          "react-native-gtkx/gesture-handler",
+        ),
+        platform,
+      )
+    }
     return fallback(context, moduleName, platform)
   }
 
