@@ -399,13 +399,13 @@ it. Two things fell out immediately:
 The 2×2 that separates painted area from our own work, medians of three
 interleaved repeats on a quiet box (`down2`, steady scroll over warm rows):
 
-| Configuration              |      area | `frame.avg` | `frame.veryLate`/s |
-| -------------------------- | --------: | ----------: | -----------------: |
-| ScrollView, windowed       |   560×724 |     15.5 ms |                0.3 |
-| FlatList `windowSize` 11   |   560×724 |     15.0 ms |                0.4 |
-| ScrollView, full area      | 1981×1212 | **43.9 ms** |               22.0 |
-| FlatList `windowSize` 11   | 1981×1212 |     44.5 ms |               21.8 |
-| …plus a sticky header      | 1981×1212 |     52.6 ms |               18.5 |
+| Configuration            |      area | `frame.avg` | `frame.veryLate`/s |
+| ------------------------ | --------: | ----------: | -----------------: |
+| ScrollView, windowed     |   560×724 |     15.5 ms |                0.3 |
+| FlatList `windowSize` 11 |   560×724 |     15.0 ms |                0.4 |
+| ScrollView, full area    | 1981×1212 | **43.9 ms** |               22.0 |
+| FlatList `windowSize` 11 | 1981×1212 |     44.5 ms |               21.8 |
+| …plus a sticky header    | 1981×1212 |     52.6 ms |               18.5 |
 
 The ScrollView row is the control: all 500 rows mounted, scrolling is a pure
 native adjustment translation, and the instrumentation confirms it does
