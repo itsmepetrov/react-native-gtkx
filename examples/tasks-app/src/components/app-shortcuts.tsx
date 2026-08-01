@@ -1,8 +1,11 @@
 // Global window shortcuts — ported from the gtkx tutorial
 // (examples/tutorial/src/components/app-shortcuts.tsx). Returns the
 // GtkShortcutController element itself (not a wrapping component with its
-// own chrome), passed to AppRegistry's windowControllers
-// (react-native-gtkx epic tasks-app #003) from src/index.tsx.
+// own chrome); window-chrome.tsx puts it inside <WindowControllers>, which
+// attaches it to the window from where it sits in the tree. It used to go
+// to AppRegistry's windowControllers option instead — out of tree, where
+// useRequestDeleteTask's useToast() found no provider and the Delete
+// shortcut's toast silently never appeared.
 import type { ReactElement } from "react"
 import { Gtk, GtkShortcut, GtkShortcutController } from "react-native-gtkx/gtk"
 import { useStore } from "../store/index"

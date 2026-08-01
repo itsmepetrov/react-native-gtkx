@@ -42,15 +42,17 @@ import the settings hooks rely on only resolves for free on that path (the
 - **Actions, menus, accelerators**: app-level and window-level
   `GSimpleAction`s (`Ctrl+N`, `Ctrl+,`, `Ctrl+?`), a `GtkMenuButton`+`GMenu`
   overflow menu, a window-scoped `GtkShortcutController`
-  (`Ctrl+F`/`Escape`/`Delete`) — all reached through `AppRegistry`'s new
-  `applicationActions`/`actionAccels`/`windowActions`/`windowControllers`.
+  (`Ctrl+F`/`Escape`/`Delete`) — declared inside the app tree through
+  `<ApplicationActions>`/`<WindowActions>`/`<WindowControllers>`
+  (`src/components/window-chrome.tsx`), with only `actionAccels` left as an
+  `AppRegistry` option.
 - **Dialogs**: About, Preferences, a searchable Shortcuts window, a delete
   confirmation, all real `Adw.Dialog` subclasses presented outside any RN
   layout tree.
 - **Desktop notifications**: `Gio.Notification` reminders with a
   "Mark Complete" action button that routes back into the running app
-  through an app-level action — the reason `applicationActions` had to
-  exist at all.
+  through an app-level action — the reason an application-scoped action map
+  had to be reachable at all.
 - **Drag-reorder** and **colored list styling** through raw
   `GtkDragSource`/`GtkDropTarget` and `@gtkx/css`, both reached through
   `react-native-gtkx/gtk`.
@@ -100,7 +102,12 @@ Small, additive changes to `packages/react-native-gtkx`, each with tests:
   `actionAccels`, `windowActions`, `windowControllers` and `breakpoints` —
   before this, a mounted app had no way to attach a `GSimpleAction`, a
   `GtkShortcutController` or an `Adw.Breakpoint` to the window/application
-  `AppRegistry` builds internally.
+  `AppRegistry` builds internally. The three action/controller options were
+  later deprecated in favour of `<ApplicationActions>`/`<WindowActions>`/
+  `<WindowControllers>`, which can be declared from inside the app tree and
+  therefore read its context — this app used them from the moment they
+  existed, and moving them in-tree turned out to fix a silent bug of its
+  own (the Delete shortcut's toast, see `src/components/window-chrome.tsx`).
 - **`GLib`** and **`css`/`cx`/`injectGlobal`** (`@gtkx/css`) re-exported
   from `react-native-gtkx/gtk` — the repo's own `no-restricted-imports`
   ESLint rule for `@gtkx/*` turned out to apply to `examples/**` too (not
