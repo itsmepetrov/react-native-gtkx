@@ -10,14 +10,22 @@
 //   - React Native content inside a page (SlotContent);
 //   - React Native content inside an AdwHeaderBar slot (IntrinsicContent);
 //   - a raw GTK widget in the header, because nothing is filtered;
-//   - the escape hatch: a ref to the Adw.NavigationView itself.
+//   - the escape hatch: a ref to the Adw.NavigationView itself;
+//   - List/ListRow: Adwaita's boxed list, drawn entirely from React Native
+//     style. Its rows ARE Pressables — the hover and press tints come from
+//     the state callback — and the article list below used to be a
+//     hand-styled version of the same thing that did not look like GNOME.
 import { useRef, useState } from "react"
 import { Pressable, StyleSheet, Text, View } from "react-native"
 import { Adw, AdwHeaderBar, AdwToolbarView } from "react-native-gtkx/adw"
 import {
+  Icon,
   IntrinsicContent,
+  List,
+  ListRow,
   NavigationStack,
   NavigationStackPage,
+  rowPosition,
   SlotContent,
 } from "react-native-gtkx/common"
 import { GtkButton, GtkEntry } from "react-native-gtkx/gtk"
@@ -99,19 +107,21 @@ const App = () => {
                   label="Go"
                 />
               </View>
-              {ARTICLES.map((article) => (
-                <Pressable
-                  key={article.tag}
-                  style={({ hovered }) => [
-                    styles.row,
-                    hovered && styles.rowHovered,
-                  ]}
-                  onPress={() => push(article.tag)}
-                >
-                  <Text style={styles.title}>{article.title}</Text>
-                  <Text style={styles.body}>{article.body}</Text>
-                </Pressable>
-              ))}
+              {/* The `.boxed-list` a GNOME app would use, with no GtkListBox
+                  and no AdwActionRow: the frame, the separators, the corner
+                  radii and both tints are React Native style. */}
+              <List>
+                {ARTICLES.map((article, index) => (
+                  <ListRow
+                    key={article.tag}
+                    title={article.title}
+                    subtitle={article.body}
+                    position={rowPosition(index, ARTICLES.length)}
+                    onPress={() => push(article.tag)}
+                    suffix={<Icon name="go-next-symbolic" />}
+                  />
+                ))}
+              </List>
             </View>
           </SlotContent>
         </AdwToolbarView>
