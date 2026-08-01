@@ -40,6 +40,13 @@ jobs:
         run: npm run typecheck
       - name: Lint
         run: npm run lint
+      - name: Formatting
+        # eslint only reaches what its config covers, which is the TS/JS
+        # sources — prettier also owns the markdown, YAML and JSON in the
+        # repo, and nothing was checking those. main has silently landed
+        # unformatted markdown before; the pre-commit hook catches it only
+        # for files that were staged through it.
+        run: npm run format:check
       - name: Docs coverage
         run: npm run docs:check
       - name: MCP data is in sync with the docs

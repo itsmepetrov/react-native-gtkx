@@ -45,6 +45,23 @@ it("press events carry RN's shape, with page and location in different spaces", 
   ).getParent()!
   const click = findClickController(box)
 
+  // pageX/pageY come from gtk_widget_compute_point(), which walks the
+  // allocated transform chain — and a widget that has been realized and
+  // mapped but not yet ALLOCATED still has an identity transform, so
+  // compute_point succeeds and returns the point unchanged. Finding the
+  // label only proves React committed and GTK mapped the tree; the layout
+  // phase runs on a later frame-clock tick, and under CPU load that tick
+  // lands after this point, which is exactly how this test flaked (pageX
+  // came back as 7 — the raw locationX — instead of 30 + 7).
+  // A non-zero allocation is the honest precondition: GTK sets a widget's
+  // size and its transform in the same gtk_widget_allocate() call, and
+  // allocation runs top-down, so the whole chain up to the root is placed
+  // by the time this passes. Waiting on the size rather than on the
+  // position keeps the assertion below able to fail.
+  await waitFor(() => {
+    expect(box.getAllocatedWidth()).toBeGreaterThan(0)
+  })
+
   await act(async () => {
     click.emit("pressed", 1, 7, 4)
     click.emit("released", 1, 7, 4)
