@@ -95,6 +95,10 @@ export { css, cx, injectGlobal } from "@gtkx/css"
 
 export { createTextProbe, measureWidget, toNumber } from "./measure"
 export { computePointIn, computePointInWindow, type Point } from "./geometry"
+// A portal into a NAMED slot of a remote object (the window's action map,
+// its controllers) rather than into its default child slot — see the file
+// for why gtkx's own createPortal is not enough on its own.
+export { createSlotPortal } from "./slot-portal"
 export { getViewBoxComponent, setBoxPassthrough } from "./view-box"
 export {
   getSvgNodeComponent,

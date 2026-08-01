@@ -1,18 +1,28 @@
 // A small hand-written store — no external state library, since the point
 // of this example is the navigator, not state management.
 //
-// It is a MODULE-LEVEL external store (useSyncExternalStore) rather than
-// the Context + useReducer it started as, and that is not a stylistic
-// preference. `AppRegistry.runApplication`'s `windowActions` /
-// `windowControllers` are rendered as props of the window it builds — as
-// SIBLINGS of the app's own tree, not descendants of it (see
-// packages/react-native-gtkx/src/components/app-registry.tsx). React
-// context from a provider inside the app therefore cannot reach them, so a
-// `win.new` action or a Ctrl+F shortcut had no way to touch a Context
-// store at all. examples/tasks-app never hit this because zustand is
-// module-global to begin with. Same public `useStore()` API as before,
-// plus `getStore()` for the out-of-tree callers.
-import { useSyncExternalStore } from "react"
+// Context + useReducer, with nothing at module scope: no singleton state and
+// no `getStore()` escape hatch. That is worth saying out loud because it was
+// NOT possible for a while. `AppRegistry.runApplication`'s
+// `windowActions`/`windowControllers` options render their children as props
+// of the window it builds — siblings of the app's tree, not descendants — so
+// no provider inside the app was above them, and `win.new` (Ctrl+N) could not
+// read a context store at all. The store had to become a module-level
+// external one (useSyncExternalStore) purely to work around that.
+//
+// `<WindowActions>`/`<WindowControllers>` (react-native-gtkx/gtk) removed the
+// reason: the actions are declared inside this provider now
+// (components/window-chrome.tsx), so they read the same store every screen
+// does, and the workaround went with them.
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  type ReactNode,
+} from "react"
 import { loadTasks, saveTasks, type PersistedState } from "./storage"
 import type { DialogKind, Task, TaskList } from "./types"
 
@@ -339,35 +349,7 @@ export type Store = State & {
   setActiveRoute: (route: string) => void
 }
 
-// Restored at module load, which is before the app mounts — so the very
-// first render already draws the saved document and no "loading" state ever
-// exists. Reading a small JSON file synchronously at startup is what a
-// GNOME app of this size does; it is also what keeps this store a plain
-// synchronous external store.
-let state = createInitialState(loadTasks())
-let snapshot: Store | null = null
-const listeners = new Set<() => void>()
-
-const dispatch = (action: Action): void => {
-  const next = reducer(state, action)
-  if (next === state) {
-    return
-  }
-  // Only the DOCUMENT is persisted, and only when it actually changed:
-  // typing in the search field, opening a dialog or selecting a task are
-  // state changes too, and none of them should touch the disk. Identity
-  // comparison is enough because the reducer is immutable throughout.
-  const documentChanged =
-    next.lists !== state.lists || next.tasks !== state.tasks
-  state = next
-  snapshot = null
-  if (documentChanged) {
-    saveTasks({ lists: state.lists, tasks: state.tasks })
-  }
-  for (const listener of listeners) {
-    listener()
-  }
-}
+const StoreContext = createContext<Store | null>(null)
 
 // Random, not a counter. A counter is only safe while state starts empty
 // every run: once the document is restored from disk (see storage.ts), a
@@ -379,78 +361,101 @@ const dispatch = (action: Action): void => {
 // kept purely so an id is readable in a log or a save file.
 const makeId = (prefix: string): string => `${prefix}-${crypto.randomUUID()}`
 
-// Bound once, at module scope: useSyncExternalStore compares snapshots by
-// identity, so the action half must never be rebuilt — a fresh object per
-// read would make every consumer re-render on every read, forever.
-const actions = {
-  // Rejects an empty name here rather than in the dialog, so the rule holds
-  // for every caller — same as examples/tasks-app's own `addList`.
-  addList: (name: string, color: string): TaskList | undefined => {
-    const trimmed = name.trim()
-    if (!trimmed) {
-      return undefined
+export const StoreProvider = ({ children }: { children: ReactNode }) => {
+  // The saved document is read during the reducer's lazy init, which runs
+  // before the first render commits — so the very first frame already draws
+  // it and no "loading" state ever exists. Reading a small JSON file
+  // synchronously at startup is what a GNOME app of this size does.
+  const [state, dispatch] = useReducer(reducer, undefined, () =>
+    createInitialState(loadTasks()),
+  )
+
+  // Only the DOCUMENT is persisted, and only when it actually changed:
+  // typing in the search field, opening a dialog or selecting a task are
+  // state changes too, and none of them should touch the disk. The effect's
+  // own dependencies do that comparison — the reducer is immutable
+  // throughout, so identity is enough — and the ref skips the first run,
+  // which would otherwise write back exactly what was just loaded.
+  const persisted = useRef<PersistedState | null>(null)
+  useEffect(() => {
+    const document: PersistedState = { lists: state.lists, tasks: state.tasks }
+    if (persisted.current === null) {
+      persisted.current = document
+      return
     }
-    const list: TaskList = { id: makeId("list"), name: trimmed, color }
-    dispatch({ type: "addList", list })
-    return list
-  },
-  addTask: (listId: string, title: string): Task | undefined => {
-    const trimmed = title.trim()
-    if (!trimmed || !listId) {
-      return undefined
-    }
-    const task: Task = {
-      id: makeId("task"),
-      title: trimmed,
-      listId,
-      notes: "",
-      done: false,
-      important: false,
-      deleted: false,
-      due: null,
-      position: state.tasks.length,
-      createdAt: new Date().toISOString(),
-      completedAt: null,
-    }
-    dispatch({ type: "addTask", task })
-    return task
-  },
-  setTitle: (id: string, title: string) =>
-    dispatch({ type: "setTitle", id, title }),
-  setNotes: (id: string, notes: string) =>
-    dispatch({ type: "setNotes", id, notes }),
-  setDue: (id: string, due: string | null) =>
-    dispatch({ type: "setDue", id, due }),
-  toggleDone: (id: string) => dispatch({ type: "toggleDone", id }),
-  toggleImportant: (id: string) => dispatch({ type: "toggleImportant", id }),
-  moveToTrash: (id: string) => dispatch({ type: "moveToTrash", id }),
-  restore: (id: string) => dispatch({ type: "restore", id }),
-  deleteForever: (id: string) => dispatch({ type: "deleteForever", id }),
-  reorder: (draggedId: string, targetId: string) =>
-    dispatch({ type: "reorder", draggedId, targetId }),
-  openTask: (id: string | null) => dispatch({ type: "openTask", id }),
-  setSearchMode: (searchMode: boolean) =>
-    dispatch({ type: "setSearchMode", searchMode }),
-  setSearchQuery: (searchQuery: string) =>
-    dispatch({ type: "setSearchQuery", searchQuery }),
-  showDialog: (dialog: DialogKind) => dispatch({ type: "showDialog", dialog }),
-  askDeleteTask: (id: string | null) => dispatch({ type: "askDeleteTask", id }),
-  setActiveRoute: (route: string) =>
-    dispatch({ type: "setActiveRoute", route }),
+    persisted.current = document
+    saveTasks(document)
+  }, [state.lists, state.tasks])
+
+  // Rebuilt whenever the state changes, so an action can read the state it
+  // was called with — `addTask` needs the current task count for the new
+  // task's position, and returns the task it created so the caller can open
+  // it. Consumers of a context store re-render on every state change anyway,
+  // so there is nothing to be gained by freezing the action half.
+  const store = useMemo<Store>(
+    () => ({
+      ...state,
+      // Rejects an empty name here rather than in the dialog, so the rule
+      // holds for every caller — same as examples/tasks-app's own `addList`.
+      addList: (name, color) => {
+        const trimmed = name.trim()
+        if (!trimmed) {
+          return undefined
+        }
+        const list: TaskList = { id: makeId("list"), name: trimmed, color }
+        dispatch({ type: "addList", list })
+        return list
+      },
+      addTask: (listId, title) => {
+        const trimmed = title.trim()
+        if (!trimmed || !listId) {
+          return undefined
+        }
+        const task: Task = {
+          id: makeId("task"),
+          title: trimmed,
+          listId,
+          notes: "",
+          done: false,
+          important: false,
+          deleted: false,
+          due: null,
+          position: state.tasks.length,
+          createdAt: new Date().toISOString(),
+          completedAt: null,
+        }
+        dispatch({ type: "addTask", task })
+        return task
+      },
+      setTitle: (id, title) => dispatch({ type: "setTitle", id, title }),
+      setNotes: (id, notes) => dispatch({ type: "setNotes", id, notes }),
+      setDue: (id, due) => dispatch({ type: "setDue", id, due }),
+      toggleDone: (id) => dispatch({ type: "toggleDone", id }),
+      toggleImportant: (id) => dispatch({ type: "toggleImportant", id }),
+      moveToTrash: (id) => dispatch({ type: "moveToTrash", id }),
+      restore: (id) => dispatch({ type: "restore", id }),
+      deleteForever: (id) => dispatch({ type: "deleteForever", id }),
+      reorder: (draggedId, targetId) =>
+        dispatch({ type: "reorder", draggedId, targetId }),
+      openTask: (id) => dispatch({ type: "openTask", id }),
+      setSearchMode: (searchMode) =>
+        dispatch({ type: "setSearchMode", searchMode }),
+      setSearchQuery: (searchQuery) =>
+        dispatch({ type: "setSearchQuery", searchQuery }),
+      showDialog: (dialog) => dispatch({ type: "showDialog", dialog }),
+      askDeleteTask: (id) => dispatch({ type: "askDeleteTask", id }),
+      setActiveRoute: (route) => dispatch({ type: "setActiveRoute", route }),
+    }),
+    [state],
+  )
+
+  return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>
 }
 
-const subscribe = (listener: () => void): (() => void) => {
-  listeners.add(listener)
-  return () => {
-    listeners.delete(listener)
+export const useStore = (): Store => {
+  const store = useContext(StoreContext)
+  if (store === null) {
+    throw new Error("useStore() must be called inside <StoreProvider>")
   }
+  return store
 }
-
-/** The store outside React — what `windowActions`/`windowControllers` use,
- *  since no provider of ours is above them. */
-export const getStore = (): Store => {
-  snapshot ??= { ...state, ...actions }
-  return snapshot
-}
-
-export const useStore = (): Store => useSyncExternalStore(subscribe, getStore)

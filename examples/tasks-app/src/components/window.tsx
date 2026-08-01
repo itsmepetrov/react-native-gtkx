@@ -39,6 +39,7 @@ import { ContentPane } from "./content-pane"
 import { Dialogs } from "./dialogs"
 import { Sidebar } from "./sidebar"
 import { SidebarHeader } from "./sidebar-header"
+import { WindowChrome } from "./window-chrome"
 
 export const Window = () => {
   const application = useApplication()
@@ -103,6 +104,10 @@ export const Window = () => {
         </AdwNavigationSplitView>
       </AdwToastOverlay>
       <Dialogs />
+      {/* Window/application actions and the global shortcut controller. In
+          the tree, below ToastProvider, so the Delete shortcut's "moved to
+          Trash — Undo" toast actually has an overlay to reach. */}
+      <WindowChrome />
     </ToastProvider>
   )
 }

@@ -203,6 +203,98 @@ useBindSetting({
 })
 ```
 
+For the other half of reaching back into that window — putting things ON it
+rather than reading it — see the next section.
+
+### Actions and shortcuts declared in the app tree
+
+`WindowActions`, `ApplicationActions` and `WindowControllers` register their
+children on the window (or the application) **from wherever they are written
+in the app tree**. They render nothing where they sit — they are portals in
+React's own sense: the children stay part of the tree at that position, with
+the context, state and effects they would have there, while the registration
+lands on the window.
+
+```tsx
+import { GSimpleAction, WindowActions } from "react-native-gtkx/gtk"
+
+const NewTaskAction = () => {
+  const { addTask } = useStore() // an ordinary React context store
+  return (
+    <WindowActions>
+      <GSimpleAction
+        name="new"
+        onActivate={() => addTask()}
+      />
+    </WindowActions>
+  )
+}
+```
+
+That is `win.new` — what a HeaderBar button's `actionName`, a `GMenu` item
+and an `actionAccels` entry all target. `ApplicationActions` is the same
+component against the application's action map (`app.*`), and the two are
+NOT interchangeable: a `Gio.Notification`'s action button can only ever
+activate an application action, and an application action outlives any one
+window. Which prefix you get is decided by which component you write.
+`WindowControllers` takes `Gtk.EventController` children — a
+`GtkShortcutController` with `scope={Gtk.ShortcutScope.GLOBAL}` is the whole
+reason it exists.
+
+**Reach for these, not for `runApplication`'s `applicationActions` /
+`windowActions` / `windowControllers` options.** Those options build their
+children as props of the window `AppRegistry` creates, which makes them
+SIBLINGS of the app tree: no provider inside the app is above them, so an
+action declared there cannot read a React context — `examples/tasks-nav` had
+to rewrite its store as a module-level external store before Ctrl+N could
+see any app state at all. The options still work and are not going away
+without notice, but they are deprecated, and everything they can express the
+components can express better:
+
+- **context works**, because the declaration is a descendant of its provider;
+- **registration is dynamic** — the action is added when the declaring
+  component mounts and removed when it unmounts, so one screen can own its
+  own actions instead of the process owning all of them for its lifetime;
+- **it composes** — two unrelated subtrees each declare their own without
+  meeting in a single options object.
+
+`actionAccels` is NOT deprecated and stays a `runApplication` option: it is a
+flat name→keys table with no children and nothing to read from context, and
+it is deliberately process-wide (an accelerator naming an action that is not
+registered right now simply does nothing). A shortcut that should come and
+go with a screen is a `GtkShortcutController` inside `<WindowControllers>`.
+
+**Two components, not one, on purpose.** Actions land on the window as a
+`Gio.ActionMap` (`addAction`/`removeAction`, keyed by NAME); controllers land
+on it as a `Gtk.Widget` (`addController`/`removeController`, keyed by the
+controller object). Different children, different GObject interfaces, and —
+see below — different duplicate semantics. One component sorting its children
+by type would fail silently on a wrong child; two fail at the type level.
+
+**A duplicated action name goes to the FIRST declaration**, and a second one
+is ignored with a development warning naming it. This is not a coin toss
+between first and last. `Gio.ActionMap` is name-keyed at both ends:
+`addAction` silently replaces a same-named action, and `removeAction` takes a
+name, not the action object. Under "last wins", the first of the two
+declarations to unmount would remove whatever currently answers to that
+name — leaving the other one mounted but dead. First-wins is the only order
+in which release always precedes acquire: the loser never registers, and when
+the winner unmounts (removing its own action, correctly) the claim passes to
+the next declaration still mounted, which registers in a later commit. If you
+want a screen to override a shortcut, give it its own name, or move the
+declaration somewhere both screens can reach.
+
+**Inside a `Modal`, the enclosing window is the modal's own window**, so
+actions and controllers declared there belong to it and go away with it —
+usually what a dialog wants, and worth knowing when it is not. Under
+`chrome: "content"` and inside the navigators nothing changes: the window is
+still the one `AppRegistry` built, the navigators own widgets inside it and
+not its action map, and a `HeaderBar` button in a page resolves `win.*`
+through the widget hierarchy up to that same window. One consequence worth
+knowing: react-navigation keeps a popped screen mounted until its exit
+transition ends, so a screen's actions outlive the pop by the length of the
+animation.
+
 ### GSettings
 
 `useSetting` and `useBindSetting` come straight from `@gtkx/react`, re-

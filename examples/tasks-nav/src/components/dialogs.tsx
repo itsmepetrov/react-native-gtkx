@@ -2,8 +2,9 @@
 // Mounted as a SIBLING of the navigator (see src/app.tsx): an Adw.Dialog
 // presents itself onto the window rather than being laid out where it sits,
 // so it deliberately has no place inside a screen's body.
-import { getStore, useStore } from "../store"
-import { showToast } from "../toast"
+import { useCallback } from "react"
+import { useStore } from "../store"
+import { useToast } from "../toast"
 import type { Task } from "../types"
 import { About } from "./about"
 import { DeleteConfirmation } from "./delete-confirmation"
@@ -22,22 +23,32 @@ import { Shortcuts } from "./shortcuts"
  * and it gets an undoable TOAST instead. That is the GNOME pattern:
  * confirm what cannot be taken back, offer undo for what can.
  *
- * A plain function rather than a hook, because the Delete key reaches it
- * from `AppShortcuts` — mounted outside the app's tree as
- * `windowControllers`, where no hook of ours can run (see src/toast.ts).
+ * A hook, like tasks-app's own `useRequestDeleteTask`. It used to be a plain
+ * function because the Delete key reached it from `AppShortcuts`, which
+ * `windowControllers` mounted outside the app's tree where no hook of ours
+ * could run; `<WindowControllers>` put that declaration back in the tree.
  */
-export const requestDeleteTask = (task: Task): void => {
-  const store = getStore()
-  if (task.deleted) {
-    store.askDeleteTask(task.id)
-    return
-  }
-  store.moveToTrash(task.id)
-  showToast({
-    title: `“${task.title}” moved to Trash`,
-    buttonLabel: "Undo",
-    onButtonClicked: () => getStore().restore(task.id),
-  })
+export const useRequestDeleteTask = (): ((task: Task) => void) => {
+  const { show } = useToast()
+  const { askDeleteTask, moveToTrash, restore } = useStore()
+
+  // Memoized: content-screen.tsx puts the result in an effect's dependency
+  // list (the header it builds carries the delete button).
+  return useCallback(
+    (task: Task) => {
+      if (task.deleted) {
+        askDeleteTask(task.id)
+        return
+      }
+      moveToTrash(task.id)
+      show({
+        title: `“${task.title}” moved to Trash`,
+        buttonLabel: "Undo",
+        onButtonClicked: () => restore(task.id),
+      })
+    },
+    [show, askDeleteTask, moveToTrash, restore],
+  )
 }
 
 export const Dialogs = () => {

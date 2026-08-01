@@ -18,7 +18,6 @@ export { Gdk, Gio, GLib, GObject, Gtk, Pango } from "../gtkx/bridge/index"
 // docs/platform-layer.md "Unwrapped by necessity".
 export {
   GMenu,
-  GSimpleAction,
   GtkAdjustment,
   GtkDragSource,
   GtkDropTarget,
@@ -26,6 +25,23 @@ export {
   GtkShortcutController,
   GtkTextBuffer,
 } from "../gtkx/bridge/index"
+
+// Window and application actions declared inside the app tree instead of
+// around it (the AppRegistry options they replace cannot see app context —
+// see window-actions.tsx). GSimpleAction comes from here rather than
+// straight from the bridge because inside these components it arbitrates
+// duplicate action names; on every other path it is gtkx's element,
+// unchanged.
+export {
+  ApplicationActions,
+  GSimpleAction,
+  WindowActions,
+  WindowControllers,
+  type ApplicationActionsProps,
+  type GSimpleActionProps,
+  type WindowActionsProps,
+  type WindowControllersProps,
+} from "./window-actions"
 
 // GSettings: reads and writes backed by a compiled `.gschema.xml` schema.
 // `useSetting`/`useBindSetting` come straight from @gtkx/react; loading a

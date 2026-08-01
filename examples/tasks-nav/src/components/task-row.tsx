@@ -33,7 +33,7 @@ import {
 import { escapeMarkup, formatDue } from "../format"
 import { useStore } from "../store"
 import type { Task, TaskList } from "../types"
-import { requestDeleteTask } from "./dialogs"
+import { useRequestDeleteTask } from "./dialogs"
 
 /** Due date first, then the list name when the current view mixes lists —
  *  AdwActionRow has exactly one subtitle line, so the two share it. */
@@ -58,6 +58,7 @@ export const TaskRow = ({
   showListName: boolean
 }) => {
   const { toggleDone, toggleImportant, restore, reorder, openTask } = useStore()
+  const requestDeleteTask = useRequestDeleteTask()
 
   const title = task.done
     ? `<s>${escapeMarkup(task.title)}</s>`

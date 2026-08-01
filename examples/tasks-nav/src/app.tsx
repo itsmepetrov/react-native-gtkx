@@ -6,18 +6,19 @@
 // navigator instead of around it.
 import { NavigationContainer } from "@react-navigation/native"
 import schema from "#data/dev.rngtkx.tasksnav.gschema.xml"
-import { useCallback, useEffect } from "react"
-import { AdwToastOverlay } from "react-native-gtkx/adw"
+import { useCallback, useEffect, useRef } from "react"
+import { AdwToastOverlay, type Adw } from "react-native-gtkx/adw"
 import { GtkButton, useApplication, useSetting } from "react-native-gtkx/gtk"
 import { createSidebarNavigator } from "react-native-gtkx/navigation"
 import { Dialogs } from "./components/dialogs"
+import { WindowChrome } from "./components/window-chrome"
 import { isToday } from "./format"
 import { useReminders } from "./hooks/use-reminders"
 import { buildReminder } from "./notifications"
 import { ContentScreen } from "./screens/content-screen"
-import { useStore } from "./store"
+import { StoreProvider, useStore } from "./store"
 import { applyColorScheme } from "./theme"
-import { setToastOverlay } from "./toast"
+import { ToastProvider } from "./toast"
 import type { SmartView, Task } from "./types"
 
 const Sidebar = createSidebarNavigator()
@@ -27,9 +28,10 @@ const Sidebar = createSidebarNavigator()
 export const smartViewRoute = (view: SmartView): string => `smart:${view}`
 export const listRoute = (listId: string): string => `list:${listId}`
 
-export const App = () => {
+const TasksNav = () => {
   const { lists, tasks, showDialog } = useStore()
   const application = useApplication()
+  const toastOverlayRef = useRef<Adw.ToastOverlay | null>(null)
   const [colorScheme] = useSetting(schema, "color-scheme")
   const [reminderMinutes] = useSetting(schema, "reminder-minutes")
 
@@ -55,13 +57,10 @@ export const App = () => {
   const trashCount = tasks.filter((task) => task.deleted).length
 
   return (
-    <>
+    <ToastProvider overlayRef={toastOverlayRef}>
       {/* The overlay has to be ABOVE the navigator: a toast is drawn over
-          the whole window, not inside whichever pane raised it. The ref is
-          a module-level setter rather than a context provider — see
-          src/toast.ts for why this app cannot use the context tasks-app
-          does. */}
-      <AdwToastOverlay ref={setToastOverlay}>
+          the whole window, not inside whichever pane raised it. */}
+      <AdwToastOverlay ref={toastOverlayRef}>
         <NavigationContainer>
           <Sidebar.Navigator
             sidebarTitle="Tasks (nav)"
@@ -156,6 +155,21 @@ export const App = () => {
           Adw.Dialog presents itself onto the window rather than being laid
           out where it is written. */}
       <Dialogs />
-    </>
+      {/* The window's actions and its global shortcuts, inside the app tree
+          on purpose: the Delete shortcut raises the undo toast through
+          useToast(), and win.new reads the store — neither can see a
+          provider from outside. */}
+      <WindowChrome />
+    </ToastProvider>
   )
 }
+
+// The store's provider is the app's outermost component. Everything that
+// used to be a runApplication option — the actions, the shortcut controller —
+// now renders inside it (see TasksNav above and store.tsx for why that
+// matters).
+export const App = () => (
+  <StoreProvider>
+    <TasksNav />
+  </StoreProvider>
+)

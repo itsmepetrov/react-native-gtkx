@@ -38,19 +38,42 @@ export type RunApplicationParams = {
   // the app's content provides HeaderBars (navigation apps: the page
   // HeaderBar becomes the titlebar, with the window controls in it).
   chrome?: "system" | "content"
-  // GSimpleAction elements registered on the GApplication itself
-  // ("app.<name>" — reachable from anywhere, including a
-  // Gio.Notification's action buttons, which can only ever target an
-  // app-level action).
+  /**
+   * GSimpleAction elements registered on the GApplication itself
+   * ("app.<name>" — reachable from anywhere, including a Gio.Notification's
+   * action buttons, which can only ever target an app-level action).
+   *
+   * @deprecated Render `<ApplicationActions>` (react-native-gtkx/gtk) inside
+   * the app instead. Options render as SIBLINGS of the app tree, so no
+   * context of the app's can reach them and the set is fixed for the
+   * process's lifetime. Still supported; see docs/api.md.
+   */
   applicationActions?: ReactNode
   // Keyboard accelerators bound to actions, at the application level —
-  // GtkApplication's own actionAccels prop, unchanged.
+  // GtkApplication's own actionAccels prop, unchanged. NOT deprecated with
+  // the three ReactNode options below: this is a flat name→keys table with
+  // no children and nothing to read from context, and it is deliberately
+  // process-wide (an accelerator for an action that is not currently
+  // registered simply does nothing). A shortcut that should come and go
+  // with a screen is a GtkShortcutController in <WindowControllers>.
   actionAccels?: ActionAccel[]
-  // GSimpleAction elements registered on the window ("win.<name>" —
-  // what a HeaderBar button's actionName or a GMenu item usually targets).
+  /**
+   * GSimpleAction elements registered on the window ("win.<name>" — what a
+   * HeaderBar button's actionName or a GMenu item usually targets).
+   *
+   * @deprecated Render `<WindowActions>` (react-native-gtkx/gtk) inside the
+   * app instead — it can read the app's context and registers/unregisters
+   * with the component that declares it. Still supported; see docs/api.md.
+   */
   windowActions?: ReactNode
-  // Event controllers attached to the window itself — a
-  // GtkShortcutController scoped to the whole window is the common case.
+  /**
+   * Event controllers attached to the window itself — a
+   * GtkShortcutController scoped to the whole window is the common case.
+   *
+   * @deprecated Render `<WindowControllers>` (react-native-gtkx/gtk) inside
+   * the app instead, for the same reasons as `windowActions`. Still
+   * supported; see docs/api.md.
+   */
   windowControllers?: ReactNode
   // AdwBreakpoint elements, evaluated against the window's own allocated
   // size. Only meaningful under chrome: "content" (AdwApplicationWindow) —
