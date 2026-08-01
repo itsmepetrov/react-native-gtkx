@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# gesture-detector recon: run both probes under a PRIVATE headless sway and
+# print their PASS/FAIL lines.
+#
+# A private compositor per invocation, not `dev-loop shot`: these probes
+# inject a real pointer at absolute output coordinates and fullscreen their
+# own window, so a shared session would both aim at whatever has focus and
+# move the user's actual cursor.
+#
+# usage (VM), after `npm install && npm run build` in this directory:
+#
+#   bash spike/gesture-detector/run-headless.sh          # both probes
+#   bash spike/gesture-detector/run-headless.sh gtk      # probe 1 and 4
+#   bash spike/gesture-detector/run-headless.sh spike    # probe 5
+#   GD_BREAK=1 bash spike/gesture-detector/run-headless.sh spike
+#
+# The last one is the mutation run: GD_BREAK makes the detector take the
+# responder on press and activate immediately (the naive implementation), and
+# six of the spike's nine checks must fail. See
+# docs/research/gesture-detector.md for what all of it establishes.
+#
+# Logs and screenshots land in /tmp/gd-spike/.
+set -euo pipefail
+export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+DIR="$(cd "$(dirname "$0")" && pwd)"
+WHICH="${1:-all}"
+OUT=/tmp/gd-spike
+mkdir -p "$OUT"
+
+run_probe() {
+  local probe="$1"
+  local conf="/tmp/sway-gd-$probe.conf"
+  # 1024x768 — matches OUTPUT in src/harness.ts, which is what the injected
+  # absolute coordinates are expressed against.
+  printf 'output HEADLESS-1 resolution 1024x768\n' > "$conf"
+  pkill -f "sway -V -c $conf" 2>/dev/null || true
+  sleep 0.5
+  WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1 \
+    sway -V -c "$conf" >"/tmp/sway-gd-$probe.log" 2>&1 &
+  local sway=$!
+  sleep 2
+  local socket
+  socket=$(grep -o "wayland display '[^']*'" "/tmp/sway-gd-$probe.log" | cut -d"'" -f2 | head -1)
+
+  (
+    cd "$DIR" && GD_PROBE="$probe" GD_BREAK="${GD_BREAK:-0}" WAYLAND_DISPLAY="$socket" \
+      DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent \
+      node dist/bundle.js >"$OUT/$probe.log" 2>&1
+  ) &
+  local app=$!
+  # Long enough for the whole scripted pointer session; the probe exits by
+  # itself when it is done.
+  local waited=0
+  while kill -0 $app 2>/dev/null && [ $waited -lt 90 ]; do
+    sleep 1
+    waited=$((waited + 1))
+    if [ $waited -eq 6 ]; then
+      WAYLAND_DISPLAY="$socket" grim "$OUT/$probe-mid.png" 2>/dev/null || true
+    fi
+  done
+  WAYLAND_DISPLAY="$socket" grim "$OUT/$probe-end.png" 2>/dev/null || true
+  kill $app 2>/dev/null || true
+  kill $sway 2>/dev/null || true
+  sleep 0.5
+
+  echo "=== $probe ==="
+  grep "\[gd-" "$OUT/$probe.log" || echo "NO MARKERS — see $OUT/$probe.log"
+}
+
+if [ "$WHICH" = "all" ] || [ "$WHICH" = "gtk" ]; then
+  run_probe gtk
+fi
+if [ "$WHICH" = "all" ] || [ "$WHICH" = "spike" ]; then
+  run_probe spike
+fi
+echo "=== logs and shots: $OUT ==="
