@@ -11,6 +11,7 @@ import type { StyleProp } from "../contracts"
 import { Gtk, GtkBox } from "../gtkx/bridge/index"
 import { perfAddTime, perfCount, perfEnabled, perfNow } from "../perf"
 import { HostNodeContext } from "./host-node"
+import { createPressEvent, createTouch, type PressEvent } from "./press-event"
 import {
   useLayoutChild,
   useRnContainer,
@@ -22,7 +23,7 @@ export type PressableStateCallbackType = {
   hovered: boolean
 }
 
-export type PressEvent = { nativeEvent: { x: number; y: number } }
+export type { NativeTouch, PressEvent } from "./press-event"
 
 export type PressableProps = {
   style?: StyleProp | ((state: PressableStateCallbackType) => StyleProp)
@@ -39,9 +40,14 @@ export type PressableProps = {
   testID?: string
 }
 
-const pressEvent = (x: number, y: number): PressEvent => ({
-  nativeEvent: { x, y },
-})
+// Coordinates arrive from GtkGestureClick in the widget's own space, which
+// is exactly RN's locationX/locationY; createTouch translates them into the
+// window for pageX/pageY.
+const pressEvent = (
+  widget: Gtk.Widget | null,
+  x: number,
+  y: number,
+): PressEvent => createPressEvent(createTouch(widget, x, y))
 
 // A View with a click gesture and hover tracking. State-dependent style and
 // children follow the RN Pressable function-prop contract.
@@ -173,12 +179,15 @@ export const Pressable = ({
     }
     longPressFired.current = false
     setPressed(true)
-    onPressIn?.(pressEvent(x, y))
+    const widget = widgetRef.current
+    onPressIn?.(pressEvent(widget, x, y))
     if (onLongPress) {
       clearLongPress()
       longPressTimer.current = setTimeout(() => {
         longPressFired.current = true
-        onLongPress(pressEvent(x, y))
+        // Timestamped when it FIRES, not when the press started — the delay
+        // is the whole point of the event.
+        onLongPress(pressEvent(widgetRef.current, x, y))
       }, delayLongPress)
     }
   }
@@ -189,9 +198,10 @@ export const Pressable = ({
     }
     clearLongPress()
     setPressed(false)
-    onPressOut?.(pressEvent(x, y))
+    const widget = widgetRef.current
+    onPressOut?.(pressEvent(widget, x, y))
     if (!longPressFired.current) {
-      onPress?.(pressEvent(x, y))
+      onPress?.(pressEvent(widget, x, y))
     }
   }
 

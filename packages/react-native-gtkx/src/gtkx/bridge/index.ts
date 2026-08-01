@@ -94,6 +94,7 @@ export { useSignal } from "./use-signal"
 export { css, cx, injectGlobal } from "@gtkx/css"
 
 export { createTextProbe, measureWidget, toNumber } from "./measure"
+export { computePointIn, computePointInWindow, type Point } from "./geometry"
 export { getViewBoxComponent, setBoxPassthrough } from "./view-box"
 export {
   getSvgNodeComponent,

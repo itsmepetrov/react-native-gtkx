@@ -1,4 +1,10 @@
-import { useLayoutEffect, useRef, type ReactNode } from "react"
+import {
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  type ReactNode,
+  type Ref,
+} from "react"
 import { StyleSheet } from "../style/index"
 import type { PointerEventsValue, StyleProp } from "../contracts"
 import {
@@ -8,11 +14,15 @@ import {
   type Gtk,
 } from "../gtkx/bridge/index"
 import { HostNodeContext } from "./host-node"
+import { createMeasureHandle, type MeasureHandle } from "./measure"
 import {
   useLayoutChild,
   useRnContainer,
   type LayoutEvent,
 } from "./use-layout-child"
+
+/** RN's imperative geometry methods, on a `View` ref. */
+export type ViewHandle = MeasureHandle
 
 export type ViewProps = {
   style?: StyleProp
@@ -21,6 +31,10 @@ export type ViewProps = {
   onLayout?: (event: LayoutEvent) => void
   children?: ReactNode
   testID?: string
+  // React 19 takes `ref` as an ordinary prop, which is what we want here:
+  // forwardRef is booby-trapped on this stack (useEffectEvent never
+  // refreshes inside it — see gtkx/bridge/use-signal.ts).
+  ref?: Ref<ViewHandle>
 }
 
 // Every View is a GtkBox subclass (RnGtkxViewBox) driven by RnGtkxLayout:
@@ -42,6 +56,7 @@ export const View = ({
   onLayout,
   children,
   testID,
+  ref,
 }: ViewProps) => {
   const widgetRef = useRef<Gtk.Box | null>(null)
   const { host, node, cssClass } = useLayoutChild(widgetRef, {
@@ -49,6 +64,8 @@ export const View = ({
     onLayout,
   })
   useRnContainer(widgetRef, node)
+
+  useImperativeHandle(ref, () => createMeasureHandle(widgetRef, node), [node])
 
   const mode: PointerEventsValue =
     pointerEvents ?? StyleSheet.flatten(style)?.pointerEvents ?? "auto"
