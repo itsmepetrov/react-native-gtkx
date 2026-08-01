@@ -6,7 +6,9 @@ JavaScript on top of GTK4 event controllers, so the source you write is
 ordinary `react-native` and the same file runs on iOS and Android.
 
 `react-native-gesture-handler` and `react-native-reanimated` do **not** work
-here, and neither does anything built on them. That is the platform's largest
+here, and neither does anything built on them. RNGH's package name is aliased
+to a shim so that a ported app's root `GestureHandlerRootView` needs no edit,
+but that is the only symbol it implements. This is the platform's largest
 single portability gap — see [Porting an app](#porting-an-app) below.
 
 Why the responder system rather than RNGH, and every measurement behind the
@@ -167,16 +169,24 @@ Android.
 
 ## Porting an app
 
-`react-native-gesture-handler` and `react-native-reanimated` are not
-implemented, shimmed or aliased, so libraries built on them fail at _import_,
-not at runtime. That includes `react-native-draggable-flatlist`,
-`@gorhom/bottom-sheet` and `@react-navigation/drawer`, all of which take
-Reanimated as a hard peer dependency.
+Neither library is implemented. `react-native-reanimated` is not aliased
+either, so anything taking it as a hard peer dependency fails at _import_,
+not at runtime — that includes `react-native-draggable-flatlist`,
+`@gorhom/bottom-sheet` and `@react-navigation/drawer`.
+`react-native-gesture-handler`'s package name _is_ aliased, onto
+[`react-native-gtkx/gesture-handler`](api.md#react-native-gesture-handler-react-native-gtkxgesture-handler):
+`GestureHandlerRootView` is implemented faithfully, because it is the one
+RNGH symbol that shows up in apps using none of the rest of it, and every
+other export throws where it is used rather than silently doing nothing.
 
 What to do instead:
 
 - a **drag** — `PanResponder` plus `Animated.ValueXY`, as above. Portable,
   and it is what most RNGH usage in the wild amounts to;
+- **drag and drop between zones, or a sortable list** —
+  [`react-native-gtkx/dnd`](api.md#drag-and-drop-react-native-gtkxdnd)
+  mirrors `react-native-reanimated-dnd`'s API on GTK's own drag-and-drop,
+  and both presets alias that package name onto it;
 - a **reorderable list** on Linux — `List`/`ListRow` from
   `react-native-gtkx/common`, which gives you GDK's own drag icon and drop
   targets;
