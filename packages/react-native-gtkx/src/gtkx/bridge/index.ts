@@ -94,6 +94,10 @@ export { useSignal } from "./use-signal"
 
 export { css, cx, injectGlobal } from "@gtkx/css"
 
+// The imperative counterpart of `css`: a private provider on one widget,
+// for values that change per frame and must not enter the shared stylesheet.
+export { createWidgetCss, type WidgetCss } from "./widget-css"
+
 export { createTextProbe, measureWidget, toNumber } from "./measure"
 export { computePointIn, computePointInWindow, type Point } from "./geometry"
 // A portal into a NAMED slot of a remote object (the window's action map,

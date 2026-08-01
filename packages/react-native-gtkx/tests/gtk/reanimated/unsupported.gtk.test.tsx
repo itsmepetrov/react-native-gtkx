@@ -11,11 +11,11 @@ import { Root, Text } from "../../../src/index"
 import Animated, {
   css,
   FadeIn,
-  interpolateColor,
   isConfigured,
   isWorkletFunction,
   LinearTransition,
   makeShareableCloneRecursive,
+  processColor,
   ReduceMotion,
   runOnJS,
   runOnUI,
@@ -29,8 +29,10 @@ const settle = (ms = 60): Promise<void> =>
   })
 
 it("throws with the symbol's name when an unsupported export is called", () => {
-  expect(() => (interpolateColor as () => void)()).toThrow(
-    /`interpolateColor` is not supported/,
+  // `processColor` returns RN's packed integer, whose only consumer is a
+  // native module — there is none here, and a GTK stylesheet takes strings.
+  expect(() => (processColor as () => void)()).toThrow(
+    /`processColor` is not supported/,
   )
   expect(() => (useAnimatedScrollHandler as () => void)()).toThrow(
     /`useAnimatedScrollHandler` is not supported/,

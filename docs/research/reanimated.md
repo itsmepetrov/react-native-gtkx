@@ -236,6 +236,15 @@ Widening it is a separate, independently valuable piece of work:
   what `queueResize` already does — expensive per frame by construction, and
   expensive on mobile too.
 
+> **Both of those were since done and measured** —
+> [animated-colors.md](animated-colors.md). Colours animate through a
+> `GtkCssProvider` private to each widget, at 11.2 µs per frame and no React
+> renders. Layout props were measured and **refused**: a Yoga pass costs what
+> the tree costs (64 µs at five children, 496 µs at three hundred) where
+> every other imperative write is flat, so they warn by name with the
+> transform to use instead. The paragraph above predicted the shape of both
+> answers; only the layout half came out the other way.
+
 The correct first slice therefore stops where the platform stops, and says so
 in `docs/api.md`'s Differences column rather than silently dropping writes.
 

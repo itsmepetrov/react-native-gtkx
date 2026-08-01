@@ -6,8 +6,19 @@
 // in ./registry.gtkx.ts and is imported directly by the components.
 
 export { boxShadowToCss } from "./box-shadow"
-export { parseColor, PlatformColor } from "./colors"
+export {
+  parseColor,
+  parseColorToRgba,
+  PlatformColor,
+  type Rgba,
+} from "./colors"
 export { resetDevWarnings } from "./dev-warning"
+export {
+  driveableColorsToCss,
+  DRIVEABLE_COLOR_PROPERTIES,
+  isDriveableColorProperty,
+  type DriveableColorProperty,
+} from "./imperative-css"
 export { createCssRegistry, type CssFn, type CssRegistry } from "./registry"
 export { splitStyle } from "./split-style"
 export {

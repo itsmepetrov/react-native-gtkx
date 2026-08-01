@@ -10,9 +10,20 @@ import {
   type Ref,
   type RefObject,
 } from "react"
+import {
+  DRIVEABLE_COLOR_PROPERTIES,
+  driveableColorsToCss,
+  type DriveableColorProperty,
+} from "../style/imperative-css"
 import { createAnimated } from "../animated/index"
 import type { FlatStyle, StyleProp, TransformPart } from "../contracts"
-import { GtkBox, queueAllocate, type Gtk } from "../gtkx/bridge/index"
+import {
+  createWidgetCss,
+  GtkBox,
+  queueAllocate,
+  type Gtk,
+  type WidgetCss,
+} from "../gtkx/bridge/index"
 import type { ResponderProps } from "../responder/types"
 import { useResponder } from "../responder/use-responder"
 import { glibScheduler } from "./frame-scheduler"
@@ -79,10 +90,13 @@ const nodeId = (value: object): number => {
 
 // Omit, not plain intersection: intersecting would AND the animated transform
 // with FlatStyle's numeric one, rejecting Animated.Value entries.
-export type AnimatedViewStyle = Omit<FlatStyle, "opacity" | "transform"> & {
+export type AnimatedViewStyle = Omit<
+  FlatStyle,
+  "opacity" | "transform" | DriveableColorProperty
+> & {
   opacity?: number | AnimatedNode
   transform?: (TransformPart | AnimatedTransformPart)[]
-}
+} & Partial<Record<DriveableColorProperty, string | AnimatedNode>>
 
 /** What every animated component accepts as `style`, arrays and falsy included. */
 export type AnimatedStyleProp =
@@ -103,12 +117,20 @@ export type AnimatedViewProps = ResponderProps & {
   ref?: Ref<MeasureHandle>
 }
 
+// One driven colour property. Unlike transforms these do not compose, so each
+// is simply the latest value of its own declaration.
+type ColorSlot = {
+  property: DriveableColorProperty
+  node: AnimatedNode
+}
+
 const splitAnimated = (
   style: AnimatedStyleProp | false | null | undefined,
 ): {
   staticStyle: StyleProp
   opacity: AnimatedNode | null
   slots: TransformSlot[]
+  colors: ColorSlot[]
 } => {
   const flat: Record<string, unknown> = {}
   const collect = (
@@ -127,10 +149,21 @@ const splitAnimated = (
 
   let opacity: AnimatedNode | null = null
   const slots: TransformSlot[] = []
+  const colors: ColorSlot[] = []
 
   if (isAnimatedNode(flat.opacity)) {
     opacity = flat.opacity
     delete flat.opacity
+  }
+  for (const property of DRIVEABLE_COLOR_PROPERTIES) {
+    const value = flat[property]
+    if (isAnimatedNode(value)) {
+      colors.push({ property, node: value })
+      // Removed from the static style so the shared class registry never sees
+      // a per-frame value: its memoisation stays keyed on styles that change
+      // when React renders, which is the only thing it is good at.
+      delete flat[property]
+    }
   }
   if (Array.isArray(flat.transform)) {
     for (const part of flat.transform as AnimatedTransformPart[]) {
@@ -152,16 +185,17 @@ const splitAnimated = (
     delete flat.transform
   }
 
-  return { staticStyle: flat as StyleProp, opacity, slots }
+  return { staticStyle: flat as StyleProp, opacity, slots, colors }
 }
 
 /**
  * The imperative write path, and the whole of it.
  *
  * Animated values bypass React entirely: listeners write straight to the
- * widget (opacity) and to the rect store (the transform applied by the
- * parent's allocate), on top of the engine-committed base rect — the fast
- * path measured in the spike. Animation frames never touch Yoga.
+ * widget (opacity), to the rect store (the transform applied by the parent's
+ * allocate) on top of the engine-committed base rect, and to a CSS provider
+ * private to the widget (colours). Animation frames never touch Yoga, and
+ * never touch the shared stylesheet.
  *
  * Nothing here is View-specific, which is why it is a hook rather than a
  * paragraph inside `AnimatedView`: it needs the CHILD's widget (for
@@ -176,6 +210,7 @@ const useAnimatedBinding = (
   parentWidgetRef: RefObject<Gtk.Widget | null>,
   opacity: AnimatedNode | null,
   slots: TransformSlot[],
+  colors: ColorSlot[],
   // Anything else that must force a rebind. `AnimatedView` passes its layout
   // node; the generic wrapper has nothing to add.
   rebindKey?: unknown,
@@ -184,6 +219,8 @@ const useAnimatedBinding = (
   // inside are then owned by the listeners.
   const slotsRef = useRef<TransformSlot[]>(slots)
   slotsRef.current = slots
+  const colorsRef = useRef<ColorSlot[]>(colors)
+  colorsRef.current = colors
   const getWidgetRef = useRef(getWidget)
   getWidgetRef.current = getWidget
 
@@ -198,10 +235,12 @@ const useAnimatedBinding = (
           ? `|${slot.key}#${nodeId(slot.node)}`
           : `|${slot.key}=${String(slot.value)}`,
       )
-      .join("")
+      .join("") +
+    colors.map((slot) => `|${slot.property}#${nodeId(slot.node)}`).join("")
 
   useLayoutEffect(() => {
-    if (!getWidgetRef.current()) {
+    const widget = getWidgetRef.current()
+    if (!widget) {
       return
     }
 
@@ -258,12 +297,42 @@ const useAnimatedBinding = (
       applyOpacity(opacity.__getValue())
     }
 
+    // Colours take the other imperative door: a CSS provider private to this
+    // widget, replaced in place. Deliberately NOT the shared class registry —
+    // that one memoises by CSS text, so a driven colour would mint a class per
+    // frame into a document GTK re-parses whole and that is never pruned
+    // (docs/research/animated-colors.md). All driven colours share one
+    // provider and one declaration block: two properties animating together
+    // are one write, not two.
+    const colorSlots = colorsRef.current
+    let widgetCss: WidgetCss | null = null
+    if (colorSlots.length > 0) {
+      const css = createWidgetCss(widget)
+      widgetCss = css
+      const values: Record<string, unknown> = {}
+      const writeColors = (): void => {
+        css.set(driveableColorsToCss(values))
+      }
+      for (const slot of colorSlots) {
+        values[slot.property] = slot.node.__getValue()
+        subscriptions.push({
+          node: slot.node,
+          id: slot.node.addListener(({ value }) => {
+            values[slot.property] = value
+            writeColors()
+          }),
+        })
+      }
+      writeColors()
+    }
+
     flush()
 
     return () => {
       for (const { node: animated, id } of subscriptions) {
         animated.removeListener(id)
       }
+      widgetCss?.dispose()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bindingKey, rebindKey])
@@ -278,7 +347,7 @@ const AnimatedView = ({
   ...responderProps
 }: AnimatedViewProps) => {
   const widgetRef = useRef<Gtk.Box | null>(null)
-  const { staticStyle, opacity, slots } = splitAnimated(style)
+  const { staticStyle, opacity, slots, colors } = splitAnimated(style)
 
   const { host, node, cssClass } = useLayoutChild(widgetRef, {
     style: staticStyle,
@@ -294,6 +363,7 @@ const AnimatedView = ({
     host.widgetRef,
     opacity,
     slots,
+    colors,
     node,
   )
 
@@ -353,8 +423,8 @@ const warnNoWidget = (name: string): void => {
     typeof process !== "undefined" && process.env.NODE_ENV === "production"
   if (!isProduction) {
     console.warn(
-      `react-native-gtkx: createAnimatedComponent(${name}) was given an animated \`opacity\` or ` +
-        "`transform`, but the component exposed no ref carrying a widget, so there is nothing to write " +
+      `react-native-gtkx: createAnimatedComponent(${name}) was given an animated \`opacity\`, ` +
+        "`transform` or colour, but the component exposed no ref carrying a widget, so there is nothing to write " +
         "to. Give it a `ref?: Ref<MeasureHandle>` built with the platform's own measure handle, or wrap " +
         "it in an `Animated.View`. See docs/api.md.",
     )
@@ -405,8 +475,8 @@ export const createAnimatedComponent = <C extends ElementType>(
     // by, exactly as it would be without the wrapper.
     const host = useHostNode()
     const handleRef = useRef<unknown>(null)
-    const { staticStyle, opacity, slots } = splitAnimated(style)
-    const driven = opacity !== null || slots.length > 0
+    const { staticStyle, opacity, slots, colors } = splitAnimated(style)
+    const driven = opacity !== null || slots.length > 0 || colors.length > 0
 
     // Stable identity: a fresh callback ref every render would detach and
     // reattach the wrapped component's handle on every render.
@@ -428,6 +498,7 @@ export const createAnimatedComponent = <C extends ElementType>(
       host.widgetRef,
       opacity,
       slots,
+      colors,
     )
 
     // A silent no-op is the failure this repo refuses. Checked after the

@@ -30,15 +30,17 @@
 // and `dependencies` arrays are honoured but never required.
 //
 // WHAT IS AND IS NOT HERE. Shared values, animations, the mapper core,
-// `useAnimatedStyle`, `useAnimatedProps`, `createAnimatedComponent` and
-// `Animated.View`/`Text`/`Image`/`ScrollView` are implemented. Everything
-// else throws through the `unsupported()` proxy, naming itself. The boundary
-// is not arbitrary: `opacity` and `transform` are the only two things this
-// platform can write to a mounted widget without a React render (plus the
-// numeric SVG props, whose components subscribe to an animated node
-// themselves). Colours, borders and radii reach GTK as a CSS class computed
-// during render, and layout properties additionally need a Yoga pass —
-// closing that gap is its own slice of work. See docs/api.md.
+// `useAnimatedStyle`, `useAnimatedProps`, `interpolateColor`,
+// `createAnimatedComponent` and `Animated.View`/`Text`/`Image`/`ScrollView`
+// are implemented. Everything else throws through the `unsupported()` proxy,
+// naming itself. The boundary is `opacity`, `transform` and colours — the
+// things this platform can write to a mounted widget without a React render
+// (plus the numeric SVG props, whose components subscribe to an animated node
+// themselves). What is deliberately outside it is LAYOUT: `width`, `top`,
+// `flex` and the rest go through Yoga, and a Yoga pass costs what the tree
+// costs rather than what the animated value costs, so it is refused by name
+// with the transform to use instead. Both halves of that are measured in
+// docs/research/animated-colors.md. See docs/api.md.
 import type { ReactNode } from "react"
 import { Animated as PlatformAnimated } from "../components/animated"
 import type {
@@ -55,6 +57,12 @@ import {
   withSpring,
   withTiming,
 } from "./animation"
+import {
+  convertToRGBA,
+  interpolateColor,
+  isColor,
+  rgbaArrayToRGBAColor,
+} from "./color"
 import { Easing } from "./easing"
 import { createHooks } from "./hooks"
 import { clamp, Extrapolation, interpolate } from "./interpolation"
@@ -86,13 +94,17 @@ const { runOnUI, scheduleOnUI, runOnJS, scheduleOnRN } =
 export {
   cancelAnimation,
   clamp,
+  convertToRGBA,
   Easing,
   Extrapolation,
   interpolate,
+  interpolateColor,
+  isColor,
   isSharedValue,
   isWorkletFunction,
   makeMutable,
   measure,
+  rgbaArrayToRGBAColor,
   runOnJS,
   runOnUI,
   scheduleOnRN,
@@ -110,11 +122,25 @@ export {
   withTiming,
 }
 
+/**
+ * RN's `PlatformColor`, which Reanimated re-exports. This is the platform's
+ * own — theme colours by name, resolved by GTK against the live Adwaita
+ * palette (`var(--accent-bg-color)`). It can be written to a style, animated
+ * BETWEEN by a shared value, and not interpolated THROUGH: see
+ * {@link interpolateColor}.
+ */
+export { PlatformColor } from "../style/colors"
+
 export type {
   AnimationCallback,
   WithSpringConfig,
   WithTimingConfig,
 } from "./animation"
+export type {
+  ColorInterpolationOptions,
+  ColorSpace,
+  ParsedColorArray,
+} from "./color"
 export type { EasingFunction, EasingFunctionFactory } from "./easing"
 export type { AnimatedRef, MeasuredDimensions } from "./animated-ref"
 export type { DependencyList } from "./hooks"
@@ -266,7 +292,7 @@ const View = PlatformAnimated.View as (props: AnimatedViewProps) => ReactNode
 const unsupported = createUnsupportedFactory(
   "react-native-reanimated",
   "Implemented here: shared values, useAnimatedStyle/useAnimatedProps/useDerivedValue/useAnimatedReaction, " +
-    "withTiming/withSpring/withSequence/withRepeat/withDelay, interpolate, Easing, " +
+    "withTiming/withSpring/withSequence/withRepeat/withDelay, interpolate, interpolateColor, Easing, " +
     "useAnimatedRef + measure, runOnUI/runOnJS, Animated.View/Text/Image/ScrollView and " +
     "createAnimatedComponent. See docs/api.md for what is not, and why.",
 )
@@ -325,12 +351,14 @@ export const defineAnimation: any = unsupported("defineAnimation")
 export const withClamp: any = unsupported("withClamp")
 export const withDecay: any = unsupported("withDecay")
 
-// --- colours: the property gap, not the runtime ---
-export const convertToRGBA: any = unsupported("convertToRGBA")
-export const isColor: any = unsupported("isColor")
-export const interpolateColor: any = unsupported("interpolateColor")
+// --- colours: what is left after the gap closed ---
+// `processColor` returns RN's packed AARRGGBB integer, whose only purpose is
+// to cross to a native module. There is no native side here — a colour's
+// destination is a GTK stylesheet, which takes strings — so a number handed
+// back from this function would be accepted by nothing downstream, including
+// this platform's own styles. Refusing beats returning a value that only
+// fails later.
 export const processColor: any = unsupported("processColor")
-export const PlatformColor: any = unsupported("PlatformColor")
 export const DynamicColorIOS: any = unsupported("DynamicColorIOS")
 
 // --- layout animations (entering/exiting/layout) and the preset catalog ---
