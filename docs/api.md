@@ -895,6 +895,19 @@ const Pulse = () => {
 }
 ```
 
+#### Writing a shared value: `.value` or `.set()`
+
+Both spellings are upstream's and both work here: `sharedValue.value = x`, or
+`sharedValue.get()` / `sharedValue.set(x)` (which also takes an updater,
+`count.set((current) => current + 1)`). They differ only under lint. The
+React Compiler — [on by default on the vite path](getting-started.md#the-react-compiler-is-on-by-default-vite-path) —
+treats anything a hook returns as frozen, so `react-hooks/immutability`
+reports **every** assignment to `.value`, including the ones inside a
+callback or an effect that are perfectly legitimate. `.get()`/`.set()` is
+what upstream added for exactly this case and lints clean everywhere. Prefer
+it in new code; `.value` keeps working, and a ported app does not have to be
+rewritten.
+
 ### Layout animations, and the one primitive they needed
 
 ```tsx

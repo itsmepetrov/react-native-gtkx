@@ -207,6 +207,51 @@ declaration of `"react-native-svg"` in play.
   (`react-native-gtkx/vite`; `gtkx dev` gives Fast Refresh, builds are
   single-file bundles). Both paths consume the same published package.
 
+## The React Compiler is on by default (vite path)
+
+`gtkx dev` and `gtkx build` run the
+[React Compiler](https://react.dev/learn/react-compiler) over every source
+file in the project — never `node_modules`. Nothing switches it on; it is on
+unless `gtkx.config.ts` switches it off:
+
+```ts
+export default defineConfig({
+  libraries: ["Gtk-4.0", "Adw-1"],
+  applicationId: "com.example.myapp",
+  reactCompiler: false,
+})
+```
+
+Leaving the option out and setting it to `true` mean the same thing — only an
+explicit `false` disables it. The Metro path (`run-linux` / `build-linux`)
+keeps the app's stock Babel preset and does not run the compiler at all.
+
+**If a ported app misbehaves in a way that smells like stale rendering, set
+`reactCompiler: false` and see whether the symptom goes away.** One line, and
+it tells you which half of the system to debug — worth knowing about up
+front, because the symptom does not look like a compiler.
+
+The expensive version of this: a component that reads mutable module-level
+state during render has that read memoised. A render counter built on
+`readCounter("loop")` — a function taking no reactive input — is computed
+once, and the JSX built from it is reused forever. The component re-renders
+fourteen times and shows the mount value every time. It looks exactly like a
+broken counter, and it is not: it is a working counter behind a cached
+render.
+
+On React Native the compiler is opt-in, so an app that does not follow the
+[Rules of React](https://react.dev/reference/rules) still works. Here it is
+on, so the same violations become visible misbehaviour — and on a platform
+where everything else is new too, that reads as _our_ bug. Flipping
+`reactCompiler` to `false` settles it. Once it is settled the fix is the
+Rules-of-React one (move the read into state, a ref or a hook), not leaving
+the compiler off.
+
+Reanimated shared values have their own spelling for the same reason:
+`sharedValue.value = x` and `sharedValue.set(x)` both work here, but only
+`.get()`/`.set()` passes compiler-aware lint — see
+[api.md](api.md#writing-a-shared-value-value-or-set).
+
 ## Shipping an app
 
 The two paths get you from source to something installable differently,
