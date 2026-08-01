@@ -101,6 +101,57 @@ by reading `@gtkx/config/dist/user-event-signals.js` and a release note.
 - Ask: document the table and the extension point; it is exactly what a
   library embedding gtkx must reason about.
 
+### 5. `userEvent` cannot produce a real `GdkEvent` — and the missing piece is already in the box
+
+`@gtkx/testing`'s `userEvent` drives widgets by **emitting GtkGesture
+signals** on the controllers of the widget you name — `userEvent.drag` calls
+`getAllControllers(widget, Gtk.GestureDrag)` and emits
+`drag-begin`/`drag-update`/`drag-end` with `getStartPoint`/`getOffset`
+patched. That is a good default: it is fast, deterministic, and needs no
+compositor cooperation.
+
+It also means an entire layer is untestable, because no `GdkEvent` is ever
+created:
+
+- the compositor -> GDK -> `GtkGesture` hop itself (every app depends on it;
+  nothing tests it);
+- real propagation through the hierarchy — `GTK_PHASE_CAPTURE` versus
+  `BUBBLE` ordering, `gtk_widget_pick` targeting, `can-target`/`contains`;
+- GTK's own arbitration: `GtkEventSequenceState`, gesture groups, implicit
+  grabs;
+- anything on a `GtkEventControllerLegacy`, which by construction only ever
+  sees real events.
+
+**The missing piece is three requests.** `@gtkx/vitest`'s
+`virtual-seat.js` already opens a raw Wayland connection to the headless
+compositor and binds `zwlr_virtual_pointer_manager_v1`, calling
+`create_device` so the compositor advertises pointer capability to GTK. It
+never sends anything through that object. Adding `motion_absolute`,
+`button` and `frame` on the pointer it already holds is the whole feature.
+
+We have a working implementation:
+`packages/react-native-gtkx/tests/gtk/support/virtual-pointer.ts` (~250
+lines of hand-rolled wire protocol, no dependencies) plus
+`tests/gtk/components/real-input.gtk.test.tsx`, which drives a real drag
+through `GtkGestureDrag` into React Native's `PanResponder` and asserts the
+neighbouring widget stayed silent. Two practical notes for anyone
+implementing it upstream:
+
+- the harness config floats and centres windows
+  (`for_window [app_id=".*"] floating enable`), so tests must fullscreen the
+  window before treating widget coordinates as output coordinates —
+  or `userEvent` should do the coordinate mapping itself, which is the
+  better API;
+- a Wayland pointer is addressed by **position, not focus**, so a test that
+  merely asserts "a handler fired" can pass on a mis-aimed event that landed
+  somewhere plausible. Ours is verified by a negative control: aiming 900 px
+  away makes it fail.
+
+- Ask: `userEvent` gains a real-input mode (or `userEvent.real.*`) built on
+  the virtual pointer that is already created, with the widget-to-output
+  coordinate mapping handled inside. We are happy to contribute the
+  implementation.
+
 ## Workaround receipts (things we would like to delete)
 
 Kept only until upstream changes; each has a row in
