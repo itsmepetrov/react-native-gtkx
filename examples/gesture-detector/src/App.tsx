@@ -22,6 +22,10 @@
 //   hold   — `Gesture.LongPress()`, which activates on its timer with the
 //            pointer standing still, and cancels if the pointer then wanders
 //            further than `maxDistance`
+//   native — `Gesture.Native()` over a real `ScrollView`, @gorhom/bottom-
+//            sheet's shape. Drag it and it reports; wheel it and it still
+//            scrolls, because this is the one recognizer that never takes
+//            the interaction
 //
 // The immutability rule is off for this file on purpose: writing
 // `sharedValue.value` from a gesture callback is Reanimated's own documented
@@ -29,7 +33,7 @@
 // from ordinary hook state.
 /* eslint-disable react-hooks/immutability */
 import { useLayoutEffect, useRef, useState } from "react"
-import { StyleSheet, Text, View } from "react-native"
+import { ScrollView, StyleSheet, Text, View } from "react-native"
 import {
   Gesture,
   GestureDetector,
@@ -69,6 +73,17 @@ const styles = StyleSheet.create({
   tap: { backgroundColor: "#f9f06b" },
   double: { backgroundColor: "#99c1f1" },
   hold: { backgroundColor: "#f66151" },
+  scroller: {
+    height: 130,
+    borderRadius: 12,
+    backgroundColor: "#3d3846",
+  },
+  scrollRow: {
+    height: 36,
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  scrollRowText: { color: "#deddda", fontSize: 12, fontWeight: "700" },
   cardText: { color: "#1a1a1a", fontSize: 12, fontWeight: "700" },
   edgeStrip: {
     position: "absolute",
@@ -139,6 +154,7 @@ const App = () => {
   const sheet = useDragged()
   const edge = useDragged()
   const hook = useDragged()
+  const [scrolled, setScrolled] = useState(0)
   const [controlEvents, setControlEvents] = useState(0)
 
   // react-native-reanimated-dnd's useDraggable, verbatim in shape. The card
@@ -263,6 +279,19 @@ const App = () => {
     return false
   }
 
+  // @gorhom/bottom-sheet's scrollable, in shape: a `Gesture.Native()` over a
+  // real list. It reports what the widget underneath is doing and takes
+  // nothing away from it — the wheel keeps scrolling this while the gesture
+  // is active, which it could not if the gesture had won the responder
+  // (winning is what puts every enclosing GtkScrolledWindow's own gestures
+  // into GTK_PHASE_NONE).
+  const nativeGesture = Gesture.Native()
+    .onBegin(() => say("native", "pressed — the list still owns this"))
+    .onStart(() => say("native", "ACTIVE (the widget took over)"))
+    .onFinalize((_event, success) =>
+      say("native", success ? "ended" : "cancelled — something took it"),
+    )
+
   return (
     <GestureHandlerRootView>
       <View style={styles.screen}>
@@ -373,17 +402,46 @@ const App = () => {
           </View>
         </View>
 
-        <View style={styles.column}>
-          <Text style={styles.label}>
-            negative control — must stay at 0 unless you touch it
-          </Text>
-          <View
-            style={styles.control}
-            onStartShouldSetResponder={countControl}
-            onMoveShouldSetResponder={countControl}
-            onTouchStart={countControl}
-          >
-            <Text style={styles.cardText}>events seen: {controlEvents}</Text>
+        <View style={styles.row}>
+          <View style={styles.column}>
+            <Text style={styles.label}>Gesture.Native() over a ScrollView</Text>
+            <Text style={styles.hint}>
+              drag it: reports. wheel it: still scrolls.
+            </Text>
+            <GestureDetector gesture={nativeGesture}>
+              <ScrollView
+                style={styles.scroller}
+                onScroll={(event) =>
+                  setScrolled(Math.round(event.nativeEvent.contentOffset.y))
+                }
+              >
+                {Array.from({ length: 24 }, (_value, index) => (
+                  <View
+                    key={index}
+                    style={styles.scrollRow}
+                  >
+                    <Text style={styles.scrollRowText}>row {index}</Text>
+                  </View>
+                ))}
+              </ScrollView>
+            </GestureDetector>
+            <Text style={styles.status}>
+              {status.native ?? "—"} · offset {scrolled}
+            </Text>
+          </View>
+
+          <View style={styles.column}>
+            <Text style={styles.label}>
+              negative control — must stay at 0 unless you touch it
+            </Text>
+            <View
+              style={styles.control}
+              onStartShouldSetResponder={countControl}
+              onMoveShouldSetResponder={countControl}
+              onTouchStart={countControl}
+            >
+              <Text style={styles.cardText}>events seen: {controlEvents}</Text>
+            </View>
           </View>
         </View>
       </View>
