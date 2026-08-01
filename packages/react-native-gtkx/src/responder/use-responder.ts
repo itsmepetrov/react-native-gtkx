@@ -43,6 +43,79 @@ const contains = (ancestor: Gtk.Widget, widget: object): boolean => {
 }
 
 /**
+ * Every `GtkScrolledWindow` above `source`, innermost first. Nested
+ * scrollers are rare but real, and stopping only the innermost would let an
+ * outer one take the drag instead.
+ */
+const enclosingScrollers = (source: Gtk.Widget): Gtk.ScrolledWindow[] => {
+  const found: Gtk.ScrolledWindow[] = []
+  for (
+    let widget = source.getParent();
+    widget !== null;
+    widget = widget.getParent()
+  ) {
+    if (widget instanceof Gtk.ScrolledWindow) {
+      found.push(widget)
+    }
+  }
+  return found
+}
+
+/**
+ * `setIsJSResponder`, which is what every RN platform calls the message
+ * "JavaScript has taken this interaction, native scroller stop stealing the
+ * drag". iOS cancels the `UIScrollView` pan when the responder is a
+ * descendant; Android has a `JSResponderHandler`; react-native-windows
+ * punted on it in 2017, shipped a `manipulationModes` prop instead, and its
+ * tracking issues are still open.
+ *
+ * On GTK the message is `kinetic-scrolling`. Measured on GTK 4 rather than
+ * inferred (tests/gtk/components/scroll-arbitration.gtk.test.tsx):
+ * `GtkScrolledWindow` installs exactly four gestures of its own —
+ * `GestureLongPress`, `GestureSwipe`, `GesturePan`, `GestureDrag`, all
+ * touch-only, all in the CAPTURE phase — and turning kinetic scrolling off
+ * puts those four, and only those four, into `GTK_PHASE_NONE`. Setting a
+ * controller's phase to NONE resets it, so a scroll that had already begun
+ * stops there; the wheel and the motion controllers are untouched, so
+ * scrolling with a mouse keeps working while a child pans.
+ *
+ * Why this is needed at all when the `CLAIMED` declaration above already
+ * denies ancestor gestures: it is a race, and only sometimes ours.
+ * `GtkScrolledWindow` does not claim on press — it claims in `drag-update`,
+ * once movement passes `gtk-dnd-drag-threshold` (8 px). A view that claims
+ * on press beats it. A view that claims on a MOVE — which is what
+ * `onMoveShouldSetPanResponder` does, and it is the commonest shape there
+ * is — usually does not, and `CLAIMED` cannot be taken back once the
+ * scroller has it. So the claim is not enough on its own, and this is the
+ * part that makes a child pan reachable inside a scrolling list.
+ *
+ * Restores the previous value rather than assuming `true`: an app that
+ * turned kinetic scrolling off itself must not have it turned back on.
+ */
+const suspendEnclosingScrollers = (source: Gtk.Widget): (() => void) => {
+  const suspended = enclosingScrollers(source).filter((scroller) =>
+    scroller.getKineticScrolling(),
+  )
+  for (const scroller of suspended) {
+    scroller.setKineticScrolling(false)
+  }
+  return () => {
+    for (const scroller of suspended) {
+      scroller.setKineticScrolling(true)
+    }
+  }
+}
+
+/**
+ * The scroller suspension for the interaction currently under way. Module
+ * scope because it is set when the responder is granted and undone when the
+ * interaction ends, which are two different events on two different
+ * objects; there is only ever one interaction, which is the same assumption
+ * the responder system itself is built on (one pointer, one session).
+ */
+let restoreScrollers: (() => void) | null = null
+
+/**
  * One lock for the process, as in RN. What is island-scoped is the
  * negotiation PATH, not the lock: `parentOf` walks the GTK widget tree and
  * simply finds nothing registered above a layout Root, so an RN island
@@ -62,6 +135,9 @@ const responderSystem = createResponderSystem({
     // after the grant. Slice 2 did exactly that, and the common
     // onMoveShouldSetPanResponder shape never received a single move.
     gestures.get(source)?.setState(Gtk.EventSequenceState.CLAIMED)
+    // A ResponderHost is deliberately opaque to the pure module; on this
+    // platform it is always the Gtk.Widget that registered it.
+    restoreScrollers = suspendEnclosingScrollers(source as Gtk.Widget)
   },
 })
 
@@ -106,15 +182,7 @@ const watchTerminations = (source: Gtk.Widget): (() => void) => {
   // Watching the adjustments rather than a scroll controller is what makes
   // that precise: it fires for a wheel, for a keyboard scroll and for
   // kinetic deceleration alike, and only for this scroller.
-  for (
-    let widget = source.getParent();
-    widget !== null;
-    widget = widget.getParent()
-  ) {
-    if (!(widget instanceof Gtk.ScrolledWindow)) {
-      continue
-    }
-    const scroller = widget
+  for (const scroller of enclosingScrollers(source)) {
     const onScrolled = (): void => {
       const holder = responderSystem.getResponder()
       if (
@@ -188,6 +256,8 @@ export const useResponder = (
     const endInteraction = (): void => {
       stopWatching?.()
       stopWatching = null
+      restoreScrollers?.()
+      restoreScrollers = null
     }
 
     drag.on("drag-begin", (x: number, y: number) => {
