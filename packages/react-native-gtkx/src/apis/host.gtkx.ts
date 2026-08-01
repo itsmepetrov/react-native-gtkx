@@ -268,6 +268,15 @@ const WINDOW_ACTIVE_SIGNALS = ["notify::is-active"] as const
 const gtkVersion = (): string =>
   `${toNumber(Gtk.getMajorVersion())}.${toNumber(Gtk.getMinorVersion())}.${toNumber(Gtk.getMicroVersion())}`
 
+// AdwStyleManager is the only thing that decides the palette here, and it is
+// enough on its own — appearance.test.tsx asserts that a real widget's
+// computed foreground flips with it. This used to also write the classic
+// GtkSettings:gtk-application-prefer-dark-theme, guarding against Adwaita
+// not restyling a GtkApplication (we do not use AdwApplication). Under
+// libadwaita that write is inert: adw_init() takes the color scheme over,
+// answers the setting with "unsupported ... use AdwStyleManager:color-scheme
+// instead" and keeps its own value, so all the duplicate ever produced was a
+// warning per call — seven per test run.
 const setColorScheme = (scheme: ColorSchemeName | null): void => {
   const manager = styleManager()
   if (scheme === "dark") {
@@ -276,17 +285,6 @@ const setColorScheme = (scheme: ColorSchemeName | null): void => {
     manager.setColorScheme(Adw.ColorScheme.FORCE_LIGHT)
   } else {
     manager.setColorScheme(Adw.ColorScheme.DEFAULT)
-  }
-  // Our apps are GtkApplication (not AdwApplication), so Adwaita may not
-  // restyle widgets: duplicate the request through the classic GTK setting,
-  // which the theme always honors.
-  const settings = Gtk.Settings.getDefault()
-  if (settings) {
-    if (scheme === null) {
-      settings.resetProperty("gtk-application-prefer-dark-theme")
-    } else {
-      settings.gtkApplicationPreferDarkTheme = scheme === "dark"
-    }
   }
 }
 
