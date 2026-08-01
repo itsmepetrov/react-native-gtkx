@@ -28,8 +28,9 @@
 //      small, stable, and the only place NavigationStack/SlotContent/
 //      IntrinsicContent are documented at all.
 //   4. Full sections (by ## / ### heading) of docs/getting-started.md,
-//      docs/gtkx-rc3-notes.md, docs/research/navigation-extensibility.md
-//      and docs/api.md/docs/platform-layer.md themselves, plus a few
+//      docs/gestures.md, docs/gtkx-rc3-notes.md,
+//      docs/research/navigation-extensibility.md and
+//      docs/api.md/docs/platform-layer.md themselves, plus a few
 //      individually-chunked table rows (component rows, API module rows,
 //      the gtkx-rc3-notes live-workaround rows) — a full-text search corpus
 //      for rn_gtkx_search_docs, the fallback tool for anything the
@@ -56,6 +57,7 @@ const PLATFORM_MD = join(ROOT, "docs/platform-layer.md")
 const GETTING_STARTED_MD = join(ROOT, "docs/getting-started.md")
 const RC3_NOTES_MD = join(ROOT, "docs/gtkx-rc3-notes.md")
 const NAV_EXT_MD = join(ROOT, "docs/research/navigation-extensibility.md")
+const GESTURES_MD = join(ROOT, "docs/gestures.md")
 const CLASSIFICATION_JSON = join(
   ROOT,
   "scripts/widget-surface/classification.json",
@@ -269,6 +271,7 @@ const adwWidgets = widgetRecords(classification.adw, "react-native-gtkx/adw")
 const rc3NotesText = readFileSync(RC3_NOTES_MD, "utf8")
 const gettingStartedText = readFileSync(GETTING_STARTED_MD, "utf8")
 const navExtText = readFileSync(NAV_EXT_MD, "utf8")
+const gesturesText = readFileSync(GESTURES_MD, "utf8")
 
 const workaroundsTable = parseTableAfterHeading(
   rc3NotesText,
@@ -308,6 +311,7 @@ const docChunks = [
   ...parseSections(gettingStartedText, "docs/getting-started.md"),
   ...parseSections(rc3NotesText, "docs/gtkx-rc3-notes.md"),
   ...parseSections(navExtText, "docs/research/navigation-extensibility.md"),
+  ...parseSections(gesturesText, "docs/gestures.md"),
   ...workaroundChunks,
   ...componentRowChunks,
   ...apiModuleRowChunks,
@@ -320,7 +324,7 @@ const docChunks = [
 const HEADER = `// GENERATED FILE — do not edit by hand.
 // Produced by scripts/generate-mcp-data.mjs from docs/api.md,
 // docs/platform-layer.md, docs/gtkx-rc3-notes.md, docs/getting-started.md,
-// docs/research/navigation-extensibility.md and
+// docs/gestures.md, docs/research/navigation-extensibility.md and
 // scripts/widget-surface/classification.json.
 //
 // Regenerate after touching any of those:
