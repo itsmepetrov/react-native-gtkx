@@ -1,0 +1,28 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "types": ["node", "react"],
+    // The rewrites the vite preset applies at build time
+    // (packages/react-native-gtkx/src/vite), spelled out for tsc.
+    //
+    // The last two are the point of this example: neither
+    // `react-native-reanimated-dnd` nor `react-native-gesture-handler` is
+    // installed here, and the ported sources import both by their real
+    // names. Mapping them to the compat subpaths is what lets the
+    // unedited upstream source typecheck — the build-time equivalent is
+    // the alias in the preset.
+    "paths": {
+      "@/*": ["./src/*"],
+      "react-native": ["../../packages/react-native-gtkx/dist/index.d.ts"],
+      "react-native-reanimated-dnd": [
+        "../../packages/react-native-gtkx/dist/dnd/index.d.ts"
+      ],
+      "react-native-gesture-handler": [
+        "../../packages/react-native-gtkx/dist/gesture-handler-compat/index.d.ts"
+      ]
+    }
+  },
+  "include": ["src/**/*", "*.ts"]
+}
