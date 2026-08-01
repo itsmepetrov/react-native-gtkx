@@ -129,7 +129,8 @@ widget consumes never enter it at all.
 
 `gtk_gesture_set_state(CLAIMED)` sets the sequence to `DENIED` on every
 gesture on _parent_ widgets and emits `::cancel` on everything _underneath_
-— and `::cancel` means "forget everything about this sequence".
+— and `::cancel` means "forget everything about this sequence". (Slice 3
+found out what that costs when you claim on the wrong widget; see below.)
 `Claimed → Denied` is legal but is not an undo; GTK compensates only in the
 narrow case of a capture-phase claim on press released before any movement.
 There is no way to ask a holder to yield, so
@@ -252,6 +253,126 @@ delivery. That last hop is the same one `Pressable`'s `GtkGestureClick` has
 been making in shipped apps since the beginning, on the same widget class,
 which is why this was judged an acceptable gap rather than a blocker. Closing
 it properly is task 011.
+
+## What building slice 3 changed about the plan
+
+Two more corrections, and one of them is a bug that shipped.
+
+**The GTK claim belongs to the interaction, not to the view that won it.**
+Slice 2 made its `CLAIMED` declaration on the gesture of whichever view was
+granted the responder. That is wrong whenever the winner is not the view the
+events are arriving through — which is the single most common `PanResponder`
+shape there is: a scrollable-looking parent with
+`onMoveShouldSetPanResponder`, wrapping children that declare touch props of
+their own. Claiming denies the sequence on every gesture ABOVE the claimer
+and cancels it on everything below, so claiming on the ancestor killed the
+descendant gesture the interaction was riding on. The measured symptom is
+unambiguous: `onResponderGrant` fires, and then not one `onResponderMove`
+for the rest of the drag. It shipped in 0.2.0-alpha.1 and every test missed
+it, because a test written with `userEvent` emits gesture signals directly
+and never asks GTK what it thinks about the sequence — only real pointer
+input can see this. The fix is one line and a paragraph of why: claim on the
+SOURCE's gesture, once per interaction. What GTK is being told is "this
+interaction belongs to React Native"; which view inside the island holds the
+lock is a JS matter GTK has no way to represent, and no business knowing.
+
+**The raw event tap is not needed, and most of the terminations do not
+exist.** The plan for full negotiation called for a single
+`GtkEventControllerLegacy` on the toplevel in the capture phase — the only
+way, it said, to see the events that end a gesture without being pointer
+events. Measuring each of react-native-web's five triggers against GTK left
+two:
+
+| RNW trigger           | On GTK                                                                                                   | Asks the holder?                  |
+| --------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| cancel-ish events     | `GtkGesture::cancel` — already the source of `onResponderTerminate` since slice 2                        | no, as in RNW                     |
+| context menu          | **also `::cancel`**: `GtkGestureSingle` cancels its sequence the instant a second mouse button goes down | no — RNW asks here, and we cannot |
+| text selection change | **also `::cancel`**: a selectable label or entry claims the sequence, which cancels ours                 | no — RNW asks here, and we cannot |
+| window blur           | `Gtk.Window`'s `is-active` property                                                                      | no, as in RNW                     |
+| ancestor scroll       | the enclosing `GtkScrolledWindow`'s adjustments                                                          | **yes**                           |
+
+So the two that survive have a first-class signal each that says exactly the
+right thing, and a legacy controller would have re-derived both from a raw
+event stream. Its one genuine advantage — a legacy controller is not a
+gesture, so it keeps hearing events on a sequence GTK has already denied us
+— turned out to matter only for triggers that no longer exist. The three
+`::cancel` rows are the shape of PRD crux 2 in practice: **`onResponder-
+TerminationRequest` is honored in exactly two places**, a transfer and an
+ancestor scroll, and everywhere else GTK has already taken the sequence
+before JS hears about it. That is a real deviation from RN and it is in
+docs/api.md rather than papered over.
+
+### ScrollView arbitration: what it is, and what cannot be checked
+
+The task assumed the hard part was choosing a lever. It was not; the levers
+were already known. The hard part is that **the contention is touch-only and
+this rig cannot produce a touch**, and saying so precisely is most of the
+work.
+
+Measured, on GTK 4 as installed rather than read out of its source
+(`tests/gtk/components/scroll-arbitration.gtk.test.tsx` asserts all of it):
+
+- `GtkScrolledWindow` installs exactly four gestures of its own —
+  `GestureLongPress`, `GestureSwipe`, `GesturePan`, `GestureDrag` — every
+  one `touch_only`, every one in the CAPTURE phase. Its mouse paths are two
+  `GtkEventControllerScroll` and two `GtkEventControllerMotion`, and a wheel
+  is not a drag. The rescoping holds.
+- `kinetic-scrolling = FALSE` moves those four, and only those four, into
+  `GTK_PHASE_NONE`. The wheel and motion controllers keep their phases, so
+  the lever cannot accidentally take mouse scrolling down with it.
+- Setting a controller's phase to NONE **resets** it, so the lever cancels a
+  scroll already under way rather than merely declining the next one. Driven
+  with a real pointer against a stand-in gesture that differs from
+  `GtkScrolledWindow`'s only in not being touch-only, since that is the one
+  way to watch it happen here.
+
+So `setIsJSResponder` on this platform is: when a view takes the responder,
+turn kinetic scrolling off on every enclosing `GtkScrolledWindow` for the
+rest of the interaction, and put it back afterwards. It is iOS's answer —
+let the scroller run, cancel its pan when JS wins — rather than
+react-native-windows', which punted in 2017 and shipped `manipulationModes`
+instead.
+
+The `CLAIMED` declaration is not enough on its own, which is worth spelling
+out because it looks like it should be. `GtkScrolledWindow` claims in
+`drag-update` past `gtk-dnd-drag-threshold` (8 px), not on press. A view
+claiming on press beats it and the claim alone would do. A view claiming on
+a MOVE — `onMoveShouldSetPanResponder`, the commonest shape there is —
+generally does not, and by then the scroller's `CLAIMED` is irrevocable.
+
+**What is not verified, and will not be here.** That a finger pans the child
+instead of scrolling the list. sway 1.11 on wlroots 0.19 advertises
+`zwlr_virtual_pointer_manager_v1` and `zwp_virtual_keyboard_manager_v1` and
+nothing else that injects input; wlroots has no virtual-touch protocol at
+all, and `ext_transient_seat_manager_v1` creates seats with no devices on
+them. Spike 000's uinput touchscreen does work, and needs a seated session —
+a headless compositor reached over SSH is not one. Every link in the chain
+above is tested and the finger is not, and that is in docs/api.md as a
+caveat rather than left for someone to discover. Closing it needs either a
+virtual-touch protocol upstream in wlroots, or a compositor started on a
+real VT with the uinput device attached, which is a CI question rather than
+a code one.
+
+Two edges that follow from the design and are documented with it: a
+move-claiming view can lose the first ~8 px of a touch drag to the scroller
+(iOS has the same artefact), and the mouse wheel is deliberately left alone
+— scrolling with a wheel mid-gesture terminates the responder rather than
+being suppressed, which is react-native-web's rule for an ancestor scroll.
+
+### What slice 3's tests do prove
+
+All of it is driven by the real `zwlr_virtual_pointer_v1` from task 011,
+because every claim above is about what GTK does with a CLAIMED sequence,
+and `userEvent` cannot produce one. Each test was also run against a
+deliberately broken build to check it fails for the reason it claims:
+disabling the termination watchers fails the scroll and blur tests and
+leaves the context-menu one passing (it goes through `::cancel`, which is
+the finding), and restoring slice 2's claim target fails the ancestor-move
+test with zero moves delivered. The window-blur test needs its own negative
+assertion to be worth anything: under sway a second fullscreen window also
+cancels the gesture, so "terminate fired" is not evidence — the test asserts
+that `onTouchCancel` did NOT fire, which is what distinguishes the blur path
+from the cancel path.
 
 ## What the gallery found, the first time this met a real screen
 

@@ -39,15 +39,40 @@ const MANAGER_CREATE_POINTER = 0
 // zwlr_virtual_pointer_v1
 const POINTER_MOTION_ABSOLUTE = 1
 const POINTER_BUTTON = 2
+const POINTER_AXIS = 3
 const POINTER_FRAME = 4
+const POINTER_AXIS_SOURCE = 5
+const POINTER_AXIS_DISCRETE = 7
+
+// wl_pointer.axis
+const AXIS_VERTICAL_SCROLL = 0
+// wl_pointer.axis_source
+const AXIS_SOURCE_WHEEL = 0
+/** One wheel detent, in the units libinput reports for a discrete wheel. */
+const WHEEL_STEP = 15
+/** wl_fixed_t is 24.8 fixed point. */
+const toFixed = (value: number): number => Math.round(value * 256)
 
 const SEAT_INTERFACE = "wl_seat"
 const POINTER_MANAGER_INTERFACE = "zwlr_virtual_pointer_manager_v1"
 
 /** linux/input-event-codes.h */
 const BTN_LEFT = 0x110
+const BTN_RIGHT = 0x111
 const BUTTON_RELEASED = 0
 const BUTTON_PRESSED = 1
+
+/**
+ * Which physical button. `"secondary"` is what a context menu is on this
+ * platform — there is no `contextmenu` event in GDK, so a right press is
+ * both the trigger an app sees and the one a test has to send.
+ */
+export type PointerButton = "primary" | "secondary"
+
+const BUTTON_CODES: Record<PointerButton, number> = {
+  primary: BTN_LEFT,
+  secondary: BTN_RIGHT,
+}
 
 export class VirtualPointerUnavailable extends Error {}
 
@@ -219,8 +244,10 @@ const bindGlobal = (
 export type VirtualPointer = {
   /** Absolute position, in output pixels. */
   moveTo(x: number, y: number): void
-  press(): void
-  release(): void
+  press(button?: PointerButton): void
+  release(button?: PointerButton): void
+  /** Vertical wheel, in detents; positive scrolls down. */
+  scrollBy(detents: number): void
   dispose(): void
 }
 
@@ -278,21 +305,40 @@ export const createVirtualPointer = async (
       ])
       frame()
     },
-    press() {
+    press(button = "primary") {
       time += 8
       sendRequest(connection, pointer, POINTER_BUTTON, [
         time,
-        BTN_LEFT,
+        BUTTON_CODES[button],
         BUTTON_PRESSED,
       ])
       frame()
     },
-    release() {
+    release(button = "primary") {
       time += 8
       sendRequest(connection, pointer, POINTER_BUTTON, [
         time,
-        BTN_LEFT,
+        BUTTON_CODES[button],
         BUTTON_RELEASED,
+      ])
+      frame()
+    },
+    scrollBy(detents) {
+      time += 8
+      // The compositor needs all three to synthesize a wheel the way a real
+      // one arrives: the source (so it is a wheel and not a touchpad glide),
+      // the continuous value, and the detent count.
+      sendRequest(connection, pointer, POINTER_AXIS_SOURCE, [AXIS_SOURCE_WHEEL])
+      sendRequest(connection, pointer, POINTER_AXIS, [
+        time,
+        AXIS_VERTICAL_SCROLL,
+        toFixed(detents * WHEEL_STEP),
+      ])
+      sendRequest(connection, pointer, POINTER_AXIS_DISCRETE, [
+        time,
+        AXIS_VERTICAL_SCROLL,
+        toFixed(detents * WHEEL_STEP),
+        detents,
       ])
       frame()
     },
