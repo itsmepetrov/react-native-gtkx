@@ -18,6 +18,7 @@ import {
   useTapGesture,
 } from "../../../src/gesture-handler-compat/hooks"
 import { longPressDecider } from "../../../src/gesture-handler-compat/long-press"
+import { createOrchestrator } from "../../../src/gesture-handler-compat/orchestrator"
 import {
   asRange,
   DEFAULT_MIN_DISTANCE,
@@ -77,9 +78,15 @@ const mount = (
   })
 
   let current = config
+  // A loop of its own per mount: these tests are about ONE recognizer, and a
+  // shared registry would leak the previous test's participants into the next
+  // one. tests/unit/gesture-handler/orchestrator.test.ts is where several
+  // gestures share one.
+  const orchestrator = createOrchestrator()
   const recognizer = createRecognizer(7, decider, () => current, {
     boundsInWindow: () => bounds,
     requestResponder: () => system.requestResponder(view),
+    orchestrator,
   })
   system.register(view, () => recognizer.handlers)
 
@@ -665,15 +672,12 @@ describe("the two spellings are one implementation", () => {
 })
 
 describe("what is not implemented stays loud", () => {
-  it("throws on a relation rather than silently ignoring it", () => {
-    // Two gestures that were meant to cooperate racing instead, with no error,
-    // is the exact failure this repo refuses. The orchestrator is slice 3.
-    expect(() =>
-      Gesture.Pan().simultaneousWithExternalGesture(Gesture.Pan()),
-    ).toThrow(/simultaneousWithExternalGesture` is not supported/)
-    expect(() =>
-      Gesture.Pan().requireExternalGestureToFail(Gesture.Pan()),
-    ).toThrow(/requireExternalGestureToFail` is not supported/)
+  it("still names the recognizers that do not exist", () => {
+    // A `GestureDetector` that accepted its props and did nothing is the
+    // failure this repo refuses. The three relations and the three composers
+    // stopped throwing when the orchestrator shipped; these did not.
+    expect(() => Gesture.Pinch()).toThrow(/`Gesture.Pinch` is not supported/)
+    expect(() => Gesture.Fling()).toThrow(/`Gesture.Fling` is not supported/)
   })
 
   it("accepts the knobs upstream itself ignores off-platform", () => {

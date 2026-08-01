@@ -26,6 +26,14 @@
 //            sheet's shape. Drag it and it reports; wheel it and it still
 //            scrolls, because this is the one recognizer that never takes
 //            the interaction
+//   both   — `simultaneousWithExternalGesture`: two nested detectors, ONE
+//            drag, and both of them active. The outer card slides down while
+//            the inner one slides right, each from its own gesture, and the
+//            responder lock still has a single holder underneath
+//   wait   — `requireExternalGestureToFail`: the inner card is held in BEGAN
+//            until the outer one gives up. Drag sideways and only the outer
+//            moves; drag down and the outer fails, which is what releases the
+//            inner one
 //
 // The immutability rule is off for this file on purpose: writing
 // `sharedValue.value` from a gesture callback is Reanimated's own documented
@@ -52,16 +60,16 @@ const TAP_MAX_DISTANCE = 10
 const HOLD_MS = 400
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#241f31", padding: 20, gap: 16 },
+  screen: { flex: 1, backgroundColor: "#241f31", padding: 16, gap: 10 },
   heading: { color: "#ffffff", fontSize: 16, fontWeight: "700" },
   subheading: { color: "#c0bfbc", fontSize: 12 },
-  row: { flexDirection: "row", gap: 16, flex: 1 },
-  column: { flex: 1, gap: 8 },
+  row: { flexDirection: "row", gap: 16 },
+  column: { flex: 1, gap: 4 },
   label: { color: "#ffffff", fontSize: 12, fontWeight: "700" },
   hint: { color: "#9a9996", fontSize: 11 },
   status: { color: "#f6d32d", fontSize: 11, fontWeight: "700" },
   card: {
-    height: 130,
+    height: 92,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
@@ -84,6 +92,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   scrollRowText: { color: "#deddda", fontSize: 12, fontWeight: "700" },
+  carrier: { backgroundColor: "#1c71d8", height: 118, padding: 14 },
+  rider: {
+    backgroundColor: "#99c1f1",
+    height: 56,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  blocker: { backgroundColor: "#a51d2d", height: 118, padding: 14 },
+  waiter: {
+    backgroundColor: "#f8e45c",
+    height: 56,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   cardText: { color: "#1a1a1a", fontSize: 12, fontWeight: "700" },
   edgeStrip: {
     position: "absolute",
@@ -94,7 +118,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#813d9c",
   },
   control: {
-    height: 130,
+    height: 64,
     borderRadius: 12,
     backgroundColor: "#c01c28",
     alignItems: "center",
@@ -274,6 +298,66 @@ const App = () => {
     },
   })
 
+  // --- slice 3: the two facts about relations, drivable by hand ---
+  //
+  // Both pairs are two SEPARATE `GestureDetector`s, one nested inside the
+  // other, which is the arrangement every real cross-component relation has:
+  // `@gorhom/bottom-sheet`'s sheet and the scrollable inside it, a draggable
+  // row inside a list.
+  const carrier = useDragged()
+  const rider = useDragged()
+
+  // Two gestures ACTIVE at once. There is still exactly one responder while
+  // this happens — the inner detector wins it, and the outer one is driven
+  // from the touch props, which fire regardless of who holds the lock.
+  const carrierGesture = Gesture.Pan()
+    .activeOffsetY([-10, 10])
+    .onStart(() => {
+      carrier.begin()
+      say("both", "outer ACTIVE…")
+    })
+    .onUpdate((event) => {
+      carrier.moveBy(0, event.translationY)
+    })
+    .onFinalize(() => say("both", "released"))
+
+  const riderGesture = Gesture.Pan()
+    .activeOffsetY([-10, 10])
+    .simultaneousWithExternalGesture(carrierGesture)
+    .onStart(() => {
+      rider.begin()
+      say("both", "BOTH ACTIVE — one drag, two gestures")
+    })
+    .onUpdate((event) => {
+      rider.moveBy(event.translationY, 0)
+    })
+
+  const waiter = useDragged()
+
+  // The outer one is a horizontal scroller that gives up the moment the drag
+  // has gone far enough DOWN.
+  const blockerGesture = Gesture.Pan()
+    .activeOffsetX([-10, 10])
+    .failOffsetY([-25, 25])
+    .onBegin(() => say("wait", "pressed — inner is held in BEGAN"))
+    .onStart(() => say("wait", "outer won it — drag down instead"))
+    .onFinalize((_event, success) => {
+      if (!success) {
+        say("wait", "outer FAILED — inner is released")
+      }
+    })
+
+  const waiterGesture = Gesture.Pan()
+    .activeOffsetY([-10, 10])
+    .requireExternalGestureToFail(blockerGesture)
+    .onStart(() => {
+      waiter.begin()
+      say("wait", "inner ACTIVE, after the outer failed")
+    })
+    .onUpdate((event) => {
+      waiter.moveBy(0, event.translationY)
+    })
+
   const countControl = () => {
     setControlEvents((n) => n + 1)
     return false
@@ -431,17 +515,53 @@ const App = () => {
           </View>
 
           <View style={styles.column}>
-            <Text style={styles.label}>
-              negative control — must stay at 0 unless you touch it
+            <Text style={styles.label}>simultaneousWithExternalGesture</Text>
+            <Text style={styles.hint}>
+              drag the light card down — both move, one responder
             </Text>
-            <View
-              style={styles.control}
-              onStartShouldSetResponder={countControl}
-              onMoveShouldSetResponder={countControl}
-              onTouchStart={countControl}
-            >
-              <Text style={styles.cardText}>events seen: {controlEvents}</Text>
-            </View>
+            <GestureDetector gesture={carrierGesture}>
+              <Animated.View
+                style={[styles.card, styles.carrier, carrier.style]}
+              >
+                <GestureDetector gesture={riderGesture}>
+                  <Animated.View style={[styles.rider, rider.style]}>
+                    <Text style={styles.cardText}>drag me down</Text>
+                  </Animated.View>
+                </GestureDetector>
+              </Animated.View>
+            </GestureDetector>
+            <Text style={styles.status}>{status.both ?? "—"}</Text>
+          </View>
+
+          <View style={styles.column}>
+            <Text style={styles.label}>requireExternalGestureToFail</Text>
+            <Text style={styles.hint}>
+              sideways: only the outer. down: the outer fails, the inner moves
+            </Text>
+            <GestureDetector gesture={blockerGesture}>
+              <View style={[styles.card, styles.blocker]}>
+                <GestureDetector gesture={waiterGesture}>
+                  <Animated.View style={[styles.waiter, waiter.style]}>
+                    <Text style={styles.cardText}>held until it fails</Text>
+                  </Animated.View>
+                </GestureDetector>
+              </View>
+            </GestureDetector>
+            <Text style={styles.status}>{status.wait ?? "—"}</Text>
+          </View>
+        </View>
+
+        <View style={styles.column}>
+          <Text style={styles.label}>
+            negative control — must stay at 0 unless you touch it
+          </Text>
+          <View
+            style={styles.control}
+            onStartShouldSetResponder={countControl}
+            onMoveShouldSetResponder={countControl}
+            onTouchStart={countControl}
+          >
+            <Text style={styles.cardText}>events seen: {controlEvents}</Text>
           </View>
         </View>
       </View>

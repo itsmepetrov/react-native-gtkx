@@ -42,6 +42,8 @@ const exceeds = (value: number, limit: number | undefined): boolean =>
   limit !== undefined && Math.abs(value) > limit
 
 export const tapDecider: RecognizerDecider = {
+  kind: "tap",
+
   /** The deadline, re-armed on every press of the sequence. */
   timer: (config: RecognizerConfig): RecognizerTimer => ({
     delay: config.maxDuration ?? DEFAULT_MAX_DURATION,

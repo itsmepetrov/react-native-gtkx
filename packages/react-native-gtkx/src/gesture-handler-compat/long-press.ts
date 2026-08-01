@@ -38,6 +38,8 @@ const travelledTooFar = (
   view.distanceFromPress > (config.maxDistance ?? DEFAULT_MAX_DISTANCE)
 
 export const longPressDecider: RecognizerDecider = {
+  kind: "longPress",
+
   timer: (config: RecognizerConfig): RecognizerTimer => ({
     delay: config.minDuration ?? DEFAULT_MIN_DURATION,
     elapsed: "activate",

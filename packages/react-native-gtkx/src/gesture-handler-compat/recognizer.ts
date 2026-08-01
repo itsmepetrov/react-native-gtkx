@@ -16,18 +16,29 @@
 // by the time the negotiation asks it anything. That ordering is load-bearing
 // and predates this module.
 //
-// Arbitration is deliberately absent. One interaction, one holder, one
-// irrevocable GTK `CLAIMED` on the source — the responder lock's single job.
-// The JS-only registry that lets two gestures be ACTIVE at once is its own
-// slice; the seam for it is `decide()` below, the one place a recognizer asks
-// to become active.
+// TWO LOCKS, AT TWO LEVELS, and this file is where they meet. The responder
+// lock keeps its one job — one interaction, one holder, one irrevocable GTK
+// `CLAIMED` on the source. Gesture arbitration is a second, JS-only registry
+// (./orchestrator) that never talks to GTK, and `decide()` below is the one
+// place a recognizer asks it for a turn. A gesture that is first to activate
+// takes the responder as it always did; a gesture activating alongside one
+// that already holds it does not ask, becomes ACTIVE in the registry, and is
+// driven from the touch props.
+//
+// There are therefore two reasons a gesture can be ACTIVE without the lock —
+// a kind that never takes it (`Native`, `claimsResponder: false`) and one that
+// simply lost the race to a simultaneous partner — and exactly one test for
+// both: `runtime.hasResponder`. A static per-kind flag cannot answer it,
+// because whether a `Pan` holds the lock is a fact about this interaction.
 import type { GestureResponderEvent } from "../responder/types"
+import type { Orchestrator, Participant } from "./orchestrator"
 import {
   GESTURE_STATE,
   POINTER_TYPE,
   TOUCH_EVENT_TYPE,
   type GestureEventPayload,
   type GestureHitSlop,
+  type GestureKind,
   type GestureStateManagerApi,
   type GestureStateValue,
   type GestureTouchEvent,
@@ -53,6 +64,12 @@ export type RecognizerEnvironment = {
    * granted. See `ResponderSystem.requestResponder`.
    */
   requestResponder: () => boolean
+  /**
+   * The JS-only arbitration registry this gesture takes part in. Injected
+   * rather than imported so a test can drive one loop in isolation, exactly
+   * as the responder system is injected rather than imported.
+   */
+  orchestrator: Orchestrator
 }
 
 /** The read-only view of the runtime the predicates are allowed to see. */
@@ -112,6 +129,15 @@ export type ReleaseOutcome =
  * was reachable from a pair of movement predicates.
  */
 export type RecognizerDecider = {
+  /**
+   * Which kind this is.
+   *
+   * Carried by the decider because the decider IS what tells the kinds apart,
+   * and because the arbitration loop needs exactly one fact about a gesture
+   * beyond its relations: whether it is `Gesture.Native()`, the one kind that
+   * can cancel an already-active gesture.
+   */
+  kind: GestureKind
   shouldFail: (view: RecognizerView, config: RecognizerConfig) => boolean
   shouldActivate: (view: RecognizerView, config: RecognizerConfig) => boolean
   /** Absent means "no timer", which is `Pan` without `activateAfterLongPress`. */
@@ -185,8 +211,27 @@ type Runtime = {
    */
   taps: number
   delayTimer: Timer
-  /** A timer or a callback asked to activate. */
-  wantsActivation: boolean
+  /**
+   * The orchestrator cleared this gesture to become ACTIVE and it is waiting
+   * for the responder lock to catch up.
+   *
+   * This is the ONLY thing `onMoveShouldSetResponder` answers from. It used to
+   * mean "a timer or a callback asked to activate", which was the same thing
+   * while there was nothing to arbitrate; now the difference is load-bearing,
+   * because a gesture parked behind `requireExternalGestureToFail` wants to
+   * activate and must not be allowed to take the lock.
+   */
+  authorized: boolean
+  /**
+   * Whether THIS gesture holds the responder, in THIS interaction.
+   *
+   * Which of two update pumps drives it: the holder reads `onResponderMove`,
+   * anything else ACTIVE reads `onTouchMove`. Two different gestures end up on
+   * the second pump and only this flag covers both — a kind that never takes
+   * the lock (`claimsResponder: false`), and a kind that does but lost the
+   * race to a simultaneous partner. Exactly one pump fires per gesture.
+   */
+  hasResponder: boolean
   forcedFailure: boolean
 }
 
@@ -213,7 +258,8 @@ const newRuntime = (): Runtime => ({
   maxPointerCount: 0,
   taps: 0,
   delayTimer: null,
-  wantsActivation: false,
+  authorized: false,
+  hasResponder: false,
   forcedFailure: false,
 })
 
@@ -300,7 +346,9 @@ const contains = (rect: Rect, x: number, y: number): boolean =>
 export type Recognizer = {
   /** The responder props to put on the gesture's view. */
   handlers: Record<string, (event: GestureResponderEvent) => boolean | void>
-  /** Cancels any pending timer; called when the detector unmounts. */
+  /** This gesture's seat in the arbitration loop. */
+  participant: Participant
+  /** Cancels any pending timer and leaves the loop; called on unmount. */
   dispose: () => void
 }
 
@@ -472,6 +520,14 @@ export const createRecognizer = (
     payloadFor: () => GestureEventPayload,
     success: boolean,
   ): void => {
+    if (runtime.state === GESTURE_STATE.UNDETERMINED) {
+      // Already over. The responder system dispatches `onResponderRelease` to
+      // whoever holds the lock at the end of the interaction, and a gesture
+      // can have cancelled itself while still holding it — a `LongPress` that
+      // wandered past `maxDistance`, or one the orchestrator cancelled. One
+      // exit per gesture, and this is where the second one stops.
+      return
+    }
     const config = readConfig()
     clearActivationTimer()
     clearDelayTimer()
@@ -493,6 +549,12 @@ export const createRecognizer = (
       config.onDeactivate?.(payload, success)
     }
     config.onFinalize?.(payload, success)
+    // Told AFTER the callbacks and BEFORE the reset. After, so a gesture this
+    // failure releases from `awaiting` starts where the previous one left off
+    // rather than in the middle of it; before, so the loop is handed the state
+    // the gesture actually ended in — END releases nobody and cancels the
+    // waiters, FAILED and CANCELLED release them.
+    env.orchestrator.finished(participant, runtime.state)
     runtime = newRuntime()
   }
 
@@ -519,12 +581,16 @@ export const createRecognizer = (
   /**
    * Everything becoming ACTIVE means, from a position rather than an event.
    *
-   * Shared by the two ways in: `onResponderGrant`, for a recognizer that took
-   * the lock, and `decide()` below, for one that never will.
+   * Three ways in now, and the third is the whole of slice 3: `onResponderGrant`
+   * for a recognizer that took the lock, `authorize()` for one that never will
+   * (`claimsResponder: false`), and `authorize()` again for one that WOULD have
+   * but was told the interaction is already held by a gesture it is
+   * simultaneous with. Everything after the transition is identical, because
+   * being ACTIVE is a fact about the gesture and not about the lock.
    */
   const enterActive = (pageX: number, pageY: number): void => {
     setState(GESTURE_STATE.ACTIVE)
-    runtime.wantsActivation = false
+    runtime.authorized = false
     clearActivationTimer()
     clearDelayTimer()
     // Translation is measured from where the gesture BECAME ACTIVE, not
@@ -543,27 +609,104 @@ export const createRecognizer = (
     runtime.hasActivated = true
   }
 
+  /** Becoming ACTIVE without a grant to carry the position or the payload. */
+  const activateHere = (): void => {
+    enterActive(runtime.lastX, runtime.lastY)
+    const payload = payloadNow()
+    // Mutual exclusion is enforced here rather than at the moment permission
+    // was given, because permission is not always the same instant: a gesture
+    // that has to take the responder becomes ACTIVE only if the negotiation
+    // grants it, and an ancestor can still win.
+    env.orchestrator.activated(participant)
+    readConfig().onActivate?.(payload)
+  }
+
   /**
-   * The one place a recognizer asks to become active, and therefore the seam
-   * the orchestrator (slice 3) will sit in: today it records the want, and
-   * the responder system is asked either by the negotiation already in flight
-   * or — for a timer — through the out-of-event channel.
+   * The orchestrator's answer, and the only place the two locks touch.
    *
-   * A recognizer that does not claim skips all of that and simply activates.
-   * There is nothing to negotiate: it is not asking for the interaction, it
-   * is reporting that the widget underneath it has taken one.
+   * `needsResponder` false means another gesture already holds the interaction
+   * and this one was cleared to run alongside it. It does NOT ask for the
+   * responder: the lock is single-holder by design, GTK has already been told
+   * everything it can be told, and winning the lock would take the interaction
+   * away from the gesture this one was written to accompany.
+   *
+   * A recognizer that never claims takes the same path for its own reason —
+   * it is not asking for the interaction, it is reporting that the widget
+   * underneath it has taken one.
    */
-  const decide = (insideTouchEvent: boolean): void => {
-    if (!claimsResponder) {
-      enterActive(runtime.lastX, runtime.lastY)
-      readConfig().onActivate?.(payloadNow())
+  const authorize = (needsResponder: boolean): void => {
+    if (runtime.state !== GESTURE_STATE.BEGAN) {
       return
     }
-    runtime.wantsActivation = true
-    if (!insideTouchEvent) {
-      env.requestResponder()
+    runtime.authorized = true
+    if (!claimsResponder || !needsResponder) {
+      activateHere()
+      return
     }
+    // The out-of-event channel, asked from inside a touch event as well as
+    // from a timer, and that uniformity is not laziness. Slice 1 could leave
+    // an in-event activation to the negotiation the responder system runs
+    // after the touch props, because there was only ever one gesture asking.
+    // With two, both would defer into the same negotiation, exactly one would
+    // win it, and the loser would sit authorized and never activate — so
+    // `Simultaneous` would silently be a race. Asking here settles the lock
+    // before the second gesture is even consulted, which is what lets it be
+    // told the interaction is already taken.
+    //
+    // It is the same negotiation either way: `requestResponder` reuses
+    // `negotiateAndTransfer` unchanged, so capture still beats bubble and an
+    // ancestor can still win.
+    env.requestResponder()
   }
+
+  /**
+   * The one place a recognizer asks to become active, and therefore the seam
+   * the orchestrator sits in.
+   *
+   * Every path that used to take the responder now goes through here first:
+   * the gesture's own criteria being met is a request, not a decision. What
+   * comes back is `authorize()` (with or without the lock), a parking in
+   * `awaiting` that leaves the gesture BEGAN holding nothing, or a
+   * cancellation. `Native` goes through it too — a gesture that never takes
+   * the lock still takes part in arbitration, and it is the one kind that can
+   * cancel an already-active gesture.
+   */
+  const decide = (): void => {
+    if (runtime.authorized || runtime.state !== GESTURE_STATE.BEGAN) {
+      return
+    }
+    env.orchestrator.tryActivate(participant)
+  }
+
+  /** Cancelled by the loop: another gesture won, or the one it waited for ended. */
+  const cancelFromOrchestrator = (): void => {
+    if (
+      runtime.state !== GESTURE_STATE.BEGAN &&
+      runtime.state !== GESTURE_STATE.ACTIVE
+    ) {
+      return
+    }
+    setState(GESTURE_STATE.CANCELLED)
+    finalize(payloadNow, false)
+  }
+
+  const participant: Participant = {
+    tag: handlerTag,
+    kind: decider.kind,
+    authorize,
+    holdsResponder: () => runtime.hasResponder,
+    cancel: cancelFromOrchestrator,
+  }
+
+  /**
+   * The state, read through a call.
+   *
+   * Not decoration: `decide()` can change the state before it returns — the
+   * orchestrator may activate the gesture, or cancel it, synchronously — and a
+   * narrowed `runtime.state` read straight afterwards is a fact the compiler
+   * believes and the runtime does not.
+   */
+  const stateNow = (): GestureStateValue => runtime.state
 
   const stateManager: GestureStateManagerApi = {
     begin: () => {
@@ -573,7 +716,7 @@ export const createRecognizer = (
     },
     activate: () => {
       if (runtime.state === GESTURE_STATE.BEGAN) {
-        decide(false)
+        decide()
       }
     },
     fail: () => {
@@ -680,6 +823,14 @@ export const createRecognizer = (
       runtime.lastTime = timestamp
       countPointers(event)
       setState(GESTURE_STATE.BEGAN)
+      // Recorded on the press, not on mount. That is the whole islands answer
+      // in one line: a gesture takes part in an interaction only when the
+      // interaction's pointer reaches it, so a relation naming a gesture in
+      // another `Root` — or one the pointer never went near — never has an
+      // occasion to apply and can never park anything for ever. Recording on
+      // mount would have made `requireExternalGestureToFail` across two
+      // islands a permanent deadlock. See docs/api.md.
+      env.orchestrator.record(participant)
       // Upstream begins once per SEQUENCE, not once per tap: its `begin()` is
       // reached only from the UNDETERMINED branch, so the second press of a
       // double tap gets no second `onBegin`.
@@ -719,7 +870,7 @@ export const createRecognizer = (
           // drag, and never for a press-and-hold that stays still. This is
           // the single extension slice 1 makes to the responder model;
           // docs/research/gestures.md records it with its reason.
-          decide(false)
+          decide()
         }, timer.delay)
       }
 
@@ -738,17 +889,23 @@ export const createRecognizer = (
         config.manualActivation !== true &&
         decider.shouldActivate(viewOf(), config)
       ) {
-        decide(true)
+        decide()
       }
     },
 
     onTouchMove: (event: GestureResponderEvent) => {
       if (runtime.state === GESTURE_STATE.ACTIVE) {
-        // A recognizer that never took the lock has no `onResponderMove`
-        // coming, so this is where its updates live. One that did is driven
+        // A gesture that does not hold the lock has no `onResponderMove`
+        // coming, so this is where its updates live. One that does is driven
         // from there instead, and emitting here as well would double every
         // update it reports.
-        if (!claimsResponder) {
+        //
+        // Two kinds of gesture end up here and the flag covers both: one that
+        // never takes the lock (`claimsResponder: false`), and one that would
+        // have but is ACTIVE alongside a gesture it is `Simultaneous` with.
+        // Without the second, `Simultaneous` would be a state with no events
+        // attached to it.
+        if (!runtime.hasResponder) {
           advance(event)
         }
         return
@@ -785,7 +942,7 @@ export const createRecognizer = (
         return
       }
       if (decider.shouldActivate(view, config)) {
-        decide(true)
+        decide()
       }
     },
 
@@ -799,22 +956,31 @@ export const createRecognizer = (
       if (runtime.state !== GESTURE_STATE.BEGAN || !isEnabled()) {
         return false
       }
-      if (runtime.wantsActivation) {
-        return true
-      }
-      if (readConfig().manualActivation === true) {
-        return false
-      }
-      // A move that arrived while another view held the responder never
-      // reached the decision above — the touch props fire either way, so this
-      // is the same question asked from the negotiation's side rather than a
-      // second code path.
-      return decider.shouldActivate(viewOf(), readConfig())
+      // The orchestrator's answer and nothing else. Slice 1 asked the decider
+      // a second time from here, on the reasoning that a move arriving while
+      // another view held the responder had not reached the decision above —
+      // which was never true (system.ts dispatches the touch props BEFORE it
+      // negotiates, in both entry points) and is now actively wrong: a gesture
+      // parked behind `requireExternalGestureToFail` still meets its own
+      // criteria, and answering them here would let it take the lock it was
+      // told to wait for.
+      return runtime.authorized
     },
 
     onResponderGrant: (event: GestureResponderEvent) => {
+      // The host holds the responder whoever asked for it — the recognizer's
+      // props are merged into the child's, so a child with responder props of
+      // its own can be the reason this fired.
+      runtime.hasResponder = true
+      if (!runtime.authorized) {
+        // Not this gesture's grant. Becoming ACTIVE is the orchestrator's to
+        // authorize, and it has not.
+        return
+      }
       enterActive(event.nativeEvent.pageX, event.nativeEvent.pageY)
-      readConfig().onActivate?.(payloadOf(event))
+      const payload = payloadOf(event)
+      env.orchestrator.activated(participant)
+      readConfig().onActivate?.(payload)
     },
 
     onResponderMove: (event: GestureResponderEvent) => {
@@ -825,10 +991,22 @@ export const createRecognizer = (
     },
 
     onResponderRelease: (event: GestureResponderEvent) => {
+      runtime.hasResponder = false
       finalizeAt(event, true)
     },
 
     onResponderTerminate: (event: GestureResponderEvent) => {
+      runtime.hasResponder = false
+      // The interaction went somewhere this registry cannot follow — an
+      // ancestor took the responder, the window lost focus, a scroller moved
+      // under it. Anything running alongside this gesture was riding on a lock
+      // that is gone, and there is no callback of its own coming to tell it.
+      env.orchestrator.interactionLost(participant)
+      if (runtime.state === GESTURE_STATE.UNDETERMINED) {
+        // Already over: this gesture cancelled itself while still holding the
+        // lock, and the system is telling the HOST the interaction ended.
+        return
+      }
       setState(GESTURE_STATE.CANCELLED)
       finalizeAt(event, false)
     },
@@ -838,11 +1016,13 @@ export const createRecognizer = (
         touchEventOf(event, TOUCH_EVENT_TYPE.TOUCHES_UP),
         stateManager,
       )
-      // An ACTIVE gesture is finalized by `onResponderRelease`, which the
-      // system dispatches AFTER the touch props. A gesture that never took
-      // the lock has no responder callback coming and ends here.
+      // The responder holder is finalized by `onResponderRelease`, which the
+      // system dispatches AFTER the touch props. A gesture that is ACTIVE
+      // without holding the lock — a `Native`, or a `Simultaneous` partner
+      // that lost the race for it — has no responder callback coming, and
+      // this is where its successful ending is.
       if (runtime.state === GESTURE_STATE.ACTIVE) {
-        if (!claimsResponder) {
+        if (!runtime.hasResponder) {
           finalizeAt(event, true)
         }
         return
@@ -879,12 +1059,21 @@ export const createRecognizer = (
       // interaction to negotiate over — and the `onResponderRelease` that
       // follows in the same event is what ends the gesture with success.
       clearActivationTimer()
-      decide(false)
-      if (runtime.state === GESTURE_STATE.BEGAN) {
-        // Nobody granted it — an ancestor holds the interaction, or the
-        // gesture is not on its path. There is no release callback coming.
-        finalizeAt(event, false)
+      decide()
+      if (stateNow() === GESTURE_STATE.ACTIVE) {
+        if (!runtime.hasResponder) {
+          // It activated alongside a gesture that holds the lock, so no
+          // `onResponderRelease` is coming for it either.
+          finalizeAt(event, true)
+        }
+        return
       }
+      // Nobody granted it — an ancestor holds the interaction, the gesture is
+      // not on its path, or the orchestrator parked it behind another. There
+      // is no release callback coming, and a discrete gesture whose pointer
+      // has lifted cannot be woken later: the interaction it would have taken
+      // is over.
+      finalizeAt(event, false)
     },
 
     onTouchCancel: (event: GestureResponderEvent) => {
@@ -904,7 +1093,7 @@ export const createRecognizer = (
       // props — finalizing here too would end it twice.
       if (
         runtime.state === GESTURE_STATE.BEGAN ||
-        (!claimsResponder && runtime.state === GESTURE_STATE.ACTIVE)
+        (!runtime.hasResponder && runtime.state === GESTURE_STATE.ACTIVE)
       ) {
         setState(GESTURE_STATE.CANCELLED)
         finalizeAt(event, false)
@@ -914,9 +1103,11 @@ export const createRecognizer = (
 
   return {
     handlers,
+    participant,
     dispose: () => {
       clearActivationTimer()
       clearDelayTimer()
+      env.orchestrator.forget(participant)
     },
   }
 }

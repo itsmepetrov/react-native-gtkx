@@ -78,6 +78,8 @@ const exceeds = (value: number, floor: number | undefined): boolean =>
   floor !== undefined && Math.abs(value) >= floor
 
 export const panDecider: RecognizerDecider = {
+  kind: "pan",
+
   /** Only `activateAfterLongPress` arms one; an ordinary pan has no clock. */
   timer: (config: RecognizerConfig): RecognizerTimer | null =>
     config.activateAfterLongPress === undefined

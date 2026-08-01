@@ -15,6 +15,7 @@ import {
   NATIVE_TOUCH_SLOP,
   nativeDecider,
 } from "../../../src/gesture-handler-compat/native"
+import { createOrchestrator } from "../../../src/gesture-handler-compat/orchestrator"
 import {
   createRecognizer,
   type Rect,
@@ -55,9 +56,13 @@ const mount = (config: RecognizerConfig) => {
   })
 
   const requestResponder = vi.fn(() => system.requestResponder(view))
+  // A loop of its own per mount: this file is about ONE recognizer, and a
+  // shared registry would leak the previous test's participants into the next.
+  const orchestrator = createOrchestrator()
   const recognizer = createRecognizer(7, nativeDecider, () => config, {
     boundsInWindow: () => BOUNDS,
     requestResponder,
+    orchestrator,
   })
   system.register(view, () => recognizer.handlers)
 

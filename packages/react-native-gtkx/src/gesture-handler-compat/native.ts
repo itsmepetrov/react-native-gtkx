@@ -45,6 +45,12 @@ import type { RecognizerConfig } from "./types"
 export const NATIVE_TOUCH_SLOP = 15
 
 export const nativeDecider: RecognizerDecider = {
+  // The one kind the arbitration loop asks about by name: an already ACTIVE or
+  // parked gesture is cancelled by nothing except an active native one, which
+  // is upstream's rule and the reason `Native` is special rather than just
+  // another recognizer. See ./orchestrator.
+  kind: "native",
+
   // Reporting, not competing: it never takes the interaction, so it never
   // suspends the scroller it is reporting on. See the file header.
   claimsResponder: false,

@@ -117,18 +117,23 @@ it("throws with the symbol's name when an unsupported export is called", () => {
 })
 
 it("throws per unimplemented recognizer rather than for the namespace", () => {
-  // `Gesture` itself is real — three of its statics are implemented — so the
-  // refusal moved down one level. Each of the other nine names ITSELF, which
+  // `Gesture` itself is real — six of its statics are implemented — so the
+  // refusal moved down one level. Each of the other six names ITSELF, which
   // is strictly more useful than the old whole-namespace throw: an app calling
   // `Gesture.Pinch()` is told about Pinch, not about Gesture.
   expect(Gesture.Pan()).toBeTruthy()
   expect(Gesture.Tap()).toBeTruthy()
   expect(Gesture.LongPress()).toBeTruthy()
+  // The three composers stopped throwing when the relation maps landed; they
+  // are list-builders over those maps and needed nothing else.
+  expect(Gesture.Simultaneous(Gesture.Pan(), Gesture.Tap())).toBeTruthy()
+  expect(Gesture.Exclusive(Gesture.Tap(), Gesture.Tap())).toBeTruthy()
+  expect(Gesture.Race(Gesture.Pan(), Gesture.LongPress())).toBeTruthy()
   expect(() => (Gesture.Pinch as () => void)()).toThrow(
     /`Gesture\.Pinch` is not supported/,
   )
-  expect(() => (Gesture.Simultaneous as () => void)()).toThrow(
-    /`Gesture\.Simultaneous` is not supported/,
+  expect(() => (Gesture.Fling as () => void)()).toThrow(
+    /`Gesture\.Fling` is not supported/,
   )
   // And an enum comparison, which is the other way these symbols get reached.
   // `Directions` has no handler that could produce one, so it still refuses.
