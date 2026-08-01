@@ -161,8 +161,15 @@ Ids rather than indices, because the rows are React children and a `List`
 cannot see their order. A row with no `reorderId`, or a list with no
 `onReorder`, attaches no drag controllers at all — so a view that cannot
 express an order simply drops the handler. Underneath, `ListRow` uses
-`Controllers` from `react-native-gtkx/gtk` (below): nothing here is reachable
-only from inside the platform.
+`react-native-gtkx/dnd` — the same module `Draggable` and `Sortable` are
+built from — which in turn uses `Controllers` from `react-native-gtkx/gtk`
+(below): nothing here is reachable only from inside the platform.
+
+**When to reach for `Sortable` instead.** `List`'s `onReorder` takes row
+**ids**, because a `List`'s rows are React children and it cannot see their
+order. `Sortable` in [`react-native-gtkx/dnd`](api.md#drag-and-drop-react-native-gtkxdnd)
+owns an array and reports positions, and is the one to use for a list that
+is not Adwaita chrome — or for anything with a drop zone in it.
 
 `Icon` is not `Image`: RN's `Image` takes a file path or URI, because on iOS
 and Android an icon is a bundled asset. Here it is a _name_ resolved against
@@ -471,9 +478,14 @@ Inside a GTK widget's own slot there is no enclosing React Native component
 and nothing is attached; pass `controllers={…}` to the widget itself there,
 which is the prop this substitutes for.
 
-For drag-reorder specifically, `List`/`ListRow` in
-`react-native-gtkx/common` already package this — and they are written on
-top of `Controllers`, not around it.
+For drag-and-drop specifically there is a whole module above this:
+[`react-native-gtkx/dnd`](api.md#drag-and-drop-react-native-gtkxdnd) mirrors
+`react-native-reanimated-dnd`'s API (`Draggable`, `Droppable`,
+`DropProvider`, `Sortable`) on these two controllers, and both bundler
+presets alias the package name onto it so a ported app keeps its source.
+`List`/`ListRow` in `react-native-gtkx/common` package the id-keyed reorder
+on top of the same module. All of it is written on top of `Controllers`, not
+around it — which is the property that makes this subpath worth having.
 
 ### GSettings
 

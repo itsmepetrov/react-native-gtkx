@@ -63,6 +63,10 @@
       "types": "./dist/common/index.d.ts",
       "default": "./dist/common/index.js"
     },
+    "./dnd": {
+      "types": "./dist/dnd/index.d.ts",
+      "default": "./dist/dnd/index.js"
+    },
     "./mcp": {
       "types": "./dist/mcp/index.d.ts",
       "default": "./dist/mcp/index.js"

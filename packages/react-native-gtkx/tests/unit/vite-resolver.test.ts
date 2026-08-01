@@ -59,6 +59,24 @@ describe("rewriteReactNativeImport", () => {
     expect(rewriteReactNativeImport("react-native-svg-icons")).toBeNull()
     expect(rewriteReactNativeImport("react-native-svg-transformer")).toBeNull()
   })
+
+  test("rewrites react-native-reanimated-dnd to the dnd subpath", () => {
+    // Load-bearing rather than convenient: the real library cannot run here,
+    // so this alias is what lets a ported app keep its source unchanged.
+    expect(rewriteReactNativeImport("react-native-reanimated-dnd")).toBe(
+      "react-native-gtkx/dnd",
+    )
+    expect(
+      rewriteReactNativeImport("react-native-reanimated-dnd/lib/index"),
+    ).toBe("react-native-gtkx/dnd/lib/index")
+  })
+
+  test("ignores react-native-reanimated-dnd lookalikes", () => {
+    expect(
+      rewriteReactNativeImport("react-native-reanimated-dnd-extras"),
+    ).toBeNull()
+    expect(rewriteReactNativeImport("react-native-reanimated")).toBeNull()
+  })
 })
 
 describe("splitQuery", () => {

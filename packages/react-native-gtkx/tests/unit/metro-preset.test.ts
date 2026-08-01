@@ -68,6 +68,22 @@ test("redirects react-native-svg (and subpaths) to the compat subpath on linux",
   ])
 })
 
+test("redirects react-native-reanimated-dnd to the dnd subpath on linux", () => {
+  // The alias that IS the migration story: the real library cannot run here
+  // (Reanimated 4 + worklets + RNGH at module scope), so without this every
+  // app with drag-and-drop rewrites its imports to add a Linux build.
+  const { context, calls } = makeContext()
+  resolve(context, "react-native-reanimated-dnd", "linux")
+  resolve(context, "react-native-reanimated-dnd/lib/index", "linux")
+  resolve(context, "react-native-reanimated-dnd-extras", "linux")
+  expect(calls).toEqual([
+    ["react-native-gtkx/dnd", "linux"],
+    ["react-native-gtkx/dnd/lib/index", "linux"],
+    // lookalike: left untouched.
+    ["react-native-reanimated-dnd-extras", "linux"],
+  ])
+})
+
 test("externals resolve to __hostModules proxies", () => {
   const { context } = makeContext()
   for (const name of ["@gtkx/react", "react", "yoga-layout"]) {

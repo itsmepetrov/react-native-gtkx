@@ -16,6 +16,7 @@ import { createSidebarNavigator } from "react-native-gtkx/navigation"
 import { AnimatedSection } from "./sections/animated"
 import { ApisSection } from "./sections/apis"
 import { ButtonsSection } from "./sections/buttons"
+import { DndSection } from "./sections/dnd"
 import { GesturesSection } from "./sections/gestures"
 import { SECTION_IDS, type SectionId } from "./sections/index"
 import { InputsSection } from "./sections/inputs"
@@ -48,6 +49,7 @@ const SECTION_DEFS: Record<SectionId, SectionDef> = {
   svg: { title: "Svg", Component: SvgSection },
   animated: { title: "Animated", Component: AnimatedSection },
   gestures: { title: "Gestures", Component: GesturesSection },
+  dnd: { title: "Drag and drop", Component: DndSection },
   modal: { title: "Modal", Component: ModalSection },
   apis: { title: "APIs", Component: ApisSection },
 }

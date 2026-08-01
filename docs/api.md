@@ -524,3 +524,59 @@ Apps using neither preset can point their own bundler alias at
 `react-native-gtkx/svg` by hand. `react-native-svg` itself is never a
 dependency of this package and does not need to be installed — the alias
 works whether or not the real package is present.
+
+## Drag and drop (`react-native-gtkx/dnd`)
+
+A mirror of [`react-native-reanimated-dnd`](https://github.com/entropyconquers/react-native-reanimated-dnd)'s
+API, implemented on `GtkDragSource`/`GtkDropTarget`. Both presets alias the
+bare `react-native-reanimated-dnd` package name onto it, exactly as they do
+`react-native-svg` — so an app that already does drag-and-drop keeps its
+source:
+
+```tsx
+import { Draggable, Droppable, DropProvider } from "react-native-reanimated-dnd"
+```
+
+**Why a mirror and not the library.** It cannot run here. Reanimated 4,
+`react-native-worklets` and `react-native-gesture-handler` are imported at
+module scope in twelve of its files, its sort algorithm lives inside a
+`useAnimatedReaction` worklet and its row layout inside a `useAnimatedStyle`,
+and its public types are written in `SharedValue<T>`. Full evidence in
+[research/drag-and-drop.md](research/drag-and-drop.md).
+
+**The one thing a ported app must change.** `<GestureHandlerRootView>` —
+`react-native-gesture-handler` is not aliased (a partial shim would make
+every other RNGH import fail silently rather than loudly), so guard it with
+`Platform.OS` or a `.linux.tsx` split. `DropProvider` already renders the
+`flex: 1` box it was providing.
+
+| Export                                                                                | Notes                                                                                                                                                                                         |
+| ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DropProvider`                                                                        | Scopes a set of draggables and droppables. Renders a `View` (upstream renders a fragment) because `onDragging` needs a widget. `ref` gives `getDroppedItems()` and `requestPositionUpdate()`. |
+| `Draggable`, `Draggable.Handle`, `useDraggable`                                       | The drag source. With a handle, the `GtkDragSource` attaches to the **handle's** widget, so the rest of the item stays pressable.                                                             |
+| `Droppable`, `useDroppable`                                                           | The drop target. `capacity` is enforced in GDK's `::accept`, so a full zone shows the no-drop cursor.                                                                                         |
+| `Sortable`, `SortableItem`, `SortableItem.Handle`, `useSortable`, `useSortableList`   | Drag-to-reorder. The component owns the order (upstream's contract); read the settled one from `onDrop`'s `allPositions`.                                                                     |
+| `DraggableState`, `ScrollDirection`, `SortableDirection`, `HorizontalScrollDirection` | The enums, unchanged.                                                                                                                                                                         |
+| `listToObject`, `objectMove`, `clamp`                                                 | The utilities, as plain functions rather than worklets.                                                                                                                                       |
+| `SharedValueLike<T>`                                                                  | What `SharedValue<T>` degrades to: `{ value: T }` without the worklet crossing. Reads and writes work; they just do not animate.                                                              |
+
+### Differences from `react-native-reanimated-dnd`
+
+The dragged view never moves — GDK carries a `Gtk.WidgetPaintable` of it
+above every window, with the theme's own cursors and hit testing against the
+real widget tree, including widgets React Native never created. Everything
+below follows from that one fact.
+
+| Prop                                                                                                             | Behaviour here                                                                                                                                                      |
+| ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `preDragDelay`                                                                                                   | Accepted, ignored. GDK's `gtk-dnd-drag-threshold` already separates a tap from a drag.                                                                              |
+| `collisionAlgorithm`                                                                                             | Accepted, ignored. GDK hit-tests the pointer; `"center"` is the closest of the three.                                                                               |
+| `requestPositionUpdate()`                                                                                        | No-op. Nothing caches a slot rectangle, because GDK re-hit-tests every motion.                                                                                      |
+| `onLayoutUpdateComplete`                                                                                         | Accepted, ignored — there is no layout pass to complete.                                                                                                            |
+| `itemHeight`, `estimatedItemHeight`, `enableDynamicHeights`, `useFlatList`                                       | Accepted, ignored. Yoga lays rows out at their natural height.                                                                                                      |
+| `dragAxis`, `dragBoundsRef`, `animationFunction`                                                                 | **Unsupported.** All three describe where the dragged view goes, and it never went anywhere. Kept in the type so a file shared with iOS and Android still compiles. |
+| `dropAlignment`, `dropOffset`                                                                                    | **Unsupported**, same reason.                                                                                                                                       |
+| `positions`, `lowerBound`, `autoScrollDirection`, `itemHeights`                                                  | Real `{ value }` boxes (`SharedValueLike`), not `SharedValue`. Forwarding them with `{...rest}` works, reads work, writes do not animate.                           |
+| `SortableGrid`, `SortableGridItem`, `useGridSortable*`, `useHorizontalSortable*`, `SortableDirection.Horizontal` | **Not implemented.** Importing them fails at build time; passing `Horizontal` throws.                                                                               |
+| Autoscroll near a container edge during a drag                                                                   | Not implemented.                                                                                                                                                    |
+| Sortable list height                                                                                             | Rows are in flow layout, so the list is as tall as its rows — not `itemsCount × itemHeight`.                                                                        |
