@@ -160,7 +160,16 @@ functions named in the crash output, in the order they run.
 A `self->button != NULL` guard around the split-button check and the
 `add_css_class` call (or bailing out of `root()` early when no button
 ancestor is found) would fix this without changing behavior in the
-documented case.
+documented case. `adw_button_content_unroot()`, a few lines below, already
+treats this same `self->button` as nullable (`if (self->button) { ... }`)
+before removing the CSS class — `root()` just lacks the matching guard.
+
+Built libadwaita 1.9.1 from source in a clean VM and confirmed: the two
+criticals disappear with the guard added, the button and split-button cases
+(covered by the existing `test-button-content.c`) are unaffected, and the
+full test suite (67/67, plus one new test for this) stays green. Happy to
+attach the patch (~10 lines, plus a test) to the issue or open it as a
+linked merge request — whichever this project prefers.
 
 ## Environment
 

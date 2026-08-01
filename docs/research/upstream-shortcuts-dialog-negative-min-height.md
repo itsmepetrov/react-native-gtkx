@@ -113,35 +113,70 @@ populating it gets this warning on stderr — in a flatpak sandbox or under
 `G_DEBUG=fatal-warnings` (common in test suites and CI) this is a hard
 failure, not just log noise.
 
-## Root cause (read from the 1.9.1 source, not just observed)
+## Root cause (built from source and instrumented — corrected from an earlier guess)
 
 The internal wrap box lives at `src/adw-shortcuts-dialog.ui` as `nav_box`
-(an `AdwWrapBox` used for the dialog's search/category row), and its size is
-computed by `adw_wrap_layout_measure()` in `src/adw-wrap-layout.c`. The
-perpendicular-to-pack-direction branch (used for height, when packing is
-horizontal) is:
+(an `AdwWrapBox`, styled `.navigation-box`, used for the dialog's
+section-navigation row). It is tempting to blame the `n_lines - 1`
+line-spacing arithmetic in `adw_wrap_layout_measure()` (`src/adw-wrap-layout.c`)
+for an empty-box negative value — that was our first guess too, before
+building libadwaita from source and instrumenting the measure path directly
+to check it. It does not hold up: with zero children, `adw_wrap_layout_measure()`
+takes its early "trivial case" branch (`multiple_visible_children` is false,
+`visible_child` is NULL) and returns a plain `[0, 0]` _before_ the
+line-spacing arithmetic ever runs. Instrumented, confirmed: for this exact
+repro the function is entered twice (width and height) and both times exits
+through `DEBUG-TRIVIAL-EMPTY`, min/nat = 0/0.
 
-```c
-// src/adw-wrap-layout.c, adw_wrap_layout_measure(), ~line 609-627 (v1.9.1)
-line_data = compute_sizes (self, widget, for_size, child_spacing, &n_lines, &child_data);
+The real mechanism is CSS, not arithmetic. `src/stylesheet/widgets/_shortcuts-dialog.scss`:
 
-/* ... accumulate min/nat over n_lines, each starting at 0 ... */
-
-min += line_spacing * (n_lines - 1);
-nat += line_spacing * (n_lines - 1);
+```scss
+.navigation-box {
+  margin-top: -12px;
+  ...
+}
 ```
 
-`count_lines()` (same file) correctly returns `0` for zero visible children
-— the `while (n_children > 0)` loop never runs. With `n_lines == 0`, the
-last two lines above compute `line_spacing * (0 - 1)`, i.e. `-line_spacing`,
-and nothing after this clamps it back to `>= 0`. The multiplier assumes at
-least one line and needs a floor at `0` (equivalently, skip the `+=`
-entirely when `n_lines == 0`).
+GTK's own `gtk_widget_measure()` adds a widget's CSS margin on top of
+whatever its layout manager reports. With `nav_box` empty, content height is
+`0` (from the trivial branch above), and the combined size becomes
+`0 + (-12px margin) = -12` — computed entirely inside GTK core's own
+generic bounds check, not inside any libadwaita arithmetic. Removing the
+`-12px` (or giving the box any content) makes the warning disappear, which
+we verified directly by editing the built stylesheet and rebuilding.
 
-This is also why a downstream consumer cannot observe or work around the
-negative value: `gtk_widget_measure()` itself clamps a negative minimum to 0
-before returning it to any caller, so the value only ever surfaces as this
-warning, never as an actual layout defect visible to the caller.
+The `-12px` is intentional: normal use never leaves this row empty long
+enough to matter, because `adw-shortcuts-dialog.c` already has logic to
+hide `nav_group` (the parent of `nav_box`) whenever there is nothing to
+navigate between:
+
+```c
+// src/adw-shortcuts-dialog.c, update_nav_visibility()
+gboolean has_many_sections = g_list_model_get_n_items (...) >= N_MIN_SECTIONS;
+gboolean has_many_shortcuts = g_list_model_get_n_items (...) >= N_MIN_SHORTCUTS;
+gtk_widget_set_visible (GTK_WIDGET (self->nav_group),
+                        has_many_sections && has_many_shortcuts);
+```
+
+`update_nav_visibility()` (via `update_stack()`) is correct — the actual gap
+is that it only ever runs _reactively_, wired to `"items-changed"` on the
+section list model (`adw_shortcuts_dialog_init()`, `g_signal_connect_object
+(self->title_sections, "items-changed", ...)`). A dialog that never has a
+section added never gets that first change notification, so it never runs
+even once, and `nav_group` stays at the `.ui` template's default — visible,
+with nothing in it — for the dialog's entire lifetime. It is a missing
+initial sync, not a bad formula: calling the existing `update_stack(self)`
+once at the end of `adw_shortcuts_dialog_init()` is enough, and a dialog
+that starts with zero sections then reaches the exact state a later mutation
+would already put it in.
+
+We built libadwaita 1.9.1 from source in a clean VM and confirmed all of
+the above directly, including that the one-line fix removes the warning
+with no change to the "many sections" case (nav row still shows once
+thresholds are met) or the "one section" case (already correctly hidden,
+unaffected). Happy to attach the patch (~12 lines, plus a test) to the
+issue or open it as a linked merge request — whichever this project
+prefers.
 
 ## Environment
 
