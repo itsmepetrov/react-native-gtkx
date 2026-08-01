@@ -197,8 +197,11 @@ export const RefusalsPanel = () => {
         <Animated.View style={[styles.accepted, scaleStyle]} />
       </View>
       <Text style={styles.laneLabel}>
-        transform: [{"{"} scaleX {"}"}] — the alternative the warning names, and
-        the one that runs
+        transform: [{"{"} scaleX {"}"}] — the closest transform, and the one
+        that runs. It is an APPROXIMATION, not a replacement: a scale grows
+        about the view&apos;s centre, so the box moves as it grows, and it
+        scales the content with the box instead of re-laying it out — text
+        stretches rather than re-wrapping
       </Text>
       <Row>
         <Button
@@ -222,20 +225,20 @@ export const RefusalsPanel = () => {
       </Caption>
       <View style={styles.factTable}>
         <Fact
-          label="Yoga pass + commit for one animated width, 5-child tree"
-          value="64 µs"
+          label="Yoga pass + commit walk for one animated width, 5-child container"
+          value="71 µs"
         />
         <Fact
-          label="…the same value, 60-child tree"
-          value="128 µs"
+          label="…the same value, 60-child container"
+          value="129 µs"
         />
         <Fact
-          label="…the same value, 300-child tree"
-          value="496 µs"
+          label="…the same value, 300-child container"
+          value="509 µs"
         />
         <Fact
           label="A transform write, at every one of those sizes"
-          value="0.7 µs"
+          value="0.6 µs"
         />
         <Fact
           label="A colour write, at every one of those sizes"
@@ -243,21 +246,24 @@ export const RefusalsPanel = () => {
         />
       </View>
       <Caption>
-        That first column is the whole decision. A layout write is O(the tree):
-        the same single animated value costs 64, 128 and 496 µs per frame as the
-        tree grows, because changing one child&apos;s width re-lays-out its
-        following siblings and every ancestor whose size follows. The two
-        imperative paths are O(1) — flat at every size. At 300 children an
-        animated `width` spends 3 % of a frame budget in Yoga alone, before GTK
-        has re-measured anything.
+        That first column is the whole decision, and it is the whole decision on
+        its own. A layout write is O(the container): the same single animated
+        value costs 71, 129 and 509 µs per frame as the container grows, because
+        changing one child re-lays-out its following siblings and re-commits
+        every rect the pass touched. The two imperative paths are O(1) — flat at
+        every size. At 300 children an animated `width` spends 3 % of a frame
+        budget before anything is painted.
       </Caption>
       <Caption>
-        And it is the one write that is not paint-only: `queueResize` propagates
-        to the toplevel, so an animated `width` can resize the window it is in.
-        There is no version of that which is safe to run at 60 Hz. Two numbers
-        would change the decision — an incremental layout that made the Yoga
-        column flat, and a `queueResize` that could be scoped below the toplevel
-        — and neither is a small change.
+        Two things that used to be said here were re-measured and are not true.
+        Making GTK re-measure every ancestor after the resize adds nothing at
+        any tree size — this platform&apos;s root reports a constant size
+        request, so there is nothing up there to recompute — and for the same
+        reason an animated `width` cannot resize the window: the request stayed
+        at min 88 with a child driven to 3000 px wide. (An RN island mounted
+        straight into GTK chrome does report its content size, and there the
+        window request really does follow.) The refusal rests on cost, and only
+        on cost.
       </Caption>
       <Caption>
         Not everything refused is a layout property. `borderRadius` gets the

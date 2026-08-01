@@ -12,13 +12,22 @@
 // WHERE THE BOUNDARY IS NOW. Opacity, transforms and colours are driven.
 // What is left out is layout — `width`, `height`, `flex`, every
 // `margin*`/`padding*` — and that is a refusal on measured grounds rather
-// than a gap waiting to be filled. A layout write has to go through Yoga,
-// and a Yoga pass costs what the TREE costs, not what the animated value
-// costs: 63 µs for a five-child container, 135 µs at sixty, 519 µs at three
-// hundred, per frame, before GTK re-measures the ancestors the resize
-// invalidated. The same frame's transform write is 0.7 µs and does not grow
-// at all. docs/research/animated-colors.md has the full table and the number
-// that would change the decision.
+// than a gap waiting to be filled. A layout write has to go through Yoga, and
+// a pass plus its commit walk costs what the CONTAINER costs, not what the
+// animated value costs: 71 µs for a five-child container, 129 µs at sixty,
+// 509 µs at three hundred, per frame. The same frame's transform write is
+// 0.6 µs and does not grow at all.
+//
+// It is a cost argument and ONLY a cost argument, which is narrower than this
+// comment used to claim. docs/research/animated-size.md re-measured the two
+// other things that were said here: GTK re-measuring the ancestors after the
+// resize adds nothing at any tree size, and a size write cannot move the
+// window — the RN root reports a zero size request, so the toplevel never
+// re-negotiates. (An `IntrinsicRoot` mounted directly in GTK chrome is the one
+// exception, and it does change the window's request.) That file also
+// measures the carve-out this refusal is waiting on: re-laying out the
+// ANIMATED NODE's own subtree, pinned to the driven size, is 6.6–23 µs and
+// flat in the size of the tree.
 //
 // THE ONE CARVE-OUT, and it is not a softening of that. `top`/`left`/
 // `right`/`bottom` on a node whose OWN `position` is `"absolute"` are driven,
@@ -179,17 +188,32 @@ const LAYOUT_PROPERTIES = new Set([
   "width",
 ])
 
-// Which transform to reach for instead. Only the properties with an exact
-// visual equivalent are listed; suggesting `scaleX` for `flexGrow` would be
-// worse than saying nothing.
-const TRANSFORM_ALTERNATIVE: Record<string, string> = {
+// Which transform to reach for instead, in the two kinds it comes in. The
+// distinction is not pedantry — `scaleX` was named as the replacement for
+// `width` here and it is not one, which docs/research/animated-size.md §6
+// measured on a 100×60 box widened to 260:
+//
+//   - a scale grows about the view's CENTRE, so the box MOVES: x went 500 →
+//     420, where the width change kept it at 500;
+//   - a scale scales the CONTENT with the box instead of re-laying it out: the
+//     label inside kept its three-line, 45 px-tall layout and was drawn 2.6×
+//     wide — stretched glyphs — where the width change re-wrapped it to one
+//     line, 15 px tall.
+//
+// So an inset really does have a transform that reproduces it, and a size does
+// not. Offering `scaleX` as if it did sends people to a different behaviour
+// with the same name on it.
+const EXACT_ALTERNATIVE: Record<string, string> = {
   bottom: "translateY",
   end: "translateX",
-  height: "scaleY",
   left: "translateX",
   right: "translateX",
   start: "translateX",
   top: "translateY",
+}
+
+const APPROXIMATE_ALTERNATIVE: Record<string, string> = {
+  height: "scaleY",
   width: "scaleX",
 }
 
@@ -228,22 +252,31 @@ const warnUndriveable = (property: string, source: StyleObject): void => {
         `positioned — which is normally driven at frame rate here — but ${insetReason}, so no ` +
         "translation reproduces it and it would need a Yoga pass. Give the axis a single edge (or a " +
         `definite size) and \`${property}\` animates; otherwise animate ` +
-        `\`transform: [{ ${TRANSFORM_ALTERNATIVE[property]}: … }]\`. The new value is applied on the next ` +
+        `\`transform: [{ ${EXACT_ALTERNATIVE[property]}: … }]\`. The new value is applied on the next ` +
         "React render. See docs/api.md.",
     )
     return
   }
   if (LAYOUT_PROPERTIES.has(property)) {
-    const alternative = TRANSFORM_ALTERNATIVE[property]
+    const exact = EXACT_ALTERNATIVE[property]
+    const approximate = APPROXIMATE_ALTERNATIVE[property]
     console.warn(
       `react-native-reanimated: useAnimatedStyle changed \`${property}\`, a LAYOUT property. ` +
         "react-native-gtkx does not drive layout at frame rate on purpose: a layout write costs a Yoga " +
-        "pass over the container plus a GTK resize of every ancestor, and that cost grows with the tree " +
-        "rather than with the number of animated values. " +
-        (alternative
-          ? `Animate \`transform: [{ ${alternative}: … }]\` instead — it is paint-only, costs the same at ` +
-            "any tree size, and is what RN's own native driver restricts you to. "
-          : "Transforms are paint-only and cost the same at any tree size. ") +
+        "pass over the container plus the commit walk that follows it, and that cost grows with the " +
+        "CONTAINER rather than with the number of animated values — measured at 71 µs for a five-child " +
+        "container and 509 µs at three hundred, against a transform's 0.6 µs. " +
+        (exact
+          ? `Animate \`transform: [{ ${exact}: … }]\` instead — it reproduces the move exactly, it is ` +
+            "paint-only, it costs the same at any tree size, and it is what RN's own native driver " +
+            "restricts you to. "
+          : approximate
+            ? `The closest transform is \`transform: [{ ${approximate}: … }]\`, but it is NOT the same ` +
+              "thing and it is worth knowing how: a scale grows about the view's CENTRE, so the box " +
+              "moves as it grows, and it scales the CONTENT with the box instead of re-laying it out — " +
+              "text stretches rather than re-wrapping. Reach for it when the content can take being " +
+              "stretched (a plain box, an image), not as a replacement. "
+            : "Transforms are paint-only and cost the same at any tree size. ") +
         (isInsetProperty(property)
           ? `(\`${property}\` IS driven at frame rate on a node whose own \`position\` is "absolute", ` +
             "where moving it is exactly a translation and touches no sibling.) "

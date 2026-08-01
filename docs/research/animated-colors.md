@@ -205,6 +205,24 @@ It is also the one write that is not paint-only: `queueResize` propagates to
 the toplevel, so an animated `width` can resize the window it is in. There is
 no version of that which is safe to run at 60 Hz.
 
+> **Corrected on 2026-08-02, and the correction is the reason to read
+> [animated-size.md](animated-size.md).** Both halves of the paragraph above
+> were re-measured and neither survived. The `+ GTK relayout & paint` column
+> is real but it is not caused by the resize: forcing the WHOLE toplevel
+> measure cascade after the write adds nothing to it at any tree size (50 /
+> 130 / 499 µs against 64 / 135 / 491 µs for the write alone), because the RN
+> root's `measure` hook returns a constant. And the window cannot resize: its
+> size request was unchanged at `min=88 nat=200` with a child driven to 3000 px
+> wide, for the same reason. The hazard is real for exactly one root — an
+> `IntrinsicRoot` that is the window's OWN child, where the request went
+> 120 → 640.
+>
+> So the refusal below rests on cost alone, and the cost is the first column
+> plus the commit walk: 71 / 129 / 509 µs. That is still 100–800× a transform
+> and still O(the container), which is why it stands — but §"What would change
+> this decision" has since been met on one of its two conditions, and
+> [animated-size.md](animated-size.md) measures the carve-out that follows.
+
 One exception was found later and it is a narrowing rather than a softening:
 an inset on an out-of-flow node moves nothing but itself, so it has an exact
 transform equivalent and costs no Yoga pass — [absolute-insets.md](absolute-insets.md).
@@ -213,11 +231,16 @@ sibling gets.
 
 **Decision: refuse, by name, with the alternative.** `useAnimatedStyle`
 returning a layout property warns once for that property with its own
-message — that it is a LAYOUT property, that the cost is a Yoga pass plus a
-GTK resize of every ancestor, that the cost grows with the tree, and which
-transform to use instead (`translateX` for `left`/`right`, `translateY` for
-`top`/`bottom`, `scaleX`/`scaleY` for `width`/`height`). The value is still
-applied on the next React render rather than dropped, exactly as before.
+message — that it is a LAYOUT property, that the cost is a Yoga pass plus the
+commit walk that follows it, that the cost grows with the container, and which
+transform to use instead: `translateX` for `left`/`right` and `translateY` for
+`top`/`bottom`, which reproduce the move exactly. `scaleX`/`scaleY` are named
+for `width`/`height` as an APPROXIMATION with its difference spelled out — a
+scale grows about the view's centre and stretches the content instead of
+re-laying it out ([animated-size.md §6](animated-size.md#6-what-scalex-differs-in-measured)).
+Recommending them as equivalents, which this file did until 2026-08-02, was
+wrong. The value is still applied on the next React render rather than
+dropped, exactly as before.
 
 The refusal is a warning and not a throw for one reason: a layout property in
 an animated style is usually a constant sitting next to the thing that moves
@@ -233,6 +256,15 @@ resize hazard would go with it. Neither is a small change, and neither is
 worth doing speculatively: RN's own native driver restricts animations to
 `transform` and `opacity` for the same reason, and every consumer already
 writes to that restriction.
+
+> **Both have since been answered, and the second was a false alarm.** The
+> second condition never needed meeting: `queueResize` does reach the toplevel
+> and it costs nothing, because the root reports a constant. The first was met
+> by rooting the pass at the ANIMATED NODE rather than at its container —
+> 6.6 µs for a leaf and 23 µs with wrapped text, flat at 5, 60 and 300
+> children, driving real GTK geometry in `spike/animated-size/`. The rule that
+> says when it is safe, the configurations where it is not, and the cost of
+> everything around it: [animated-size.md](animated-size.md).
 
 ## Not implemented, and why
 

@@ -909,16 +909,39 @@ and its parent", so `Animated.Text` and anything through
 `createAnimatedComponent` animate colours on the same terms.
 
 **Layout properties are refused, and it is a decision rather than a gap.**
-`width`, `height`, `flex` and every `margin*`/`padding*` need a Yoga pass,
-whose cost is proportional to the TREE and not to the animated value: 64 µs
-for a five-child container, 128 µs at sixty, 496 µs at three hundred, per
-frame, before GTK re-measures every ancestor the resize invalidated. A
-transform is 0.7 µs at all three, and a colour 11.2 µs. A `useAnimatedStyle`
-that changes a layout property warns once for that property, says it is a
-layout property and why, and names the transform to use instead (`scaleX` for
-`width`, and so on). The value is still applied on the next React render
-rather than dropped. Full measurements, and the two numbers that would change
-the decision, in [research/animated-colors.md](research/animated-colors.md).
+`width`, `height`, `flex` and every `margin*`/`padding*` need a Yoga pass plus
+the commit walk that follows it, and that cost is proportional to the
+CONTAINER rather than to the animated value: 71 µs for a five-child container,
+129 µs at sixty, 509 µs at three hundred, per frame. A transform is 0.6 µs at
+all three, and a colour 11.2 µs. A `useAnimatedStyle` that changes a layout
+property warns once for that property, says it is a layout property and why,
+and names the transform to use instead. The value is still applied on the next
+React render rather than dropped.
+
+It is a cost argument and only a cost argument. Two things that used to be
+said here were re-measured and are not true:
+[research/animated-size.md](research/animated-size.md) found that GTK
+re-measuring every ancestor after the resize adds nothing at any tree size,
+and that a size write cannot resize the window — the RN root reports a zero
+size request, so the toplevel never re-negotiates. (An `IntrinsicRoot` mounted
+directly in GTK chrome does change the window's request, and is the one place
+the hazard is real.)
+
+**`scaleX`/`scaleY` are an approximation for `width`/`height`, not a
+replacement**, and the warning now says which. Measured on a 100×60 box
+widened to 260: a scale grows about the view's CENTRE, so the box moves as it
+grows (x 500 → 420, where the width change kept x at 500), and it scales the
+CONTENT with the box instead of re-laying it out — the label inside kept its
+three-line 45 px layout and was drawn stretched, where the width change
+re-wrapped it to one line of 15 px. Reach for a scale when the content can
+take being stretched (a plain box, an image). `translateX`/`translateY` for
+the insets are exact and carry no such caveat.
+
+Full measurements, and the carve-out the refusal is waiting on — re-laying out
+the animated node's OWN subtree, which is 6.6–23 µs and flat in the size of the
+tree — in [research/animated-size.md](research/animated-size.md), next to the
+original table in
+[research/animated-colors.md](research/animated-colors.md).
 
 #### The one exception: insets on an absolutely positioned node
 

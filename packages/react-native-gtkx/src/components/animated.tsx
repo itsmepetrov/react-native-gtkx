@@ -190,8 +190,8 @@ const warnInsetNotTranslatable = (
         ? `The node IS absolutely positioned, but ${reason}, so there is no translation that reproduces it. `
         : "`top`/`left`/`right`/`bottom` are driven at frame rate only on a node whose own `position` is " +
           '"absolute", where moving it is exactly a translation and touches no sibling. Anything else needs a ' +
-          "Yoga pass over the container, which costs what the TREE costs (63.9 µs at five children, 496.3 µs at " +
-          "three hundred) against a transform's 0.12 µs. ") +
+          "Yoga pass over the container plus its commit walk, which costs what the CONTAINER costs (71 µs at " +
+          "five children, 509 µs at three hundred) against a transform's 0.12 µs. ") +
       `Animate \`transform: [{ ${spec}: … }]\` instead. ` +
       "The value is still applied on the next React render. See docs/api.md.",
   )

@@ -169,6 +169,36 @@ test("a layout property is refused in its own words, naming the transform to use
   expect(flex).not.toContain("scaleX")
 })
 
+test("a size is told what a scale differs in; an inset is not, because nothing differs", () => {
+  // The advice for `width` used to be "animate scaleX instead", full stop,
+  // which sends people to a different behaviour under the same name: a scale
+  // grows about the view's CENTRE and stretches the CONTENT rather than
+  // re-laying it out (docs/research/animated-size.md §6). An inset really does
+  // have an exact transform, so its message must NOT carry the caveat.
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+  const animated = createAnimatedStyle({ width: 40, marginTop: 4 })
+
+  animated.apply({ width: 60, marginTop: 9 })
+
+  const messages = warn.mock.calls.map((call) => String(call[0]))
+  const width = messages.find((message) => message.includes("`width`"))!
+  expect(width).toContain("NOT the same thing")
+  expect(width).toContain("CENTRE")
+  expect(width).toMatch(/stretch/i)
+  expect(width).not.toContain("reproduces the move exactly")
+
+  resetUndriveableWarnings()
+  const inset = createAnimatedStyle({ position: "relative", top: 4 })
+  warn.mockClear()
+  inset.apply({ position: "relative", top: 40 })
+  const topMessage = warn.mock.calls
+    .map((call) => String(call[0]))
+    .find((message) => message.includes("`top`"))!
+  expect(topMessage).toContain("translateY")
+  expect(topMessage).toContain("reproduces the move exactly")
+  expect(topMessage).not.toContain("CENTRE")
+})
+
 test("an unchanged undriveable property is not a warning", () => {
   // A constant `width` alongside an animated transform is ordinary code, not
   // a mistake — warning about it would be noise that trains people to ignore
