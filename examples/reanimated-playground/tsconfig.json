@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "types": ["node", "react"],
+    // The rewrites the vite preset applies at build time
+    // (packages/react-native-gtkx/src/vite), spelled out for tsc. The second
+    // one is what this example is about: `react-native-reanimated` is not
+    // installed in this workspace and never resolves — the alias is what
+    // makes the app both build and typecheck.
+    "paths": {
+      "react-native": ["../../packages/react-native-gtkx/dist/index.d.ts"],
+      "react-native-reanimated": [
+        "../../packages/react-native-gtkx/dist/reanimated-compat/index.d.ts"
+      ]
+    }
+  },
+  "include": ["src/**/*", "*.ts"]
+}
