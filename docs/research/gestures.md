@@ -11,6 +11,14 @@ GTK4 event controllers, mouse-first, in three slices.**
 scope. GTK's own controllers stay the documented Linux-only escape hatch
 they already are.
 
+> **Superseded in part.** The responder-system decision above is shipped and
+> stands. The two exclusions do not: `react-native-reanimated` was reversed
+> by `docs/research/reanimated.md` (2026-08-01) and
+> `react-native-gesture-handler` by `docs/research/gesture-detector.md`
+> (2026-08-01) — both as reimplementations behind the package name, both
+> built ON the responder system rather than instead of it. Two paragraphs
+> in this file are also factually corrected there and are flagged inline.
+
 ## Where we started
 
 Building drag-reorder for `tasks-nav` established the position concretely.
@@ -81,9 +89,20 @@ multi-gesture arbitration actually lives. `AdaptedEvent` is a plain struct;
 `GestureHandlerDelegate` is 13 methods. A port is ~1,200–1,600 LOC against
 ~9,000 LOC of native recognizers.
 
-We are still not doing it:
+We are still not doing it — **but two of the four reasons below have since
+expired, and the decision has been reversed.** See
+`docs/research/gesture-detector.md` (2026-08-01), which re-opened this with
+evidence neither this file nor the Reanimated recon had: GTK controllers do
+report motion without claiming the sequence, so a faithful `activeOffsetY`
+is reachable here, and a working spike drives real GTK geometry through
+`Gesture.Pan().activateAfterLongPress()`. Reasons 3 and 4 are untouched by
+that decision — it is a reimplementation behind the package name, not a
+port of `src/web/`. Reasons 1 and 2 are left standing below as written,
+because they were correct when written and the record of why matters; read
+them with this paragraph attached.
 
-1. **It unblocks almost nothing.** `react-native-draggable-flatlist`,
+1. **It unblocks almost nothing.** (EXPIRED — Reanimated ships.)
+   `react-native-draggable-flatlist`,
    `@gorhom/bottom-sheet` and `@react-navigation/drawer` all list Reanimated
    as a _hard_ peer dependency and import it at module scope. Reanimated
    genuinely is a soft dependency of RNGH itself (3.1.0's
@@ -91,7 +110,9 @@ We are still not doing it:
    `try { require(...) } catch` in `reanimatedWrapper.ts` is real) — and a
    hard one for everything built on it. "RNGH without Reanimated" buys
    `@react-navigation/stack`'s swipe-back and nothing else.
-2. **RNGH 3.x closed even that.** PR #3734 (in 3.0.0) deleted the
+2. **RNGH 3.x closed even that.** (EXPIRED for the same reason: the
+   milestone it named as joint is now half walked.) PR #3734 (in 3.0.0)
+   deleted the
    Reanimated-free `Swipeable` and `DrawerLayout`; only
    `ReanimatedSwipeable`/`ReanimatedDrawerLayout` survive, both with an
    unconditional module-scope Reanimated import that bypasses RNGH's own
@@ -131,6 +152,20 @@ widget consumes never enter it at all.
 gesture on _parent_ widgets and emits `::cancel` on everything _underneath_
 — and `::cancel` means "forget everything about this sequence". (Slice 3
 found out what that costs when you claim on the wrong widget; see below.)
+
+**Correction, measured on GTK 4.22.4 with real pointer injection
+(`docs/research/gesture-detector.md`, probe 1): the two directions are the
+other way round, and they are not symmetrical.** A claim by the DESCENDANT
+(deeper, first in the bubble chain) **cancels** the ancestor's gesture —
+`::cancel` then `::end`, with no `::sequence-state-changed` on it at all. A
+claim by the ANCESTOR **denies** the descendant — `::sequence-state-changed`
+to `DENIED` then `::end`, and no `::cancel`. The consequence matters more
+than the direction: a denied sequence ends with `drag-end`, which this
+platform maps to `onResponderRelease`, so an ancestor stealing the sequence
+mid-drag reaches JS as a clean release rather than a termination. Nothing
+depends on it today because the claim is always made on the source; it
+becomes load-bearing when `Gesture.Native()` puts a real GTK gesture into
+the arbitration.
 `Claimed → Denied` is legal but is not an undo; GTK compensates only in the
 narrow case of a capture-phase claim on press released before any movement.
 There is no way to ask a holder to yield, so
@@ -523,7 +558,8 @@ the note that would reopen it is a touchscreen plus a reported symptom.
 ## Honest gaps for ported apps
 
 No RNGH-based library works, and that is the largest single portability gap
-in the platform. Touch targets are not enforced at 44pt/48dp, though
+in the platform — as of 2026-08-01 it is being closed rather than accepted;
+see `docs/research/gesture-detector.md` for the reversal and its slices. Touch targets are not enforced at 44pt/48dp, though
 `hitSlop` now exists to widen one by hand. Multi-finger pinch/rotate is
 deferred (GTK has `GtkGestureZoom`/`GtkGestureRotate` through the platform
 layer; RN has no portable API worth matching). Hover fires from touch as
