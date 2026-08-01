@@ -1,11 +1,15 @@
 import { existsSync } from "node:fs"
-import { useEffect, useRef } from "react"
+import { useEffect, useImperativeHandle, useRef, type Ref } from "react"
 import type { StyleProp } from "../contracts"
 import { Gdk, Gtk, GtkPicture } from "../gtkx/bridge/index"
 import { isRemoteUri, loadRemoteImage } from "./image-loader"
+import { createMeasureHandle, type MeasureHandle } from "./measure"
 import { useLayoutChild, type LayoutEvent } from "./use-layout-child"
 
 export type ImageSource = { uri: string } | string
+
+/** RN's imperative geometry methods, on an `Image` ref. */
+export type ImageHandle = MeasureHandle
 
 export type ImageProps = {
   source: ImageSource
@@ -15,6 +19,9 @@ export type ImageProps = {
   onLoad?: () => void
   onError?: (error: { nativeEvent: { error: string } }) => void
   testID?: string
+  // The same handle every other host component exposes — RN parity, and the
+  // seam `Animated.Image` reads its widget back through.
+  ref?: Ref<ImageHandle>
 }
 
 const CONTENT_FIT = {
@@ -43,9 +50,12 @@ export const Image = ({
   onLoad,
   onError,
   testID,
+  ref,
 }: ImageProps) => {
   const widgetRef = useRef<Gtk.Picture | null>(null)
-  useLayoutChild(widgetRef, { style, onLayout })
+  const { node } = useLayoutChild(widgetRef, { style, onLayout })
+
+  useImperativeHandle(ref, () => createMeasureHandle(widgetRef, node), [node])
 
   const path = toPath(source)
 

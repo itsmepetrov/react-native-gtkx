@@ -4,7 +4,12 @@ export {
 } from "./activity-indicator"
 export {
   Animated,
+  createAnimatedComponent,
   Easing,
+  type AnimatedComponent,
+  type AnimatedComponentExtraProps,
+  type AnimatedPropsProp,
+  type AnimatedStyleProp,
   type AnimatedViewProps,
   type AnimatedViewStyle,
 } from "./animated"
@@ -19,7 +24,12 @@ export {
   type ViewabilityConfig,
   type ViewToken,
 } from "./flat-list"
-export { Image, type ImageProps, type ImageSource } from "./image"
+export {
+  Image,
+  type ImageHandle,
+  type ImageProps,
+  type ImageSource,
+} from "./image"
 export { Modal, type ModalProps } from "./modal"
 export {
   Pressable,
@@ -45,7 +55,7 @@ export {
   type ScrollViewProps,
 } from "./scroll-view"
 export { Switch, type SwitchProps } from "./switch"
-export { Text, type TextProps } from "./text"
+export { Text, type TextHandle, type TextProps } from "./text"
 export { TextInput, type TextInputProps } from "./text-input"
 export {
   SafeAreaView,

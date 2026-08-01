@@ -2,8 +2,13 @@ import {
   useImperativeHandle,
   useLayoutEffect,
   useRef,
+  useState,
+  type ComponentProps,
+  type ComponentType,
+  type ElementType,
   type ReactNode,
   type Ref,
+  type RefObject,
 } from "react"
 import { createAnimated } from "../animated/index"
 import type { FlatStyle, StyleProp, TransformPart } from "../contracts"
@@ -11,9 +16,16 @@ import { GtkBox, queueAllocate, type Gtk } from "../gtkx/bridge/index"
 import type { ResponderProps } from "../responder/types"
 import { useResponder } from "../responder/use-responder"
 import { glibScheduler } from "./frame-scheduler"
-import { HostNodeContext } from "./host-node"
-import { createMeasureHandle, type MeasureHandle } from "./measure"
+import { HostNodeContext, useHostNode } from "./host-node"
+import { Image } from "./image"
+import {
+  createMeasureHandle,
+  widgetForHandle,
+  type MeasureHandle,
+} from "./measure"
 import { setStoredTransform } from "./rect-store"
+import { ScrollView } from "./scroll-view"
+import { Text } from "./text"
 import {
   useLayoutChild,
   useRnContainer,
@@ -72,11 +84,15 @@ export type AnimatedViewStyle = Omit<FlatStyle, "opacity" | "transform"> & {
   transform?: (TransformPart | AnimatedTransformPart)[]
 }
 
+/** What every animated component accepts as `style`, arrays and falsy included. */
+export type AnimatedStyleProp =
+  AnimatedViewStyle | readonly (AnimatedViewStyle | false | null | undefined)[]
+
 // Animated.View is where a PanResponder drag lands in idiomatic RN — the
 // dragged box is animated by definition — so it takes the responder props
 // exactly as View does.
 export type AnimatedViewProps = ResponderProps & {
-  style?: AnimatedViewStyle | AnimatedViewStyle[]
+  style?: AnimatedStyleProp
   children?: ReactNode
   onLayout?: (event: LayoutEvent) => void
   testID?: string
@@ -88,14 +104,16 @@ export type AnimatedViewProps = ResponderProps & {
 }
 
 const splitAnimated = (
-  style: AnimatedViewProps["style"],
+  style: AnimatedStyleProp | false | null | undefined,
 ): {
   staticStyle: StyleProp
   opacity: AnimatedNode | null
   slots: TransformSlot[]
 } => {
   const flat: Record<string, unknown> = {}
-  const collect = (entry: AnimatedViewProps["style"]): void => {
+  const collect = (
+    entry: AnimatedStyleProp | false | null | undefined,
+  ): void => {
     if (!entry) {
       return
     }
@@ -137,34 +155,37 @@ const splitAnimated = (
   return { staticStyle: flat as StyleProp, opacity, slots }
 }
 
-// Animated values bypass React entirely: listeners write straight to the
-// widget (opacity) and to the rect store (the transform applied by the
-// parent's allocate), on top of the engine-committed base rect — the fast
-// path measured in the spike. Animation frames never touch Yoga.
-const AnimatedView = ({
-  style,
-  children,
-  onLayout,
-  testID,
-  ref,
-  ...responderProps
-}: AnimatedViewProps) => {
-  const widgetRef = useRef<Gtk.Box | null>(null)
-  const { staticStyle, opacity, slots } = splitAnimated(style)
-
-  const { host, node, cssClass } = useLayoutChild(widgetRef, {
-    style: staticStyle,
-    onLayout,
-  })
-  useRnContainer(widgetRef, node)
-  useResponder(widgetRef, responderProps)
-
-  useImperativeHandle(ref, () => createMeasureHandle(widgetRef, node), [node])
-
+/**
+ * The imperative write path, and the whole of it.
+ *
+ * Animated values bypass React entirely: listeners write straight to the
+ * widget (opacity) and to the rect store (the transform applied by the
+ * parent's allocate), on top of the engine-committed base rect — the fast
+ * path measured in the spike. Animation frames never touch Yoga.
+ *
+ * Nothing here is View-specific, which is why it is a hook rather than a
+ * paragraph inside `AnimatedView`: it needs the CHILD's widget (for
+ * `setOpacity` and the rect store) and its PARENT's (for `queueAllocate`),
+ * and any component that can produce those two can be animated. The child is
+ * reached through a getter rather than a ref because a wrapper does not own
+ * the widget — it reads it back out of whatever handle the wrapped component
+ * exposed, which may only exist after that component's own layout effects.
+ */
+const useAnimatedBinding = (
+  getWidget: () => Gtk.Widget | null,
+  parentWidgetRef: RefObject<Gtk.Widget | null>,
+  opacity: AnimatedNode | null,
+  slots: TransformSlot[],
+  // Anything else that must force a rebind. `AnimatedView` passes its layout
+  // node; the generic wrapper has nothing to add.
+  rebindKey?: unknown,
+): void => {
   // The effect reads the slots of the render that (re)armed it; the values
   // inside are then owned by the listeners.
   const slotsRef = useRef<TransformSlot[]>(slots)
   slotsRef.current = slots
+  const getWidgetRef = useRef(getWidget)
+  getWidgetRef.current = getWidget
 
   // Rebind on a change of shape (which transforms, in which order), of the
   // node behind an animated entry, or of a static entry's value — not on
@@ -180,8 +201,7 @@ const AnimatedView = ({
       .join("")
 
   useLayoutEffect(() => {
-    const widget = widgetRef.current
-    if (!widget) {
+    if (!getWidgetRef.current()) {
       return
     }
 
@@ -198,8 +218,12 @@ const AnimatedView = ({
     )
 
     const flush = (): void => {
+      const widget = getWidgetRef.current()
+      if (!widget) {
+        return
+      }
       setStoredTransform(widget, parts as unknown as TransformPart[])
-      const parentWidget = host.widgetRef.current
+      const parentWidget = parentWidgetRef.current
       if (parentWidget) {
         queueAllocate(parentWidget)
       }
@@ -223,7 +247,7 @@ const AnimatedView = ({
     if (opacity) {
       const applyOpacity = (value: AnimatedValue): void => {
         const numeric = typeof value === "number" ? value : parseFloat(value)
-        widgetRef.current?.setOpacity(Math.min(1, Math.max(0, numeric)))
+        getWidgetRef.current()?.setOpacity(Math.min(1, Math.max(0, numeric)))
       }
       subscriptions.push({
         node: opacity,
@@ -242,7 +266,36 @@ const AnimatedView = ({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bindingKey, node])
+  }, [bindingKey, rebindKey])
+}
+
+const AnimatedView = ({
+  style,
+  children,
+  onLayout,
+  testID,
+  ref,
+  ...responderProps
+}: AnimatedViewProps) => {
+  const widgetRef = useRef<Gtk.Box | null>(null)
+  const { staticStyle, opacity, slots } = splitAnimated(style)
+
+  const { host, node, cssClass } = useLayoutChild(widgetRef, {
+    style: staticStyle,
+    onLayout,
+  })
+  useRnContainer(widgetRef, node)
+  useResponder(widgetRef, responderProps)
+
+  useImperativeHandle(ref, () => createMeasureHandle(widgetRef, node), [node])
+
+  useAnimatedBinding(
+    () => widgetRef.current,
+    host.widgetRef,
+    opacity,
+    slots,
+    node,
+  )
 
   return (
     <GtkBox
@@ -259,9 +312,200 @@ const AnimatedView = ({
   )
 }
 
+// --- createAnimatedComponent ---------------------------------------------
+
+/** Node-backed props from `useAnimatedProps`, spread onto the wrapped component. */
+export type AnimatedPropsProp = Record<string, unknown>
+
+/** The props an animated wrapper adds on top of the component's own. */
+export type AnimatedComponentExtraProps = {
+  style?: AnimatedStyleProp
+  animatedProps?: AnimatedPropsProp
+}
+
+// `Partial`, as upstream's own `AnimatedProps<Props>` effectively is: a prop
+// supplied through `animatedProps` is invisible to the type system here, so
+// insisting on the wrapped component's required props would reject exactly
+// the call the feature exists for (`<AnimatedCircle animatedProps={{ r }} />`).
+export type AnimatedComponent<C extends ElementType> = (
+  props: Partial<Omit<ComponentProps<C>, "style">> &
+    AnimatedComponentExtraProps,
+) => ReactNode
+
+const displayNameOf = (component: unknown): string => {
+  if (typeof component === "string") {
+    return component
+  }
+  const named = component as { displayName?: string; name?: string }
+  return named?.displayName ?? named?.name ?? "Component"
+}
+
+// One warning per wrapped component per session — a mapper runs at frame
+// rate, and the name is the actionable part.
+const warnedWithoutWidget = new Set<string>()
+
+const warnNoWidget = (name: string): void => {
+  if (warnedWithoutWidget.has(name)) {
+    return
+  }
+  warnedWithoutWidget.add(name)
+  const isProduction =
+    typeof process !== "undefined" && process.env.NODE_ENV === "production"
+  if (!isProduction) {
+    console.warn(
+      `react-native-gtkx: createAnimatedComponent(${name}) was given an animated \`opacity\` or ` +
+        "`transform`, but the component exposed no ref carrying a widget, so there is nothing to write " +
+        "to. Give it a `ref?: Ref<MeasureHandle>` built with the platform's own measure handle, or wrap " +
+        "it in an `Animated.View`. See docs/api.md.",
+    )
+  }
+}
+
+/** @internal Test seam: the warning is once per component per session by design. */
+export const resetAnimatedComponentWarnings = (): void => {
+  warnedWithoutWidget.clear()
+}
+
+/**
+ * Wraps a component so its `style`'s `opacity`/`transform` and its
+ * `animatedProps` can be driven imperatively — RN's own
+ * `Animated.createAnimatedComponent`.
+ *
+ * IT ADDS NO WIDGET. Wrapping in an `Animated.View` would have been three
+ * lines and would have been wrong: an extra box changes flex layout, changes
+ * what `measureLayout` is relative to, and changes which widget a parent's
+ * allocate walks. That is not a shim, it is a different tree. Instead the
+ * wrapper renders the component itself and reaches the widget through the
+ * handle the component already exposes (see measure.ts's `widgetOf`), so the
+ * rendered output is byte-for-byte what the unwrapped component produces.
+ *
+ * `animatedProps` are passed straight through as animated NODES rather than
+ * resolved to numbers, because the components that take them already accept
+ * one: the SVG shapes duck-type an animated node on every numeric geometry
+ * and paint prop and subscribe to it themselves (svg/animated-support.ts),
+ * redrawing through `queueDraw`. Nothing is resolved here that the receiver
+ * can resolve better.
+ */
+export const createAnimatedComponent = <C extends ElementType>(
+  component: C,
+): AnimatedComponent<C> => {
+  const name = displayNameOf(component)
+
+  const AnimatedWrapper = ({
+    style,
+    animatedProps,
+    ref,
+    ...rest
+  }: AnimatedComponentExtraProps & {
+    ref?: Ref<unknown>
+    [key: string]: unknown
+  }) => {
+    // The PARENT's widget, for `queueAllocate` — the wrapper is not a host
+    // node itself, so this is the container the wrapped component is laid out
+    // by, exactly as it would be without the wrapper.
+    const host = useHostNode()
+    const handleRef = useRef<unknown>(null)
+    const { staticStyle, opacity, slots } = splitAnimated(style)
+    const driven = opacity !== null || slots.length > 0
+
+    // Stable identity: a fresh callback ref every render would detach and
+    // reattach the wrapped component's handle on every render.
+    const forwardedRef = useRef<Ref<unknown> | undefined>(ref)
+    forwardedRef.current = ref
+    const [assignHandle] = useState(() => (instance: unknown) => {
+      handleRef.current = instance
+      const target = forwardedRef.current
+      if (typeof target === "function") {
+        target(instance)
+      } else if (target) {
+        ;(target as { current: unknown }).current = instance
+      }
+      // No return value: React 19 reads one as a callback-ref cleanup.
+    })
+
+    useAnimatedBinding(
+      () => widgetForHandle(handleRef.current),
+      host.widgetRef,
+      opacity,
+      slots,
+    )
+
+    // A silent no-op is the failure this repo refuses. Checked after the
+    // wrapped component's own layout effects have run, which is where its
+    // `useImperativeHandle` publishes the handle.
+    useLayoutEffect(() => {
+      if (driven && widgetForHandle(handleRef.current) === null) {
+        warnNoWidget(name)
+      }
+    })
+
+    const targetProps: Record<string, unknown> = { ...rest, ...animatedProps }
+    // Only when there is something to attach: a component that takes no ref
+    // (the SVG shapes) would otherwise get one in its rest props.
+    if (driven || ref) {
+      targetProps.ref = assignHandle
+    }
+    // Likewise `style`: passing `{}` to a component that has no style prop
+    // would push an empty object into whatever collects its rest props.
+    if (style !== undefined) {
+      targetProps.style = staticStyle
+    }
+
+    const Target = component as ComponentType<Record<string, unknown>>
+    return <Target {...targetProps} />
+  }
+  AnimatedWrapper.displayName = `Animated(${name})`
+
+  return AnimatedWrapper as AnimatedComponent<C>
+}
+
+/**
+ * `Animated.FlatList` is deliberately absent, and this is the refusal.
+ *
+ * FlatList is a COMPOSITE, not a host component: it renders the windowed
+ * VirtualizedList core, which renders a ScrollView, which is the only thing
+ * in that chain owning a widget. Its ref is a scroll API by contract
+ * (`scrollToIndex`/`scrollToItem`/`scrollToOffset`), so there is no handle to
+ * read a widget back out of — and giving it one would mean publishing the
+ * scrolled window through two layers that exist to hide it.
+ *
+ * Upstream's `Animated.FlatList` mostly exists so `onScroll` can be an
+ * `Animated.event`/`useAnimatedScrollHandler`, and neither of those is
+ * implemented here either. So this throws where it is used, naming itself and
+ * naming the two things that do work.
+ */
+const AnimatedFlatList = (): never => {
+  throw new Error(
+    "react-native-gtkx: `Animated.FlatList` is not implemented. FlatList is a composite — the windowed " +
+      "core over a ScrollView — and its ref is a scroll API, so there is no host widget for an animated " +
+      "style to write to. Put the animated style on an `Animated.View` wrapping the list, or use " +
+      "`Animated.ScrollView` if the list does not need virtualization. See docs/api.md.",
+  )
+}
+AnimatedFlatList.displayName = "Animated.FlatList"
+
+/**
+ * `Text`, `Image` and `ScrollView` are the generic wrapper over the
+ * platform's own components — no subclass, no special case, and no widget
+ * added to the tree. They are animatable at all because those three now
+ * expose a ref carrying their widget, which is RN parity in its own right.
+ */
+const AnimatedText = createAnimatedComponent(Text)
+const AnimatedImage = createAnimatedComponent(Image)
+const AnimatedScrollView = createAnimatedComponent(ScrollView)
+
 export const Animated = {
   ...api,
   View: AnimatedView,
+  Text: AnimatedText,
+  Image: AnimatedImage,
+  ScrollView: AnimatedScrollView,
+  // Typed as taking the props it refuses, so the failure is at RUNTIME with
+  // the message above rather than at compile time with "no overload matches
+  // this call" — an app porting from mobile deserves the sentence, not a
+  // type puzzle.
+  FlatList: AnimatedFlatList as (props: Record<string, unknown>) => never,
+  createAnimatedComponent,
 }
 
 export { Easing } from "../animated/index"

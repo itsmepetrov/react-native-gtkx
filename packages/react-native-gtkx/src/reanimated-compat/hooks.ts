@@ -13,6 +13,11 @@ import { useEffect, useReducer, useRef, useState } from "react"
 import type { SharedValue } from "./mutable"
 import { cancelAnimation } from "./mutable"
 import {
+  createAnimatedProps,
+  type AnimatedPropsObject,
+  type PropsObject,
+} from "./props"
+import {
   createAnimatedStyle,
   type AnimatedStyle,
   type StyleObject,
@@ -166,10 +171,59 @@ export const createHooks = (makeMutable: MakeMutable) => {
     return animatedRef.current.style
   }
 
+  /**
+   * Props whose numeric leaves are driven straight to the component that
+   * takes them — the SVG shapes, which subscribe to an animated node on any
+   * numeric geometry or paint prop. Same lifecycle as `useAnimatedStyle`,
+   * down to the one render a shape change costs.
+   */
+  const useAnimatedProps = (
+    updater: () => PropsObject,
+    dependencies?: DependencyList,
+  ): PropsObject => {
+    const updaterRef = useRef(updater)
+    updaterRef.current = updater
+    const [rebuilds, requestRebuild] = useReducer(
+      (count: number) => count + 1,
+      0,
+    )
+    const animatedRef = useRef<AnimatedPropsObject | null>(null)
+    const pendingRef = useRef<PropsObject | null>(null)
+
+    if (animatedRef.current === null) {
+      animatedRef.current = createAnimatedProps(untracked(updater))
+    } else if (pendingRef.current !== null) {
+      animatedRef.current = createAnimatedProps(
+        pendingRef.current,
+        animatedRef.current.nodes,
+      )
+      pendingRef.current = null
+    }
+
+    useEffect(() => {
+      const mapper = createMapper(() => {
+        const next = updaterRef.current()
+        const animated = animatedRef.current
+        if (animated && !animated.apply(next)) {
+          pendingRef.current = next
+          requestRebuild()
+        }
+      })
+      mapper.run()
+      return () => {
+        mapper.dispose()
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [rebuilds, ...rebuildDependencies(updater, dependencies)])
+
+    return animatedRef.current.props
+  }
+
   return {
     useSharedValue,
     useDerivedValue,
     useAnimatedReaction,
     useAnimatedStyle,
+    useAnimatedProps,
   }
 }

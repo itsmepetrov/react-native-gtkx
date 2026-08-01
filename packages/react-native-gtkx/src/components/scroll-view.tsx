@@ -28,6 +28,11 @@ import {
   perfNow,
 } from "../perf"
 import { HostNodeContext } from "./host-node"
+import {
+  createMeasureHandle,
+  registerHandleWidget,
+  type MeasureHandle,
+} from "./measure"
 import { deferDuringAllocate, setStoredOffset } from "./rect-store"
 import {
   useLayoutChild,
@@ -35,10 +40,22 @@ import {
   type LayoutEvent,
 } from "./use-layout-child"
 
-export type ScrollViewHandle = {
+/**
+ * The scroll half on its own, because the windowed list core builds its own
+ * handle on top of it and is a COMPOSITE — it owns no widget, so it has no
+ * honest geometry to report and does not claim any.
+ */
+export type ScrollHandle = {
   scrollTo(options: { x?: number; y?: number; animated?: boolean }): void
   scrollToEnd(options?: { animated?: boolean }): void
 }
+
+// RN's ScrollView ref carries the geometry methods as well as the scroll
+// ones — it is a host component, and every host component has them. Here the
+// composition also carries the widget: `registerHandleWidget` below is what
+// lets `measureLayout(scrollViewRef, …)` resolve, and what lets
+// `Animated.ScrollView` find the scrolled window to write a transform to.
+export type ScrollViewHandle = MeasureHandle & ScrollHandle
 
 export type ScrollEvent = {
   nativeEvent: {
@@ -245,29 +262,40 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [contentNode, contentKey])
 
-    useImperativeHandle(handleRef, () => ({
-      scrollTo({ x, y }) {
-        const widget = outerRef.current
-        if (!widget) {
-          return
-        }
-        if (y !== undefined) {
-          widget.getVadjustment()?.setValue(y)
-        }
-        if (x !== undefined) {
-          widget.getHadjustment()?.setValue(x)
-        }
-      },
-      scrollToEnd() {
-        const widget = outerRef.current
-        const adjustment = horizontal
-          ? widget?.getHadjustment()
-          : widget?.getVadjustment()
-        if (adjustment) {
-          adjustment.setValue(adjustment.getUpper() - adjustment.getPageSize())
-        }
-      },
-    }))
+    useImperativeHandle(handleRef, () => {
+      const handle: ScrollViewHandle = {
+        ...createMeasureHandle(outerRef, outerNode),
+
+        scrollTo({ x, y }) {
+          const widget = outerRef.current
+          if (!widget) {
+            return
+          }
+          if (y !== undefined) {
+            widget.getVadjustment()?.setValue(y)
+          }
+          if (x !== undefined) {
+            widget.getHadjustment()?.setValue(x)
+          }
+        },
+        scrollToEnd() {
+          const widget = outerRef.current
+          const adjustment = horizontal
+            ? widget?.getHadjustment()
+            : widget?.getVadjustment()
+          if (adjustment) {
+            adjustment.setValue(
+              adjustment.getUpper() - adjustment.getPageSize(),
+            )
+          }
+        },
+      }
+      // Spreading built a NEW object, and the widget lookup is keyed by
+      // handle identity — without this the composed handle is a stranger to
+      // measure.ts.
+      registerHandleWidget(handle, outerRef)
+      return handle
+    })
 
     // --- sticky headers -------------------------------------------------
     // The RN model, faithfully: the REAL child is translated (no duplicate,

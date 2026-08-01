@@ -31,7 +31,12 @@ export type StyleNode = {
   __push(value: StyleValue): void
 }
 
-const createStyleNode = (initial: StyleValue): StyleNode => {
+/**
+ * @internal Shared with `props.ts`: `useAnimatedProps` publishes through the
+ * exact same node the style path does, because the receivers duck-type it the
+ * same way (`addListener` + `__getValue`).
+ */
+export const createStyleNode = (initial: StyleValue): StyleNode => {
   let current = initial
   const listeners = new Map<string, (state: { value: StyleValue }) => void>()
   let nextListenerId = 1

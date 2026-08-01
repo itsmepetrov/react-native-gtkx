@@ -26,11 +26,14 @@ import { createRef } from "react"
 import { expect, it } from "vitest"
 import type { Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
 import {
+  Image,
   Root,
   ScrollView,
   Text,
   View,
+  type ImageHandle,
   type ScrollViewHandle,
+  type TextHandle,
   type ViewHandle,
 } from "../../../src/index"
 
@@ -224,4 +227,148 @@ it("measureInWindow follows the content when the ScrollView scrolls", async () =
   // measureInWindow read the layout rect instead of computing a point, this
   // is where it would silently report the unscrolled position.
   expect(windowY()).toBeCloseTo(before - 120, 0)
+})
+
+// --- the other host components ------------------------------------------
+//
+// RN gives EVERY host component the geometry methods; here only `View` had
+// them, so measuring a label or a picture meant wrapping it in a View purely
+// to have something to hold. These are that gap closed, tested on their own
+// terms rather than through the animated components that also need them.
+
+it("Text reports its own geometry, in both coordinate spaces", async () => {
+  const label = createRef<TextHandle>()
+
+  await act(async () => {
+    await render(
+      <Root
+        width={300}
+        height={300}
+      >
+        <View style={{ paddingTop: 35, paddingLeft: 20 }}>
+          <Text
+            ref={label}
+            style={{ width: 90, height: 24 }}
+          >
+            labelled
+          </Text>
+        </View>
+      </Root>,
+    )
+  })
+  await waitForAllocation("labelled")
+
+  let measured: { x: number; y: number; width: number; height: number } | null =
+    null
+  label.current!.measureInWindow((x, y, width, height) => {
+    measured = { x, y, width, height }
+  })
+  expect(measured).not.toBeNull()
+  const box = measured!
+  expect(box.width).toBe(90)
+  expect(box.height).toBe(24)
+  expect(box.x).toBeGreaterThanOrEqual(20)
+  expect(box.y).toBeGreaterThanOrEqual(35)
+
+  let local: { x: number; y: number } | null = null
+  label.current!.measure((x, y) => {
+    local = { x, y }
+  })
+  // Parent-relative: the container's padding, and nothing the window adds.
+  expect(local).not.toBeNull()
+  expect(local!.x).toBe(20)
+  expect(local!.y).toBe(35)
+  expect(box.x).toBeGreaterThanOrEqual(local!.x)
+  expect(box.y).toBeGreaterThanOrEqual(local!.y)
+})
+
+it("Image reports its geometry, and measureLayout works between leaves", async () => {
+  const picture = createRef<ImageHandle>()
+  const label = createRef<TextHandle>()
+
+  await act(async () => {
+    await render(
+      <Root
+        width={300}
+        height={300}
+      >
+        <View style={{ paddingTop: 10, paddingLeft: 5 }}>
+          <Text
+            ref={label}
+            style={{ width: 100, height: 20 }}
+          >
+            caption
+          </Text>
+          <Image
+            ref={picture}
+            // Never loads: the geometry is the style's, exactly as in RN,
+            // which cannot size a remote image synchronously either.
+            source="/nonexistent/never-loads.png"
+            style={{ width: 64, height: 48, marginTop: 16 }}
+          />
+        </View>
+      </Root>,
+    )
+  })
+  await waitForAllocation("caption")
+
+  let own: { width: number; height: number } | null = null
+  picture.current!.measureInWindow((_x, _y, width, height) => {
+    own = { width, height }
+  })
+  expect(own).not.toBeNull()
+  expect(own!.width).toBe(64)
+  expect(own!.height).toBe(48)
+
+  // Two leaves, neither of them a View: measureLayout resolves both widgets
+  // through the same handle registry.
+  let relative: { left: number; top: number } | null = null
+  picture.current!.measureLayout(label.current!, (left, top) => {
+    relative = { left, top }
+  })
+  expect(relative).not.toBeNull()
+  // 20px of label plus its 16px margin, in the label's own space.
+  expect(relative!.top).toBe(36)
+  expect(relative!.left).toBe(0)
+})
+
+it("the ScrollView handle carries the geometry methods alongside the scroll ones", async () => {
+  // The composed handle is a NEW object, so it needs its own entry in the
+  // widget registry — without it these calls come back empty and
+  // measureLayout(scrollViewRef, …) silently fails.
+  const list = createRef<ScrollViewHandle>()
+
+  await act(async () => {
+    await render(
+      <Root
+        width={300}
+        height={200}
+      >
+        <View style={{ paddingTop: 12, paddingLeft: 8 }}>
+          <ScrollView
+            ref={list}
+            style={{ width: 150, height: 100 }}
+          >
+            <Text>row</Text>
+          </ScrollView>
+        </View>
+      </Root>,
+    )
+  })
+  await waitForAllocation("row")
+
+  let measured: { x: number; y: number; width: number; height: number } | null =
+    null
+  list.current!.measureInWindow((x, y, width, height) => {
+    measured = { x, y, width, height }
+  })
+  expect(measured).not.toBeNull()
+  expect(measured!.width).toBe(150)
+  expect(measured!.height).toBe(100)
+  expect(measured!.x).toBeGreaterThanOrEqual(8)
+  expect(measured!.y).toBeGreaterThanOrEqual(12)
+
+  // Still a scroll handle.
+  expect(typeof list.current!.scrollTo).toBe("function")
+  expect(typeof list.current!.scrollToEnd).toBe("function")
 })
