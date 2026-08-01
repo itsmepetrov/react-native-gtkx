@@ -98,6 +98,15 @@ GTK allocation. Two orders of magnitude of headroom against a 60 fps frame
 budget, measured, not estimated (see docs/research/yoga-gtk-spike.md and
 docs/research/layout-manager.md).
 
+Those are this layer's own costs, and a scrolling-list study measured what
+share of a real frame they are: 0.6 ms of a 44.5 ms frame at full screen,
+where the rest is software rasterization on a GPU-less test VM. Windowed,
+a `FlatList` is indistinguishable from a native `GtkScrolledWindow`. Read
+that as "the compatibility layer is not what costs frames on that rig"
+rather than as an absolute — the same study retracted an earlier headline
+number that had compared two different window sizes
+(docs/research/scroll-performance.md).
+
 ## Documentation
 
 - [Getting Started](docs/getting-started.md) — a new project in a minute, and adding Linux to an existing RN app;
