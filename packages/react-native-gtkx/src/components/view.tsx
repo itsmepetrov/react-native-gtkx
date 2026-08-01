@@ -13,6 +13,8 @@ import {
   setBoxPassthrough,
   type Gtk,
 } from "../gtkx/bridge/index"
+import type { ResponderProps } from "../responder/types"
+import { useResponder } from "../responder/use-responder"
 import { HostNodeContext } from "./host-node"
 import { createMeasureHandle, type MeasureHandle } from "./measure"
 import {
@@ -24,7 +26,7 @@ import {
 /** RN's imperative geometry methods, on a `View` ref. */
 export type ViewHandle = MeasureHandle
 
-export type ViewProps = {
+export type ViewProps = ResponderProps & {
   style?: StyleProp
   // RN pointerEvents; the prop wins over style.pointerEvents (RN 0.71+).
   pointerEvents?: PointerEventsValue
@@ -57,6 +59,7 @@ export const View = ({
   children,
   testID,
   ref,
+  ...responderProps
 }: ViewProps) => {
   const widgetRef = useRef<Gtk.Box | null>(null)
   const { host, node, cssClass } = useLayoutChild(widgetRef, {
@@ -66,6 +69,10 @@ export const View = ({
   useRnContainer(widgetRef, node)
 
   useImperativeHandle(ref, () => createMeasureHandle(widgetRef, node), [node])
+
+  // Spreading PanResponder's panHandlers onto a View is the portable RN
+  // idiom, so every responder prop arrives here as a rest prop.
+  useResponder(widgetRef, responderProps)
 
   const mode: PointerEventsValue =
     pointerEvents ?? StyleSheet.flatten(style)?.pointerEvents ?? "auto"

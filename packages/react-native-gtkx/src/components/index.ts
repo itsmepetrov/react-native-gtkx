@@ -61,3 +61,15 @@ export type {
   MeasureOnSuccessCallback,
 } from "./measure"
 export { type LayoutEvent } from "./use-layout-child"
+export { default as PanResponder } from "../vendor/react-native/pan-responder"
+export type {
+  PanResponderCallbacks,
+  PanResponderGestureState,
+  PanResponderInstance,
+} from "../vendor/react-native/pan-responder"
+export type {
+  GestureResponderEvent,
+  ResponderProps,
+  TouchHistory,
+  TouchRecord,
+} from "../responder/types"
