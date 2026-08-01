@@ -1,0 +1,19 @@
+{
+  "name": "animated-size-spike",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "gtkx build",
+    "start": "node dist/bundle.js"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-native-gtkx": "file:../../packages/react-native-gtkx"
+  },
+  "devDependencies": {
+    "@gtkx/cli": "1.0.0-rc.3",
+    "@gtkx/config": "1.0.0-rc.3",
+    "vite": "^8.1.4"
+  }
+}
