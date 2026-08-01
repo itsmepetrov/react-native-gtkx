@@ -44,15 +44,13 @@ And the portability proof — `examples/profile` renders ONE source file with bo
 - [x] **Fast Refresh on both toolchains**: `run-linux --dev` (Metro dev server + HMR in the GTK host, state preserved) and `gtkx dev` (vite)
 - [x] **Navigation on real Adwaita widgets**: react-navigation navigators backed by `Adw.NavigationView` and `Adw.NavigationSplitView` — see below
 
-Verified live: `examples/hn-app` (a Hacker News reader on the Metro path), `examples/gallery` (the whole surface) and the interactive `examples/playground` — 448 tests (unit + component tests under headless Wayland).
+Verified live: `examples/hn-app` (a Hacker News reader on the Metro path), `examples/gallery` (the whole surface), the interactive `examples/playground`, and `examples/tasks-app` (a full GNOME task manager — a port of the [gtkx tutorial](https://gtkx.dev/tutorial/)'s Tasks app, and the platform's most demanding app so far) — 921 tests (unit + component tests under headless Wayland).
 
 ## Navigation is native, not redrawn
 
 ```tsx
-import {
-  createStackNavigator,
-  NavigationContainer,
-} from "react-native-gtkx/navigation"
+import { NavigationContainer } from "@react-navigation/native"
+import { createStackNavigator } from "react-native-gtkx/navigation"
 ```
 
 Screens are real `Adw.NavigationPage`s inside an `Adw.NavigationView`, and
@@ -74,8 +72,13 @@ to the JS drawer; react-native-macos is not supported by it at all, because
 AppKit has no navigation-stack primitive to bind to. GTK4/libadwaita does have
 one, so the model here is the iOS `native-stack` one:
 [docs/research/navigation-extensibility.md](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/research/navigation-extensibility.md)
-maps every native-stack option against what we support, what is coming, and
-what is meaningless on a desktop.
+lays out the split, what an app can reach, and what is meaningless on a
+desktop.
+
+Underneath it, [`react-native-gtkx/gtk` and `react-native-gtkx/adw`](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/platform-layer.md) exposes the
+widgets themselves — including a navigation stack that needs no router at
+all, and GTK widgets that take a React Native `style` for position and
+appearance. react-navigation is a convenience here, not the ceiling.
 
 ## Performance architecture
 
@@ -95,11 +98,22 @@ GTK allocation. Two orders of magnitude of headroom against a 60 fps frame
 budget, measured, not estimated (see docs/research/yoga-gtk-spike.md and
 docs/research/layout-manager.md).
 
+Those are this layer's own costs, and a scrolling-list study measured what
+share of a real frame they are: 0.6 ms of a 44.5 ms frame at full screen,
+where the rest is software rasterization on a GPU-less test VM. Windowed,
+a `FlatList` is indistinguishable from a native `GtkScrolledWindow`. Read
+that as "the compatibility layer is not what costs frames on that rig"
+rather than as an absolute — the same study retracted an earlier headline
+number that had compared two different window sizes
+(docs/research/scroll-performance.md).
+
 ## Documentation
 
 - [Getting Started](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/getting-started.md) — a new project in a minute, and adding Linux to an existing RN app;
 - [API v1](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/api.md) — the full surface and differences from RN;
-- [Navigation research](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/research/navigation-extensibility.md) — every native-stack option mapped, how an existing react-navigation app ports, and why the other desktop RN platforms never got native navigation;
+- [The platform layer](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/platform-layer.md) — `react-native-gtkx/gtk` and `react-native-gtkx/adw`: Adwaita and GTK widgets as React components, driven by React Native style, usable with your own router or none at all;
+- [Gestures](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/gestures.md) — the responder system and `PanResponder` on GTK: which layer to reach for, how the negotiation works, every difference from React Native, and what to do about `react-native-gesture-handler`;
+- [Navigation research](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/research/navigation-extensibility.md) — the two layers, how an existing react-navigation app ports, and why the other desktop RN platforms never got native navigation;
 - [What we need from gtkx](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/upstream-gtkx.md) — the standing upstream agenda (bugs with repros, API asks, workarounds we want to delete);
 - [CONTRIBUTING](https://github.com/itsmepetrov/react-native-gtkx/blob/main/CONTRIBUTING.md) — developing the library (from macOS — via the UTM VM).
 
