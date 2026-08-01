@@ -32,15 +32,23 @@ const REACT_NATIVE = "react-native"
 const REACT_NATIVE_GTKX = "react-native-gtkx"
 const REACT_NATIVE_SVG = "react-native-svg"
 const REACT_NATIVE_GTKX_SVG = "react-native-gtkx/svg"
+const REANIMATED_DND = "react-native-reanimated-dnd"
+const REACT_NATIVE_GTKX_DND = "react-native-gtkx/dnd"
 
 /**
- * Maps `react-native` (and its subpaths) to `react-native-gtkx`, and
- * `react-native-svg` (and its subpaths) to the `react-native-gtkx/svg`
- * compat subpath (see src/svg-compat/index.ts) — same rationale, same exact-
- * match-or-slash-prefix guard so a lookalike package name (`react-native-
- * svg-icons`, the same shape of trap `react-native-web` is for the plain
- * `react-native` case below) is never aliased by accident. Returns null for
- * every other specifier, including `react-native-gtkx` itself.
+ * Maps `react-native` (and its subpaths) to `react-native-gtkx`,
+ * `react-native-svg` to the `react-native-gtkx/svg` compat subpath (see
+ * src/svg-compat/index.ts) and `react-native-reanimated-dnd` to
+ * `react-native-gtkx/dnd` (see src/dnd/index.ts) — same rationale, same
+ * exact-match-or-slash-prefix guard so a lookalike package name
+ * (`react-native-svg-icons`, the same shape of trap `react-native-web` is
+ * for the plain `react-native` case below) is never aliased by accident.
+ * Returns null for every other specifier, including `react-native-gtkx`
+ * itself.
+ *
+ * The drag-and-drop alias is load-bearing rather than convenient:
+ * `react-native-reanimated-dnd` cannot run here at all, so without it every
+ * app with drag-and-drop rewrites its imports to add a Linux build.
  */
 export const rewriteReactNativeImport = (source: string): string | null => {
   if (source === REACT_NATIVE) {
@@ -54,6 +62,12 @@ export const rewriteReactNativeImport = (source: string): string | null => {
   }
   if (source.startsWith(`${REACT_NATIVE_SVG}/`)) {
     return `${REACT_NATIVE_GTKX_SVG}${source.slice(REACT_NATIVE_SVG.length)}`
+  }
+  if (source === REANIMATED_DND) {
+    return REACT_NATIVE_GTKX_DND
+  }
+  if (source.startsWith(`${REANIMATED_DND}/`)) {
+    return `${REACT_NATIVE_GTKX_DND}${source.slice(REANIMATED_DND.length)}`
   }
   return null
 }

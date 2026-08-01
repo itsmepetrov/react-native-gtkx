@@ -112,6 +112,7 @@ number that had compared two different window sizes
 - [Getting Started](docs/getting-started.md) — a new project in a minute, and adding Linux to an existing RN app;
 - [API v1](docs/api.md) — the full surface and differences from RN;
 - [The platform layer](docs/platform-layer.md) — `react-native-gtkx/gtk` and `react-native-gtkx/adw`: Adwaita and GTK widgets as React components, driven by React Native style, usable with your own router or none at all;
+- [Drag and drop](docs/api.md#drag-and-drop-react-native-gtkxdnd) — `react-native-gtkx/dnd`: `react-native-reanimated-dnd`'s API on GTK's own drag-and-drop, aliased by both bundler presets so an app that already has drag-and-drop keeps its source;
 - [Navigation research](docs/research/navigation-extensibility.md) — the two layers, how an existing react-navigation app ports, and why the other desktop RN platforms never got native navigation;
 - [What we need from gtkx](docs/upstream-gtkx.md) — the standing upstream agenda (bugs with repros, API asks, workarounds we want to delete);
 - [CONTRIBUTING](CONTRIBUTING.md) — developing the library (from macOS — via the UTM VM).

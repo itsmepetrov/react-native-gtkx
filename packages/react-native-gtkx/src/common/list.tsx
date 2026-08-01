@@ -16,21 +16,24 @@
 // Everything below is portable React Native underneath — no widget is created
 // that an app could not have created itself. Compare `Widget`/`SlotContent`
 // next door, which exist precisely because they CANNOT be written in RN.
-import { createContext, useContext, type ReactNode } from "react"
+import {
+  createContext,
+  useContext,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react"
 import { useColorScheme } from "../apis/index"
 import { Pressable } from "../components/pressable"
 import { Text } from "../components/text"
 import { View } from "../components/view"
 import { PlatformColor, StyleSheet } from "../style/index"
 import type { StyleProp } from "../contracts"
-import { Controllers } from "../gtk/controllers"
 import {
-  Gdk,
-  GObject,
-  Gtk,
-  GtkDragSource,
-  GtkDropTarget,
-} from "../gtkx/bridge/index"
+  DragSourceControllers,
+  DropTargetControllers,
+} from "../dnd/gtk-controllers"
+import { nextDraggableId } from "../dnd/payload"
 
 /**
  * Where a row sits in its list, which is what decides its corner radii and
@@ -141,11 +144,15 @@ const TINTS = {
 } as const
 
 /**
- * Where a row reports a completed drag. Carried through context so an app
+ * Where a row reports a completed drag, plus the scope that keeps one list's
+ * rows from being dropped into another's. Carried through context so an app
  * writes the handler once on the `List` and an id per `ListRow`, instead of
  * threading a callback through whatever component renders its rows.
  */
-const ReorderContext = createContext<ListReorderHandler | null>(null)
+const ReorderContext = createContext<{
+  onReorder: ListReorderHandler
+  scope: string
+} | null>(null)
 
 export type ListReorderHandler = (draggedId: string, targetId: string) => void
 
@@ -188,16 +195,27 @@ export const List = ({
   onReorder,
   style,
   testID,
-}: ListProps): ReactNode => (
-  <ReorderContext.Provider value={onReorder ?? null}>
-    <View
-      testID={testID}
-      style={[styles.list, style]}
-    >
-      {children}
-    </View>
-  </ReorderContext.Provider>
-)
+}: ListProps): ReactNode => {
+  // One scope per List, so a row dragged out of this list is refused by every
+  // other list and by every `Droppable` — the same namespacing `Sortable`
+  // uses, from the same module.
+  const [scope] = useState(() => `list-${nextDraggableId()}`)
+  const reorder = useMemo(
+    () => (onReorder ? { onReorder, scope } : null),
+    [onReorder, scope],
+  )
+
+  return (
+    <ReorderContext.Provider value={reorder}>
+      <View
+        testID={testID}
+        style={[styles.list, style]}
+      >
+        {children}
+      </View>
+    </ReorderContext.Provider>
+  )
+}
 
 export type ListRowProps = {
   /** Primary line. A string renders with the row's own typography; a node is
@@ -255,61 +273,35 @@ const focusRing = {
  * The GTK half of drag-to-reorder, kept in one place so a row can stay a
  * `Pressable` with children.
  *
- * WHY GTK's own drag-and-drop and not a JS one. Every RN drag-reorder list
- * (`react-native-draggable-flatlist` and its relatives) is built on
- * react-native-gesture-handler + react-native-reanimated, and this platform
- * implements neither (docs/research/gestures.md). GDK's is right there, and
- * it brings a real drag icon, the correct cursors and content negotiation
- * with other applications for free.
+ * WHY this is nine lines rather than its own implementation: it is the
+ * `react-native-gtkx/dnd` module underneath — the same `GtkDragSource` and
+ * `GtkDropTarget` wrappers `Draggable`, `Droppable` and `SortableItem` are
+ * built from, with the same payload encoding and the same drag icon (a
+ * `Gtk.WidgetPaintable` of the row, lifted at the grab point).
  *
- * The payload is the row id as a plain GObject string, the shape
- * `tests/gtk/bridge/auxiliary-elements.gtk.test.tsx` already exercises.
- * Every row is both a source (of its own id) and a target (put the dragged
- * row in front of me).
+ * What `List` keeps that `Sortable` cannot is the shape of its API: it takes
+ * row **ids**, not indices, because a `List`'s rows are React children and it
+ * cannot see their order. `Sortable` owns an array and so reports positions.
+ * Two genuinely different jobs; one implementation.
  */
 const ReorderControllers = ({
   id,
+  scope,
   onReorder,
 }: {
   id: string
+  scope: string
   onReorder: ListReorderHandler
 }): ReactNode => (
-  <Controllers>
-    <GtkDragSource
-      actions={Gdk.DragAction.MOVE}
-      onPrepare={(x, y, self) => {
-        // The drag icon is a snapshot of the row itself, offset by where
-        // inside it the drag began — so the row appears to lift off under
-        // the cursor rather than jumping to it.
-        const row = self.getWidget()
-        if (row) {
-          self.setIcon(
-            Gtk.WidgetPaintable.new(row),
-            Math.round(x),
-            Math.round(y),
-          )
-        }
-        return Gdk.ContentProvider.newForValue(
-          GObject.buildValue(GObject.TYPE_STRING, (value) =>
-            value.setString(id),
-          ),
-        )
-      }}
+  <>
+    <DragSourceControllers payload={{ scope, id }} />
+    <DropTargetControllers
+      // A row dropped on itself is a no-op, not a reorder — and GTK will
+      // happily deliver one. Refusing it here means the cursor says so.
+      accepts={(payload) => payload.scope === scope && payload.id !== id}
+      onDrop={(payload) => onReorder(payload.id, id)}
     />
-    <GtkDropTarget
-      actions={Gdk.DragAction.MOVE}
-      types={[GObject.TYPE_STRING]}
-      onDrop={(value) => {
-        const draggedId = value.getString()
-        // A row dropped on itself is a no-op, not a reorder — GTK will
-        // happily deliver one.
-        if (draggedId && draggedId !== id) {
-          onReorder(draggedId, id)
-        }
-        return true
-      }}
-    />
-  </Controllers>
+  </>
 )
 
 /**
@@ -326,9 +318,11 @@ const ReorderControllers = ({
  * `GtkListBox` behaviour a hand-built list used to have to give up.
  *
  * **Drag-to-reorder** arrives with `reorderId` plus the enclosing `List`'s
- * `onReorder`, using GDK's real drag-and-drop under the covers — and doing
- * so through `Controllers` from `react-native-gtkx/gtk`, the same public
- * door an app would use for a controller this component does not offer.
+ * `onReorder`, using GDK's real drag-and-drop under the covers — through
+ * `react-native-gtkx/dnd`, the same module `Draggable` and `Sortable` are
+ * built from, which in turn goes through `Controllers` from
+ * `react-native-gtkx/gtk`. Nothing here is reachable only from inside the
+ * platform.
  */
 export const ListRow = ({
   title,
@@ -347,12 +341,13 @@ export const ListRow = ({
   const isFirst = position === "first" || position === "only"
   const isLast = position === "last" || position === "only"
   const drawSeparator = separator ?? !isLast
-  const onReorder = useContext(ReorderContext)
+  const reorderContext = useContext(ReorderContext)
   const reorder =
-    reorderId !== undefined && onReorder !== null ? (
+    reorderId !== undefined && reorderContext !== null ? (
       <ReorderControllers
         id={reorderId}
-        onReorder={onReorder}
+        scope={reorderContext.scope}
+        onReorder={reorderContext.onReorder}
       />
     ) : null
 

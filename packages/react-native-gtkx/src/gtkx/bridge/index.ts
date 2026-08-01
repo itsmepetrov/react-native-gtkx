@@ -56,6 +56,7 @@ export {
 export {
   GtkAdjustment,
   GtkDragSource,
+  GtkDropControllerMotion,
   GtkDropTarget,
   GtkShortcut,
   GtkShortcutController,

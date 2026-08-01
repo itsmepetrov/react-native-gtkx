@@ -181,6 +181,24 @@ export const withLinuxPlatform = <T extends MetroLikeConfig>(
         platform,
       )
     }
+    // And the drag-and-drop compat subpath. This one is the whole migration
+    // story rather than a convenience: `react-native-reanimated-dnd` cannot
+    // run here at all (Reanimated 4 + worklets + RNGH at module scope), so
+    // without the alias every app with drag-and-drop rewrites its imports.
+    // With it, the source is untouched. See src/dnd/index.ts.
+    if (
+      moduleName === "react-native-reanimated-dnd" ||
+      moduleName.startsWith("react-native-reanimated-dnd/")
+    ) {
+      return fallback(
+        context,
+        moduleName.replace(
+          /^react-native-reanimated-dnd/,
+          "react-native-gtkx/dnd",
+        ),
+        platform,
+      )
+    }
     return fallback(context, moduleName, platform)
   }
 

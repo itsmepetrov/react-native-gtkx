@@ -20,6 +20,7 @@ export {
   GMenu,
   GtkAdjustment,
   GtkDragSource,
+  GtkDropControllerMotion,
   GtkDropTarget,
   GtkShortcut,
   GtkShortcutController,
