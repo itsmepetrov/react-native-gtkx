@@ -73,6 +73,9 @@ const BUNDLER_ONLY = [
   "./dnd",
   "./gesture-handler",
   "./reanimated",
+  // Only ever reached through the presets' alias of `react-native-worklets`,
+  // which fires inside Metro or Vite — nothing loads it through Node.
+  "./worklets",
 ]
 
 const readExportKeys = (): string[] => {

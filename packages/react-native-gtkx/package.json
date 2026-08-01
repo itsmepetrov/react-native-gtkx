@@ -75,6 +75,10 @@
       "types": "./dist/reanimated-compat/index.d.ts",
       "default": "./dist/reanimated-compat/index.js"
     },
+    "./worklets": {
+      "types": "./dist/worklets-compat/index.d.ts",
+      "default": "./dist/worklets-compat/index.js"
+    },
     "./mcp": {
       "types": "./dist/mcp/index.d.ts",
       "default": "./dist/mcp/index.js"

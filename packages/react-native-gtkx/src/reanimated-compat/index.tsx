@@ -49,8 +49,21 @@ import type {
 } from "../components/animated"
 import { glibScheduler } from "../components/frame-scheduler"
 import { createUnsupportedFactory } from "../unsupported-export"
+// The worklet surface lives one package over now (see src/worklets-compat),
+// and these are re-exported from there rather than built again: upstream
+// re-exports them from that package too, and a second `createThreads` would
+// be a second batch queue behind one name.
+import {
+  makeShareableCloneRecursive,
+  runOnJS,
+  runOnUI,
+  scheduleOnRN,
+  scheduleOnUI,
+} from "../worklets-compat/index"
 import { measure, useAnimatedRef } from "./animated-ref"
 import {
+  withClamp,
+  withDecay,
   withDelay,
   withRepeat,
   withSequence,
@@ -68,7 +81,7 @@ import { createHooks } from "./hooks"
 import { clamp, Extrapolation, interpolate } from "./interpolation"
 import { cancelAnimation, createMakeMutable, isSharedValue } from "./mutable"
 import type { StyleObject } from "./style"
-import { createThreads, isWorkletFunction } from "./threads"
+import { isWorkletFunction } from "./threads"
 import { createMapper, type Mapper } from "./tracking"
 
 // --- the one clock -------------------------------------------------------
@@ -76,7 +89,11 @@ import { createMapper, type Mapper } from "./tracking"
 // Both halves are wired to the SAME frame scheduler the platform's own
 // `Animated` uses. That is the point: this layer adds no timer, no scheduler
 // and no second clock — it sits on top of what already ships.
-const makeMutable = createMakeMutable(PlatformAnimated)
+// The frame scheduler is handed to the mutable factory as well as to the
+// Animated api built on it: `withDecay` is the first animation whose maths
+// upstream owns rather than the platform, so it drives the frame loop
+// directly instead of reaching for `api.timing`/`api.spring`.
+const makeMutable = createMakeMutable(PlatformAnimated, glibScheduler)
 
 const {
   useSharedValue,
@@ -85,9 +102,6 @@ const {
   useAnimatedStyle,
   useAnimatedProps,
 } = createHooks(makeMutable)
-
-const { runOnUI, scheduleOnUI, runOnJS, scheduleOnRN } =
-  createThreads(glibScheduler)
 
 // --- the implemented surface --------------------------------------------
 
@@ -103,6 +117,7 @@ export {
   isSharedValue,
   isWorkletFunction,
   makeMutable,
+  makeShareableCloneRecursive,
   measure,
   rgbaArrayToRGBAColor,
   runOnJS,
@@ -115,6 +130,8 @@ export {
   useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
+  withClamp,
+  withDecay,
   withDelay,
   withRepeat,
   withSequence,
@@ -133,6 +150,7 @@ export { PlatformColor } from "../style/colors"
 
 export type {
   AnimationCallback,
+  WithDecayConfig,
   WithSpringConfig,
   WithTimingConfig,
 } from "./animation"
@@ -237,13 +255,6 @@ export const isReanimated3 = (): boolean => true
  */
 export const reanimatedVersion = "4.5.3"
 
-/**
- * On the single-runtime path there is nothing to clone: upstream's own
- * non-native serializer is a file of identity functions, because a value
- * never leaves the runtime it was made in.
- */
-export const makeShareableCloneRecursive = <T,>(value: T): T => value
-
 // `startMapper`/`stopMapper` are the primitive `useAnimatedReaction` and
 // `useDerivedValue` are built on, and a few libraries reach for them
 // directly. `inputs` is accepted and ignored: it is upstream's static
@@ -292,9 +303,10 @@ const View = PlatformAnimated.View as (props: AnimatedViewProps) => ReactNode
 const unsupported = createUnsupportedFactory(
   "react-native-reanimated",
   "Implemented here: shared values, useAnimatedStyle/useAnimatedProps/useDerivedValue/useAnimatedReaction, " +
-    "withTiming/withSpring/withSequence/withRepeat/withDelay, interpolate, interpolateColor, Easing, " +
-    "useAnimatedRef + measure, runOnUI/runOnJS, Animated.View/Text/Image/ScrollView and " +
-    "createAnimatedComponent. See docs/api.md for what is not, and why.",
+    "withTiming/withSpring/withDecay/withClamp/withSequence/withRepeat/withDelay, interpolate, " +
+    "interpolateColor, Easing, useAnimatedRef + measure, runOnUI/runOnJS, " +
+    "Animated.View/Text/Image/ScrollView and createAnimatedComponent. " +
+    "See docs/api.md for what is not, and why.",
 )
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -348,8 +360,6 @@ export const createAnimatedComponent: any =
 
 // --- animations not implemented ---
 export const defineAnimation: any = unsupported("defineAnimation")
-export const withClamp: any = unsupported("withClamp")
-export const withDecay: any = unsupported("withDecay")
 
 // --- colours: what is left after the gap closed ---
 // `processColor` returns RN's packed AARRGGBB integer, whose only purpose is

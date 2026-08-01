@@ -219,6 +219,29 @@ export const withLinuxPlatform = <T extends MetroLikeConfig>(
         platform,
       )
     }
+    // And the package Reanimated 4 moved the worklet surface INTO. Libraries
+    // import it under this name rather than through Reanimated:
+    // `react-native-reanimated-dnd` pulls `scheduleOnRN`/`scheduleOnUI` out of
+    // it at module scope in five of its hooks with no try/require guard, so an
+    // unaliased name fails at IMPORT rather than at use. The exact-match-or-
+    // slash-prefix guard matters most here of all the aliases:
+    // `react-native-worklets-core` is a REAL and unrelated package (the
+    // VisionCamera one), and a loose prefix match would send it to
+    // `react-native-gtkx/worklets-core`, which does not exist.
+    // See src/worklets-compat/index.ts.
+    if (
+      moduleName === "react-native-worklets" ||
+      moduleName.startsWith("react-native-worklets/")
+    ) {
+      return fallback(
+        context,
+        moduleName.replace(
+          /^react-native-worklets/,
+          "react-native-gtkx/worklets",
+        ),
+        platform,
+      )
+    }
     // And the gesture-handler shim. Not a port of RNGH — that stays out of
     // scope (docs/research/gestures.md). It supplies `GestureHandlerRootView`,
     // the one RNGH symbol that appears in apps which otherwise use none of it

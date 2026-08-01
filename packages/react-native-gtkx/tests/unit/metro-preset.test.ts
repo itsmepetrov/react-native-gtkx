@@ -105,6 +105,26 @@ test("redirects react-native-reanimated to the compat subpath on linux", () => {
   ])
 })
 
+test("redirects react-native-worklets to the worklets subpath on linux", () => {
+  // Reanimated 4 moved the worklet surface into its own package, and
+  // libraries import it under that name at module scope with no try/require
+  // guard — so without this alias the wall aliasing Reanimated tore down is
+  // still standing one package over, and it falls at IMPORT rather than at
+  // use. The lookalike here is a real package: react-native-worklets-core is
+  // the VisionCamera worklets library, and an anchored replace on a loose
+  // prefix would send it to `react-native-gtkx/worklets-core`.
+  const { context, calls } = makeContext()
+  resolve(context, "react-native-worklets", "linux")
+  resolve(context, "react-native-worklets/plugin", "linux")
+  resolve(context, "react-native-worklets-core", "linux")
+  expect(calls).toEqual([
+    ["react-native-gtkx/worklets", "linux"],
+    ["react-native-gtkx/worklets/plugin", "linux"],
+    // lookalike: left untouched.
+    ["react-native-worklets-core", "linux"],
+  ])
+})
+
 test("redirects react-native-gesture-handler to the shim on linux", () => {
   // Not a port of RNGH: the shim implements GestureHandlerRootView and makes
   // every other export throw. The alias exists so a ported app does not have

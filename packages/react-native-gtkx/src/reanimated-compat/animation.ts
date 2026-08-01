@@ -24,11 +24,14 @@
 // The spring row is not a tuning difference: RN's default has damping ratio
 // 0.5 and visibly bounces, Reanimated 4's is exactly critically damped and
 // does not. Every config below is therefore passed explicitly.
-import type {
-  AnimatedApi,
-  AnimatedValue,
-  CompositeAnimation,
+import {
+  createValueAnimation,
+  type AnimatedApi,
+  type AnimatedValue,
+  type CompositeAnimation,
+  type FrameScheduler,
 } from "../animated/index"
+import { decayStep, resolveDecayConfig, type WithDecayConfig } from "./decay"
 import { Easing, resolveEasing, type EasingFunction } from "./easing"
 
 /** Called when an animation settles or is cancelled, as upstream. */
@@ -90,8 +93,27 @@ type RepeatSpec = {
   callback?: AnimationCallback
 }
 
+type DecaySpec = {
+  kind: "decay"
+  config: ReturnType<typeof resolveDecayConfig>
+  callback?: AnimationCallback
+}
+
+type ClampSpec = {
+  kind: "clamp"
+  min?: number
+  max?: number
+  animation: AnimationSpec
+}
+
 export type AnimationSpec =
-  TimingSpec | SpringSpec | DelaySpec | SequenceSpec | RepeatSpec
+  | TimingSpec
+  | SpringSpec
+  | DelaySpec
+  | SequenceSpec
+  | RepeatSpec
+  | DecaySpec
+  | ClampSpec
 
 const MARKER = "__rnGtkxReanimatedAnimation"
 
@@ -208,6 +230,66 @@ export const withRepeat = (
     callback,
   }) as unknown as number
 }
+
+/**
+ * Coasts to a stop from an initial velocity — the release half of a fling.
+ * Unlike every other animation here it has no target: where it lands is the
+ * result of the velocity and the friction, which is exactly what makes it the
+ * one an inertial gesture needs.
+ *
+ * ```tsx
+ * onPanResponderRelease: (_, g) => {
+ *   x.value = withDecay({ velocity: g.vx * 1000, clamp: [0, width] })
+ * }
+ * ```
+ *
+ * `velocity` is in units per SECOND, as upstream — `PanResponder`'s
+ * `gestureState.vx` is per millisecond, so it wants the ×1000 above.
+ */
+export const withDecay = (
+  config?: WithDecayConfig,
+  callback?: AnimationCallback,
+): number =>
+  mark({
+    kind: "decay",
+    config: resolveDecayConfig(config),
+    callback,
+  }) as unknown as number
+
+/**
+ * Confines another animation to a range: the inner animation runs its own
+ * un-truncated course and what reaches the value is clipped to `[min, max]`.
+ * That distinction is upstream's and it is observable — a spring clamped at
+ * 100 that would have overshot to 120 sits at 100 and then comes back down,
+ * rather than settling at 100 the moment it first arrives.
+ */
+export const withClamp = (
+  config: { min?: number; max?: number },
+  animation: number,
+): number => {
+  if (!isAnimationSpec(animation)) {
+    throw new Error(
+      "react-native-reanimated: withClamp() takes an animation, e.g. withClamp({ min: 0 }, withSpring(1))",
+    )
+  }
+  if (
+    config.min !== undefined &&
+    config.max !== undefined &&
+    config.max < config.min
+  ) {
+    throw new Error(
+      `react-native-reanimated: withClamp() was given min ${config.min} above max ${config.max}.`,
+    )
+  }
+  return mark({
+    kind: "clamp",
+    min: config.min,
+    max: config.max,
+    animation,
+  }) as unknown as number
+}
+
+export type { WithDecayConfig } from "./decay"
 
 // --- spring config normalisation ----------------------------------------
 
@@ -430,6 +512,13 @@ const targetOf = (spec: AnimationSpec): number | null => {
     }
     case "repeat":
       return targetOf(spec.animation)
+    case "clamp":
+      return targetOf(spec.animation)
+    // A decay has no target by construction — where it lands is the result
+    // rather than the input. `withRepeat(withDecay(...))` therefore replays
+    // from the same origin rather than ping-ponging between two.
+    case "decay":
+      return null
   }
 }
 
@@ -452,11 +541,19 @@ const aimedAt = (spec: AnimationSpec, toValue: number): AnimationSpec => {
     }
     case "repeat":
       return { ...spec, animation: aimedAt(spec.animation, toValue) }
+    case "clamp":
+      return { ...spec, animation: aimedAt(spec.animation, toValue) }
+    // Nothing to re-aim: see targetOf.
+    case "decay":
+      return spec
   }
 }
 
 const callbackOf = (spec: AnimationSpec): AnimationCallback | undefined =>
-  spec.kind === "timing" || spec.kind === "spring" || spec.kind === "repeat"
+  spec.kind === "timing" ||
+  spec.kind === "spring" ||
+  spec.kind === "repeat" ||
+  spec.kind === "decay"
     ? spec.callback
     : undefined
 
@@ -485,8 +582,19 @@ const reportingTo = (
       }
     : animation
 
+/**
+ * What a descriptor needs to become a running animation: the platform's
+ * Animated api for the animations it already has, and the frame scheduler
+ * behind it for the one it does not (`withDecay` — see decay.ts). Both come
+ * from the same place, so there is still exactly one clock under this layer.
+ */
+export type AnimationEngine = {
+  api: AnimatedApi
+  scheduler: FrameScheduler
+}
+
 const buildRepeat = (
-  api: AnimatedApi,
+  engine: AnimationEngine,
   driver: AnimatedValue,
   spec: RepeatSpec,
 ): CompositeAnimation => {
@@ -502,7 +610,7 @@ const buildRepeat = (
       let completed = 0
 
       const runIteration = (): void => {
-        child = buildAnimation(api, driver, aimedAt(spec.animation, to))
+        child = buildAnimation(engine, driver, aimedAt(spec.animation, to))
         child.start((result) => {
           if (cancelled || !result.finished) {
             onEnd?.(result)
@@ -546,10 +654,11 @@ const buildRepeat = (
  * injected frame scheduler.
  */
 export const buildAnimation = (
-  api: AnimatedApi,
+  engine: AnimationEngine,
   driver: AnimatedValue,
   spec: AnimationSpec,
 ): CompositeAnimation => {
+  const { api, scheduler } = engine
   const build = (): CompositeAnimation => {
     switch (spec.kind) {
       case "timing":
@@ -572,15 +681,45 @@ export const buildAnimation = (
       case "delay":
         return api.sequence([
           api.delay(spec.delayMs),
-          buildAnimation(api, driver, spec.animation),
+          buildAnimation(engine, driver, spec.animation),
         ])
       case "sequence":
         return api.sequence(
-          spec.animations.map((child) => buildAnimation(api, driver, child)),
+          spec.animations.map((child) => buildAnimation(engine, driver, child)),
         )
       case "repeat":
-        return buildRepeat(api, driver, spec)
+        return buildRepeat(engine, driver, spec)
+      case "decay":
+        return createValueAnimation(scheduler, driver, decayStep(spec.config))
+      case "clamp":
+        return buildClamp(engine, driver, spec)
     }
   }
   return reportingTo(build(), callbackOf(spec), driver)
+}
+
+/**
+ * `withClamp` in full: the inner animation is built on a PRIVATE value and
+ * what that value publishes is clipped onto the real driver. Running it
+ * un-truncated is the whole behaviour — upstream keeps the clamped animation's
+ * own `current` unbounded for exactly this reason — and the private node costs
+ * one listener, no extra frame subscription and no second clock, because the
+ * inner animation is an ordinary one built by the same function.
+ */
+const buildClamp = (
+  engine: AnimationEngine,
+  driver: AnimatedValue,
+  spec: ClampSpec,
+): CompositeAnimation => {
+  const inner = new engine.api.Value(driver.__getValue())
+  inner.addListener(({ value }) => {
+    const clipped =
+      spec.max !== undefined && value > spec.max
+        ? spec.max
+        : spec.min !== undefined && value < spec.min
+          ? spec.min
+          : value
+    driver.__updateValue(clipped)
+  })
+  return buildAnimation(engine, inner, spec.animation)
 }

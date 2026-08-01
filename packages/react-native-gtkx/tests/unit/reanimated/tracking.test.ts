@@ -11,9 +11,8 @@ import {
 } from "../../../src/reanimated-compat/tracking"
 import { createManualScheduler } from "../animated/manual-scheduler"
 
-const makeMutable = createMakeMutable(
-  createAnimated(createManualScheduler().scheduler),
-)
+const { scheduler } = createManualScheduler()
+const makeMutable = createMakeMutable(createAnimated(scheduler), scheduler)
 
 test("a mapper re-runs when a value it read is written", () => {
   const value = makeMutable(1)
