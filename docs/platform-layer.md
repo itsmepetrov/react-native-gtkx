@@ -61,6 +61,10 @@ anything you could set on `Adw.NavigationPage` you can set on
 | `SlotContent`      | fills the slot               | a page body, a pane, a dialog body               |
 | `IntrinsicContent` | sized by its own Yoga layout | an AdwHeaderBar slot, a toolbar area, a list row |
 
+`createSidebarNavigator`'s `sidebarRow` screen option (docs/api.md) wraps
+its content in exactly `IntrinsicContent` for this reason — a row is sized
+by what it holds, not stretched to fill the list.
+
 ### GTK widgets, driven by React Native
 
 Every `GtkWidget` subclass gtkx binds — 86 of them at last count, from
@@ -269,13 +273,12 @@ The stack is an array of tags. Change the array, the widget animates.
 ```tsx
 import { useState } from "react"
 import { Pressable, Text, View } from "react-native"
+import { AdwHeaderBar, AdwToolbarView } from "react-native-gtkx/adw"
 import {
-  AdwHeaderBar,
-  AdwToolbarView,
   NavigationStack,
   NavigationStackPage,
   SlotContent,
-} from "react-native-gtkx/gtk` and `react-native-gtkx/adw"
+} from "react-native-gtkx/common"
 
 const App = () => {
   const [stack, setStack] = useState(["home"])
@@ -474,7 +477,7 @@ generic, so the widget's own props keep their types:
 
 ```tsx
 import { GtkPopover } from "@gtkx/jsx/gtk"
-import { wrapReactNative } from "react-native-gtkx/gtk` and `react-native-gtkx/adw"
+import { wrapReactNative } from "react-native-gtkx/common"
 
 const Popover = wrapReactNative(GtkPopover)
 // <Popover style={{ width: 240 }} autohide … /> — `autohide` still typed

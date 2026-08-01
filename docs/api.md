@@ -155,6 +155,21 @@ const App = () => (
   round trip, the same size-class behavior a mobile master-detail app
   relies on; see docs/research/navigation-extensibility.md for the
   evidence.
+- **Which rung to reach for.** Three ways to put content in the sidebar,
+  cheapest first — the same ladder react-navigation's own `tabBarIcon` →
+  `drawerLabel` → `drawerContent` climbs: (1) `title`/`icon`/`color`/`count`
+  above — the convenience; composes an `AdwActionRow`. (2) `sidebarRow`
+  (screen option, below) — draw one row yourself; the navigator keeps the
+  list and everything attached to it (selection, click → `jumpTo`, staying
+  in step with navigation state, the collapsed reveal). (3) `sidebarContent`
+  (navigator prop, below) — draw the whole pane, routing surface included.
+  The reason rungs 2 and 3 exist at all, plainly: **`AdwActionRow` carries
+  Adwaita's OWN row metrics, not a default this package picked** — measured
+  at roughly 104px per row (with a prefix and/or count laid out) against
+  ~40px for a plain title-only row — and nothing passed to
+  `title`/`icon`/`color`/`count` changes that height. A screen on rung 1
+  has no lever for it; wanting a different height or density means climbing
+  to `sidebarRow` or `sidebarContent` instead.
 - Sidebar navigator props `minWidth` / `minHeight` (px, default 360×294 —
   GNOME's own adaptive floor): the narrowest size this navigator's UI
   supports, applied to the `AdwBreakpointBin` that `collapseWidth` mounts.
@@ -193,6 +208,21 @@ const App = () => (
   place. A screen that flips between shapes must give every one of these
   four keys an explicit value (`undefined` counts as a real overwrite; an
   absent key does not) on every call, not just the ones currently in use.
+- Sidebar screen option `sidebarRow`: `() => ReactNode` — draw the row
+  yourself instead of letting `title`/`icon`/`color`/`count` compose one.
+  Those four are a convenience, not the ceiling: they build an
+  `AdwActionRow`, which brings Adwaita's own row metrics with it, so an app
+  wanting a different shape, density or height had nothing to reach for.
+  Return anything a `GtkListBoxRow` can hold — React Native content, GTK
+  widgets, a differently-configured Adwaita row. The navigator keeps owning
+  row BEHAVIOUR (selection, click → `jumpTo`, staying in step with
+  navigation state, the collapsed reveal), so a custom row cannot drift out
+  of sync with the router; only what is drawn changes. A screen that passes
+  none of `icon`/`color`/`count` gets a compact `GtkListBoxRow` + label
+  automatically — `AdwActionRow`'s height is right when there IS a prefix
+  and a count to lay out and pure cost when there is not. The next rung up
+  is `sidebarContent`, below, for replacing the whole pane rather than one
+  row.
 - Sidebar navigator prop `sidebarContent`:
   `(props: SidebarContentProps) => ReactNode` — replaces the ENTIRE sidebar
   pane's body, for a sidebar that needs sections, a search field, a footer,
@@ -206,21 +236,54 @@ const App = () => (
   not the chrome. Mounted as React Native content (a layout root filling
   the pane); a sidebar built from GTK widgets wraps its own tree in
   `WidgetContent`, the same escape hatch `contentLayout: "widget"` is for a
-  screen body. Reach for `sidebarRow` first if you only want a different
-  ROW — it keeps the navigator's list and everything attached to it.
-- Sidebar screen option `sidebarRow`: `() => ReactNode` — draw the row
-  yourself instead of letting `title`/`icon`/`color`/`count` compose one.
-  Those four are a convenience, not the ceiling: they build an
-  `AdwActionRow`, which brings Adwaita's own row metrics with it, so an app
-  wanting a different shape, density or height had nothing to reach for.
-  Return anything a `GtkListBoxRow` can hold — React Native content, GTK
-  widgets, a differently-configured Adwaita row. The navigator keeps owning
-  row BEHAVIOUR (selection, click → `jumpTo`, staying in step with
-  navigation state, the collapsed reveal), so a custom row cannot drift out
-  of sync with the router; only what is drawn changes. A screen that passes
-  none of `icon`/`color`/`count` gets a compact `GtkListBoxRow` + label
-  automatically — `AdwActionRow`'s height is right when there IS a prefix
-  and a count to lay out and pure cost when there is not.
+  screen body. Reach for `sidebarRow` (above) first if you only want a
+  different ROW — it keeps the navigator's list and everything attached to
+  it; this one hands over the whole pane, routing included. A sidebar with
+  a search field above the list and a footer below it, still driven by the
+  navigator's own routing:
+
+  ```tsx
+  <Sidebar.Navigator
+    sidebarContent={({ routes, focusedIndex, jumpTo }) => (
+      <View style={{ flex: 1 }}>
+        <SearchField onSubmit={filterRoutes} />
+        <ScrollView style={{ flex: 1 }}>
+          {routes.map((route, index) => (
+            <Pressable
+              key={route.key}
+              onPress={() => jumpTo(route.name)}
+            >
+              <Text
+                style={{
+                  padding: 8,
+                  fontWeight: index === focusedIndex ? "700" : "400",
+                }}
+              >
+                {route.title}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+        <StorageUsageFooter />
+      </View>
+    )}
+  >
+    <Sidebar.Screen
+      name="Inbox"
+      component={InboxScreen}
+    />
+    <Sidebar.Screen
+      name="Trash"
+      component={TrashScreen}
+    />
+  </Sidebar.Navigator>
+  ```
+
+  `route.title` is already resolved (`options.title`, falling back to the
+  route name) — no need to read `options.title` yourself. `jumpTo` reveals
+  the content pane when collapsed, same as a native row click; the
+  navigator, not this callback, decides that.
+
 - Sidebar screen option `contentLayout`: `"react-native"` (default) or
   `"widget"` — what the screen's body IS. The default mounts it in a Yoga
   layout root that fills the pane, so `<View style={{ flex: 1 }}>` behaves

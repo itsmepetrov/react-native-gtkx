@@ -143,6 +143,9 @@ CONTENT header instead, via the navigator-level `headerButtons` prop
 global action, just not where this app would have put it first). Recorded
 in `docs/research/navigation-extensibility.md` as an open item; not fixed
 here because it was not on the PRD's checklist and a workaround existed.
+Still true after the `sidebar-open-api` epic's `sidebarRow`/`sidebarContent`
+shipped — both replace the pane's BODY, not its `AdwHeaderBar` (see
+docs/api.md's sidebar section); neither was ever aimed at this gap.
 
 ## Verified live
 
