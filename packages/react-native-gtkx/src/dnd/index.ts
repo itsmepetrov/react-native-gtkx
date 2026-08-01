@@ -19,7 +19,19 @@
 
 export { DropProvider, useDropContext } from "./context"
 
-export { Draggable, DraggableHandle, useDraggable } from "./draggable"
+export {
+  Draggable,
+  DraggableHandle,
+  useDraggable,
+  // What `useDraggable` actually returns. `UseDraggableReturn` below is the
+  // mirrored half (upstream's field names); this adds the two fields a
+  // caller rendering its own view cannot do without — the measurable ref and
+  // the drag source itself. Unexported, the hook's own documented use case
+  // ("for a component that owns its own view") could not be typed by the
+  // component that owns it; porting upstream's `CustomDraggable` is what
+  // found that.
+  type UseDraggableResult,
+} from "./draggable"
 
 export { Droppable, useDroppable } from "./droppable"
 

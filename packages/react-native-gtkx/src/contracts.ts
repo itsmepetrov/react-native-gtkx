@@ -192,6 +192,24 @@ export type FlatStyle = LayoutStyle & VisualStyle & BehavioralStyle
 export type StyleProp<T = FlatStyle> =
   T | null | undefined | false | ReadonlyArray<StyleProp<T>>
 
+// RN's three style bags, as the names ordinary React Native code writes
+// them: `StyleProp<ViewStyle>`, `StyleProp<TextStyle>`, `StyleProp<ImageStyle>`.
+//
+// They are all `FlatStyle` here, and deliberately so. RN splits the bag
+// three ways to keep `fontWeight` off a `View` and `resizeMode` off a
+// `Text`; this platform's split is a different one (layout → Yoga, visual →
+// GTK CSS, see style/split-style.ts) and it does not follow component
+// boundaries. Narrowing these three to subsets would reject styles that
+// work — and the names exist so that a file shared with iOS and Android
+// compiles, not so that this platform can re-police RN's taxonomy.
+//
+// Found by porting react-native-reanimated-dnd's example app, where
+// `StyleProp<ViewStyle>` on a `Droppable`'s `activeStyle` is the ordinary
+// way to type it and there was no name to import.
+export type ViewStyle = FlatStyle
+export type TextStyle = FlatStyle
+export type ImageStyle = FlatStyle
+
 // Result of classifying a flattened style (produced by the style system):
 export type SplitStyle = {
   layout: LayoutStyle

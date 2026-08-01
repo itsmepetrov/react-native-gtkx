@@ -220,7 +220,26 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
     useLayoutEffect(() => {
       contentNode.setStyle({
         flexDirection: horizontal ? "row" : "column",
-        alignItems: "flex-start",
+        // RN's content container is a plain `View`, and a `View`'s default
+        // `alignItems` is `stretch` — so a vertical ScrollView's children are
+        // as wide as the viewport unless they say otherwise. This used to be
+        // `flex-start`, which made every child shrink to its intrinsic width
+        // and any `flex: 1` inside it collapse to zero.
+        //
+        // It was found twice. First by `Sortable`, whose rows rendered as
+        // bare drag handles with no text (docs/research/drag-and-drop.md
+        // recorded it as a probable ScrollView parity bug and did not act on
+        // it, because changing a shared default under every example was not
+        // that epic's business). Then by porting
+        // `react-native-reanimated-dnd`'s example app, where it broke
+        // seventeen screens at once — at which point "a ported app changes
+        // nothing in its source" was simply false, and the default was the
+        // thing that was wrong.
+        //
+        // An app that wants the old behaviour writes it, exactly as it would
+        // on iOS and Android: `contentContainerStyle={{ alignItems:
+        // "flex-start" }}`.
+        alignItems: "stretch",
         ...contentLayout,
       })
       // eslint-disable-next-line react-hooks/exhaustive-deps
