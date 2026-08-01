@@ -14,16 +14,23 @@
 // socket. Sequential runs are byte-comparable; parallel runs on the same VM
 // do not collide, because startHeadlessSway prefixes its conf/log paths.
 //
-// Deliberately NO pointer control here, though it was tried: hover and press
-// states cannot be captured on this rig at all. A wlroots seat started with
-// WLR_LIBINPUT_NO_DEVICES=1 has no pointer capability (`swaymsg -t get_seats`
-// → `capabilities: 0, devices: []`), so no wl_pointer is ever advertised and
-// no client can receive an enter. sway's `seat - cursor set X Y` answers
-// `success: true` and changes nothing. wlrctl's wlr-virtual-pointer does
-// reach the compositor, but each invocation creates and destroys its device,
-// so the capability appears and disappears faster than a frame. Hover/press
-// styling is covered by tests/gtk/components/pressable-hover.gtk.test.tsx
-// instead, which drives the real EventControllerMotion signal.
+// No pointer control here — this script takes ONE still of an app at rest,
+// and that is all most comparisons need. It is not because a pointer is
+// impossible: an earlier note here said so, and it was wrong. The
+// observations behind it were right (a wlroots seat started with
+// WLR_LIBINPUT_NO_DEVICES=1 reports `capabilities: 0, devices: []`, so no
+// wl_pointer is advertised; sway's `seat - cursor set X Y` answers
+// `success: true` and changes nothing; wlrctl's wlr-virtual-pointer creates
+// and destroys its device per invocation, so the capability blinks in and
+// out faster than a frame) — but the conclusion did not follow. A process
+// that binds zwlr_virtual_pointer_manager_v1 itself and KEEPS the device
+// for the whole session gives the seat a real pointer for as long as it
+// lives. packages/react-native-gtkx/tests/gtk/support/virtual-pointer.ts
+// does that, and a drag on this rig was screenshotted with it (see
+// docs/research/react-native-first-showcase.md). Reach for it when a shot
+// needs a pointer; hover STYLING is still cheaper to cover through
+// tests/gtk/components/pressable-hover.gtk.test.tsx, which drives the real
+// EventControllerMotion signal.
 //
 // Usage (in the VM):
 //   node scripts/shot-example-headless.ts examples/tasks-app /tmp/a.png \
