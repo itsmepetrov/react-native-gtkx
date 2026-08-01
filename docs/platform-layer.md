@@ -131,16 +131,16 @@ app should not have to do is rediscover the numbers, which are not obvious
 on the first and last ROW, not on the container) and which move when
 libadwaita moves.
 
-| Export          | What it is                                                                       |
-| --------------- | -------------------------------------------------------------------------------- |
-| `List`          | the `.boxed-list` frame — a `View` with the card background, radius and shadow    |
+| Export          | What it is                                                                                  |
+| --------------- | ------------------------------------------------------------------------------------------- |
+| `List`          | the `.boxed-list` frame — a `View` with the card background, radius and shadow              |
 | `ListRow`       | `AdwActionRow`'s layout and states (`title`/`subtitle`/`prefix`/`suffix`), on a `Pressable` |
-| `ListSeparator` | the hairline, for a `FlatList`'s `ItemSeparatorComponent`                         |
-| `rowPosition`   | `(index, count)` → `"first" | "middle" | "last" | "only"`, since RN has no `:first-child` |
-| `Icon`          | a **named** icon from the desktop icon theme                                     |
+| `ListSeparator` | the hairline, for a `FlatList`'s `ItemSeparatorComponent`                                   |
+| `rowPosition`   | `(index, count)` → `"first"                                                                 | "middle" | "last" | "only"`, since RN has no `:first-child` |
+| `Icon`          | a **named** icon from the desktop icon theme                                                |
 
 `Icon` is not `Image`: RN's `Image` takes a file path or URI, because on iOS
-and Android an icon is a bundled asset. Here it is a *name* resolved against
+and Android an icon is a bundled asset. Here it is a _name_ resolved against
 the current icon theme at paint time, which recolours itself with the label
 colour and follows the user's theme — nothing in `Image`'s contract can
 express that. The shape is the one RN apps already use
