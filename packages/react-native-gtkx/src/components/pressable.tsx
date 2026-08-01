@@ -469,3 +469,79 @@ export const TouchableOpacity = ({
     style={({ pressed }) => [style, pressed && { opacity: activeOpacity }]}
   />
 )
+
+export type TouchableHighlightProps = Omit<PressableProps, "style"> & {
+  style?: StyleProp
+  /**
+   * RN's default is `"black"`, and its default `activeOpacity` is `0.85` — the
+   * underlay shows through the dimmed child rather than replacing it. Here the
+   * underlay IS the background, because there is no separate underlay view to
+   * put behind a child that may be opaque, so an app that wants RN's exact
+   * blend gives the child a translucent background itself.
+   */
+  underlayColor?: string
+  activeOpacity?: number
+  onShowUnderlay?: () => void
+  onHideUnderlay?: () => void
+}
+
+/**
+ * RN's `TouchableHighlight`: a background colour while held.
+ *
+ * Here because `@gorhom/bottom-sheet` re-exports it from its own public entry
+ * as `BottomSheetTouchable` on every platform except iOS — it is upstream's
+ * export, not an app's choice, so an app cannot avoid it. It is also an
+ * ordinary `react-native` component that this surface was simply missing.
+ *
+ * One structural difference, stated rather than papered over: RN renders a
+ * separate underlay VIEW behind the child and lowers the child's opacity onto
+ * it. Reproducing that needs a second box, and an extra box changes flex
+ * layout and what `measureLayout` is relative to — the same reason
+ * `GestureDetector` and `createAnimatedComponent` add none. So the highlight
+ * is this view's own `backgroundColor` while pressed.
+ */
+export const TouchableHighlight = ({
+  style,
+  underlayColor = "black",
+  activeOpacity,
+  onShowUnderlay,
+  onHideUnderlay,
+  onPressIn,
+  onPressOut,
+  ...rest
+}: TouchableHighlightProps) => (
+  <Pressable
+    {...rest}
+    onPressIn={(event) => {
+      onShowUnderlay?.()
+      onPressIn?.(event)
+    }}
+    onPressOut={(event) => {
+      onHideUnderlay?.()
+      onPressOut?.(event)
+    }}
+    style={({ pressed }) => [
+      style,
+      pressed && {
+        backgroundColor: underlayColor,
+        ...(activeOpacity === undefined ? null : { opacity: activeOpacity }),
+      },
+    ]}
+  />
+)
+
+export type TouchableWithoutFeedbackProps = PressableProps
+
+/**
+ * RN's `TouchableWithoutFeedback`: the press callbacks and nothing visual.
+ *
+ * RN's own version clones its single child rather than rendering a box, and
+ * its documentation calls that a mistake it kept for compatibility. This one
+ * renders the `Pressable` box, which is what `Pressable` already is with no
+ * `style` callback — the difference is invisible unless the child was relying
+ * on being laid out by ITS parent, and RN's own docs tell you to use
+ * `Pressable` instead for exactly that reason.
+ */
+export const TouchableWithoutFeedback = (props: PressableProps) => (
+  <Pressable {...props} />
+)

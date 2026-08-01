@@ -178,30 +178,36 @@ slop cannot escape a `ScrollView` viewport, or any view whose style says
 Both `react-native-reanimated` and `react-native-gesture-handler` are aliased
 onto reimplementations by both presets, so their imports resolve and their
 `Pan` code runs unedited. What is implemented of RNGH is
-`GestureHandlerRootView`, `GestureDetector`, `Gesture.Pan()` and
-`usePanGesture()` — the full `Pan` config surface, including all four offset
-knobs, `hitSlop`, `shouldCancelWhenOutside` and `activateAfterLongPress`. See
+`GestureHandlerRootView`, `GestureDetector`, `State`, `Pan`, `Tap`,
+`LongPress` and `Native` in both spellings (`Gesture.Pan()` and
+`usePanGesture()`, and so on), and the components it re-exports from
+`react-native` — `ScrollView`, `FlatList`, `TextInput`, `Switch`, `Pressable`
+and the three `Touchable`s. See
 [the API reference](api.md#react-native-gesture-handler-react-native-gtkxgesture-handler)
-for the table, and `examples/gesture-detector` for all four shapes running.
+for the tables, and `examples/gesture-detector` for the shapes running.
 
 What is not implemented throws where it is used, naming itself, rather than
 silently doing nothing:
 
-- **`Tap`, `LongPress` and `State`** — the next increment. `State` is what
-  stops `@gorhom/bottom-sheet` and `react-native-draggable-flatlist` at
-  import today;
 - **cross-gesture relations** (`simultaneousWithExternalGesture`,
   `requireExternalGestureToFail`, `blocksExternalGesture`) and the
   `Race`/`Simultaneous`/`Exclusive` composers — these need an arbitration
   registry separate from the responder lock, because the lock has one holder
-  by design and simultaneity is a set;
-- **`Gesture.Native()`** and RNGH's re-exported `ScrollView`/`FlatList`,
-  which `@gorhom/bottom-sheet` and `react-native-draggable-flatlist` render;
+  by design and simultaneity is a set. This is what still stops
+  `@gorhom/bottom-sheet`;
 - **`Pinch` and `Rotation`** — GTK feeds touchpad gestures properly, and
   nothing in this project's test rig can produce one, so they wait for a
   machine that can;
 - **`Fling`, `Hover`, `Manual`, `ForceTouch`**, the legacy `*GestureHandler`
-  components and the button family.
+  components and the button family (`RectButton` and friends — RNGH's own
+  native button views, not RN components with a handler attached).
+
+Two libraries measured by BUILDING them rather than by reading them are
+blocked on `react-native` core rather than on any of the above:
+`react-native-draggable-flatlist` needs `findNodeHandle`, `LogBox` and
+`useAnimatedScrollHandler`; `@gorhom/bottom-sheet` needs those two plus
+`Keyboard` and `VirtualizedList`, and the relations. The API reference has the
+file names.
 
 What to do instead, where something is still missing:
 

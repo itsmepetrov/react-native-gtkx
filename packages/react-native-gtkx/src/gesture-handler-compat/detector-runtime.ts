@@ -12,6 +12,7 @@ import { widgetForHandle } from "../components/measure"
 import { computePointInWindow } from "../gtkx/bridge/index"
 import { requestResponder } from "../responder/use-responder"
 import { longPressDecider } from "./long-press"
+import { nativeDecider } from "./native"
 import { panDecider } from "./pan"
 import {
   createRecognizer,
@@ -23,16 +24,22 @@ import { tapDecider } from "./tap"
 import type { GestureKind, RecognizerConfig } from "./types"
 
 /**
- * The whole of what tells the three kinds apart: which pair of predicates the
+ * The whole of what tells the four kinds apart: which pair of predicates the
  * one machine runs. There is no second state machine, no second event stream
  * and no second grant channel — `docs/research/gesture-detector.md` predicted
  * that `Tap` and `LongPress` would be an afternoon over slice 1's core, and
  * this map is the shape of that claim.
+ *
+ * `Native` stretched it by exactly one flag rather than one machine: it wants
+ * the same progression without the responder grant, because taking the
+ * interaction is the one thing a gesture that stands for the native widget
+ * must not do. See ./native and `RecognizerDecider.claimsResponder`.
  */
 const DECIDERS: Record<GestureKind, RecognizerDecider> = {
   pan: panDecider,
   tap: tapDecider,
   longPress: longPressDecider,
+  native: nativeDecider,
 }
 
 /** A ref in either of React's two spellings. */

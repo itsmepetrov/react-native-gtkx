@@ -27,6 +27,8 @@ import {
   perfFrameTick,
   perfNow,
 } from "../perf"
+import type { ResponderProps } from "../responder/types"
+import { useResponder } from "../responder/use-responder"
 import { HostNodeContext } from "./host-node"
 import {
   createMeasureHandle,
@@ -69,7 +71,17 @@ export type ScrollEvent = {
   }
 }
 
-export type ScrollViewProps = {
+/**
+ * `ResponderProps` because a `ScrollView` is a HOST component in RN, and every
+ * host component takes them. It matters more here than it reads: a
+ * `GestureDetector` reaches its child through the child's own responder
+ * registration, so a scrollable that did not accept them could never carry a
+ * gesture — and `Gesture.Native()` exists precisely to put a scrollable into
+ * the arbitration (`@gorhom/bottom-sheet` wraps its scrollable in exactly that
+ * shape). `useResponder` installs nothing unless some responder prop is
+ * actually present, so a plain `ScrollView` gains no controller.
+ */
+export type ScrollViewProps = ResponderProps & {
   style?: StyleProp
   contentContainerStyle?: StyleProp
   horizontal?: boolean
@@ -167,6 +179,7 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       onLayout,
       children,
       testID,
+      ...responderProps
     },
     handleRef,
   ) => {
@@ -260,6 +273,12 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       })
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [contentNode, contentKey])
+
+    // On the SCROLLED WINDOW, not on the content box: that is the widget the
+    // handle stands for, the widget a `GestureDetector` measures its gesture's
+    // view against, and the widget whose own kinetics a `Gesture.Native()`
+    // over this scrollable is talking about.
+    useResponder(outerRef, responderProps)
 
     useImperativeHandle(handleRef, () => {
       const handle: ScrollViewHandle = {

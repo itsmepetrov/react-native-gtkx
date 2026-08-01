@@ -85,6 +85,15 @@ export type LongPressGestureHookConfig = CommonGestureHookConfig & {
   numberOfPointers?: number
 }
 
+/** The config object `useNativeGesture` accepts. */
+export type NativeGestureHookConfig = CommonGestureHookConfig & {
+  shouldActivateOnStart?: boolean
+  disallowInterruption?: boolean
+  yieldsToContinuousGestures?: boolean
+  /** A native view is continuous upstream, so it reports travel. */
+  onUpdate?: (event: GestureEventPayload) => void
+}
+
 /**
  * Upstream's dev-time validation, reproduced because both messages describe
  * configs that look reasonable and silently never activate.
@@ -183,6 +192,7 @@ const adaptCommon = (config: CommonGestureHookConfig): RecognizerConfig => {
 const EMPTY_PAN: PanGestureHookConfig = {}
 const EMPTY_TAP: TapGestureHookConfig = {}
 const EMPTY_LONG_PRESS: LongPressGestureHookConfig = {}
+const EMPTY_NATIVE: NativeGestureHookConfig = {}
 
 /**
  * The hook spelling. Rebuilds its spec every render, exactly as the builder
@@ -254,5 +264,20 @@ export const useLongPressGesture = (
     minDuration: config.minDuration,
     maxDistance: config.maxDistance,
     numberOfPointers: config.numberOfPointers,
+  },
+})
+
+/** `useNativeGesture`, the hook spelling of `Gesture.Native()`. */
+export const useNativeGesture = (
+  config: NativeGestureHookConfig = EMPTY_NATIVE,
+): GestureSpec => ({
+  kind: "native",
+  config: {
+    ...adaptCommon(config),
+    shouldCancelWhenOutside: config.shouldCancelWhenOutside ?? true,
+    shouldActivateOnStart: config.shouldActivateOnStart,
+    disallowInterruption: config.disallowInterruption,
+    yieldsToContinuousGestures: config.yieldsToContinuousGestures,
+    onUpdate: config.onUpdate,
   },
 })

@@ -425,9 +425,60 @@ in `docs/research/gestures.md`.
    `FlatList` re-exports (two of the four consumers render them) and the
    `Touchable` family `@gorhom/bottom-sheet` re-exports. The `->DENIED`
    detection from probe 1 belongs here, because this is the slice that puts
-   a real GTK gesture into the arbitration.
+   a real GTK gesture into the arbitration. **Shipped**, and it corrected
+   two more lines — see below.
 5. **`Pinch`/`Rotation`**, when there is a machine that can produce a
    touchpad gesture to test them with. Not before.
+
+### What slice 4 corrected, by building the libraries instead of reading them
+
+The recon measured the four consumers' SOURCES. Slice 4 measured them the only
+way that settles it — a probe app under the real `gtkx build`, with the real
+published packages and the presets' aliases in place. Two claims did not
+survive, and both are the same shape: **what stops these libraries is not in
+this surface at all.**
+
+- **`react-native-draggable-flatlist` 4.0.3 does not stop on the
+  `FlatList`/`ScrollView` re-exports.** It stops at BUILD, on `react-native`:
+  `findNodeHandle` and `LogBox` are not exported by this platform
+  (`CellRendererComponent.tsx`, `NestableDraggableFlatList.tsx`). The
+  re-exports could not have been the wall, and the mechanism says why —
+  `Animated.createAnimatedComponent()` reads only `displayName` and `name`,
+  which are both on the stand-in's introspection allowlist, so a stand-in
+  binds and constructs at module scope without complaint. It would have failed
+  at first RENDER. Past those two exports the next wall is
+  `useAnimatedScrollHandler`, which `react-native-gtkx/reanimated` refuses.
+- **`@gorhom/bottom-sheet` 5.2.14 stops at BUILD too**, on the same surface:
+  `findNodeHandle`, `LogBox`, `Keyboard`, `VirtualizedList`. Everything it
+  takes from `react-native-gesture-handler` now resolves. What is still
+  missing from THIS surface is the cross-gesture relations its pan chains
+  configure, which are slice 3's.
+- **`react-native-reanimated-dnd` never loads at all**, and that is the
+  presets' own decision: both alias the package name onto
+  `react-native-gtkx/dnd`. Its `Sortable`/`SortableGrid` do take RNGH's
+  `FlatList`/`ScrollView` at module scope, so the re-exports are what an
+  unaliased build would need — but no app takes that path.
+
+So the epic's "which libraries run" question has an answer the recon could not
+have reached from sources: **the remaining blockers are four `react-native`
+core exports and one Reanimated hook**, not gesture code. That is a different
+slice's work, and naming it is more useful than guessing at it.
+
+Two smaller things this slice settled:
+
+- **`Gesture.Native()` is the first recognizer that never takes the
+  responder**, and that is a platform fact rather than an optimisation: taking
+  it is what calls `setKineticScrolling(false)` on every enclosing
+  `GtkScrolledWindow`. A gesture that means "the native scroller is handling
+  this" cannot be the thing that switches the native scroller off. Proven with
+  a real wheel and a real drag over one, asserting the scroller's four gestures
+  never leave `GTK_PHASE_CAPTURE`.
+- **`scrollBy` can inject a scroll UP now.** The `wl_fixed` argument was
+  encoded with `writeUInt32LE`, which throws on anything negative; `>>> 0`
+  reinterprets the two's complement bits and touches nothing that was already
+  in range. It stopped being "unrelated to this epic" the moment a test wanted
+  to prove a scroller was fully live rather than merely movable in one
+  direction.
 
 Refusals that stand: `Fling`, `Hover`, `Manual`, `ForceTouch`, the legacy
 `*GestureHandler` components, `RectButton` and the button family beyond the
@@ -449,10 +500,10 @@ Refusals that stand: `Fling`, `Hover`, `Manual`, `ForceTouch`, the legacy
 
 Two smaller things measurement turned up and left alone:
 
-- `tests/gtk/support/virtual-pointer.ts`'s `scrollBy` encodes its `wl_fixed`
-  argument as an unsigned word, so a **negative** detent count throws
-  `ERR_OUT_OF_RANGE` before it reaches the wire. Scrolling up cannot be
-  injected today. One-line fix, unrelated to this epic.
+- `tests/gtk/support/virtual-pointer.ts`'s `scrollBy` encoded its `wl_fixed`
+  argument as an unsigned word, so a **negative** detent count threw
+  `ERR_OUT_OF_RANGE` before it reached the wire, and scrolling up could not be
+  injected. **Fixed in slice 4**, which needed it.
 - The harness window never reports `is-active` under a private headless sway
   even though it is the only window and receives every event. The probes log
   it and proceed; the negative controls are what carry the assertions, which

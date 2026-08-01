@@ -265,6 +265,9 @@ export const useResponder = (
     let startX = 0
     let startY = 0
     let stopWatching: (() => void) | null = null
+    // Whether this sequence was taken from us by something above. See the
+    // `sequence-state-changed` handler below.
+    let denied = false
 
     const endInteraction = (): void => {
       stopWatching?.()
@@ -273,9 +276,41 @@ export const useResponder = (
       restoreScrollers = null
     }
 
+    // THE ONE SIGNAL THAT TELLS A THEFT FROM AN ENDING.
+    //
+    // GTK's claim propagation is asymmetric, and measuring it on 4.22.4
+    // corrected `docs/research/gestures.md`, which had it backwards. A claim
+    // by a DESCENDANT cancels the ancestor's gesture — `::cancel` then
+    // `::end`, and no state transition at all, which the `cancel` handler
+    // below already turns into a termination. A claim by an ANCESTOR is the
+    // dangerous direction: it DENIES the descendant's sequence and then ends
+    // it with an ordinary `drag-end`, exactly the signal a finger lifting
+    // produces. Without this handler a native ancestor stealing the drag
+    // mid-gesture reaches JS as `onResponderRelease` — a CLEAN RELEASE,
+    // indistinguishable from the user letting go, so a drag would commit
+    // itself at whatever position the theft happened at.
+    //
+    // `->DENIED` is the only thing that separates the two, which is why the
+    // sequence state has to be watched rather than just the drag signals.
+    // Nothing else here can produce it: this module never sets DENIED, and
+    // our own CLAIMED is always made on the source, which cancels ancestors
+    // rather than denying them.
+    drag.on(
+      "sequence-state-changed",
+      (_sequence: unknown, state: Gtk.EventSequenceState) => {
+        if (state === Gtk.EventSequenceState.DENIED) {
+          denied = true
+        }
+      },
+    )
+
     drag.on("drag-begin", (x: number, y: number) => {
       startX = x
       startY = y
+      // A `GtkGestureSingle` denies its own sequence when a press arrives on
+      // the wrong button and nothing is down yet, so the flag can survive from
+      // before this press. Every interaction starts clean.
+      denied = false
       responderSystem.touchStart(widget, createTouch(widget, x, y))
       // Every ancestor's gesture reports the same press; only the one that
       // opened the interaction owns it, and asking the system afterwards is
@@ -291,10 +326,15 @@ export const useResponder = (
       )
     })
     drag.on("drag-end", (offsetX: number, offsetY: number) => {
-      responderSystem.touchEnd(
-        widget,
-        createTouch(widget, startX + offsetX, startY + offsetY),
-      )
+      const touch = createTouch(widget, startX + offsetX, startY + offsetY)
+      // A denied sequence ends with this same signal, and it is not an
+      // ending: the interaction was taken away. RN's word for that is a
+      // termination, so it goes down the cancel path.
+      if (denied) {
+        responderSystem.touchCancel(widget, touch)
+      } else {
+        responderSystem.touchEnd(widget, touch)
+      }
       endInteraction()
     })
     // GTK cancels a sequence when something takes it away from us: a native

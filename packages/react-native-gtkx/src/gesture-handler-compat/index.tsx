@@ -40,24 +40,32 @@ import type { StyleProp } from "../contracts"
 import { createUnsupportedFactory } from "../unsupported-export"
 import { Gesture } from "./builder"
 import { GestureDetector } from "./detector"
-import { useLongPressGesture, usePanGesture, useTapGesture } from "./hooks"
+import {
+  useLongPressGesture,
+  useNativeGesture,
+  usePanGesture,
+  useTapGesture,
+} from "./hooks"
 import { GESTURE_STATE } from "./types"
 
 export {
   Gesture,
   GestureDetector,
   useLongPressGesture,
+  useNativeGesture,
   usePanGesture,
   useTapGesture,
 }
 export {
   LongPressGestureBuilder,
+  NativeGestureBuilder,
   PanGestureBuilder,
   TapGestureBuilder,
 } from "./builder"
 export type { GestureDetectorProps } from "./detector"
 export type {
   LongPressGestureHookConfig,
+  NativeGestureHookConfig,
   PanGestureHookConfig,
   TapGestureHookConfig,
 } from "./hooks"
@@ -116,12 +124,12 @@ export const GestureHandlerRootView = ({
 
 const unsupported = createUnsupportedFactory(
   "react-native-gesture-handler",
-  "Implemented: GestureHandlerRootView, GestureDetector, `State`, and Pan, Tap and LongPress " +
-    "in both spellings (`Gesture.Pan()` and `usePanGesture()`, and so on). Cross-gesture " +
-    "relations and the composers need the orchestrator; Native needs it and the scroll " +
-    "arbitration; Pinch and Rotation need a machine that can produce a touchpad gesture to " +
-    "test them on. RN's own responder system and PanResponder also work (docs/api.md); " +
-    "drag-and-drop is react-native-gtkx/dnd.",
+  "Implemented: GestureHandlerRootView, GestureDetector, `State`, the re-exported " +
+    "ScrollView/FlatList/TextInput/Switch and the three Touchables, and Pan, Tap, LongPress " +
+    "and Native in both spellings (`Gesture.Pan()` and `usePanGesture()`, and so on). " +
+    "Cross-gesture relations and the composers need the orchestrator; Pinch and Rotation " +
+    "need a machine that can produce a touchpad gesture to test them on. RN's own responder " +
+    "system and PanResponder also work (docs/api.md); drag-and-drop is react-native-gtkx/dnd.",
 )
 
 // Every runtime value `react-native-gesture-handler` 3.1.0 exports, minus
@@ -172,7 +180,6 @@ export const useExclusiveGestures: any = unsupported("useExclusiveGestures")
 export const useFlingGesture: any = unsupported("useFlingGesture")
 export const useHoverGesture: any = unsupported("useHoverGesture")
 export const useManualGesture: any = unsupported("useManualGesture")
-export const useNativeGesture: any = unsupported("useNativeGesture")
 export const usePinchGesture: any = unsupported("usePinchGesture")
 export const useRotationGesture: any = unsupported("useRotationGesture")
 export const useSimultaneousGestures: any = unsupported(
@@ -205,24 +212,53 @@ export const MouseButton: any = unsupported("MouseButton")
 export const PointerType: any = unsupported("PointerType")
 
 // --- the wrapped RN components and buttons ---
+//
+// Upstream builds every one of these with `createNativeWrapper(RN.X, {
+// disallowInterruption: true, shouldCancelWhenOutside: false })` — an RN
+// component with a `NativeViewGestureHandler` attached, so that RNGH's
+// arbitration knows about the native scrolling or the native press underneath.
+// On this platform that wrapper has nothing to add: the responder system IS
+// the arbitration these are being registered with, every one of these
+// components already speaks it, and `Gesture.Native()` is how a gesture is
+// declared over one of them explicitly. So the honest re-export is the
+// platform's own component, unwrapped.
+//
+// They are here because they are RENDERED, not merely imported.
+// `react-native-draggable-flatlist` 4.0.3 hands `FlatList` and `ScrollView` to
+// `Animated.createAnimatedComponent()` at module scope in
+// `DraggableFlatList.tsx` and `NestableScrollContainer.tsx`, which is what
+// stopped that library at IMPORT rather than at use;
+// `react-native-reanimated-dnd`'s `Sortable`/`SortableGrid` do the same;
+// `@gorhom/bottom-sheet` re-exports the three Touchables from its own public
+// entry as `BottomSheetTouchable` on every platform except iOS, and renders
+// `TextInput` as `BottomSheetTextInput`.
+//
+// WHAT IS NOT HERE, and the boundary is upstream's own: the BUTTON family
+// (`RawButton`, `BaseButton`, `RectButton`, `BorderlessButton`) is not RN
+// components with a handler attached — it is RNGH's own native button views,
+// with platform ripple, border radius handling and an `activeOpacity` that
+// belong to a widget this platform does not have. Nothing measured needs them.
+// `TouchableNativeFeedback` is Android's ripple and `Touchable` is RN's
+// deprecated mixin; both stay refused for the same reason RN itself would not
+// give them to you here.
 export const BaseButton: any = unsupported("BaseButton")
 export const BorderlessButton: any = unsupported("BorderlessButton")
-export const FlatList: any = unsupported("FlatList")
-export const Pressable: any = unsupported("Pressable")
+export { FlatList } from "../components/flat-list"
+export {
+  Pressable,
+  TouchableHighlight,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+} from "../components/pressable"
+export { ScrollView } from "../components/scroll-view"
+export { Switch } from "../components/switch"
+export { TextInput } from "../components/text-input"
 export const RawButton: any = unsupported("RawButton")
 export const RectButton: any = unsupported("RectButton")
 export const RefreshControl: any = unsupported("RefreshControl")
-export const ScrollView: any = unsupported("ScrollView")
-export const Switch: any = unsupported("Switch")
-export const TextInput: any = unsupported("TextInput")
 export const Touchable: any = unsupported("Touchable")
-export const TouchableHighlight: any = unsupported("TouchableHighlight")
 export const TouchableNativeFeedback: any = unsupported(
   "TouchableNativeFeedback",
-)
-export const TouchableOpacity: any = unsupported("TouchableOpacity")
-export const TouchableWithoutFeedback: any = unsupported(
-  "TouchableWithoutFeedback",
 )
 
 // --- the 2.x legacy aliases, still exported by 3.x ---

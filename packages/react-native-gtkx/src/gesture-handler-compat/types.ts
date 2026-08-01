@@ -247,6 +247,25 @@ export type RecognizerConfig = RecognizerCallbacks & {
   maxDeltaX?: number
   maxDeltaY?: number
 
+  // --- Native ---
+  /**
+   * Take the gesture the instant the pointer goes down, instead of waiting
+   * for the wrapped view to start handling it. Upstream's spelling for a
+   * native view that is a BUTTON rather than a scrollable.
+   */
+  shouldActivateOnStart?: boolean
+  /**
+   * Upstream: an active `Native` handler that disallows interruption cannot
+   * be cancelled by anything else. Recorded and read by nothing yet — it is a
+   * statement about ARBITRATION, and the registry that arbitrates is the
+   * orchestrator's. Storing it is what lets that registry find it later;
+   * refusing it would refuse `@gorhom/bottom-sheet`'s own configuration for a
+   * knob whose only effect is on a relation it also sets explicitly.
+   */
+  disallowInterruption?: boolean
+  /** Upstream's companion to `disallowInterruption`, same treatment. */
+  yieldsToContinuousGestures?: boolean
+
   // --- LongPress ---
   /** How long the pointer must stay down. Upstream's default is 500ms. */
   minDuration?: number
@@ -283,9 +302,9 @@ export type RecognizerConfig = RecognizerCallbacks & {
  * Which predicates the shared machine runs. Spelled as upstream's
  * `SingleGestureName` reads, minus the `GestureHandler` suffix.
  */
-export type GestureKind = "pan" | "tap" | "longPress"
+export type GestureKind = "pan" | "tap" | "longPress" | "native"
 
-const KINDS = new Set<string>(["pan", "tap", "longPress"])
+const KINDS = new Set<string>(["pan", "tap", "longPress", "native"])
 
 /**
  * What a `GestureDetector` consumes. Both spellings produce exactly this.
