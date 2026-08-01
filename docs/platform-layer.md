@@ -65,6 +65,59 @@ anything you could set on `Adw.NavigationPage` you can set on
 its content in exactly `IntrinsicContent` for this reason — a row is sized
 by what it holds, not stretched to fill the list.
 
+**Every content area inside a widget needs one of them.** A widget hands out
+rectangles two ways: as ordinary CHILDREN (a content area) and as SLOTS —
+properties that take a widget, `topBar={…}`, `titleWidget={…}`, `sheet={…}`.
+Which way a given area arrives is gtkx's business and moves between releases
+(rc.3 took the `content`/`child` props off single-child widgets and made that
+content a child), and it has never had anything to do with layout. Both are
+GTK's territory: the layout root is cleared on the way in, so a widget lands
+bare (what `WidgetContent` does by hand) and React Native content has to bring
+its own root.
+
+```tsx
+<AdwBottomSheet
+  style={{ flex: 1 }}
+  sheet={
+    <IntrinsicContent>
+      <View style={{ padding: 20, gap: 10 }}>…</View>
+    </IntrinsicContent>
+  }
+  bottomBar={
+    <IntrinsicContent>
+      <View style={{ flexDirection: "row", gap: 8 }}>…</View>
+    </IntrinsicContent>
+  }
+>
+  {/* the content area — a child under rc.3, and just as much a boundary */}
+  <SlotContent>
+    <View style={{ flex: 1, justifyContent: "center" }}>…</View>
+  </SlotContent>
+</AdwBottomSheet>
+```
+
+Forget the wrapper and you get an error naming the widget and where the
+content landed, not a wrong-looking window: without a root, content inside a
+widget would join the ENCLOSING Yoga tree — laid out against the window's
+viewport while GTK hands it the widget's own rectangle.
+`examples/bottom-sheet` is that whole story in one screen.
+
+Which of the two is yours to choose, and the platform deliberately does not
+guess: `AdwBottomSheet` alone FILLS in its content child but HUGS in both
+`sheet` and `bottomBar`. One widget, three content areas, two answers, with
+nothing in the name or the GIR type to tell them apart — the answer lives in
+the widget's own layout code. Swapping them is visible immediately:
+`SlotContent` in a bottom bar collapses it to nothing (a filling root reports
+a zero minimum, so a size-to-content area is told "nothing"), and
+`IntrinsicContent` around a content area leaves `flex: 1` with no viewport to
+fill.
+
+Note the two independent sizes here. `style={{ flex: 1 }}` on the widget is
+the WIDGET's size in the surrounding React Native layout (a wrapped widget is
+a Yoga leaf at its natural size until the style says otherwise); the wrapper
+inside each content area is the CONTENT's size inside the rectangle that
+widget then hands out.
+
 ### GTK widgets, driven by React Native
 
 Every `GtkWidget` subclass gtkx binds — 86 of them at last count, from

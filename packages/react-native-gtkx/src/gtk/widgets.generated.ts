@@ -100,92 +100,197 @@ import {
   GtkWindowHandle as RawGtkWindowHandle,
 } from "../gtkx/bridge/widgets.generated"
 
-export const GtkActionBar = wrapReactNative(RawGtkActionBar)
-export const GtkAppChooserButton = wrapReactNative(RawGtkAppChooserButton)
-export const GtkAppChooserWidget = wrapReactNative(RawGtkAppChooserWidget)
-export const GtkAspectFrame = wrapReactNative(RawGtkAspectFrame)
-export const GtkBox = wrapReactNative(RawGtkBox)
-export const GtkButton = wrapReactNative(RawGtkButton)
-export const GtkCalendar = wrapReactNative(RawGtkCalendar)
-export const GtkCellView = wrapReactNative(RawGtkCellView)
-export const GtkCenterBox = wrapReactNative(RawGtkCenterBox)
-export const GtkCheckButton = wrapReactNative(RawGtkCheckButton)
-export const GtkColorButton = wrapReactNative(RawGtkColorButton)
-export const GtkColorChooserWidget = wrapReactNative(RawGtkColorChooserWidget)
-export const GtkColorDialogButton = wrapReactNative(RawGtkColorDialogButton)
-export const GtkColumnView = wrapReactNative(RawGtkColumnView)
-export const GtkComboBox = wrapReactNative(RawGtkComboBox)
-export const GtkComboBoxText = wrapReactNative(RawGtkComboBoxText)
-export const GtkDrawingArea = wrapReactNative(RawGtkDrawingArea)
-export const GtkDropDown = wrapReactNative(RawGtkDropDown)
-export const GtkEditableLabel = wrapReactNative(RawGtkEditableLabel)
-export const GtkEmojiChooser = wrapReactNative(RawGtkEmojiChooser)
-export const GtkEntry = wrapReactNative(RawGtkEntry)
-export const GtkExpander = wrapReactNative(RawGtkExpander)
-export const GtkFileChooserWidget = wrapReactNative(RawGtkFileChooserWidget)
-export const GtkFixed = wrapReactNative(RawGtkFixed)
-export const GtkFlowBox = wrapReactNative(RawGtkFlowBox)
-export const GtkFontButton = wrapReactNative(RawGtkFontButton)
-export const GtkFontChooserWidget = wrapReactNative(RawGtkFontChooserWidget)
-export const GtkFontDialogButton = wrapReactNative(RawGtkFontDialogButton)
-export const GtkFrame = wrapReactNative(RawGtkFrame)
-export const GtkGLArea = wrapReactNative(RawGtkGLArea)
-export const GtkGraphicsOffload = wrapReactNative(RawGtkGraphicsOffload)
-export const GtkGrid = wrapReactNative(RawGtkGrid)
-export const GtkGridView = wrapReactNative(RawGtkGridView)
-export const GtkHeaderBar = wrapReactNative(RawGtkHeaderBar)
-export const GtkIconView = wrapReactNative(RawGtkIconView)
-export const GtkImage = wrapReactNative(RawGtkImage)
-export const GtkInfoBar = wrapReactNative(RawGtkInfoBar)
-export const GtkInscription = wrapReactNative(RawGtkInscription)
-export const GtkLabel = wrapReactNative(RawGtkLabel)
-export const GtkLevelBar = wrapReactNative(RawGtkLevelBar)
-export const GtkLinkButton = wrapReactNative(RawGtkLinkButton)
-export const GtkListBox = wrapReactNative(RawGtkListBox)
-export const GtkListView = wrapReactNative(RawGtkListView)
-export const GtkLockButton = wrapReactNative(RawGtkLockButton)
-export const GtkMediaControls = wrapReactNative(RawGtkMediaControls)
-export const GtkMenuButton = wrapReactNative(RawGtkMenuButton)
-export const GtkNotebook = wrapReactNative(RawGtkNotebook)
-export const GtkOverlay = wrapReactNative(RawGtkOverlay)
-export const GtkPaned = wrapReactNative(RawGtkPaned)
-export const GtkPasswordEntry = wrapReactNative(RawGtkPasswordEntry)
-export const GtkPicture = wrapReactNative(RawGtkPicture)
-export const GtkPopover = wrapReactNative(RawGtkPopover)
-export const GtkPopoverBin = wrapReactNative(RawGtkPopoverBin)
-export const GtkPopoverMenu = wrapReactNative(RawGtkPopoverMenu)
-export const GtkPopoverMenuBar = wrapReactNative(RawGtkPopoverMenuBar)
-export const GtkProgressBar = wrapReactNative(RawGtkProgressBar)
-export const GtkRange = wrapReactNative(RawGtkRange)
-export const GtkRevealer = wrapReactNative(RawGtkRevealer)
-export const GtkScale = wrapReactNative(RawGtkScale)
-export const GtkScaleButton = wrapReactNative(RawGtkScaleButton)
-export const GtkScrollbar = wrapReactNative(RawGtkScrollbar)
-export const GtkScrolledWindow = wrapReactNative(RawGtkScrolledWindow)
-export const GtkSearchBar = wrapReactNative(RawGtkSearchBar)
-export const GtkSearchEntry = wrapReactNative(RawGtkSearchEntry)
-export const GtkSeparator = wrapReactNative(RawGtkSeparator)
-export const GtkShortcutLabel = wrapReactNative(RawGtkShortcutLabel)
-export const GtkShortcutsGroup = wrapReactNative(RawGtkShortcutsGroup)
-export const GtkShortcutsSection = wrapReactNative(RawGtkShortcutsSection)
-export const GtkShortcutsShortcut = wrapReactNative(RawGtkShortcutsShortcut)
-export const GtkSpinButton = wrapReactNative(RawGtkSpinButton)
-export const GtkSpinner = wrapReactNative(RawGtkSpinner)
-export const GtkStack = wrapReactNative(RawGtkStack)
-export const GtkStackSidebar = wrapReactNative(RawGtkStackSidebar)
-export const GtkStackSwitcher = wrapReactNative(RawGtkStackSwitcher)
-export const GtkStatusbar = wrapReactNative(RawGtkStatusbar)
-export const GtkSwitch = wrapReactNative(RawGtkSwitch)
-export const GtkText = wrapReactNative(RawGtkText)
-export const GtkTextView = wrapReactNative(RawGtkTextView)
-export const GtkToggleButton = wrapReactNative(RawGtkToggleButton)
-export const GtkTreeExpander = wrapReactNative(RawGtkTreeExpander)
-export const GtkTreeView = wrapReactNative(RawGtkTreeView)
-export const GtkVideo = wrapReactNative(RawGtkVideo)
-export const GtkViewport = wrapReactNative(RawGtkViewport)
-export const GtkVolumeButton = wrapReactNative(RawGtkVolumeButton)
-export const GtkWindowControls = wrapReactNative(RawGtkWindowControls)
-export const GtkWindowHandle = wrapReactNative(RawGtkWindowHandle)
+export const GtkActionBar = wrapReactNative(RawGtkActionBar, "GtkActionBar")
+export const GtkAppChooserButton = wrapReactNative(
+  RawGtkAppChooserButton,
+  "GtkAppChooserButton",
+)
+export const GtkAppChooserWidget = wrapReactNative(
+  RawGtkAppChooserWidget,
+  "GtkAppChooserWidget",
+)
+export const GtkAspectFrame = wrapReactNative(
+  RawGtkAspectFrame,
+  "GtkAspectFrame",
+)
+export const GtkBox = wrapReactNative(RawGtkBox, "GtkBox")
+export const GtkButton = wrapReactNative(RawGtkButton, "GtkButton")
+export const GtkCalendar = wrapReactNative(RawGtkCalendar, "GtkCalendar")
+export const GtkCellView = wrapReactNative(RawGtkCellView, "GtkCellView")
+export const GtkCenterBox = wrapReactNative(RawGtkCenterBox, "GtkCenterBox")
+export const GtkCheckButton = wrapReactNative(
+  RawGtkCheckButton,
+  "GtkCheckButton",
+)
+export const GtkColorButton = wrapReactNative(
+  RawGtkColorButton,
+  "GtkColorButton",
+)
+export const GtkColorChooserWidget = wrapReactNative(
+  RawGtkColorChooserWidget,
+  "GtkColorChooserWidget",
+)
+export const GtkColorDialogButton = wrapReactNative(
+  RawGtkColorDialogButton,
+  "GtkColorDialogButton",
+)
+export const GtkColumnView = wrapReactNative(RawGtkColumnView, "GtkColumnView")
+export const GtkComboBox = wrapReactNative(RawGtkComboBox, "GtkComboBox")
+export const GtkComboBoxText = wrapReactNative(
+  RawGtkComboBoxText,
+  "GtkComboBoxText",
+)
+export const GtkDrawingArea = wrapReactNative(
+  RawGtkDrawingArea,
+  "GtkDrawingArea",
+)
+export const GtkDropDown = wrapReactNative(RawGtkDropDown, "GtkDropDown")
+export const GtkEditableLabel = wrapReactNative(
+  RawGtkEditableLabel,
+  "GtkEditableLabel",
+)
+export const GtkEmojiChooser = wrapReactNative(
+  RawGtkEmojiChooser,
+  "GtkEmojiChooser",
+)
+export const GtkEntry = wrapReactNative(RawGtkEntry, "GtkEntry")
+export const GtkExpander = wrapReactNative(RawGtkExpander, "GtkExpander")
+export const GtkFileChooserWidget = wrapReactNative(
+  RawGtkFileChooserWidget,
+  "GtkFileChooserWidget",
+)
+export const GtkFixed = wrapReactNative(RawGtkFixed, "GtkFixed")
+export const GtkFlowBox = wrapReactNative(RawGtkFlowBox, "GtkFlowBox")
+export const GtkFontButton = wrapReactNative(RawGtkFontButton, "GtkFontButton")
+export const GtkFontChooserWidget = wrapReactNative(
+  RawGtkFontChooserWidget,
+  "GtkFontChooserWidget",
+)
+export const GtkFontDialogButton = wrapReactNative(
+  RawGtkFontDialogButton,
+  "GtkFontDialogButton",
+)
+export const GtkFrame = wrapReactNative(RawGtkFrame, "GtkFrame")
+export const GtkGLArea = wrapReactNative(RawGtkGLArea, "GtkGLArea")
+export const GtkGraphicsOffload = wrapReactNative(
+  RawGtkGraphicsOffload,
+  "GtkGraphicsOffload",
+)
+export const GtkGrid = wrapReactNative(RawGtkGrid, "GtkGrid")
+export const GtkGridView = wrapReactNative(RawGtkGridView, "GtkGridView")
+export const GtkHeaderBar = wrapReactNative(RawGtkHeaderBar, "GtkHeaderBar")
+export const GtkIconView = wrapReactNative(RawGtkIconView, "GtkIconView")
+export const GtkImage = wrapReactNative(RawGtkImage, "GtkImage")
+export const GtkInfoBar = wrapReactNative(RawGtkInfoBar, "GtkInfoBar")
+export const GtkInscription = wrapReactNative(
+  RawGtkInscription,
+  "GtkInscription",
+)
+export const GtkLabel = wrapReactNative(RawGtkLabel, "GtkLabel")
+export const GtkLevelBar = wrapReactNative(RawGtkLevelBar, "GtkLevelBar")
+export const GtkLinkButton = wrapReactNative(RawGtkLinkButton, "GtkLinkButton")
+export const GtkListBox = wrapReactNative(RawGtkListBox, "GtkListBox")
+export const GtkListView = wrapReactNative(RawGtkListView, "GtkListView")
+export const GtkLockButton = wrapReactNative(RawGtkLockButton, "GtkLockButton")
+export const GtkMediaControls = wrapReactNative(
+  RawGtkMediaControls,
+  "GtkMediaControls",
+)
+export const GtkMenuButton = wrapReactNative(RawGtkMenuButton, "GtkMenuButton")
+export const GtkNotebook = wrapReactNative(RawGtkNotebook, "GtkNotebook")
+export const GtkOverlay = wrapReactNative(RawGtkOverlay, "GtkOverlay")
+export const GtkPaned = wrapReactNative(RawGtkPaned, "GtkPaned")
+export const GtkPasswordEntry = wrapReactNative(
+  RawGtkPasswordEntry,
+  "GtkPasswordEntry",
+)
+export const GtkPicture = wrapReactNative(RawGtkPicture, "GtkPicture")
+export const GtkPopover = wrapReactNative(RawGtkPopover, "GtkPopover")
+export const GtkPopoverBin = wrapReactNative(RawGtkPopoverBin, "GtkPopoverBin")
+export const GtkPopoverMenu = wrapReactNative(
+  RawGtkPopoverMenu,
+  "GtkPopoverMenu",
+)
+export const GtkPopoverMenuBar = wrapReactNative(
+  RawGtkPopoverMenuBar,
+  "GtkPopoverMenuBar",
+)
+export const GtkProgressBar = wrapReactNative(
+  RawGtkProgressBar,
+  "GtkProgressBar",
+)
+export const GtkRange = wrapReactNative(RawGtkRange, "GtkRange")
+export const GtkRevealer = wrapReactNative(RawGtkRevealer, "GtkRevealer")
+export const GtkScale = wrapReactNative(RawGtkScale, "GtkScale")
+export const GtkScaleButton = wrapReactNative(
+  RawGtkScaleButton,
+  "GtkScaleButton",
+)
+export const GtkScrollbar = wrapReactNative(RawGtkScrollbar, "GtkScrollbar")
+export const GtkScrolledWindow = wrapReactNative(
+  RawGtkScrolledWindow,
+  "GtkScrolledWindow",
+)
+export const GtkSearchBar = wrapReactNative(RawGtkSearchBar, "GtkSearchBar")
+export const GtkSearchEntry = wrapReactNative(
+  RawGtkSearchEntry,
+  "GtkSearchEntry",
+)
+export const GtkSeparator = wrapReactNative(RawGtkSeparator, "GtkSeparator")
+export const GtkShortcutLabel = wrapReactNative(
+  RawGtkShortcutLabel,
+  "GtkShortcutLabel",
+)
+export const GtkShortcutsGroup = wrapReactNative(
+  RawGtkShortcutsGroup,
+  "GtkShortcutsGroup",
+)
+export const GtkShortcutsSection = wrapReactNative(
+  RawGtkShortcutsSection,
+  "GtkShortcutsSection",
+)
+export const GtkShortcutsShortcut = wrapReactNative(
+  RawGtkShortcutsShortcut,
+  "GtkShortcutsShortcut",
+)
+export const GtkSpinButton = wrapReactNative(RawGtkSpinButton, "GtkSpinButton")
+export const GtkSpinner = wrapReactNative(RawGtkSpinner, "GtkSpinner")
+export const GtkStack = wrapReactNative(RawGtkStack, "GtkStack")
+export const GtkStackSidebar = wrapReactNative(
+  RawGtkStackSidebar,
+  "GtkStackSidebar",
+)
+export const GtkStackSwitcher = wrapReactNative(
+  RawGtkStackSwitcher,
+  "GtkStackSwitcher",
+)
+export const GtkStatusbar = wrapReactNative(RawGtkStatusbar, "GtkStatusbar")
+export const GtkSwitch = wrapReactNative(RawGtkSwitch, "GtkSwitch")
+export const GtkText = wrapReactNative(RawGtkText, "GtkText")
+export const GtkTextView = wrapReactNative(RawGtkTextView, "GtkTextView")
+export const GtkToggleButton = wrapReactNative(
+  RawGtkToggleButton,
+  "GtkToggleButton",
+)
+export const GtkTreeExpander = wrapReactNative(
+  RawGtkTreeExpander,
+  "GtkTreeExpander",
+)
+export const GtkTreeView = wrapReactNative(RawGtkTreeView, "GtkTreeView")
+export const GtkVideo = wrapReactNative(RawGtkVideo, "GtkVideo")
+export const GtkViewport = wrapReactNative(RawGtkViewport, "GtkViewport")
+export const GtkVolumeButton = wrapReactNative(
+  RawGtkVolumeButton,
+  "GtkVolumeButton",
+)
+export const GtkWindowControls = wrapReactNative(
+  RawGtkWindowControls,
+  "GtkWindowControls",
+)
+export const GtkWindowHandle = wrapReactNative(
+  RawGtkWindowHandle,
+  "GtkWindowHandle",
+)
 
 export {
   GtkAboutDialog, // toplevel (implements GtkRoot)

@@ -240,7 +240,10 @@ const emitPlatformWidgets = ({
     `\n} from "../gtkx/bridge/widgets.generated"\n` +
     `import { wrapReactNative } from "${wrapReactNativeFrom}"\n\n` +
     wrapped
-      .map((n) => `export const ${n} = wrapReactNative(Raw${n})`)
+      // The name is passed explicitly: gtkx builds its components from a
+      // factory, so they carry no name of their own, and wrapReactNative
+      // needs one for the slot diagnostics and for React devtools.
+      .map((n) => `export const ${n} = wrapReactNative(Raw${n}, "${n}")`)
       .join("\n") +
     "\n\n" +
     (rawNames.length > 0

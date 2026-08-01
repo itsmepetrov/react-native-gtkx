@@ -10,8 +10,18 @@
 //
 // The visual half of the style (background, border, radius) is applied as a
 // GTK CSS class, the same mechanism View uses.
-import { useContext, useRef, type ComponentType, type ReactNode } from "react"
-import { HostNodeContext } from "../components/host-node"
+import {
+  isValidElement,
+  useContext,
+  useRef,
+  type ComponentType,
+  type ReactNode,
+} from "react"
+import {
+  HostNodeContext,
+  SlotContext,
+  type SlotLocation,
+} from "../components/host-node"
 import {
   useLayoutChild,
   type LayoutEvent,
@@ -132,9 +142,95 @@ export type ReactNativeLayoutProps = {
  * where there is no Yoga tree to join. The wrapper detects that and renders
  * the bare component, so one exported symbol works in both worlds.
  */
+// A wrapped widget is a Yoga LEAF, so everything INSIDE it is GTK's
+// territory — its children and its slots alike.
+//
+// A widget SLOT is a property that takes a widget (`titleWidget`, `sheet`,
+// `sidebar`, `startChild`); a widget's content area is an ordinary child.
+// The distinction is gtkx's, it moves between releases — rc.3 took the
+// `content`/`child` props off single-child widgets and made that content a
+// child — and it has never had anything to do with layout. Both keep
+// rendering where they were written, so both keep seeing the enclosing React
+// Native layout root even though GTK has parented them somewhere else
+// entirely. Content then joins a Yoga tree whose viewport is the WINDOW
+// while GTK gives it the widget's own rectangle: laid out against one box,
+// drawn in another, and silently stealing space from a tree it was never
+// meant to be in.
+//
+// So the boundary clears the layout root on the way in. The widgets a slot
+// or a child usually holds want exactly that (it is what `WidgetContent`
+// does by hand), and React Native content entering has to bring its own root
+// — `SlotContent` to fill the area, `IntrinsicContent` to size the area to
+// itself. Which of the two is right cannot be inferred, and measurement says
+// so louder than argument: `AdwBottomSheet` alone FILLS in its content child
+// but HUGS in both `sheet` (a bottom sheet rises to the height of its own
+// contents) and `bottomBar`. One widget, three content areas, two answers,
+// with nothing in the name or the GIR type to tell them apart — the answer
+// lives in the widget's own layout code. The boundary is what makes NOT
+// saying a readable error instead of a silent mislayout — see useHostNode.
+const SlotBoundary = ({
+  location,
+  children,
+}: {
+  location: SlotLocation
+  children: ReactNode
+}) => (
+  // Two providers, no widget: a context provider is invisible to the gtkx
+  // reconciler, so this is safe even on slots whose value is NOT a widget
+  // (`breakpoints`, `menuModel`, `buffer`, `adjustment` — the majority of
+  // element-valued props, in fact) — wrapping those in a real box would put
+  // a GtkBox where an AdwBreakpoint belongs.
+  <SlotContext.Provider value={location}>
+    <HostNodeContext.Provider value={null}>{children}</HostNodeContext.Provider>
+  </SlotContext.Provider>
+)
+
+const holdsElement = (value: unknown): boolean =>
+  isValidElement(value) || (Array.isArray(value) && value.some(holdsElement))
+
+// Puts every element-valued prop, and the children, behind a boundary.
+// `ref` is never content; anything that holds no element (a string child, a
+// number, an already-constructed GObject) is left exactly as it was, so the
+// common widget pays nothing.
+const withSlotBoundaries = <P extends object>(props: P, widget: string): P => {
+  let bounded: Record<string, unknown> | undefined
+  for (const key in props) {
+    if (key === "ref") {
+      continue
+    }
+    const value = (props as Record<string, unknown>)[key]
+    if (!holdsElement(value)) {
+      continue
+    }
+    bounded ??= {}
+    bounded[key] = (
+      // Children are not a named slot: the error says "inside AdwBottomSheet"
+      // rather than naming a property that does not exist.
+      <SlotBoundary
+        location={{ widget, slot: key === "children" ? null : key }}
+      >
+        {value as ReactNode}
+      </SlotBoundary>
+    )
+  }
+  // The common case is a widget with no element-valued prop at all: return the
+  // props object untouched rather than allocate a copy per render.
+  return bounded ? ({ ...props, ...bounded } as P) : props
+}
+
 export const wrapReactNative = <P extends object>(
   Component: ComponentType<P>,
+  // The widget's name, for error messages and React devtools. gtkx builds its
+  // components from a factory, so they carry no name of their own — the
+  // generated widget surface passes the class name it already knows.
+  widgetName?: string,
 ): ComponentType<P & ReactNativeLayoutProps> => {
+  const name =
+    widgetName ||
+    (Component as { displayName?: string; name?: string }).displayName ||
+    (Component as { name?: string }).name ||
+    "Widget"
+
   const InLayout = (props: P & ReactNativeLayoutProps) => {
     const { style, onLayout, ...rest } = props
     const boxRef = useRef<Gtk.Box | null>(null)
@@ -172,6 +268,10 @@ export const wrapReactNative = <P extends object>(
   }
 
   const Wrapped = (props: P & ReactNativeLayoutProps) => {
+    // Every slot this widget is given becomes GTK territory, in both branches
+    // below: whether the widget itself joined React Native layout has nothing
+    // to do with what its slots hold.
+    const withSlots = withSlotBoundaries(props, name)
     // Read the context directly rather than through useHostNode, which throws
     // by design: here its absence is a supported case, not a mistake. The
     // same widget is often used in a pure GTK slot (a HeaderBar's `start`, a
@@ -180,18 +280,14 @@ export const wrapReactNative = <P extends object>(
     if (!host) {
       // style/onLayout are meaningless without a Yoga tree — drop them rather
       // than forward them onto a GObject that has no such properties.
-      const rest = { ...props } as Partial<ReactNativeLayoutProps>
+      const rest = { ...withSlots } as Partial<ReactNativeLayoutProps>
       delete rest.style
       delete rest.onLayout
       return <Component {...(rest as P)} />
     }
-    return <InLayout {...props} />
+    return <InLayout {...withSlots} />
   }
 
-  const name =
-    (Component as { displayName?: string; name?: string }).displayName ??
-    (Component as { name?: string }).name ??
-    "Widget"
   InLayout.displayName = `wrapReactNative(${name}).InLayout`
   Wrapped.displayName = `wrapReactNative(${name})`
   return Wrapped
