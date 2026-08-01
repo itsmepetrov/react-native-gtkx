@@ -14,10 +14,10 @@ import {
   allocateChild,
   attachRnLayout,
   detachRnLayout,
+  Gtk,
   measureWidget,
   queueAllocate,
   queueResize,
-  type Gtk,
 } from "../gtkx/bridge/index"
 import {
   perfAddTime,
@@ -48,6 +48,27 @@ export type LayoutEvent = {
 // spends in OUR layout code for the frame.
 let perfAllocDepth = 0
 
+// RN's `overflow` onto GTK's. It is the one style that has to reach BOTH
+// halves of the pipeline: Yoga reads it while measuring (see
+// layout/apply-style.ts, which keeps setting it on the node), and the widget
+// needs it to clip paint and picking — GTK4 CSS has no `overflow` property,
+// so unlike every other visual style this one is a widget call rather than a
+// declaration.
+//
+// `scroll` clips exactly like `hidden`, which is what RN itself does: a
+// `View` is not made scrollable by a style on either platform (iOS sets
+// `clipsToBounds` for any non-visible overflow, Android's ReactViewGroup
+// clips for SCROLL and HIDDEN alike) — only a `ScrollView` scrolls. Mapping
+// it to VISIBLE instead would be the silent lie this replaces.
+const WIDGET_OVERFLOW: Record<
+  NonNullable<LayoutStyle["overflow"]>,
+  Gtk.Overflow
+> = {
+  visible: Gtk.Overflow.VISIBLE,
+  hidden: Gtk.Overflow.HIDDEN,
+  scroll: Gtk.Overflow.HIDDEN,
+}
+
 export type LayoutChildOptions = {
   style: StyleProp | undefined
   onLayout: ((event: LayoutEvent) => void) | undefined
@@ -56,6 +77,12 @@ export type LayoutChildOptions = {
   // own widget so Yoga reserves exactly what the theme will draw.
   measureFromWidget?: boolean
   extraLayout?: LayoutStyle
+  // Widgets that clip whatever the style says: an under-allocated GtkLabel
+  // paints its full text past its box (Text), and a scroll viewport clips by
+  // contract (ScrollView). Both used to write the widget's overflow
+  // themselves; one writer avoids the ordering bug where a style change
+  // re-runs the generic effect and un-clips them.
+  alwaysClips?: boolean
 }
 
 export type LayoutChild = {
@@ -149,6 +176,19 @@ export const useLayoutChild = (
   }, [node, layoutKey])
 
   const cssClass = defaultCssRegistry.getClassName(visual)
+
+  // The GTK half of `overflow`. Yoga has had it since the beginning and
+  // nothing reached the widget, so the style was accepted and painted
+  // nothing — `overflow: "hidden"` on a container was a no-op. GTK clips to
+  // the CSS padding box, so `borderRadius` shapes the clip for free (a
+  // rounded-clip node rather than a rectangular one) and both paint and
+  // `gtk_widget_pick()` follow it.
+  const overflow = options.alwaysClips
+    ? "hidden"
+    : (flat?.overflow ?? "visible")
+  useLayoutEffect(() => {
+    widgetRef.current?.setOverflow(WIDGET_OVERFLOW[overflow])
+  }, [widgetRef, overflow])
 
   // RN transforms are visual only: the widget keeps the box Yoga gave it, so
   // a transform never touches the shadow tree — it only asks the parent

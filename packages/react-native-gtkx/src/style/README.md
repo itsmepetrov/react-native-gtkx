@@ -2,7 +2,8 @@
 
 Pipeline: `StyleSheet.flatten` → `splitStyle` (layout / visual) → `visualStyleToCss` → memoized
 `CssRegistry` (`css` from the bridge) → class in the widget's `cssClasses`. The layout part goes to Yoga via
-`LayoutNodeApi.setStyle` and never reaches CSS.
+`LayoutNodeApi.setStyle` and never reaches CSS (`overflow` is the exception that
+also reaches the widget — see below).
 
 Statuses: **supported** — works fully; **partial** — works with the caveat from the note;
 **ignored** — the property is outside the frozen contract, `console.warn` once per key.
@@ -17,6 +18,16 @@ All `LayoutStyle` keys from `contracts.ts` are classified into `layout` unchange
 `overflow`, `padding`, `paddingBottom`, `paddingHorizontal`, `paddingLeft`, `paddingRight`,
 `paddingTop`, `paddingVertical`, `position`, `right`, `rowGap`, `top`, `width` — **supported**
 (actual behavior is defined by the layout engine).
+
+`overflow` is the one key in that list that does not stop at Yoga. Yoga needs
+it while measuring (a scroll node's main axis is unconstrained), and the widget
+needs it to clip: GTK4 CSS has no `overflow` property, so it is a
+`gtk_widget_set_overflow()` call from `components/use-layout-child.ts` rather
+than a declaration — the only style outside `transform` whose GTK half is not
+CSS. `hidden` clips paint AND picking to the widget's CSS padding box, rounded
+by `borderRadius`; `scroll` clips the same way and adds no scrolling, which is
+what RN itself does on both of its platforms (only a `ScrollView` scrolls);
+`visible` (the default) lets children paint past the container, as in RN.
 
 ## Visual (→ GTK CSS)
 

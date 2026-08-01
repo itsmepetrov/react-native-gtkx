@@ -13,7 +13,7 @@ npm run dev                            # gtkx dev — vite + Fast Refresh
 npm run build && npm start             # release bundle
 ```
 
-![The playground mid-drag: the "drag me" box carried to the right of its arena by the pointer, and under it a row of counters reading "React renders — looping box: 1", "React renders — dragged box: 1", "Frames driven — looping box: 357", "Frames driven — dragged box: 45", "Frames per second, now: 58".](../../docs/shots/reanimated-playground.png)
+![The playground mid-drag: the "drag me" box carried down to the bottom-right of its arena by the pointer and CUT OFF at the arena's edge — its lower half and the bottom of its label gone, the caption below it untouched — and further down a row of counters reading "React renders — looping box: 1", "React renders — dragged box: 1", "Frames driven — looping box: 350", "Frames driven — dragged box: 58", "Frames per second, now: 59".](../../docs/shots/reanimated-playground.png)
 
 Every import in `src/` is a **bare package name** — `react-native` and
 `react-native-reanimated`. Neither package is installed in this workspace and
@@ -34,6 +34,15 @@ before the Gesture API existed and which runs here unchanged. The Reanimated
 half is exactly what you would write on iOS. The panel says all of this on
 screen; a demo that quietly substituted one gesture API for another would be
 lying about the state of the platform.
+
+The arena sets `overflow: "hidden"`, so throwing the box past an edge cuts it
+off at the arena — rounded corners included — instead of letting it slide over
+the caption underneath. That is the platform honouring the style, which it did
+not do until recently: `overflow` reached Yoga and stopped there, so a container
+that asked to clip was accepted and clipped nothing. The other way to keep a
+dragged box in its arena is to `clamp()` the shared value inside the gesture,
+and this panel deliberately does not: clamping is an app deciding where a drag
+ends, and it would leave nothing for the clip to demonstrate.
 
 **02 Zero renders per frame.** The strongest claim this surface makes, in the
 form a person can check. A box has been animating since the app opened; next
