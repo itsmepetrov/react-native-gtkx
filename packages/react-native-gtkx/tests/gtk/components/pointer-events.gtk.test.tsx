@@ -109,3 +109,84 @@ it("style.pointerEvents works and dynamic changes apply and restore", async () =
     expect(pickName(40, 40)).toBe("overlay-child")
   })
 })
+
+// The case that used to be listed as unsupported. Nesting works now because
+// can-target has ONE writer: a view records what its own pointerEvents
+// wants, a box-only parent masks it, and lifting the mask restores the
+// recorded value rather than a blanket `true`.
+const nested = (outer: ViewProps["pointerEvents"]) => (
+  <Root
+    width={300}
+    height={300}
+  >
+    <View
+      style={{ width: 300, height: 300 }}
+      testID="stage"
+    >
+      <View
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: 300,
+          height: 300,
+        }}
+        testID="under"
+      />
+      <View
+        pointerEvents={outer}
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: 200,
+          height: 200,
+        }}
+        testID="outer"
+      >
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 60,
+            height: 60,
+          }}
+          testID="invisible"
+        />
+        <View
+          style={{
+            position: "absolute",
+            left: 100,
+            top: 20,
+            width: 60,
+            height: 60,
+          }}
+          testID="ordinary"
+        />
+      </View>
+    </View>
+  </Root>
+)
+
+it("box-only masks children, and lifting it restores each child's own mode", async () => {
+  const { rerender } = await render(nested("box-only"))
+  await waitForStage()
+  expect(pickName(40, 40)).toBe("outer")
+  expect(pickName(120, 40)).toBe("outer")
+
+  await rerender(nested("auto"))
+  await waitFor(() => {
+    expect(pickName(120, 40)).toBe("ordinary")
+  })
+  // The child that asked to be invisible to pointers still is. A blanket
+  // restore to can-target=true would have made it a pick target here, which
+  // is the bug this replaced.
+  expect(pickName(40, 40)).toBe("outer")
+
+  await rerender(nested("box-only"))
+  await waitFor(() => {
+    expect(pickName(120, 40)).toBe("outer")
+  })
+})
