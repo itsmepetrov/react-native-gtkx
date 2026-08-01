@@ -45,7 +45,7 @@ const INPUT_PURPOSE: Record<
   url: Gtk.InputPurpose.URL,
 }
 
-// The focus controller is attached imperatively (rc.2 also offers a
+// The focus controller is attached imperatively (rc.3 also offers a
 // declarative `controllers` slot): one wiring per widget, handlers read from a
 // ref, so changing onFocus/onBlur never re-creates the controller.
 const useFocusController = (

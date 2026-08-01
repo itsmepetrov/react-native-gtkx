@@ -73,9 +73,9 @@ const CONFIG_REQUIRED =
 const { createConfigLoader } = await import(
   pathToFileURL(fromPackage.resolve("@gtkx/config/internal")).href
 )
-const gtkxConfig = await createConfigLoader()(process.cwd()).catch(
-  (error: unknown) => fail(`${CONFIG_REQUIRED}\n${String(error)}`),
-)
+const gtkxConfig = await createConfigLoader()
+  .resolve(process.cwd())
+  .catch((error: unknown) => fail(`${CONFIG_REQUIRED}\n${String(error)}`))
 if (!gtkxConfig.applicationId) {
   fail(CONFIG_REQUIRED)
 }

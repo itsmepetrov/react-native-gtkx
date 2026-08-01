@@ -1,7 +1,7 @@
-// RC2-WORKAROUND(use-signal-stale-handler): see docs/gtkx-rc2-notes.md
+// RC3-WORKAROUND(use-signal-stale-handler): see docs/gtkx-rc3-notes.md
 // @gtkx/react's useSignal documents that "each emission runs the handler from
 // the latest render", and rc.1 delivered that by pinning the handler in a ref
-// of its own. rc.2 routes it through React's useEffectEvent instead, and
+// of its own. rc.3 routes it through React's useEffectEvent instead, and
 // react-reconciler@0.33.0 only refreshes useEffectEvent in
 // commitBeforeMutationEffects for `case 0` (FunctionComponent) — `case 11`
 // (ForwardRef) and `case 15` (SimpleMemoComponent) fall through unrefreshed.

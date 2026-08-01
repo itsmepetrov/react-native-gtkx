@@ -24,7 +24,7 @@ const INPUTS = [
   "docs/api.md",
   "docs/platform-layer.md",
   "docs/getting-started.md",
-  "docs/gtkx-rc2-notes.md",
+  "docs/gtkx-rc3-notes.md",
   "docs/research/navigation-extensibility.md",
   "scripts/widget-surface/classification.json",
 ]

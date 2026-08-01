@@ -130,7 +130,7 @@ const searchDocsTool = (): Tool =>
     title: "Search react-native-gtkx docs",
     description:
       "Free-text search over the docs (getting-started, the platform layer, " +
-      "gtkx rc.2 workarounds/quirks, navigation). The fallback tool: use it " +
+      "gtkx rc.3 workarounds/quirks, navigation). The fallback tool: use it " +
       "for symptoms and known-issue questions that rn_gtkx_describe_component " +
       "cannot answer by name (workarounds are keyed by mechanism, not by " +
       "component).",

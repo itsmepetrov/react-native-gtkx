@@ -1,7 +1,7 @@
 // WORKAROUND: the gtkx tutorial's toasts (task-list.tsx / task-row.tsx /
 // dialogs.tsx's "moved to Trash, Undo" feedback) go through
 // `@gtkx/components/adw`'s `ToastProvider`/`useToast` — a package this
-// repository does not depend on (react-native-gtkx pins gtkx rc.2, and
+// repository does not depend on (react-native-gtkx pins gtkx rc.3, and
 // @gtkx/components is not among its dependencies; see
 // .claude/epics/tasks-app/updates/007/progress.md and
 // docs/research/navigation-extensibility.md, "toasts" in Still open).

@@ -65,7 +65,7 @@ const reactSubexportsOf = (manifest: PackageManifest): string[] =>
     .map((key) => key.slice(2))
 
 // @gtkx/cli is meant for apps: its `codegen` command resolves gtkx.config.ts
-// from a cwd and trusts a freshness stamp, which is what the RC2-WORKAROUND
+// from a cwd and trusts a freshness stamp, which is what the RC3-WORKAROUND
 // this replaced was dodging (running from a reconstructed "project that owns
 // the hosting node_modules" purely to keep that cwd resolution honest — see
 // gtkx-org/gtkx#468, #470). A library generating bindings on a consumer's

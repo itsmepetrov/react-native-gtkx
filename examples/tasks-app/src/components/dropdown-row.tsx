@@ -1,8 +1,9 @@
 // WORKAROUND: the gtkx tutorial's Preferences screen uses
-// `@gtkx/components`'s generic `<DropDown component={AdwComboRow} items=…
-// selectedId=… onSelectionChanged=… />` — another package this repository
-// does not depend on (see src/toast.tsx for the same situation with
-// `@gtkx/components/adw`). AdwComboRow itself is a real, already-reachable
+// `@gtkx/components/adw`'s `<ComboRow items=… selectedId=…
+// onSelectionChanged=… />` (rc.3 split it out of the generic `DropDown`,
+// which no longer takes a `component` prop) — another package this
+// repository does not depend on (see src/toast.tsx for the same situation).
+// AdwComboRow itself is a real, already-reachable
 // react-native-gtkx/adw export; what's missing is only the small id/value
 // list bookkeeping the upstream helper did generically. A one-off local
 // version, scoped to this screen's two dropdowns, is simpler than

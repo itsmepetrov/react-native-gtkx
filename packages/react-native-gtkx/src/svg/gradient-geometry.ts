@@ -1,9 +1,6 @@
 // Pure objectBoundingBox / userSpaceOnUse coordinate math for gradients — no
-// gtkx imports, so it stays testable even though the bridge's actual
-// gradient PAINT is currently blocked by an upstream gtkx-rc2 native bug
-// (see the WORKAROUND note by makeColorStop in gtkx/bridge/svg-node.ts).
-// This is the part of gradient support that already works end to end today
-// and will need no changes once that bug is fixed upstream.
+// gtkx imports, so it is unit-testable off Linux; the bridge
+// (gtkx/bridge/svg-node.ts) feeds the results to Gsk's gradient nodes.
 
 export type BoundingBox = {
   x: number

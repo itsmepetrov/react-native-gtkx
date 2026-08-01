@@ -129,7 +129,7 @@ neither is the "small, clean" kind of fix the tasks above were:
   errors in the application log. The root cause is not conclusively
   identified (candidates: a floating-reference/GC detail at the NAPI
   boundary, something specific to this VM's software-rendered compositor
-  session, or a genuine gtkx rc.2 gap in `Adw.ToastOverlay.addToast`).
+  session, or a genuine gtkx rc.3 gap in `Adw.ToastOverlay.addToast`).
   Recorded here and in `docs/research/navigation-extensibility.md` rather
   than silently assumed to work because the code compiles.
 - **The Preferences dropdowns** (`src/components/dropdown-row.tsx`): the
