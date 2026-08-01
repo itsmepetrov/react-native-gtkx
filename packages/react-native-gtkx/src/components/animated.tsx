@@ -11,12 +11,23 @@ import {
   type RefObject,
 } from "react"
 import {
+  INSET_PROPERTIES,
+  insetRefusalReason,
+  insetTranslation,
+  type InsetProperty,
+} from "../style/absolute-insets"
+import {
   DRIVEABLE_COLOR_PROPERTIES,
   driveableColorsToCss,
   type DriveableColorProperty,
 } from "../style/imperative-css"
 import { createAnimated } from "../animated/index"
-import type { FlatStyle, StyleProp, TransformPart } from "../contracts"
+import type {
+  DimensionValue,
+  FlatStyle,
+  StyleProp,
+  TransformPart,
+} from "../contracts"
 import {
   createWidgetCss,
   GtkBox,
@@ -72,6 +83,34 @@ type TransformSlot = {
   key: string
   node: AnimatedNode | null
   value: AnimatedValue
+  // Set only on a slot DERIVED from an animated inset (`top`/`left`/`right`/
+  // `bottom` on a node whose own position is absolute). The slot then carries
+  // `sign * (inset - base)`, where `base` is the inset value Yoga was given at
+  // the last React commit — see splitAnimated.
+  inset?: { base: number; sign: 1 | -1 }
+}
+
+const toNumber = (value: AnimatedValue): number =>
+  typeof value === "number" ? value : Number.parseFloat(value)
+
+// What a slot actually writes into the transform array. An ordinary slot
+// writes its value; a derived inset slot writes its offset from the committed
+// base, which is what makes an absolute `top` a translation.
+const slotValue = (
+  slot: TransformSlot,
+  value: AnimatedValue,
+): AnimatedValue => {
+  if (!slot.inset) {
+    return value
+  }
+  const numeric = toNumber(value)
+  // A non-numeric inset (a percentage produced mid-animation) has no offset
+  // from a point base. Holding the last position beats jumping to NaN, and
+  // the leaf never becomes driveable in the first place unless it starts
+  // numeric — see style/absolute-insets.ts and reanimated-compat/style.ts.
+  return Number.isFinite(numeric)
+    ? slot.inset.sign * (numeric - slot.inset.base)
+    : 0
 }
 
 // Stable per-node identity for the effect's dependency key: Animated nodes
@@ -92,11 +131,12 @@ const nodeId = (value: object): number => {
 // with FlatStyle's numeric one, rejecting Animated.Value entries.
 export type AnimatedViewStyle = Omit<
   FlatStyle,
-  "opacity" | "transform" | DriveableColorProperty
+  "opacity" | "transform" | DriveableColorProperty | InsetProperty
 > & {
   opacity?: number | AnimatedNode
   transform?: (TransformPart | AnimatedTransformPart)[]
-} & Partial<Record<DriveableColorProperty, string | AnimatedNode>>
+} & Partial<Record<DriveableColorProperty, string | AnimatedNode>> &
+  Partial<Record<InsetProperty, DimensionValue | AnimatedNode>>
 
 /** What every animated component accepts as `style`, arrays and falsy included. */
 export type AnimatedStyleProp =
@@ -122,6 +162,44 @@ export type AnimatedViewProps = ResponderProps & {
 type ColorSlot = {
   property: DriveableColorProperty
   node: AnimatedNode
+}
+
+// One warning per inset property per session, like every other channel here.
+const warnedInsets = new Set<string>()
+
+const insetTranslationOf = (property: InsetProperty): string =>
+  property === "top" || property === "bottom" ? "translateY" : "translateX"
+
+const warnInsetNotTranslatable = (
+  property: InsetProperty,
+  reason: string | null,
+): void => {
+  if (warnedInsets.has(property)) {
+    return
+  }
+  warnedInsets.add(property)
+  const isProduction =
+    typeof process !== "undefined" && process.env.NODE_ENV === "production"
+  if (isProduction) {
+    return
+  }
+  const spec = insetTranslationOf(property)
+  console.warn(
+    `react-native-gtkx: an animated \`${property}\` cannot be driven here. ` +
+      (reason
+        ? `The node IS absolutely positioned, but ${reason}, so there is no translation that reproduces it. `
+        : "`top`/`left`/`right`/`bottom` are driven at frame rate only on a node whose own `position` is " +
+          '"absolute", where moving it is exactly a translation and touches no sibling. Anything else needs a ' +
+          "Yoga pass over the container, which costs what the TREE costs (63.9 µs at five children, 496.3 µs at " +
+          "three hundred) against a transform's 0.12 µs. ") +
+      `Animate \`transform: [{ ${spec}: … }]\` instead. ` +
+      "The value is still applied on the next React render. See docs/api.md.",
+  )
+}
+
+/** @internal Test seam: the warning is once per property per session by design. */
+export const resetAnimatedInsetWarnings = (): void => {
+  warnedInsets.clear()
 }
 
 const splitAnimated = (
@@ -185,7 +263,61 @@ const splitAnimated = (
     delete flat.transform
   }
 
-  return { staticStyle: flat as StyleProp, opacity, slots, colors }
+  // Slice 2b: an animated inset on an absolutely positioned node becomes a
+  // derived translate. It is the one layout property with an exact transform
+  // equivalent, because an out-of-flow node's position affects nothing but
+  // where it is drawn — see src/style/absolute-insets.ts for the measured
+  // rule and for the configurations where the equivalence does NOT hold.
+  //
+  // Three things happen here at once, and all three are load-bearing:
+  //
+  //  - THE BASE. The inset's current value is written back into the static
+  //    style as a plain number, so Yoga is given a real position and the
+  //    committed rect the parent's allocate reads is the base the offset is
+  //    measured from. Nothing about the shadow tree changes.
+  //  - THE REBASE. This runs on every render, so when React commits a layout
+  //    with a different inset, the base moves and the offset is recomputed
+  //    against it in the SAME commit — the Yoga write and the offset write
+  //    are both layout effects, and the engine's flush is a microtask, so GTK
+  //    never gets a frame in between and there is no jump.
+  //  - THE ORDER. Derived slots go FIRST. The array's leftmost entry is the
+  //    outermost matrix (style/transform.ts), so a derived translate is
+  //    applied to the point LAST — it moves the already-rotated, already-
+  //    scaled box in the parent's coordinates, exactly as a layout position
+  //    does. Appending instead would put the user's scale on the OUTSIDE and
+  //    multiply the offset by it.
+  const insetSlots: TransformSlot[] = []
+  for (const property of INSET_PROPERTIES) {
+    const value = flat[property]
+    if (!isAnimatedNode(value)) {
+      continue
+    }
+    const base = toNumber(value.__getValue())
+    const translation = Number.isFinite(base)
+      ? insetTranslation(flat, property)
+      : null
+    if (!translation) {
+      // Not an equivalence. Resolve to the current value so the static style
+      // is at least correct on this render, and keep slice 2's refusal loud.
+      flat[property] = Number.isFinite(base) ? base : undefined
+      warnInsetNotTranslatable(property, insetRefusalReason(flat, property))
+      continue
+    }
+    flat[property] = base
+    insetSlots.push({
+      key: translation.transform,
+      node: value,
+      value: 0,
+      inset: { base, sign: translation.sign },
+    })
+  }
+
+  return {
+    staticStyle: flat as StyleProp,
+    opacity,
+    slots: insetSlots.length > 0 ? [...insetSlots, ...slots] : slots,
+    colors,
+  }
 }
 
 /**
@@ -227,14 +359,19 @@ const useAnimatedBinding = (
   // Rebind on a change of shape (which transforms, in which order), of the
   // node behind an animated entry, or of a static entry's value — not on
   // every render that rebuilds an equal-looking array.
+  //
+  // A derived inset slot adds its BASE to the key, and that is what makes the
+  // rebase happen: React committing a new `top` moves the base, which re-arms
+  // this effect in the same commit that gives Yoga the new position.
   const bindingKey =
     (opacity ? `opacity#${nodeId(opacity)}` : "") +
     slots
-      .map((slot) =>
-        slot.node
-          ? `|${slot.key}#${nodeId(slot.node)}`
-          : `|${slot.key}=${String(slot.value)}`,
-      )
+      .map((slot) => {
+        const inset = slot.inset ? `~${slot.inset.sign}:${slot.inset.base}` : ""
+        return slot.node
+          ? `|${slot.key}#${nodeId(slot.node)}${inset}`
+          : `|${slot.key}=${String(slot.value)}`
+      })
       .join("") +
     colors.map((slot) => `|${slot.property}#${nodeId(slot.node)}`).join("")
 
@@ -253,7 +390,12 @@ const useAnimatedBinding = (
     // transformed child draws past the boundary over its neighbors without
     // moving a single ancestor.
     const parts = slotsRef.current.map(
-      (slot) => ({ [slot.key]: slot.value }) as Record<string, AnimatedValue>,
+      (slot) =>
+        ({
+          [slot.key]: slot.node
+            ? slotValue(slot, slot.node.__getValue())
+            : slot.value,
+        }) as Record<string, AnimatedValue>,
     )
 
     const flush = (): void => {
@@ -277,7 +419,7 @@ const useAnimatedBinding = (
       subscriptions.push({
         node: slot.node,
         id: slot.node.addListener(({ value }) => {
-          part[slot.key] = value
+          part[slot.key] = slotValue(slot, value)
           flush()
         }),
       })

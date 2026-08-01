@@ -20,6 +20,16 @@ resize invalidated. The transform that replaces it costs 0.7 µs at every one
 of those tree sizes. Layout properties are refused by name, with the
 transform to use instead.
 
+> **Later, and narrower rather than softer:** one layout property turned out
+> to have an EXACT transform equivalent and now runs on the transform path —
+> an inset (`top`/`left`/`right`/`bottom`) on a node whose own `position` is
+> `"absolute"`. Such a node is out of flow, so moving it changes nothing but
+> where it is drawn, and no Yoga pass is needed at all. `width`, `flex`,
+> `margin` and `padding` have no such equivalence and §4 below is unchanged
+> for them. The carve-out is measured, hit-tested under a real pointer, and
+> refused in the configurations where the equivalence fails:
+> [absolute-insets.md](absolute-insets.md).
+
 ## 1. Why the existing CSS path cannot carry a colour
 
 Every visual style on this platform becomes a class:
@@ -194,6 +204,12 @@ alone, before GTK has re-measured anything, and it grows with the app.
 It is also the one write that is not paint-only: `queueResize` propagates to
 the toplevel, so an animated `width` can resize the window it is in. There is
 no version of that which is safe to run at 60 Hz.
+
+One exception was found later and it is a narrowing rather than a softening:
+an inset on an out-of-flow node moves nothing but itself, so it has an exact
+transform equivalent and costs no Yoga pass — [absolute-insets.md](absolute-insets.md).
+Everything in this section stands for the properties that DO change what a
+sibling gets.
 
 **Decision: refuse, by name, with the alternative.** `useAnimatedStyle`
 returning a layout property warns once for that property with its own
