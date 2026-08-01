@@ -52,17 +52,25 @@ jobs:
           # tasks-app builds its window by hand, tasks-nav gets it from
           # createSidebarNavigator (see examples/tasks-nav/README.md).
           (cd examples/tasks-nav && npm run build)
-          # Metro path (react-native build-linux): produces dist/main.jsbundle,
-          # not dist/bundle.js — build-deb.sh tells the two shapes apart.
-          (cd examples/hn-app && npm run build)
+          # Metro path. --standalone, not the app's own `npm run build`: the
+          # plain build-linux artifact (dist/main.jsbundle) is not
+          # self-contained, and packaging it means shipping a runtime
+          # node_modules — which measured 10,515 files and 206 MiB installed
+          # in v0.2.0-alpha.1, for a 369 KB bundle. --standalone is the same
+          # app as one 6.9 MB .cjs on a system node. The app keeps the cheap
+          # plain build as its default; the release wants the shippable one.
+          (cd examples/hn-app && npx react-native build-linux --standalone)
       - name: Build debs
         run: |
+          # --artifact is declared, not detected: --standalone writes BOTH
+          # dist/main.jsbundle and dist/hn-app.cjs, so no filename probe can
+          # tell the script which one it was asked to package.
           VERSION="${GITHUB_REF_NAME#v}"
-          node scripts/build-deb.ts monitor "System Monitor" "$VERSION" debs
-          node scripts/build-deb.ts gallery "RN Gallery" "$VERSION" debs
-          node scripts/build-deb.ts tasks-app "Tasks" "$VERSION" debs
-          node scripts/build-deb.ts tasks-nav "Tasks (nav)" "$VERSION" debs
-          node scripts/build-deb.ts hn-app "Hacker News" "$VERSION" debs
+          node scripts/build-deb.ts monitor "System Monitor" "$VERSION" debs --artifact vite
+          node scripts/build-deb.ts gallery "RN Gallery" "$VERSION" debs --artifact vite
+          node scripts/build-deb.ts tasks-app "Tasks" "$VERSION" debs --artifact vite
+          node scripts/build-deb.ts tasks-nav "Tasks (nav)" "$VERSION" debs --artifact vite
+          node scripts/build-deb.ts hn-app "Hacker News" "$VERSION" debs --artifact standalone
           ls -la debs/
       - name: Build the single executable (hn-app)
         run: |
@@ -73,9 +81,11 @@ jobs:
           # explains why the vite path cannot do this), so hn-app is the whole
           # list.
           #
-          # Runs after the debs: --sea re-bundles with Metro and drops its own
-          # scratch files (sea-bundle.cjs, sea-prep.blob) into the same dist/
-          # the deb step reads dist/main.jsbundle from.
+          # Still runs after the debs: --sea re-bundles with Metro and drops
+          # its own scratch files (sea-bundle.cjs, sea-prep.blob) into the
+          # same dist/ the deb step reads from. It no longer overwrites that
+          # step's input — dist/hn-app.cjs is not a name --sea writes — but
+          # keeping the order means the debs never wait on the slowest step.
           (cd examples/hn-app && npx react-native build-linux --sea)
           VERSION="${GITHUB_REF_NAME#v}"
           mkdir -p sea

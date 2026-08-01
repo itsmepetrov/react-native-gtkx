@@ -243,19 +243,21 @@ node node_modules/react-native-gtkx/dist/runner/host.js dist/main.jsbundle
 
 (run from the app root — the config loader reads `gtkx.config.ts` from the
 current directory, exactly like `run-linux` itself). Any ordinary
-`npm install` of the app already has that `node_modules`; the difference
-from the vite path only matters when packaging for a machine that never
-ran one — see `scripts/build-deb.ts`'s Metro branch, which builds that
-closure itself: a fresh, isolated install of the locally-packed
-`react-native-gtkx` plus `gtkx codegen`, never a copy of a monorepo's own
-hoisted `node_modules` (which would prove nothing about what a real install
-needs).
+`npm install` of the app already has that `node_modules`, so this is a fine
+way to run a release bundle from a checkout. It is a bad thing to _ship_:
+packaging it means shipping the closure too, and that closure is not the
+handful of runtime modules it sounds like. Measured on the release that did
+exactly this (v0.2.0-alpha.1's `hn-app` `.deb`): **10,515 files, 206 MiB
+installed** to run a 369 KB bundle, because `react-native-gtkx`'s install
+drags its build toolchain along — `typescript`, `@swc`, `rolldown`,
+`@babel`, `lightningcss`, all of it landing under `/opt` on a user's
+machine. `scripts/build-deb.ts` no longer packages this shape at all.
 
 That is the **default** artifact, and it is the only one that carries the
 `node_modules` caveat. `--standalone` below removes it entirely: the same
 Metro build, emitted as one self-contained file that runs on a system Node
 with nothing installed beside it — the vite path's shape, on the Metro
-path.
+path. It is what the release `.deb` ships.
 
 ### One file (Metro path)
 
