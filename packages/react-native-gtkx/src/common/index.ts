@@ -47,6 +47,7 @@ export {
   ListSeparator,
   rowPosition,
   type ListProps,
+  type ListReorderHandler,
   type ListRowPosition,
   type ListRowProps,
 } from "./list"

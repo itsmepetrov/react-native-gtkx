@@ -8,6 +8,7 @@ import {
   GtkTextView,
   type Gtk as GtkNs,
 } from "../gtkx/bridge/index"
+import { useFocusController } from "./use-focus"
 import { useLayoutChild, type LayoutEvent } from "./use-layout-child"
 import { View } from "./view"
 
@@ -45,34 +46,6 @@ const INPUT_PURPOSE: Record<
   url: Gtk.InputPurpose.URL,
 }
 
-// The focus controller is attached imperatively (rc.3 also offers a
-// declarative `controllers` slot): one wiring per widget, handlers read from a
-// ref, so changing onFocus/onBlur never re-creates the controller.
-const useFocusController = (
-  widgetRef: React.RefObject<GtkNs.Widget | null>,
-  onFocus?: () => void,
-  onBlur?: () => void,
-): void => {
-  const handlers = useRef({ onFocus, onBlur })
-  handlers.current = { onFocus, onBlur }
-  useLayoutEffect(() => {
-    const widget = widgetRef.current
-    if (!widget) {
-      return
-    }
-    const focus = new Gtk.EventControllerFocus()
-    const enter = (): void => handlers.current.onFocus?.()
-    const leave = (): void => handlers.current.onBlur?.()
-    focus.on("enter", enter)
-    focus.on("leave", leave)
-    widget.addController(focus)
-    return () => {
-      widget.removeController(focus)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-}
-
 // Single-line input over GtkEntry. gtkx's controlled-text behavior keeps the
 // widget in sync with the `text` prop (RN controlled semantics); uncontrolled
 // usage passes defaultValue once.
@@ -95,7 +68,13 @@ const SingleLineTextInput = ({
   const widgetRef = useRef<GtkNs.Entry | null>(null)
   const [focused, setFocused] = useState(false)
 
-  useLayoutChild(widgetRef, {
+  // The visual half of the style lands on the ENTRY as a GTK CSS class, the
+  // same way `wrapReactNative` puts it on the widget it wraps. It used to be
+  // computed and then dropped, so `backgroundColor`, `borderWidth` and the
+  // rest silently did nothing on a TextInput and on nothing else — found
+  // while flattening the "Add a task…" field in examples/tasks-nav, which
+  // Adwaita draws with no frame at all inside a boxed list.
+  const { cssClass } = useLayoutChild(widgetRef, {
     style,
     onLayout,
     // The entry measures itself (theme-accurate height); width is driven by
@@ -135,6 +114,7 @@ const SingleLineTextInput = ({
     <GtkEntry
       ref={widgetRef}
       name={testID}
+      cssClasses={cssClass ? [cssClass] : undefined}
       secondaryIconName={showClear ? "edit-clear-symbolic" : null}
       secondaryIconActivatable={showClear}
       secondaryIconTooltipText={showClear ? "Clear" : null}

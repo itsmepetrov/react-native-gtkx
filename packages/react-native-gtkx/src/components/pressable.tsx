@@ -12,15 +12,21 @@ import { Gtk, GtkBox } from "../gtkx/bridge/index"
 import { perfAddTime, perfCount, perfEnabled, perfNow } from "../perf"
 import { HostNodeContext } from "./host-node"
 import { createPressEvent, createTouch, type PressEvent } from "./press-event"
+import { useActivateOnKey, useFocusable, useFocusController } from "./use-focus"
 import {
   useLayoutChild,
   useRnContainer,
   type LayoutEvent,
 } from "./use-layout-child"
 
+// react-native-web's own Pressable state is `{focused, hovered, pressed}`.
+// `hovered` was already a documented extension here for that reason;
+// `focused` is the same move, and it is what lets a row draw the focus ring
+// `outlineWidth`/`outlineColor` made drawable.
 export type PressableStateCallbackType = {
   pressed: boolean
   hovered: boolean
+  focused: boolean
 }
 
 export type { NativeTouch, PressEvent } from "./press-event"
@@ -34,6 +40,13 @@ export type PressableProps = {
   onLongPress?: (event: PressEvent) => void
   onHoverIn?: () => void
   onHoverOut?: () => void
+  onFocus?: () => void
+  onBlur?: () => void
+  /** Whether Tab and the arrow keys can reach this pressable. Defaults to
+   *  true when `onPress` is set, which is react-native-web's own rule — a
+   *  control you can click and cannot reach from the keyboard is an
+   *  accessibility bug, and on a desktop that matters more, not less. */
+  focusable?: boolean
   disabled?: boolean
   delayLongPress?: number
   onLayout?: (event: LayoutEvent) => void
@@ -60,6 +73,9 @@ export const Pressable = ({
   onLongPress,
   onHoverIn,
   onHoverOut,
+  onFocus,
+  onBlur,
+  focusable,
   disabled = false,
   delayLongPress = 500,
   onLayout,
@@ -67,6 +83,10 @@ export const Pressable = ({
 }: PressableProps) => {
   const widgetRef = useRef<Gtk.Box | null>(null)
   const [pressed, setPressed] = useState(false)
+  // Focus IS React state, unlike hover: it changes at human-decision rates
+  // (a Tab press), not at pointer-motion rates, so the fast path hover needs
+  // would be complexity with nothing to buy.
+  const [focused, setFocused] = useState(false)
   // Hover is not React state: a boundary crossing should cost what it costs
   // a native GtkListBox row to swap a CSS class, not a setState + render +
   // Yoga + allocate cycle (measured: roughly 500x the latency of a native
@@ -91,6 +111,7 @@ export const Pressable = ({
   const state: PressableStateCallbackType = {
     pressed,
     hovered: hoveredRef.current,
+    focused,
   }
 
   // Gestures are attached imperatively even though rc.3 has a declarative
@@ -137,6 +158,7 @@ export const Pressable = ({
     const otherState: PressableStateCallbackType = {
       pressed,
       hovered: !hoveredRef.current,
+      focused,
     }
     const otherFlat = StyleSheet.flatten(style(otherState))
     const otherSplit = splitStyle(otherFlat)
@@ -251,6 +273,33 @@ export const Pressable = ({
     handleEnter: () => applyHover(true, onHoverIn),
     handleLeave: () => applyHover(false, onHoverOut),
   }
+
+  // A pressable that can be clicked should be reachable from the keyboard;
+  // one that only hovers or lays out should not join the Tab order. That is
+  // react-native-web's rule, and it keeps every existing Pressable in this
+  // repo behaving as before unless it had an onPress to begin with.
+  useFocusable(widgetRef, focusable ?? onPress !== undefined)
+  useFocusController(
+    widgetRef,
+    () => {
+      setFocused(true)
+      onFocus?.()
+    },
+    () => {
+      setFocused(false)
+      onBlur?.()
+    },
+  )
+  // Enter and Space activate a focused control on web and on Android, so
+  // they do here. The press event is synthesised at the widget's own origin
+  // — a keyboard press has no coordinates, and RN's own handlers read
+  // locationX/Y unconditionally.
+  useActivateOnKey(
+    widgetRef,
+    disabled || !onPress
+      ? undefined
+      : () => onPress(pressEvent(widgetRef.current, 0, 0)),
+  )
 
   useLayoutEffect(() => {
     const widget = widgetRef.current
