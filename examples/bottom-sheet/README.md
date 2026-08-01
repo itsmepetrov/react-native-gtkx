@@ -1,7 +1,7 @@
-# bottom-sheet — React Native inside GTK widget slots
+# bottom-sheet — React Native inside a GTK widget
 
 An ordinary React Native app whose entire UI is one Adwaita widget:
-`AdwBottomSheet`, with all three of its slots filled with plain
+`AdwBottomSheet`, with all three of its content areas filled with plain
 `<View>`/`<Text>`/`<Pressable>`.
 
 | Closed                                                                                                                                                            | Open                                                                                                                               |
@@ -14,24 +14,30 @@ npm run build -w bottom-sheet-example
 npm run start -w bottom-sheet-example
 ```
 
-## What a slot is
+## Children and slots are the same thing
 
-A **slot** is a widget property that takes a widget:
+A widget hands out rectangles two ways:
 
 ```tsx
-<AdwBottomSheet content={…} sheet={…} bottomBar={…} />
+<AdwBottomSheet sheet={…} bottomBar={…}>
+  {/* the content area — an ordinary child */}
+</AdwBottomSheet>
 ```
 
-not a child. gtkx routes an element-valued prop into the property it names,
-which moves the rendered widget in the GTK tree — and only in the GTK tree.
-In the React tree the element stays exactly where you wrote it.
+`sheet` and `bottomBar` are **slots**: properties that take a widget. The
+content area is an ordinary **child**. Which way a given area arrives is
+gtkx's business and moves between releases — rc.3 took the `content`/`child`
+props off single-child widgets, so what used to be `content={…}` is the child
+you see above — and it has never had anything to do with layout.
 
-That matters, because React Native layout follows the REACT tree. Without a
-boundary, the `<View>` above would put its Yoga node into the enclosing
-window root and lay itself out against the window's viewport, while GTK hands
-it the slot's rectangle. So a slot clears the layout root: GTK widgets in a
-slot render bare (which is what they want), and React Native content brings
-its own root.
+Both are GTK-tree moves, and only GTK-tree moves: in the React tree the
+content stays exactly where you wrote it. That matters, because React Native
+layout follows the REACT tree. Without a boundary, a `<View>` in either
+position would put its Yoga node into the enclosing window root and lay itself
+out against the window's viewport, while GTK hands it the widget's own
+rectangle. So the boundary clears the layout root on the way in: GTK widgets
+land bare (which is what they want), and React Native content brings its own
+root.
 
 ## The two roots, and why you pick
 
@@ -39,32 +45,33 @@ its own root.
 import { IntrinsicContent, SlotContent } from "react-native-gtkx/common"
 ```
 
-| Slot        | Wants                  | Wrapper            |
-| ----------- | ---------------------- | ------------------ |
-| `content`   | fill the widget's area | `SlotContent`      |
-| `sheet`     | rise to its own height | `IntrinsicContent` |
-| `bottomBar` | hug the row it holds   | `IntrinsicContent` |
+| Content area | Wants                  | Wrapper            |
+| ------------ | ---------------------- | ------------------ |
+| the child    | fill the widget's area | `SlotContent`      |
+| `sheet`      | rise to its own height | `IntrinsicContent` |
+| `bottomBar`  | hug the row it holds   | `IntrinsicContent` |
 
 One widget, both answers — which is exactly why the platform does not guess
-for you. All three are plain `GtkWidget` properties; nothing in the name, the
-type or the introspection data says which one fills. That lives in the
-widget's own layout code, and here it disagrees with itself two ways out of
-three.
+for you. Nothing in the name, the type or the introspection data says which
+one fills; that lives in the widget's own layout code, and here it disagrees
+with itself two ways out of three. Note that the disagreement crosses the
+child/slot line without caring about it — more evidence that the distinction
+is syntax, not layout.
 
 Try swapping them, it is instructive:
 
 - `SlotContent` in `sheet` or `bottomBar` → the panel collapses to a sliver
   and the bar disappears. A filling root reports a zero minimum (so a window
-  can always shrink), and a size-to-content slot asking "how big are you?" is
+  can always shrink), and a size-to-content area asking "how big are you?" is
   told "nothing".
-- `IntrinsicContent` in `content` → the column stops being centred. An
+- `IntrinsicContent` around the child → the column stops being centred. An
   intrinsic root's viewport is its own content size, so `flex: 1` has nothing
   to fill and `justifyContent: "center"` has no spare room to centre in.
 
-Forget the wrapper entirely and you get an error naming the widget and the
-slot, with both options spelled out. It used to render instead — content in a
-slot with no root joined the enclosing window's Yoga tree, was laid out
-against the window's viewport and drawn in the slot's rectangle, and looked
+Forget the wrapper entirely and you get an error naming the widget and where
+the content landed, with both options spelled out. It used to render instead —
+content with no root joined the enclosing window's Yoga tree, was laid out
+against the window's viewport and drawn in the widget's rectangle, and looked
 like this:
 
 ![The same window with the heading, paragraph and button jammed against the bottom edge under a window-height field of empty white.](../../docs/shots/bottom-sheet-before.png)
@@ -74,29 +81,27 @@ like this:
 They are independent, and both are in `src/App.tsx`:
 
 ```tsx
-<AdwBottomSheet
-  style={{ flex: 1 }} // ① the WIDGET in React Native layout
-  content={
-    <SlotContent>
-      <View style={{ flex: 1 }} /> // ② the CONTENT inside the slot
-    </SlotContent>
-  }
-/>
+<AdwBottomSheet style={{ flex: 1 }}>
+  {/* ① the WIDGET's size in React Native layout */}
+  <SlotContent>
+    <View style={{ flex: 1 }} /> {/* ② the CONTENT's size inside it */}
+  </SlotContent>
+</AdwBottomSheet>
 ```
 
 ① A wrapped GTK widget is a Yoga **leaf** taking its natural size until the
 style says otherwise. `flex: 1` is what makes the sheet fill the window
 instead of hugging itself — the same rule as any other React Native child.
 
-② Inside the slot, a fresh Yoga root whose viewport is the rectangle the
-widget hands out. `flex: 1` there fills the SLOT, never the window — every
-root has its own viewport, and the two numbers never meet.
+② Inside, a fresh Yoga root whose viewport is the rectangle the widget hands
+out. `flex: 1` there fills the WIDGET, never the window — every root has its
+own viewport, and the two numbers never meet.
 
 ## Why the default chrome
 
 `AppRegistry.runApplication` is called without `chrome: "content"`, so the
 window brings its own titlebar and a window-level layout root. That root is
-the point: it is the enclosing Yoga tree the slot content must NOT join. Apps
+the point: it is the enclosing Yoga tree the widget's content must NOT join. Apps
 built entirely from Adwaita chrome (`examples/adwaita-primitives`,
 `examples/tasks-nav`) use `chrome: "content"` and have no ambient root at
 all — for them every page body is already a `SlotContent`.

@@ -1,19 +1,25 @@
-// React Native content inside WIDGET SLOTS — AdwBottomSheet's three at once.
+// React Native inside a GTK widget — AdwBottomSheet's three content areas at
+// once, and the one rule that governs all of them.
 //
-// A slot is a widget PROPERTY that takes a widget, not a child: you write
-// `content={…}`, not `<AdwBottomSheet>…</AdwBottomSheet>`. A slot hands out a
-// rectangle, and React Native content has to bring a layout root to lay out
-// inside that rectangle. Which root is the whole lesson of this example, and
-// this one widget needs both kinds:
+// A widget hands out rectangles. Some it takes as ordinary CHILDREN (the
+// content area here), some as SLOTS — properties that take a widget
+// (`sheet`, `bottomBar`). That difference is gtkx's and it moves between
+// releases: rc.3 took the `content` prop off single-child widgets and made
+// that content a child instead. It has never had anything to do with layout,
+// and neither kind gets a layout root for free: React Native content must
+// bring one, or it lays itself out against the enclosing window instead of
+// the rectangle it was actually given.
 //
-//   - `content` FILLS the whole widget → `SlotContent`;
+// WHICH root is the whole lesson, and this one widget needs both kinds:
+//
+//   - the content child FILLS the widget → `SlotContent`;
 //   - `sheet` and `bottomBar` are sized by what they hold — a bottom sheet
 //     rises to the height of its own contents → `IntrinsicContent`.
 //
 // Swap them and you can see why it cannot be guessed: `SlotContent` in the
-// sheet or the bar collapses it to a sliver, `IntrinsicContent` in `content`
-// stops `flex: 1` from filling the window. Three slots, one widget, and the
-// answer is not the same for all three.
+// sheet or the bar collapses it to a sliver, `IntrinsicContent` around the
+// content child stops `flex: 1` from filling the window. One widget, three
+// content areas, and the answer is not the same for all three.
 import { useState } from "react"
 import { Pressable, StyleSheet, Text, View } from "react-native"
 import { AdwBottomSheet } from "react-native-gtkx/adw"
@@ -21,7 +27,7 @@ import { IntrinsicContent, SlotContent } from "react-native-gtkx/common"
 
 const styles = StyleSheet.create({
   // justifyContent centres this column vertically, which is only visible if
-  // the content really did receive the slot's full height.
+  // the content really did receive the widget's full height.
   content: {
     flex: 1,
     justifyContent: "center",
@@ -69,34 +75,14 @@ const App = () => {
   return (
     <AdwBottomSheet
       // The WIDGET's own size in React Native layout, which is a separate
-      // question from what its slots do: a wrapped GTK widget is a Yoga leaf
-      // at its natural size until the style says otherwise.
+      // question from what it does inside: a wrapped GTK widget is a Yoga
+      // leaf at its natural size until the style says otherwise.
       style={{ flex: 1 }}
       open={open}
       // The sheet closes itself too (drag, Escape, clicking the dimmed area),
       // so follow the widget rather than assume our state is the truth.
       onNotifyOpen={(_value, sheet) => setOpen(sheet.getOpen())}
       showDragHandle
-      content={
-        <SlotContent>
-          <View style={styles.content}>
-            <Text style={styles.heading}>Slots hold React Native</Text>
-            <Text style={styles.body}>
-              This column is centred in the window because the content slot
-              handed its whole rectangle to the React Native tree inside it.
-            </Text>
-            <Pressable
-              style={({ hovered }) => [
-                styles.button,
-                hovered && styles.buttonHovered,
-              ]}
-              onPress={() => setOpen(true)}
-            >
-              <Text style={styles.buttonLabel}>Open the sheet</Text>
-            </Pressable>
-          </View>
-        </SlotContent>
-      }
       sheet={
         <IntrinsicContent>
           <View style={styles.sheet}>
@@ -130,7 +116,29 @@ const App = () => {
           </View>
         </IntrinsicContent>
       }
-    />
+    >
+      {/* The content area is the widget's CHILD under gtkx rc.3, and needs a
+          root exactly as the two slots above do — the boundary does not care
+          which syntax the content arrived through. */}
+      <SlotContent>
+        <View style={styles.content}>
+          <Text style={styles.heading}>Widgets hold React Native</Text>
+          <Text style={styles.body}>
+            This column is centred in the window because the content area handed
+            its whole rectangle to the React Native tree inside it.
+          </Text>
+          <Pressable
+            style={({ hovered }) => [
+              styles.button,
+              hovered && styles.buttonHovered,
+            ]}
+            onPress={() => setOpen(true)}
+          >
+            <Text style={styles.buttonLabel}>Open the sheet</Text>
+          </Pressable>
+        </View>
+      </SlotContent>
+    </AdwBottomSheet>
   )
 }
 

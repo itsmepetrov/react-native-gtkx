@@ -17,7 +17,11 @@ import {
   type ComponentType,
   type ReactNode,
 } from "react"
-import { HostNodeContext, SlotContext } from "../components/host-node"
+import {
+  HostNodeContext,
+  SlotContext,
+  type SlotLocation,
+} from "../components/host-node"
 import {
   useLayoutChild,
   type LayoutEvent,
@@ -138,23 +142,29 @@ export type ReactNativeLayoutProps = {
  * where there is no Yoga tree to join. The wrapper detects that and renders
  * the bare component, so one exported symbol works in both worlds.
  */
-// A widget SLOT is a property that takes a widget: `content`, `topBar`,
-// `titleWidget`, `sheet`. gtkx routes an element-valued prop into the
-// property it names, so the element keeps rendering where it was written —
-// and therefore keeps seeing the enclosing React Native layout root, even
-// though GTK has parented it somewhere else entirely. Content in a slot then
-// joins a Yoga tree whose viewport is the WINDOW while GTK gives it the
-// SLOT's rectangle: it is laid out against one box and drawn in another, and
-// it silently steals space from the tree it was never meant to be in.
+// A wrapped widget is a Yoga LEAF, so everything INSIDE it is GTK's
+// territory — its children and its slots alike.
 //
-// So a slot boundary clears the layout root. A slot is GTK's territory: the
-// widgets it usually holds want exactly that (it is what `WidgetContent`
-// does by hand), and React Native content entering it has to bring its own
-// root — `SlotContent` to fill the slot, `IntrinsicContent` to size the slot
-// to itself. Which of the two is right cannot be inferred, and measurement
-// says so louder than argument: `AdwBottomSheet` alone fills in `content`
-// but hugs in both `sheet` (a bottom sheet rises to the height of its own
-// contents) and `bottomBar`. Three plain GtkWidget properties on one widget,
+// A widget SLOT is a property that takes a widget (`titleWidget`, `sheet`,
+// `sidebar`, `startChild`); a widget's content area is an ordinary child.
+// The distinction is gtkx's, it moves between releases — rc.3 took the
+// `content`/`child` props off single-child widgets and made that content a
+// child — and it has never had anything to do with layout. Both keep
+// rendering where they were written, so both keep seeing the enclosing React
+// Native layout root even though GTK has parented them somewhere else
+// entirely. Content then joins a Yoga tree whose viewport is the WINDOW
+// while GTK gives it the widget's own rectangle: laid out against one box,
+// drawn in another, and silently stealing space from a tree it was never
+// meant to be in.
+//
+// So the boundary clears the layout root on the way in. The widgets a slot
+// or a child usually holds want exactly that (it is what `WidgetContent`
+// does by hand), and React Native content entering has to bring its own root
+// — `SlotContent` to fill the area, `IntrinsicContent` to size the area to
+// itself. Which of the two is right cannot be inferred, and measurement says
+// so louder than argument: `AdwBottomSheet` alone FILLS in its content child
+// but HUGS in both `sheet` (a bottom sheet rises to the height of its own
+// contents) and `bottomBar`. One widget, three content areas, two answers,
 // with nothing in the name or the GIR type to tell them apart — the answer
 // lives in the widget's own layout code. The boundary is what makes NOT
 // saying a readable error instead of a silent mislayout — see useHostNode.
@@ -162,13 +172,14 @@ const SlotBoundary = ({
   location,
   children,
 }: {
-  location: { widget: string; slot: string }
+  location: SlotLocation
   children: ReactNode
 }) => (
   // Two providers, no widget: a context provider is invisible to the gtkx
   // reconciler, so this is safe even on slots whose value is NOT a widget
-  // (`breakpoints`, `menuModel`, `buffer`) — wrapping those in a real box
-  // would put a GtkBox where an AdwBreakpoint belongs.
+  // (`breakpoints`, `menuModel`, `buffer`, `adjustment` — the majority of
+  // element-valued props, in fact) — wrapping those in a real box would put
+  // a GtkBox where an AdwBreakpoint belongs.
   <SlotContext.Provider value={location}>
     <HostNodeContext.Provider value={null}>{children}</HostNodeContext.Provider>
   </SlotContext.Provider>
@@ -177,29 +188,34 @@ const SlotBoundary = ({
 const holdsElement = (value: unknown): boolean =>
   isValidElement(value) || (Array.isArray(value) && value.some(holdsElement))
 
-// Replaces every element-valued prop with the same value behind a slot
-// boundary. `children` is not a slot (gtkx appends children as content, not
-// into a named property) and `ref` is never one either.
+// Puts every element-valued prop, and the children, behind a boundary.
+// `ref` is never content; anything that holds no element (a string child, a
+// number, an already-constructed GObject) is left exactly as it was, so the
+// common widget pays nothing.
 const withSlotBoundaries = <P extends object>(props: P, widget: string): P => {
-  let slots: Record<string, unknown> | undefined
+  let bounded: Record<string, unknown> | undefined
   for (const key in props) {
-    if (key === "children" || key === "ref") {
+    if (key === "ref") {
       continue
     }
     const value = (props as Record<string, unknown>)[key]
     if (!holdsElement(value)) {
       continue
     }
-    slots ??= {}
-    slots[key] = (
-      <SlotBoundary location={{ widget, slot: key }}>
+    bounded ??= {}
+    bounded[key] = (
+      // Children are not a named slot: the error says "inside AdwBottomSheet"
+      // rather than naming a property that does not exist.
+      <SlotBoundary
+        location={{ widget, slot: key === "children" ? null : key }}
+      >
         {value as ReactNode}
       </SlotBoundary>
     )
   }
   // The common case is a widget with no element-valued prop at all: return the
   // props object untouched rather than allocate a copy per render.
-  return slots ? ({ ...props, ...slots } as P) : props
+  return bounded ? ({ ...props, ...bounded } as P) : props
 }
 
 export const wrapReactNative = <P extends object>(
