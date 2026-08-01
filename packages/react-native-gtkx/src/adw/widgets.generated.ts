@@ -60,56 +60,133 @@ import {
   AdwWrapBox as RawAdwWrapBox,
 } from "../gtkx/bridge/widgets.generated"
 
-export const AdwAboutDialog = wrapReactNative(RawAdwAboutDialog)
-export const AdwAlertDialog = wrapReactNative(RawAdwAlertDialog)
-export const AdwAvatar = wrapReactNative(RawAdwAvatar)
-export const AdwBanner = wrapReactNative(RawAdwBanner)
-export const AdwBin = wrapReactNative(RawAdwBin)
-export const AdwBottomSheet = wrapReactNative(RawAdwBottomSheet)
-export const AdwBreakpointBin = wrapReactNative(RawAdwBreakpointBin)
-export const AdwButtonContent = wrapReactNative(RawAdwButtonContent)
-export const AdwCarousel = wrapReactNative(RawAdwCarousel)
+export const AdwAboutDialog = wrapReactNative(
+  RawAdwAboutDialog,
+  "AdwAboutDialog",
+)
+export const AdwAlertDialog = wrapReactNative(
+  RawAdwAlertDialog,
+  "AdwAlertDialog",
+)
+export const AdwAvatar = wrapReactNative(RawAdwAvatar, "AdwAvatar")
+export const AdwBanner = wrapReactNative(RawAdwBanner, "AdwBanner")
+export const AdwBin = wrapReactNative(RawAdwBin, "AdwBin")
+export const AdwBottomSheet = wrapReactNative(
+  RawAdwBottomSheet,
+  "AdwBottomSheet",
+)
+export const AdwBreakpointBin = wrapReactNative(
+  RawAdwBreakpointBin,
+  "AdwBreakpointBin",
+)
+export const AdwButtonContent = wrapReactNative(
+  RawAdwButtonContent,
+  "AdwButtonContent",
+)
+export const AdwCarousel = wrapReactNative(RawAdwCarousel, "AdwCarousel")
 export const AdwCarouselIndicatorDots = wrapReactNative(
   RawAdwCarouselIndicatorDots,
+  "AdwCarouselIndicatorDots",
 )
 export const AdwCarouselIndicatorLines = wrapReactNative(
   RawAdwCarouselIndicatorLines,
+  "AdwCarouselIndicatorLines",
 )
-export const AdwClamp = wrapReactNative(RawAdwClamp)
-export const AdwClampScrollable = wrapReactNative(RawAdwClampScrollable)
-export const AdwDialog = wrapReactNative(RawAdwDialog)
-export const AdwFlap = wrapReactNative(RawAdwFlap)
-export const AdwHeaderBar = wrapReactNative(RawAdwHeaderBar)
-export const AdwInlineViewSwitcher = wrapReactNative(RawAdwInlineViewSwitcher)
-export const AdwLayoutSlot = wrapReactNative(RawAdwLayoutSlot)
-export const AdwLeaflet = wrapReactNative(RawAdwLeaflet)
-export const AdwMultiLayoutView = wrapReactNative(RawAdwMultiLayoutView)
-export const AdwNavigationSplitView = wrapReactNative(RawAdwNavigationSplitView)
-export const AdwNavigationView = wrapReactNative(RawAdwNavigationView)
-export const AdwOverlaySplitView = wrapReactNative(RawAdwOverlaySplitView)
-export const AdwPreferencesDialog = wrapReactNative(RawAdwPreferencesDialog)
-export const AdwPreferencesGroup = wrapReactNative(RawAdwPreferencesGroup)
-export const AdwShortcutLabel = wrapReactNative(RawAdwShortcutLabel)
-export const AdwShortcutsDialog = wrapReactNative(RawAdwShortcutsDialog)
-export const AdwSidebar = wrapReactNative(RawAdwSidebar)
-export const AdwSpinner = wrapReactNative(RawAdwSpinner)
-export const AdwSplitButton = wrapReactNative(RawAdwSplitButton)
-export const AdwSqueezer = wrapReactNative(RawAdwSqueezer)
-export const AdwStatusPage = wrapReactNative(RawAdwStatusPage)
-export const AdwTabBar = wrapReactNative(RawAdwTabBar)
-export const AdwTabButton = wrapReactNative(RawAdwTabButton)
-export const AdwTabOverview = wrapReactNative(RawAdwTabOverview)
-export const AdwTabView = wrapReactNative(RawAdwTabView)
-export const AdwToastOverlay = wrapReactNative(RawAdwToastOverlay)
-export const AdwToggleGroup = wrapReactNative(RawAdwToggleGroup)
-export const AdwToolbarView = wrapReactNative(RawAdwToolbarView)
-export const AdwViewStack = wrapReactNative(RawAdwViewStack)
-export const AdwViewSwitcher = wrapReactNative(RawAdwViewSwitcher)
-export const AdwViewSwitcherBar = wrapReactNative(RawAdwViewSwitcherBar)
-export const AdwViewSwitcherSidebar = wrapReactNative(RawAdwViewSwitcherSidebar)
-export const AdwViewSwitcherTitle = wrapReactNative(RawAdwViewSwitcherTitle)
-export const AdwWindowTitle = wrapReactNative(RawAdwWindowTitle)
-export const AdwWrapBox = wrapReactNative(RawAdwWrapBox)
+export const AdwClamp = wrapReactNative(RawAdwClamp, "AdwClamp")
+export const AdwClampScrollable = wrapReactNative(
+  RawAdwClampScrollable,
+  "AdwClampScrollable",
+)
+export const AdwDialog = wrapReactNative(RawAdwDialog, "AdwDialog")
+export const AdwFlap = wrapReactNative(RawAdwFlap, "AdwFlap")
+export const AdwHeaderBar = wrapReactNative(RawAdwHeaderBar, "AdwHeaderBar")
+export const AdwInlineViewSwitcher = wrapReactNative(
+  RawAdwInlineViewSwitcher,
+  "AdwInlineViewSwitcher",
+)
+export const AdwLayoutSlot = wrapReactNative(RawAdwLayoutSlot, "AdwLayoutSlot")
+export const AdwLeaflet = wrapReactNative(RawAdwLeaflet, "AdwLeaflet")
+export const AdwMultiLayoutView = wrapReactNative(
+  RawAdwMultiLayoutView,
+  "AdwMultiLayoutView",
+)
+export const AdwNavigationSplitView = wrapReactNative(
+  RawAdwNavigationSplitView,
+  "AdwNavigationSplitView",
+)
+export const AdwNavigationView = wrapReactNative(
+  RawAdwNavigationView,
+  "AdwNavigationView",
+)
+export const AdwOverlaySplitView = wrapReactNative(
+  RawAdwOverlaySplitView,
+  "AdwOverlaySplitView",
+)
+export const AdwPreferencesDialog = wrapReactNative(
+  RawAdwPreferencesDialog,
+  "AdwPreferencesDialog",
+)
+export const AdwPreferencesGroup = wrapReactNative(
+  RawAdwPreferencesGroup,
+  "AdwPreferencesGroup",
+)
+export const AdwShortcutLabel = wrapReactNative(
+  RawAdwShortcutLabel,
+  "AdwShortcutLabel",
+)
+export const AdwShortcutsDialog = wrapReactNative(
+  RawAdwShortcutsDialog,
+  "AdwShortcutsDialog",
+)
+export const AdwSidebar = wrapReactNative(RawAdwSidebar, "AdwSidebar")
+export const AdwSpinner = wrapReactNative(RawAdwSpinner, "AdwSpinner")
+export const AdwSplitButton = wrapReactNative(
+  RawAdwSplitButton,
+  "AdwSplitButton",
+)
+export const AdwSqueezer = wrapReactNative(RawAdwSqueezer, "AdwSqueezer")
+export const AdwStatusPage = wrapReactNative(RawAdwStatusPage, "AdwStatusPage")
+export const AdwTabBar = wrapReactNative(RawAdwTabBar, "AdwTabBar")
+export const AdwTabButton = wrapReactNative(RawAdwTabButton, "AdwTabButton")
+export const AdwTabOverview = wrapReactNative(
+  RawAdwTabOverview,
+  "AdwTabOverview",
+)
+export const AdwTabView = wrapReactNative(RawAdwTabView, "AdwTabView")
+export const AdwToastOverlay = wrapReactNative(
+  RawAdwToastOverlay,
+  "AdwToastOverlay",
+)
+export const AdwToggleGroup = wrapReactNative(
+  RawAdwToggleGroup,
+  "AdwToggleGroup",
+)
+export const AdwToolbarView = wrapReactNative(
+  RawAdwToolbarView,
+  "AdwToolbarView",
+)
+export const AdwViewStack = wrapReactNative(RawAdwViewStack, "AdwViewStack")
+export const AdwViewSwitcher = wrapReactNative(
+  RawAdwViewSwitcher,
+  "AdwViewSwitcher",
+)
+export const AdwViewSwitcherBar = wrapReactNative(
+  RawAdwViewSwitcherBar,
+  "AdwViewSwitcherBar",
+)
+export const AdwViewSwitcherSidebar = wrapReactNative(
+  RawAdwViewSwitcherSidebar,
+  "AdwViewSwitcherSidebar",
+)
+export const AdwViewSwitcherTitle = wrapReactNative(
+  RawAdwViewSwitcherTitle,
+  "AdwViewSwitcherTitle",
+)
+export const AdwWindowTitle = wrapReactNative(
+  RawAdwWindowTitle,
+  "AdwWindowTitle",
+)
+export const AdwWrapBox = wrapReactNative(RawAdwWrapBox, "AdwWrapBox")
 
 export {
   AdwAboutWindow, // toplevel (implements GtkRoot)

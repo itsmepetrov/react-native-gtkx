@@ -10,8 +10,14 @@
 //
 // The visual half of the style (background, border, radius) is applied as a
 // GTK CSS class, the same mechanism View uses.
-import { useContext, useRef, type ComponentType, type ReactNode } from "react"
-import { HostNodeContext } from "../components/host-node"
+import {
+  isValidElement,
+  useContext,
+  useRef,
+  type ComponentType,
+  type ReactNode,
+} from "react"
+import { HostNodeContext, SlotContext } from "../components/host-node"
 import {
   useLayoutChild,
   type LayoutEvent,
@@ -132,9 +138,83 @@ export type ReactNativeLayoutProps = {
  * where there is no Yoga tree to join. The wrapper detects that and renders
  * the bare component, so one exported symbol works in both worlds.
  */
+// A widget SLOT is a property that takes a widget: `content`, `topBar`,
+// `titleWidget`, `sheet`. gtkx routes an element-valued prop into the
+// property it names, so the element keeps rendering where it was written —
+// and therefore keeps seeing the enclosing React Native layout root, even
+// though GTK has parented it somewhere else entirely. Content in a slot then
+// joins a Yoga tree whose viewport is the WINDOW while GTK gives it the
+// SLOT's rectangle: it is laid out against one box and drawn in another, and
+// it silently steals space from the tree it was never meant to be in.
+//
+// So a slot boundary clears the layout root. A slot is GTK's territory: the
+// widgets it usually holds want exactly that (it is what `WidgetContent`
+// does by hand), and React Native content entering it has to bring its own
+// root — `SlotContent` to fill the slot, `IntrinsicContent` to size the slot
+// to itself. Which of the two is right cannot be inferred, and measurement
+// says so louder than argument: `AdwBottomSheet` alone fills in `content`
+// but hugs in both `sheet` (a bottom sheet rises to the height of its own
+// contents) and `bottomBar`. Three plain GtkWidget properties on one widget,
+// with nothing in the name or the GIR type to tell them apart — the answer
+// lives in the widget's own layout code. The boundary is what makes NOT
+// saying a readable error instead of a silent mislayout — see useHostNode.
+const SlotBoundary = ({
+  location,
+  children,
+}: {
+  location: { widget: string; slot: string }
+  children: ReactNode
+}) => (
+  // Two providers, no widget: a context provider is invisible to the gtkx
+  // reconciler, so this is safe even on slots whose value is NOT a widget
+  // (`breakpoints`, `menuModel`, `buffer`) — wrapping those in a real box
+  // would put a GtkBox where an AdwBreakpoint belongs.
+  <SlotContext.Provider value={location}>
+    <HostNodeContext.Provider value={null}>{children}</HostNodeContext.Provider>
+  </SlotContext.Provider>
+)
+
+const holdsElement = (value: unknown): boolean =>
+  isValidElement(value) || (Array.isArray(value) && value.some(holdsElement))
+
+// Replaces every element-valued prop with the same value behind a slot
+// boundary. `children` is not a slot (gtkx appends children as content, not
+// into a named property) and `ref` is never one either.
+const withSlotBoundaries = <P extends object>(props: P, widget: string): P => {
+  let slots: Record<string, unknown> | undefined
+  for (const key in props) {
+    if (key === "children" || key === "ref") {
+      continue
+    }
+    const value = (props as Record<string, unknown>)[key]
+    if (!holdsElement(value)) {
+      continue
+    }
+    slots ??= {}
+    slots[key] = (
+      <SlotBoundary location={{ widget, slot: key }}>
+        {value as ReactNode}
+      </SlotBoundary>
+    )
+  }
+  // The common case is a widget with no element-valued prop at all: return the
+  // props object untouched rather than allocate a copy per render.
+  return slots ? ({ ...props, ...slots } as P) : props
+}
+
 export const wrapReactNative = <P extends object>(
   Component: ComponentType<P>,
+  // The widget's name, for error messages and React devtools. gtkx builds its
+  // components from a factory, so they carry no name of their own — the
+  // generated widget surface passes the class name it already knows.
+  widgetName?: string,
 ): ComponentType<P & ReactNativeLayoutProps> => {
+  const name =
+    widgetName ||
+    (Component as { displayName?: string; name?: string }).displayName ||
+    (Component as { name?: string }).name ||
+    "Widget"
+
   const InLayout = (props: P & ReactNativeLayoutProps) => {
     const { style, onLayout, ...rest } = props
     const boxRef = useRef<Gtk.Box | null>(null)
@@ -172,6 +252,10 @@ export const wrapReactNative = <P extends object>(
   }
 
   const Wrapped = (props: P & ReactNativeLayoutProps) => {
+    // Every slot this widget is given becomes GTK territory, in both branches
+    // below: whether the widget itself joined React Native layout has nothing
+    // to do with what its slots hold.
+    const withSlots = withSlotBoundaries(props, name)
     // Read the context directly rather than through useHostNode, which throws
     // by design: here its absence is a supported case, not a mistake. The
     // same widget is often used in a pure GTK slot (a HeaderBar's `start`, a
@@ -180,18 +264,14 @@ export const wrapReactNative = <P extends object>(
     if (!host) {
       // style/onLayout are meaningless without a Yoga tree — drop them rather
       // than forward them onto a GObject that has no such properties.
-      const rest = { ...props } as Partial<ReactNativeLayoutProps>
+      const rest = { ...withSlots } as Partial<ReactNativeLayoutProps>
       delete rest.style
       delete rest.onLayout
       return <Component {...(rest as P)} />
     }
-    return <InLayout {...props} />
+    return <InLayout {...withSlots} />
   }
 
-  const name =
-    (Component as { displayName?: string; name?: string }).displayName ??
-    (Component as { name?: string }).name ??
-    "Widget"
   InLayout.displayName = `wrapReactNative(${name}).InLayout`
   Wrapped.displayName = `wrapReactNative(${name})`
   return Wrapped

@@ -65,6 +65,49 @@ anything you could set on `Adw.NavigationPage` you can set on
 its content in exactly `IntrinsicContent` for this reason — a row is sized
 by what it holds, not stretched to fill the list.
 
+**A slot always needs one of them.** A slot is a widget PROPERTY that takes a
+widget — `content={…}`, `topBar={…}`, `titleWidget={…}`, `sheet={…}` — as
+opposed to a child, and it is GTK's territory: the layout root is cleared at
+that boundary, so a widget in a slot renders bare (what `WidgetContent` does
+by hand) and React Native content has to bring its own root:
+
+```tsx
+<AdwBottomSheet
+  style={{ flex: 1 }}
+  content={
+    <SlotContent>
+      <View style={{ flex: 1, justifyContent: "center" }}>…</View>
+    </SlotContent>
+  }
+  bottomBar={
+    <IntrinsicContent>
+      <View style={{ flexDirection: "row", gap: 8 }}>…</View>
+    </IntrinsicContent>
+  }
+/>
+```
+
+Forget the wrapper and you get an error naming the widget and the slot, not a
+wrong-looking window: without a root, content in a slot would join the
+ENCLOSING Yoga tree — laid out against the window's viewport while GTK hands
+it the slot's rectangle. `examples/bottom-sheet` is that whole story in one
+screen.
+
+Which of the two is yours to choose, and the platform deliberately does not
+guess: `AdwBottomSheet` alone fills in `content` but hugs in `sheet` and
+`bottomBar` — three plain `GtkWidget` properties with nothing in the name or
+the type to tell them apart, since the answer lives in the widget's own
+layout code. Swapping them is visible immediately: `SlotContent` in a bottom
+bar collapses it to nothing (a filling root reports a zero minimum, so a
+size-to-content slot is told "nothing"), and `IntrinsicContent` in a content
+area leaves `flex: 1` with no viewport to fill.
+
+Note the two independent sizes here. `style={{ flex: 1 }}` on the widget is
+the WIDGET's size in the surrounding React Native layout (a wrapped widget is
+a Yoga leaf at its natural size until the style says otherwise); the wrapper
+inside each slot is the CONTENT's size inside the rectangle that widget then
+hands out.
+
 ### GTK widgets, driven by React Native
 
 Every `GtkWidget` subclass gtkx binds — 86 of them at last count, from
