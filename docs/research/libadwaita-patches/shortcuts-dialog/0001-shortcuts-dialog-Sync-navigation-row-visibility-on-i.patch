@@ -1,4 +1,4 @@
-From 792432e78edfefd2182ae554b3084278e920fdea Mon Sep 17 00:00:00 2001
+From 19ba58b6220c6ad04d57964fedb177baef6d6e0f Mon Sep 17 00:00:00 2001
 From: Anton Petrov <anton@itsmepetrov.com>
 Date: Sat, 1 Aug 2026 10:38:18 +0300
 Subject: [PATCH 1/2] shortcuts-dialog: Sync navigation row visibility on init
@@ -26,7 +26,7 @@ put it in, instead of only reaching it reactively.
  1 file changed, 12 insertions(+)
 
 diff --git a/src/adw-shortcuts-dialog.c b/src/adw-shortcuts-dialog.c
-index 86c412b..20c0fd5 100644
+index 86c412b4..20c0fd52 100644
 --- a/src/adw-shortcuts-dialog.c
 +++ b/src/adw-shortcuts-dialog.c
 @@ -690,6 +690,18 @@ adw_shortcuts_dialog_init (AdwShortcutsDialog *self)
@@ -49,5 +49,5 @@ index 86c412b..20c0fd5 100644
  
  static void
 -- 
-2.53.0
+2.50.1 (Apple Git-155)
 

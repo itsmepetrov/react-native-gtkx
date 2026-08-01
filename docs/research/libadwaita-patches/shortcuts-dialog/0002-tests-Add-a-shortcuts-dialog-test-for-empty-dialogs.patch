@@ -1,4 +1,4 @@
-From e098fcc40abf4a63ce606a0ff88adb60655d2646 Mon Sep 17 00:00:00 2001
+From fbfcf907a8416ffc84be621621940b378cc04c09 Mon Sep 17 00:00:00 2001
 From: Anton Petrov <anton@itsmepetrov.com>
 Date: Sat, 1 Aug 2026 10:38:18 +0300
 Subject: [PATCH 2/2] tests: Add a shortcuts-dialog test for empty dialogs
@@ -7,6 +7,18 @@ Presenting an AdwShortcutsDialog with no sections used to log a
 Gtk-WARNING about a negative minimum height the first time it was
 measured. Cover both the empty case and a single section, which was
 already silent.
+
+Presents each dialog against an AdwWindow, not a plain GtkWindow: the
+latter has no AdwDialogHost, so AdwDialog falls back to its
+present_as_window() path (a separate top-level GtkWindow per test).
+Running two such present/destroy cycles in the same process left GTKs
+internal toplevel-window bookkeeping in a state the next present()
+call stumbled over (ASan: SEGV inside gtk_window_list_toplevels(),
+reached from whichever test ran second, regardless of which one that
+was). AdwWindow carries its own dialog host, so the dialog is hosted
+in-place instead, matching how the bug was reproduced originally and
+avoiding the fallback path this test suite had never exercised
+before.
 ---
  tests/meson.build             |  1 +
  tests/test-shortcuts-dialog.c | 58 +++++++++++++++++++++++++++++++++++
@@ -14,7 +26,7 @@ already silent.
  create mode 100644 tests/test-shortcuts-dialog.c
 
 diff --git a/tests/meson.build b/tests/meson.build
-index d513e87..1262f3a 100644
+index d513e877..1262f3a7 100644
 --- a/tests/meson.build
 +++ b/tests/meson.build
 @@ -77,6 +77,7 @@ test_names = [
@@ -27,7 +39,7 @@ index d513e87..1262f3a 100644
    'test-spin-row',
 diff --git a/tests/test-shortcuts-dialog.c b/tests/test-shortcuts-dialog.c
 new file mode 100644
-index 0000000..2b60dbe
+index 00000000..c0a4f450
 --- /dev/null
 +++ b/tests/test-shortcuts-dialog.c
 @@ -0,0 +1,58 @@
@@ -42,7 +54,7 @@ index 0000000..2b60dbe
 +static void
 +test_adw_shortcuts_dialog_empty (void)
 +{
-+  GtkWidget *window = gtk_window_new ();
++  GtkWidget *window = adw_window_new ();
 +  AdwShortcutsDialog *dialog = ADW_SHORTCUTS_DIALOG (adw_shortcuts_dialog_new ());
 +
 +  g_assert_nonnull (dialog);
@@ -65,7 +77,7 @@ index 0000000..2b60dbe
 +static void
 +test_adw_shortcuts_dialog_one_section (void)
 +{
-+  GtkWidget *window = gtk_window_new ();
++  GtkWidget *window = adw_window_new ();
 +  AdwShortcutsDialog *dialog = ADW_SHORTCUTS_DIALOG (adw_shortcuts_dialog_new ());
 +  AdwShortcutsSection *section = ADW_SHORTCUTS_SECTION (adw_shortcuts_section_new ("Test"));
 +
@@ -90,5 +102,5 @@ index 0000000..2b60dbe
 +  return g_test_run ();
 +}
 -- 
-2.53.0
+2.50.1 (Apple Git-155)
 
