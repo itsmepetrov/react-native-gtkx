@@ -5,6 +5,10 @@
 // GTK4 CSS is not web CSS. What this generator relies on:
 // - background-color, border-*, border-radius (incl. per-corner), opacity,
 //   color, font-*, letter-spacing: supported by GTK4;
+// - box-shadow and outline-*: supported by GTK4, and used by Adwaita itself
+//   for the `.card`/`.boxed-list` frame and for every focus ring in the
+//   theme — which is why an app cannot reproduce the platform's own look
+//   without them. box-shadow is compiled by ./box-shadow.ts;
 // - line-height: supported since GTK 4.6 (we target 4.20+);
 // - text-align does NOT exist in GTK CSS — textAlign is applied by the Text
 //   component via widget properties (justify/xalign), so it is skipped here;
@@ -13,6 +17,7 @@
 //   of the child's allocation, so it is skipped here as well.
 
 import type { VisualStyle } from "../contracts"
+import { boxShadowToCss } from "./box-shadow"
 import { parseColor } from "./colors"
 import { warnOnce } from "./dev-warning"
 
@@ -64,6 +69,12 @@ export const visualStyleToCss = (visual: VisualStyle): string => {
   }
   if (visual.opacity !== undefined) {
     decls.push(`opacity: ${clamp01(visual.opacity)};`)
+  }
+  if (visual.boxShadow !== undefined) {
+    const shadow = boxShadowToCss(visual.boxShadow)
+    if (shadow !== null) {
+      decls.push(`box-shadow: ${shadow};`)
+    }
   }
 
   // GTK defaults border-style to none — width alone renders nothing. An
@@ -151,6 +162,29 @@ export const visualStyleToCss = (visual: VisualStyle): string => {
     decls.push(
       `border-bottom-left-radius: ${px(visual.borderBottomLeftRadius)};`,
     )
+  }
+
+  // outline is a ring around the border box that takes no layout space, so
+  // unlike `border` it needs no Yoga involvement at all — GTK4 draws it from
+  // CSS exactly as the web does, which is how Adwaita itself paints every
+  // focus ring in the theme. GTK, like the web, defaults outline-style to
+  // `none`, so a width on its own would draw nothing; the same auto-solid
+  // rule the borders above use applies.
+  const hasVisibleOutlineWidth =
+    visual.outlineWidth !== undefined && visual.outlineWidth > 0
+  if (visual.outlineStyle !== undefined) {
+    decls.push(`outline-style: ${visual.outlineStyle};`)
+  } else if (hasVisibleOutlineWidth) {
+    decls.push("outline-style: solid;")
+  }
+  if (visual.outlineWidth !== undefined) {
+    decls.push(`outline-width: ${px(visual.outlineWidth)};`)
+  }
+  if (visual.outlineColor !== undefined) {
+    pushColor(decls, "outline-color", visual.outlineColor, "outlineColor")
+  }
+  if (visual.outlineOffset !== undefined) {
+    decls.push(`outline-offset: ${px(visual.outlineOffset)};`)
   }
 
   if (visual.color !== undefined) {

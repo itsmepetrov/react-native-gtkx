@@ -61,6 +61,7 @@ const LAYOUT_KEYS: Record<keyof LayoutStyle, true> = {
 // through here untouched.
 const VISUAL_KEYS: Record<keyof VisualStyle, true> = {
   backgroundColor: true,
+  boxShadow: true,
   borderBottomColor: true,
   borderBottomLeftRadius: true,
   borderBottomRightRadius: true,
@@ -85,6 +86,10 @@ const VISUAL_KEYS: Record<keyof VisualStyle, true> = {
   letterSpacing: true,
   lineHeight: true,
   opacity: true,
+  outlineColor: true,
+  outlineOffset: true,
+  outlineStyle: true,
+  outlineWidth: true,
   textAlign: true,
   transform: true,
 }

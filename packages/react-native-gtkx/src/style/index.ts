@@ -5,6 +5,7 @@
 // any OS. The production registry that talks to the gtkx `css` helper lives
 // in ./registry.gtkx.ts and is imported directly by the components.
 
+export { boxShadowToCss } from "./box-shadow"
 export { parseColor, PlatformColor } from "./colors"
 export { resetDevWarnings } from "./dev-warning"
 export { createCssRegistry, type CssFn, type CssRegistry } from "./registry"

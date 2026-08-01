@@ -3,6 +3,7 @@
 exports[`visualStyleToCss > renders the full visual contract deterministically (string snapshot) 1`] = `
 "background-color: rgb(53, 132, 228);
 opacity: 0.9;
+box-shadow: 0px 1px 3px rgb(0, 0, 0);
 border-style: dotted;
 border-width: 1px;
 border-top-width: 2px;
@@ -19,6 +20,10 @@ border-top-left-radius: 3px;
 border-top-right-radius: 4px;
 border-bottom-right-radius: 2px;
 border-bottom-left-radius: 1px;
+outline-style: solid;
+outline-width: 2px;
+outline-color: rgb(53, 132, 228);
+outline-offset: -1px;
 color: rgb(255, 255, 255);
 font-family: "Fira Sans";
 font-size: 14px;

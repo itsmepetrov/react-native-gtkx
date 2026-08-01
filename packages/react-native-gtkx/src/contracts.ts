@@ -95,8 +95,25 @@ export type Transform2D = {
 
 // Visual props: classified by the style system, compiled into GTK CSS
 // classes via the bridge `css` helper. Text-specific props apply to <Text>.
+// One shadow of a `boxShadow`, field for field react-native's own
+// `BoxShadowValue` (RN 0.76+). Lengths are RN DIPs when numeric; the string
+// form accepts a bare number or `px` and nothing else, which is exactly what
+// RN's processBoxShadow.js accepts.
+export type BoxShadowValue = {
+  offsetX: number | string
+  offsetY: number | string
+  color?: string
+  blurRadius?: number | string
+  spreadDistance?: number | string
+  inset?: boolean
+}
+
 export type VisualStyle = Partial<{
   backgroundColor: string
+  // RN 0.76+. Both forms RN takes: a CSS `box-shadow` string or the
+  // structured array. Compiled by style/box-shadow.ts rather than forwarded,
+  // so colours go through the same normalizer as every other colour prop.
+  boxShadow: string | readonly BoxShadowValue[]
   borderBottomColor: string
   borderBottomLeftRadius: number
   borderBottomRightRadius: number
@@ -132,6 +149,13 @@ export type VisualStyle = Partial<{
   letterSpacing: number
   lineHeight: number
   opacity: number
+  // RN 0.77+. A ring drawn around the border box that takes no layout space
+  // — CSS `outline`, which GTK4 implements natively and Adwaita itself uses
+  // for every focus ring in the theme.
+  outlineColor: string
+  outlineOffset: number
+  outlineStyle: "solid" | "dotted" | "dashed"
+  outlineWidth: number
   // NOT emitted to CSS (no such GTK CSS property): the Text component applies
   // it via label props using the pure style/text-align helper.
   textAlign: "auto" | "left" | "right" | "center" | "justify"
