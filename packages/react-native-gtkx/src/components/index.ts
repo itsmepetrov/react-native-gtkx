@@ -33,12 +33,16 @@ export {
 export { Modal, type ModalProps } from "./modal"
 export {
   Pressable,
+  TouchableHighlight,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   type NativeTouch,
   type PressableProps,
   type PressableStateCallbackType,
   type PressEvent,
+  type TouchableHighlightProps,
   type TouchableOpacityProps,
+  type TouchableWithoutFeedbackProps,
 } from "./pressable"
 export {
   IntrinsicRoot,

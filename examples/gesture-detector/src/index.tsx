@@ -5,5 +5,5 @@ AppRegistry.registerComponent("gesture-detector", () => App)
 AppRegistry.runApplication("gesture-detector", {
   title: "GestureDetector — react-native-gtkx",
   width: 900,
-  height: 720,
+  height: 900,
 })

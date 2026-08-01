@@ -123,6 +123,23 @@ export type RecognizerDecider = {
   ) => boolean
   /** Absent means a lift while BEGAN is the end of it, which is `Pan`'s rule. */
   onRelease?: (view: RecognizerView, config: RecognizerConfig) => ReleaseOutcome
+  /**
+   * Whether activating means taking the responder. Absent means yes, which is
+   * every recognizer that decides the interaction is React Native's.
+   *
+   * `Native` is the one that says no, and it is not an optimisation: taking
+   * the responder is what makes the platform declare `CLAIMED` and suspend
+   * every enclosing `GtkScrolledWindow`'s kinetics
+   * (`responder/use-responder.ts`). A gesture whose entire meaning is "the
+   * native widget is handling this" cannot be the thing that stops the native
+   * widget from handling it.
+   *
+   * A recognizer that does not claim runs off the touch props alone — they
+   * fire regardless of responder status, which is the same seam the BEGAN
+   * phase already uses. It never receives `onResponderMove`, so its updates
+   * come from `onTouchMove` and its ending from `onTouchEnd`/`onTouchCancel`.
+   */
+  claimsResponder?: boolean
 }
 
 type Timer = ReturnType<typeof setTimeout> | null
@@ -496,13 +513,52 @@ export const createRecognizer = (
     finalize(payloadNow, false)
   }
 
+  /** Whether this kind takes the interaction when it activates. */
+  const claimsResponder = decider.claimsResponder !== false
+
+  /**
+   * Everything becoming ACTIVE means, from a position rather than an event.
+   *
+   * Shared by the two ways in: `onResponderGrant`, for a recognizer that took
+   * the lock, and `decide()` below, for one that never will.
+   */
+  const enterActive = (pageX: number, pageY: number): void => {
+    setState(GESTURE_STATE.ACTIVE)
+    runtime.wantsActivation = false
+    clearActivationTimer()
+    clearDelayTimer()
+    // Translation is measured from where the gesture BECAME ACTIVE, not
+    // from the press: a pan with `activeOffsetY([-10, 10])` that reported
+    // 10px of travel the moment it started would jump the content by the
+    // threshold on every drag. With `activateAfterLongPress` the pointer
+    // has not moved when the timer grants, so the two origins coincide —
+    // which is only true because the grant no longer waits for a move.
+    runtime.originX = pageX
+    runtime.originY = pageY
+    runtime.lastX = pageX
+    runtime.lastY = pageY
+    runtime.changeFromX = 0
+    runtime.changeFromY = 0
+    runtime.hasEmittedUpdate = false
+    runtime.hasActivated = true
+  }
+
   /**
    * The one place a recognizer asks to become active, and therefore the seam
    * the orchestrator (slice 3) will sit in: today it records the want, and
    * the responder system is asked either by the negotiation already in flight
    * or — for a timer — through the out-of-event channel.
+   *
+   * A recognizer that does not claim skips all of that and simply activates.
+   * There is nothing to negotiate: it is not asking for the interaction, it
+   * is reporting that the widget underneath it has taken one.
    */
   const decide = (insideTouchEvent: boolean): void => {
+    if (!claimsResponder) {
+      enterActive(runtime.lastX, runtime.lastY)
+      readConfig().onActivate?.(payloadNow())
+      return
+    }
     runtime.wantsActivation = true
     if (!insideTouchEvent) {
       env.requestResponder()
@@ -545,6 +601,50 @@ export const createRecognizer = (
     return (
       count >= (config.minPointers ?? 1) && count <= (config.maxPointers ?? 10)
     )
+  }
+
+  /**
+   * One ACTIVE gesture's reaction to the pointer moving, from whichever
+   * channel reached it: `onResponderMove` for the lock's holder,
+   * `onTouchMove` for a recognizer that never takes it.
+   *
+   * Returns nothing; the gesture may have finalized itself on the way out.
+   */
+  const advance = (event: GestureResponderEvent): void => {
+    track(event)
+    const config = readConfig()
+    if (
+      (config.shouldCancelWhenOutside === true && outsideBounds(event)) ||
+      // `LongPress` is the one kind that can be cancelled by movement it has
+      // already accepted: `maxDistance` keeps applying once the press has
+      // matured, and travelling past it while ACTIVE is a cancellation
+      // rather than a failure.
+      decider.shouldCancelWhileActive?.(viewOf(), config) === true
+    ) {
+      setState(GESTURE_STATE.CANCELLED)
+      finalizeAt(event, false)
+      return
+    }
+    const payload = payloadOf(event)
+    // The event that GRANTED the responder reaches here too — the system
+    // dispatches the move to whoever holds the lock after the handoff, in
+    // the same event. Emitting it would be an update of zero travel that
+    // `onActivate` has just reported the position of, and it would make
+    // upstream's rule that the FIRST change equals the translation vacuous:
+    // that first delta would always be zero. So the activation event is not
+    // an update, and the first real move is.
+    if (
+      !runtime.hasEmittedUpdate &&
+      payload.translationX === 0 &&
+      payload.translationY === 0
+    ) {
+      return
+    }
+    config.onUpdate?.(payload)
+    config.onChange?.(payload)
+    runtime.changeFromX = payload.translationX
+    runtime.changeFromY = payload.translationY
+    runtime.hasEmittedUpdate = true
   }
 
   const handlers = {
@@ -622,12 +722,39 @@ export const createRecognizer = (
           decide(false)
         }, timer.delay)
       }
+
+      // A recognizer that never claims may activate on the press itself, and
+      // `Gesture.Native().shouldActivateOnStart(true)` is the shape that
+      // wants to: a native BUTTON takes the press at once rather than waiting
+      // to see whether the pointer travels.
+      //
+      // Deliberately not asked for the claiming kinds, and that is the same
+      // rule `onStartShouldSetResponder` states by always answering false — a
+      // gesture that grabbed the interaction on press cannot honour an
+      // `activeOffset`, and deciding late is what every offset knob is for.
+      // Nothing is being decided late here, because nothing is being taken.
+      if (
+        !claimsResponder &&
+        config.manualActivation !== true &&
+        decider.shouldActivate(viewOf(), config)
+      ) {
+        decide(true)
+      }
     },
 
     onTouchMove: (event: GestureResponderEvent) => {
+      if (runtime.state === GESTURE_STATE.ACTIVE) {
+        // A recognizer that never took the lock has no `onResponderMove`
+        // coming, so this is where its updates live. One that did is driven
+        // from there instead, and emitting here as well would double every
+        // update it reports.
+        if (!claimsResponder) {
+          advance(event)
+        }
+        return
+      }
       if (runtime.state !== GESTURE_STATE.BEGAN) {
-        // An ACTIVE gesture is driven by `onResponderMove`, where velocity is
-        // tracked. A finished one is not tracked at all.
+        // A finished gesture is not tracked at all.
         return
       }
       track(event)
@@ -664,6 +791,11 @@ export const createRecognizer = (
 
     // The instant of decision. Everything above ran holding nothing.
     onMoveShouldSetResponder: () => {
+      // `Native` never answers yes: winning here is what makes the platform
+      // claim the GTK sequence and suspend the scroller it is reporting on.
+      if (!claimsResponder) {
+        return false
+      }
       if (runtime.state !== GESTURE_STATE.BEGAN || !isEnabled()) {
         return false
       }
@@ -681,24 +813,7 @@ export const createRecognizer = (
     },
 
     onResponderGrant: (event: GestureResponderEvent) => {
-      setState(GESTURE_STATE.ACTIVE)
-      runtime.wantsActivation = false
-      clearActivationTimer()
-      clearDelayTimer()
-      // Translation is measured from where the gesture BECAME ACTIVE, not
-      // from the press: a pan with `activeOffsetY([-10, 10])` that reported
-      // 10px of travel the moment it started would jump the content by the
-      // threshold on every drag. With `activateAfterLongPress` the pointer
-      // has not moved when the timer grants, so the two origins coincide —
-      // which is only true because the grant no longer waits for a move.
-      runtime.originX = event.nativeEvent.pageX
-      runtime.originY = event.nativeEvent.pageY
-      runtime.lastX = event.nativeEvent.pageX
-      runtime.lastY = event.nativeEvent.pageY
-      runtime.changeFromX = 0
-      runtime.changeFromY = 0
-      runtime.hasEmittedUpdate = false
-      runtime.hasActivated = true
+      enterActive(event.nativeEvent.pageX, event.nativeEvent.pageY)
       readConfig().onActivate?.(payloadOf(event))
     },
 
@@ -706,40 +821,7 @@ export const createRecognizer = (
       if (runtime.state !== GESTURE_STATE.ACTIVE) {
         return
       }
-      track(event)
-      const config = readConfig()
-      if (
-        (config.shouldCancelWhenOutside === true && outsideBounds(event)) ||
-        // `LongPress` is the one kind that can be cancelled by movement it has
-        // already accepted: `maxDistance` keeps applying once the press has
-        // matured, and travelling past it while ACTIVE is a cancellation
-        // rather than a failure.
-        decider.shouldCancelWhileActive?.(viewOf(), config) === true
-      ) {
-        setState(GESTURE_STATE.CANCELLED)
-        finalizeAt(event, false)
-        return
-      }
-      const payload = payloadOf(event)
-      // The event that GRANTED the responder reaches here too — the system
-      // dispatches the move to whoever holds the lock after the handoff, in
-      // the same event. Emitting it would be an update of zero travel that
-      // `onActivate` has just reported the position of, and it would make
-      // upstream's rule that the FIRST change equals the translation vacuous:
-      // that first delta would always be zero. So the activation event is not
-      // an update, and the first real move is.
-      if (
-        !runtime.hasEmittedUpdate &&
-        payload.translationX === 0 &&
-        payload.translationY === 0
-      ) {
-        return
-      }
-      config.onUpdate?.(payload)
-      config.onChange?.(payload)
-      runtime.changeFromX = payload.translationX
-      runtime.changeFromY = payload.translationY
-      runtime.hasEmittedUpdate = true
+      advance(event)
     },
 
     onResponderRelease: (event: GestureResponderEvent) => {
@@ -759,6 +841,12 @@ export const createRecognizer = (
       // An ACTIVE gesture is finalized by `onResponderRelease`, which the
       // system dispatches AFTER the touch props. A gesture that never took
       // the lock has no responder callback coming and ends here.
+      if (runtime.state === GESTURE_STATE.ACTIVE) {
+        if (!claimsResponder) {
+          finalizeAt(event, true)
+        }
+        return
+      }
       if (runtime.state !== GESTURE_STATE.BEGAN) {
         return
       }
@@ -804,7 +892,20 @@ export const createRecognizer = (
         touchEventOf(event, TOUCH_EVENT_TYPE.TOUCHES_CANCEL),
         stateManager,
       )
-      if (runtime.state === GESTURE_STATE.BEGAN) {
+      // THIS is where a stolen sequence lands, and why the responder system
+      // learned to tell `->DENIED` from an ordinary `drag-end`
+      // (`responder/use-responder.ts`). A native ancestor claiming mid-drag
+      // used to arrive here as `onTouchEnd`, which for an ACTIVE `Native`
+      // gesture would have reported a clean, successful ending of a drag that
+      // was actually taken away.
+      //
+      // An ACTIVE gesture that DID hold the lock is cancelled by
+      // `onResponderTerminate`, which the system dispatches after these touch
+      // props — finalizing here too would end it twice.
+      if (
+        runtime.state === GESTURE_STATE.BEGAN ||
+        (!claimsResponder && runtime.state === GESTURE_STATE.ACTIVE)
+      ) {
         setState(GESTURE_STATE.CANCELLED)
         finalizeAt(event, false)
       }

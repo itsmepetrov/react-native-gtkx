@@ -38,8 +38,9 @@ type TouchHandler = (
 
 const unsupported = createUnsupportedFactory(
   "react-native-gesture-handler",
-  "Pan, Tap, LongPress and GestureDetector are implemented; cross-gesture " +
-    "relations and the composers arrive with the arbitration registry. See docs/api.md.",
+  "Pan, Tap, LongPress, Native and GestureDetector are implemented; " +
+    "cross-gesture relations and the composers arrive with the arbitration registry. " +
+    "See docs/api.md.",
 )
 
 /**
@@ -333,18 +334,64 @@ export class LongPressGestureBuilder extends BaseGestureBuilder {
 }
 
 /**
+ * `Gesture.Native()` — the widget underneath, put into the arbitration.
+ *
+ * `shouldCancelWhenOutside` defaults to true from the constructor, which is
+ * where upstream's `NativeViewGestureHandler.init` sets it rather than its
+ * builder. See ./native for what the recognizer does and, more to the point,
+ * what it deliberately does not do: it never takes the responder, because
+ * taking it is what switches the native scroller off.
+ */
+export class NativeGestureBuilder extends BaseGestureBuilder {
+  readonly kind = "native" as const
+
+  constructor() {
+    super()
+    this.shouldCancelWhenOutside(true)
+  }
+
+  shouldActivateOnStart(value: boolean): this {
+    this.config.shouldActivateOnStart = value
+    return this
+  }
+  disallowInterruption(value: boolean): this {
+    this.config.disallowInterruption = value
+    return this
+  }
+  yieldsToContinuousGestures(value: boolean): this {
+    this.config.yieldsToContinuousGestures = value
+    return this
+  }
+
+  /**
+   * A native view is CONTINUOUS upstream (`isContinuous = true`), so it
+   * reports travel like `Pan` does and unlike `Tap`. These are here rather
+   * than on the base class for the same reason they are on
+   * `PanGestureBuilder`: upstream puts them on `ContinousBaseGesture`.
+   */
+  onUpdate(callback: (event: GestureEventPayload) => void): this {
+    this.config.onUpdate = callback
+    return this
+  }
+  onChange(callback: (event: GestureEventPayload) => void): this {
+    this.config.onChange = callback
+    return this
+  }
+}
+
+/**
  * `Gesture`, the namespace of statics.
  *
- * `Pan`, `Tap` and `LongPress` are real. The other nine throw by name, and
- * that is the point: docs/research/gestures.md records the failure mode this
- * repo most wants to avoid — a component that accepts its props, renders, and
- * does nothing.
+ * `Pan`, `Tap`, `LongPress` and `Native` are real. The other eight throw by
+ * name, and that is the point: docs/research/gestures.md records the failure
+ * mode this repo most wants to avoid — a component that accepts its props,
+ * renders, and does nothing.
  */
 export const Gesture = {
   Pan: (): PanGestureBuilder => new PanGestureBuilder(),
   Tap: (): TapGestureBuilder => new TapGestureBuilder(),
   LongPress: (): LongPressGestureBuilder => new LongPressGestureBuilder(),
-  Native: unsupported("Gesture.Native"),
+  Native: (): NativeGestureBuilder => new NativeGestureBuilder(),
   Pinch: unsupported("Gesture.Pinch"),
   Rotation: unsupported("Gesture.Rotation"),
   Fling: unsupported("Gesture.Fling"),

@@ -155,25 +155,48 @@ found out what that costs when you claim on the wrong widget; see below.)
 
 **Correction, measured on GTK 4.22.4 with real pointer injection
 (`docs/research/gesture-detector.md`, probe 1): the two directions are the
-other way round, and they are not symmetrical.** A claim by the DESCENDANT
-(deeper, first in the bubble chain) **cancels** the ancestor's gesture —
-`::cancel` then `::end`, with no `::sequence-state-changed` on it at all. A
-claim by the ANCESTOR **denies** the descendant — `::sequence-state-changed`
-to `DENIED` then `::end`, and no `::cancel`. The consequence matters more
-than the direction: a denied sequence ends with `drag-end`, which this
-platform maps to `onResponderRelease`, so an ancestor stealing the sequence
-mid-drag reaches JS as a clean release rather than a termination. Nothing
-depends on it today because the claim is always made on the source; it
-becomes load-bearing when `Gesture.Native()` puts a real GTK gesture into
-the arbitration.
+other way round, and they are not symmetrical.**
+
+| Who claims                                       | What happens to the other gesture | Signals it sees                                                       |
+| ------------------------------------------------ | --------------------------------- | --------------------------------------------------------------------- |
+| the **descendant** (deeper, first in the bubble) | the ancestor is **cancelled**     | `::cancel` then `::end`, and **no** `::sequence-state-changed` at all |
+| the **ancestor** (shallower, second)             | the descendant is **denied**      | `->DENIED` then `::end`, and **no** `::cancel`                        |
+
+The consequence matters more than the direction. A denied sequence ends with
+`drag-end` — the same signal a finger lifting produces — which this platform
+mapped to `onResponderRelease` and `onTouchEnd`. **So a native ancestor
+stealing the sequence mid-drag reached JS as a clean, successful ending at
+whatever position the theft happened at**, not as a termination.
+
+### How the responder system reports it now
+
+`use-responder.ts` connects `::sequence-state-changed` on its `GtkGestureDrag`
+and records a `->DENIED` transition for the length of one interaction. A
+`drag-end` on a denied sequence then goes to `touchCancel` instead of
+`touchEnd`, so the theft reaches JS as `onResponderTerminate` and
+`onTouchCancel` and every recognizer built on those reports a cancellation.
+The flag is cleared on every `drag-begin`, because `GtkGestureSingle` denies
+its own sequence when a press arrives on the wrong button with nothing down.
+
+**Watching the sequence state is the only way to tell the two apart**, which
+is why the drag signals alone were never enough: `drag-end` is `drag-end`
+either way.
+
+**Why nothing depended on it until `Gesture.Native()`, measured rather than
+assumed.** A view that takes the responder on PRESS makes the platform claim
+on its own — the source's — gesture, and by the table above a claim by the
+descendant CANCELS every ancestor's gesture outright. The ancestor never gets
+a second update, so it never gets the chance to steal anything; a GTK test
+installs a real thieving `GtkGestureDrag` on an ancestor and asserts exactly
+that. It becomes load-bearing with `Gesture.Native()`, which is the first
+recognizer that deliberately never claims — and which therefore reads its own
+ending straight off the touch props.
+
 `Claimed → Denied` is legal but is not an undo; GTK compensates only in the
 narrow case of a capture-phase claim on press released before any movement.
 There is no way to ask a holder to yield, so
 `onResponderTerminationRequest` has no GTK analogue: negotiation runs
 entirely in JS and `CLAIMED` is only the final one-way declaration.
-
-Note the asymmetry: a parent stealing from a child maps onto capture-phase
-claiming; a child stealing from a claimed ancestor is not expressible.
 
 ### RN negotiates only inside touch events, and some gestures decide on a timer
 

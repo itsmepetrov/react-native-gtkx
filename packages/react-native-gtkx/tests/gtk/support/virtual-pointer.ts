@@ -101,7 +101,14 @@ const encodeArgument = (argument: number | string): Buffer => {
     return encodeString(argument)
   }
   const encoded = Buffer.alloc(WORD_SIZE)
-  encoded.writeUInt32LE(argument, 0)
+  // `>>> 0` is what lets a SIGNED argument through. Wayland words are 32 bits
+  // and the protocol's `int` and `uint` share the encoding, but Node's
+  // `writeUInt32LE` throws `ERR_OUT_OF_RANGE` on anything negative — so a
+  // `wl_fixed` axis value for a scroll UP never reached the wire, and
+  // scrolling up could not be injected at all. The shift reinterprets the
+  // two's complement bits without touching any value that was already in
+  // range.
+  encoded.writeUInt32LE(argument >>> 0, 0)
   return encoded
 }
 
@@ -246,7 +253,7 @@ export type VirtualPointer = {
   moveTo(x: number, y: number): void
   press(button?: PointerButton): void
   release(button?: PointerButton): void
-  /** Vertical wheel, in detents; positive scrolls down. */
+  /** Vertical wheel, in detents; positive scrolls down, negative up. */
   scrollBy(detents: number): void
   dispose(): void
 }
