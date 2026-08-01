@@ -9,7 +9,7 @@ react-native-gtkx runs on Linux only: gtkx requires GTK4 â‰¥ 4.20, libadwaita â‰
 ```bash
 npm install
 npm run codegen
-npm run typecheck && npm run lint && npm test && npm run test:gtk
+npm run typecheck && npm run lint && npm run format:check && npm test && npm run test:gtk
 ```
 
 Before committing changes to the package itself, also run:
