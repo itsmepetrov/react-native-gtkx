@@ -9,7 +9,6 @@ import { act, render, screen, waitFor } from "@gtkx/testing"
 import { expect, it } from "vitest"
 import { Root, Text } from "../../../src/index"
 import Animated, {
-  createAnimatedComponent,
   css,
   FadeIn,
   interpolateColor,
@@ -20,7 +19,7 @@ import Animated, {
   ReduceMotion,
   runOnJS,
   runOnUI,
-  useAnimatedProps,
+  useAnimatedScrollHandler,
   useReducedMotion,
 } from "../../../src/reanimated-compat/index"
 
@@ -33,11 +32,8 @@ it("throws with the symbol's name when an unsupported export is called", () => {
   expect(() => (interpolateColor as () => void)()).toThrow(
     /`interpolateColor` is not supported/,
   )
-  expect(() => (useAnimatedProps as () => void)()).toThrow(
-    /`useAnimatedProps` is not supported/,
-  )
-  expect(() => (createAnimatedComponent as () => void)()).toThrow(
-    /`createAnimatedComponent` is not supported/,
+  expect(() => (useAnimatedScrollHandler as () => void)()).toThrow(
+    /`useAnimatedScrollHandler` is not supported/,
   )
 })
 
@@ -66,9 +62,10 @@ it("survives the introspection React and console do before use", () => {
   expect(() => String(FadeIn.name)).not.toThrow()
 })
 
-it("throws when an unsupported animated component is rendered", async () => {
-  // The realistic path: an app keeps its <Animated.Text> and finds out here,
-  // naming the component, rather than three frames later.
+it("throws when Animated.FlatList is rendered, and says what to do instead", async () => {
+  // The one animated component that is refused rather than implemented, and
+  // the realistic path to finding out: an app keeps its <Animated.FlatList>
+  // and is told here, by name, rather than three frames later.
   let error: unknown = null
   try {
     await act(async () => {
@@ -77,14 +74,20 @@ it("throws when an unsupported animated component is rendered", async () => {
           width={200}
           height={200}
         >
-          <Animated.Text>never rendered</Animated.Text>
+          <Animated.FlatList
+            data={[]}
+            renderItem={() => null}
+          />
         </Root>,
       )
     })
   } catch (caught) {
     error = caught
   }
-  expect(String(error)).toMatch(/`Animated.Text` is not supported/)
+  expect(String(error)).toMatch(/`Animated.FlatList` is not implemented/)
+  // A refusal that does not point somewhere is half an answer.
+  expect(String(error)).toMatch(/Animated\.View/)
+  expect(String(error)).toMatch(/Animated\.ScrollView/)
 })
 
 it("Animated.View is implemented and renders its children", async () => {

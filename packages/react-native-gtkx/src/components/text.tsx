@@ -1,10 +1,12 @@
 import {
   isValidElement,
+  useImperativeHandle,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
+  type Ref,
 } from "react"
 import { textAlignToLabelProps, textDecorationToAttrs } from "../style/index"
 import type { MeasureFn, StyleProp } from "../contracts"
@@ -15,7 +17,11 @@ import {
   measureWidget,
   Pango,
 } from "../gtkx/bridge/index"
+import { createMeasureHandle, type MeasureHandle } from "./measure"
 import { useLayoutChild, type LayoutEvent } from "./use-layout-child"
+
+/** RN's imperative geometry methods, on a `Text` ref. */
+export type TextHandle = MeasureHandle
 
 export type TextProps = {
   style?: StyleProp
@@ -23,6 +29,11 @@ export type TextProps = {
   numberOfLines?: number
   children?: ReactNode
   testID?: string
+  // RN gives every host component the geometry methods, and `Text` is one —
+  // measuring a label used to mean wrapping it in a View purely to have
+  // something to hold. It is also what makes `Animated.Text` reachable: the
+  // handle is the seam the imperative write path finds the widget through.
+  ref?: Ref<TextHandle>
 }
 
 const flattenToString = (children: ReactNode): string => {
@@ -77,6 +88,7 @@ export const Text = ({
   numberOfLines,
   children,
   testID,
+  ref,
 }: TextProps) => {
   const widgetRef = useRef<Gtk.Label | null>(null)
   const text = flattenToString(children)
@@ -133,6 +145,8 @@ export const Text = ({
     onLayout: layoutWithLines,
     measure,
   })
+
+  useImperativeHandle(ref, () => createMeasureHandle(widgetRef, node), [node])
 
   // RN text clips to its box: an under-allocated GtkLabel would otherwise
   // paint its full text past the allocation (spike finding). Containers keep

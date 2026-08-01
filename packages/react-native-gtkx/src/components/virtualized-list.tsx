@@ -30,6 +30,7 @@ import {
   ScrollView,
   StickySlot,
   type ScrollEvent,
+  type ScrollHandle,
   type ScrollViewHandle,
   type ScrollViewProps,
 } from "./scroll-view"
@@ -60,10 +61,16 @@ export type ViewabilityConfig = {
   minimumViewTime?: number
 }
 
-// RN FlatList scroll surface on top of ScrollViewHandle. The handle is not
-// generic: scrollToItem takes the item as unknown and resolves the index with
-// indexOf on the latest data.
-export type VirtualizedListHandle = ScrollViewHandle & {
+// RN FlatList scroll surface on top of the ScrollView's SCROLL half. The
+// handle is not generic: scrollToItem takes the item as unknown and resolves
+// the index with indexOf on the latest data.
+//
+// It stops at the scroll methods deliberately. A ScrollView ref also carries
+// RN's geometry methods, because a ScrollView is a host component with a
+// widget behind it; a windowed list is a composite over one, so a `measure()`
+// here would have to pick some inner widget to speak for it and pretend that
+// was the list. Measure the ScrollView, or a cell.
+export type VirtualizedListHandle = ScrollHandle & {
   scrollToIndex(params: {
     index: number
     viewPosition?: number

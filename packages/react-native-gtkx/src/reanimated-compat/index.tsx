@@ -30,13 +30,15 @@
 // and `dependencies` arrays are honoured but never required.
 //
 // WHAT IS AND IS NOT HERE. Shared values, animations, the mapper core,
-// `useAnimatedStyle` and `Animated.View` are implemented. Everything else
-// throws through the `unsupported()` proxy, naming itself. The boundary is
-// not arbitrary: `opacity` and `transform` are the only two things this
-// platform can write to a mounted widget without a React render. Colours,
-// borders and radii reach GTK as a CSS class computed during render, and
-// layout properties additionally need a Yoga pass — closing that gap is its
-// own slice of work. See docs/api.md.
+// `useAnimatedStyle`, `useAnimatedProps`, `createAnimatedComponent` and
+// `Animated.View`/`Text`/`Image`/`ScrollView` are implemented. Everything
+// else throws through the `unsupported()` proxy, naming itself. The boundary
+// is not arbitrary: `opacity` and `transform` are the only two things this
+// platform can write to a mounted widget without a React render (plus the
+// numeric SVG props, whose components subscribe to an animated node
+// themselves). Colours, borders and radii reach GTK as a CSS class computed
+// during render, and layout properties additionally need a Yoga pass —
+// closing that gap is its own slice of work. See docs/api.md.
 import type { ReactNode } from "react"
 import { Animated as PlatformAnimated } from "../components/animated"
 import type {
@@ -73,6 +75,7 @@ const {
   useDerivedValue,
   useAnimatedReaction,
   useAnimatedStyle,
+  useAnimatedProps,
 } = createHooks(makeMutable)
 
 const { runOnUI, scheduleOnUI, runOnJS, scheduleOnRN } =
@@ -94,6 +97,7 @@ export {
   runOnUI,
   scheduleOnRN,
   scheduleOnUI,
+  useAnimatedProps,
   useAnimatedReaction,
   useAnimatedRef,
   useAnimatedStyle,
@@ -116,6 +120,7 @@ export type { AnimatedRef, MeasuredDimensions } from "./animated-ref"
 export type { DependencyList } from "./hooks"
 export type { ExtrapolationConfig, ExtrapolationType } from "./interpolation"
 export type { DerivedValue, SharedValue } from "./mutable"
+export type { PropsObject as AnimatedProps } from "./props"
 
 /** Deprecated upstream alias of {@link Extrapolation}, kept for source parity. */
 export const Extrapolate = Extrapolation
@@ -260,9 +265,10 @@ const View = PlatformAnimated.View as (props: AnimatedViewProps) => ReactNode
 
 const unsupported = createUnsupportedFactory(
   "react-native-reanimated",
-  "Implemented here: shared values, useAnimatedStyle/useDerivedValue/useAnimatedReaction, " +
+  "Implemented here: shared values, useAnimatedStyle/useAnimatedProps/useDerivedValue/useAnimatedReaction, " +
     "withTiming/withSpring/withSequence/withRepeat/withDelay, interpolate, Easing, " +
-    "useAnimatedRef + measure, runOnUI/runOnJS and Animated.View. See docs/api.md for what is not, and why.",
+    "useAnimatedRef + measure, runOnUI/runOnJS, Animated.View/Text/Image/ScrollView and " +
+    "createAnimatedComponent. See docs/api.md for what is not, and why.",
 )
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -275,26 +281,35 @@ const unsupported = createUnsupportedFactory(
 const addWhitelistedNativeProps = (): void => {}
 const addWhitelistedUIProps = (): void => {}
 
+/**
+ * The rest of the host components, and the factory behind them. All four are
+ * the platform's own, because the imperative write path never needed to know
+ * what it was writing to: it needs the child's widget and its parent's, and
+ * `createAnimatedComponent` reads the first back out of the ref the wrapped
+ * component exposes. It adds NO widget to the tree — wrapping in an
+ * `Animated.View` would change flex layout and change what `measureLayout` is
+ * relative to, which is a different tree, not a shim.
+ *
+ * `FlatList` is the one refusal, and it is a decision rather than an
+ * omission: it is a composite over the windowed core over a ScrollView, and
+ * its ref is a scroll API, so no widget is reachable. It throws on render,
+ * naming itself and naming the workaround.
+ */
 const Animated = {
   View,
-  // Every other host component needs the imperative write path generalised
-  // beyond the animated box — the same widget-and-parent seam, reached from
-  // components that do not currently expose one. That is the next slice, not
-  // a silent partial.
-  Text: unsupported("Animated.Text") as any,
-  ScrollView: unsupported("Animated.ScrollView") as any,
-  Image: unsupported("Animated.Image") as any,
-  FlatList: unsupported("Animated.FlatList") as any,
-  createAnimatedComponent: unsupported("createAnimatedComponent") as any,
+  Text: PlatformAnimated.Text as any,
+  ScrollView: PlatformAnimated.ScrollView as any,
+  Image: PlatformAnimated.Image as any,
+  FlatList: PlatformAnimated.FlatList as any,
+  createAnimatedComponent: PlatformAnimated.createAnimatedComponent as any,
   addWhitelistedNativeProps,
   addWhitelistedUIProps,
 }
 
 export default Animated
 
-export const createAnimatedComponent: any = unsupported(
-  "createAnimatedComponent",
-)
+export const createAnimatedComponent: any =
+  PlatformAnimated.createAnimatedComponent
 
 // --- the refusals -------------------------------------------------------
 //
@@ -426,7 +441,6 @@ export const linear: any = unsupported("linear")
 export const steps: any = unsupported("steps")
 
 // --- hooks built on the event system, sensors and the keyboard ---
-export const useAnimatedProps: any = unsupported("useAnimatedProps")
 export const useAnimatedKeyboard: any = unsupported("useAnimatedKeyboard")
 export const useAnimatedScrollHandler: any = unsupported(
   "useAnimatedScrollHandler",
