@@ -145,13 +145,15 @@ export const DragPanel = () => (
       to show.
     </Caption>
     <Caption>
-      Honest note: this is NOT `GestureDetector`. `Gesture.Pan()` and
-      `GestureDetector` are not implemented on this platform — they throw,
-      naming themselves — so the drag is React Native&apos;s own `PanResponder`,
-      spread onto the `Animated.View` as `panHandlers`. That is the same code an
-      RN app wrote before the Gesture API existed, and it runs here unchanged.
-      The Reanimated half — the shared values, the `useAnimatedStyle`, the
-      `withSpring` — is exactly what you would write on iOS.
+      Honest note: this is NOT `GestureDetector`, on purpose. The drag is React
+      Native&apos;s own `PanResponder`, spread onto the `Animated.View` as
+      `panHandlers` — the same code an RN app wrote before the Gesture API
+      existed, running here unchanged. `Gesture.Pan()`, `Tap`, `LongPress` and
+      `GestureDetector` are implemented too; they are demonstrated in
+      `examples/gesture-detector`, so these two apps cover the two gesture
+      layers rather than showing the same drag twice. The Reanimated half — the
+      shared values, the `useAnimatedStyle`, the `withSpring` — is exactly what
+      you would write on iOS.
     </Caption>
   </Panel>
 )

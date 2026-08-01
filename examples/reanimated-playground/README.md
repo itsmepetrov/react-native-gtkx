@@ -27,13 +27,13 @@ the demo.
 
 **01 Drag me.** A shared value per axis, written from `PanResponder`'s gesture
 state, read back through `useAnimatedStyle` into `transform`, sprung home with
-`withSpring` on release. **It is not `GestureDetector`** — `Gesture.Pan()` and
-`GestureDetector` are not implemented here and throw, naming themselves — so
-the drag is React Native's own responder system, which is what an RN app used
-before the Gesture API existed and which runs here unchanged. The Reanimated
-half is exactly what you would write on iOS. The panel says all of this on
-screen; a demo that quietly substituted one gesture API for another would be
-lying about the state of the platform.
+`withSpring` on release. **It is not `GestureDetector`**, deliberately: this
+panel is the React Native responder system, the API an RN app used before the
+Gesture API existed, running here unchanged. `Gesture.Pan()`, `Tap`,
+`LongPress` and `GestureDetector` are implemented now — see
+`examples/gesture-detector`, which is where they are demonstrated — so the two
+examples cover the two layers rather than duplicating one. The Reanimated half
+here is exactly what you would write on iOS.
 
 The arena sets `overflow: "hidden"`, so throwing the box past an edge cuts it
 off at the arena — rounded corners included — instead of letting it slide over
@@ -128,12 +128,14 @@ init) and `spike/`.
 Nothing in the app is faked, and two things a reader might expect are absent
 because the platform does not have them:
 
-- **`GestureDetector` / `Gesture.Pan()`** — not implemented; panel 01 says so
-  and uses `PanResponder`.
-- **Layout animations** (`FadeIn`, `LinearTransition`, `Keyframe`) and
-  **`Animated.FlatList`** — these throw rather than warn, so there is no
-  running demo of them to show. Panel 07 names them; `docs/api.md` has the
-  reasoning.
+- **`GestureDetector` / `Gesture.Pan()`** — implemented, but demonstrated in
+  `examples/gesture-detector` rather than here. Panel 01 deliberately uses
+  `PanResponder`, so the two examples cover the two gesture layers instead of
+  duplicating one.
+- **Layout animations** (`FadeIn`, `LinearTransition`, `Keyframe`) —
+  implemented, and not yet demonstrated here. Worth a panel.
+- **`Animated.FlatList`** — throws rather than warns, so there is no running
+  demo to show. Panel 07 names it; `docs/api.md` has the reasoning.
 
 `useAnimatedProps` is not demonstrated either: its real consumer is the SVG
 shapes, and that case is already covered by the gallery's SVG section.
