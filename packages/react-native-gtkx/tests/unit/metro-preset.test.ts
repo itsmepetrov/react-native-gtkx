@@ -84,6 +84,22 @@ test("redirects react-native-reanimated-dnd to the dnd subpath on linux", () => 
   ])
 })
 
+test("redirects react-native-gesture-handler to the shim on linux", () => {
+  // Not a port of RNGH: the shim implements GestureHandlerRootView and makes
+  // every other export throw. The alias exists so a ported app does not have
+  // to edit the one wrapper at the root of its tree.
+  const { context, calls } = makeContext()
+  resolve(context, "react-native-gesture-handler", "linux")
+  resolve(context, "react-native-gesture-handler/ReanimatedSwipeable", "linux")
+  resolve(context, "react-native-gesture-handler-extras", "linux")
+  expect(calls).toEqual([
+    ["react-native-gtkx/gesture-handler", "linux"],
+    ["react-native-gtkx/gesture-handler/ReanimatedSwipeable", "linux"],
+    // lookalike: left untouched.
+    ["react-native-gesture-handler-extras", "linux"],
+  ])
+})
+
 test("externals resolve to __hostModules proxies", () => {
   const { context } = makeContext()
   for (const name of ["@gtkx/react", "react", "yoga-layout"]) {

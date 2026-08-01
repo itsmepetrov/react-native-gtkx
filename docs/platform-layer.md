@@ -482,7 +482,9 @@ For drag-and-drop specifically there is a whole module above this:
 [`react-native-gtkx/dnd`](api.md#drag-and-drop-react-native-gtkxdnd) mirrors
 `react-native-reanimated-dnd`'s API (`Draggable`, `Droppable`,
 `DropProvider`, `Sortable`) on these two controllers, and both bundler
-presets alias the package name onto it so a ported app keeps its source.
+presets alias the package name onto it — and `react-native-gesture-handler`
+onto a shim that keeps `GestureHandlerRootView` working — so a ported app
+keeps its source unchanged.
 `List`/`ListRow` in `react-native-gtkx/common` package the id-keyed reorder
 on top of the same module. All of it is written on top of `Controllers`, not
 around it — which is the property that makes this subpath worth having.

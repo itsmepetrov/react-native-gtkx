@@ -71,6 +71,21 @@ describe("rewriteReactNativeImport", () => {
     ).toBe("react-native-gtkx/dnd/lib/index")
   })
 
+  test("rewrites react-native-gesture-handler to the shim subpath", () => {
+    expect(rewriteReactNativeImport("react-native-gesture-handler")).toBe(
+      "react-native-gtkx/gesture-handler",
+    )
+    expect(
+      rewriteReactNativeImport("react-native-gesture-handler/jestSetup"),
+    ).toBe("react-native-gtkx/gesture-handler/jestSetup")
+  })
+
+  test("ignores react-native-gesture-handler lookalikes", () => {
+    expect(
+      rewriteReactNativeImport("react-native-gesture-handler-extras"),
+    ).toBeNull()
+  })
+
   test("ignores react-native-reanimated-dnd lookalikes", () => {
     expect(
       rewriteReactNativeImport("react-native-reanimated-dnd-extras"),
