@@ -11,9 +11,29 @@
 import { widgetForHandle } from "../components/measure"
 import { computePointInWindow } from "../gtkx/bridge/index"
 import { requestResponder } from "../responder/use-responder"
+import { longPressDecider } from "./long-press"
 import { panDecider } from "./pan"
-import { createRecognizer, type Recognizer, type Rect } from "./recognizer"
-import type { PanRecognizerConfig } from "./types"
+import {
+  createRecognizer,
+  type Recognizer,
+  type RecognizerDecider,
+  type Rect,
+} from "./recognizer"
+import { tapDecider } from "./tap"
+import type { GestureKind, RecognizerConfig } from "./types"
+
+/**
+ * The whole of what tells the three kinds apart: which pair of predicates the
+ * one machine runs. There is no second state machine, no second event stream
+ * and no second grant channel — `docs/research/gesture-detector.md` predicted
+ * that `Tap` and `LongPress` would be an afternoon over slice 1's core, and
+ * this map is the shape of that claim.
+ */
+const DECIDERS: Record<GestureKind, RecognizerDecider> = {
+  pan: panDecider,
+  tap: tapDecider,
+  longPress: longPressDecider,
+}
 
 /** A ref in either of React's two spellings. */
 type AnyRef =
@@ -43,14 +63,15 @@ export type DetectorRuntime = {
   /** The callback ref to put on the child. Stable for the detector's life. */
   assignHandle: (instance: unknown) => void
   /** Called from a layout effect on every render. */
-  sync: (config: PanRecognizerConfig, forwarded: AnyRef) => void
+  sync: (config: RecognizerConfig, forwarded: AnyRef) => void
   /** Warns once if the child turned out to carry no widget. */
   checkWidget: () => void
 }
 
 export const createDetectorRuntime = (
   handlerTag: number,
-  initialConfig: PanRecognizerConfig,
+  kind: GestureKind,
+  initialConfig: RecognizerConfig,
 ): DetectorRuntime => {
   let config = initialConfig
   let handle: unknown = null
@@ -64,28 +85,33 @@ export const createDetectorRuntime = (
     }
   }
 
-  const recognizer = createRecognizer(handlerTag, panDecider, () => config, {
-    boundsInWindow: (): Rect | null => {
-      const widget = widgetForHandle(handle)
-      if (!widget) {
-        return null
-      }
-      const origin = computePointInWindow(widget, 0, 0)
-      if (!origin) {
-        return null
-      }
-      return {
-        x: origin.x,
-        y: origin.y,
-        width: widget.getWidth(),
-        height: widget.getHeight(),
-      }
+  const recognizer = createRecognizer(
+    handlerTag,
+    DECIDERS[kind],
+    () => config,
+    {
+      boundsInWindow: (): Rect | null => {
+        const widget = widgetForHandle(handle)
+        if (!widget) {
+          return null
+        }
+        const origin = computePointInWindow(widget, 0, 0)
+        if (!origin) {
+          return null
+        }
+        return {
+          x: origin.x,
+          y: origin.y,
+          width: widget.getWidth(),
+          height: widget.getHeight(),
+        }
+      },
+      requestResponder: (): boolean => {
+        const widget = widgetForHandle(handle)
+        return widget !== null && requestResponder(widget)
+      },
     },
-    requestResponder: (): boolean => {
-      const widget = widgetForHandle(handle)
-      return widget !== null && requestResponder(widget)
-    },
-  })
+  )
 
   return {
     recognizer,

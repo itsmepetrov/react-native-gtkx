@@ -24,7 +24,7 @@ import {
   PanGestureHandler,
   RectButton,
   State,
-  useTapGesture,
+  usePinchGesture,
 } from "../../../src/gesture-handler-compat/index"
 import type { Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
 import { Root, Text, View } from "../../../src/index"
@@ -108,18 +108,22 @@ it("renders its children", async () => {
 })
 
 it("throws with the symbol's name when an unsupported export is called", () => {
-  // A hook or factory: called directly.
-  expect(() => (useTapGesture as () => void)()).toThrow(
-    /`useTapGesture` is not supported/,
+  // A hook or factory: called directly. `useTapGesture` used to stand here
+  // and is implemented now, which is the point of the slice; `usePinchGesture`
+  // needs a machine that can produce a touchpad gesture to test it on.
+  expect(() => (usePinchGesture as () => void)()).toThrow(
+    /`usePinchGesture` is not supported/,
   )
 })
 
 it("throws per unimplemented recognizer rather than for the namespace", () => {
-  // `Gesture` itself is real now — `Gesture.Pan()` is implemented — so the
-  // refusal moved down one level. Each of the other eleven statics names
-  // ITSELF, which is strictly more useful than the old whole-namespace throw:
-  // an app calling `Gesture.Pinch()` is told about Pinch, not about Gesture.
+  // `Gesture` itself is real — three of its statics are implemented — so the
+  // refusal moved down one level. Each of the other nine names ITSELF, which
+  // is strictly more useful than the old whole-namespace throw: an app calling
+  // `Gesture.Pinch()` is told about Pinch, not about Gesture.
   expect(Gesture.Pan()).toBeTruthy()
+  expect(Gesture.Tap()).toBeTruthy()
+  expect(Gesture.LongPress()).toBeTruthy()
   expect(() => (Gesture.Pinch as () => void)()).toThrow(
     /`Gesture\.Pinch` is not supported/,
   )
@@ -133,19 +137,30 @@ it("throws per unimplemented recognizer rather than for the namespace", () => {
   )
 })
 
-it("gives State real numbers, because Pan now produces events worth comparing", () => {
-  // It threw until this slice, on the reasoning that the enum is only
-  // meaningful against an event from a handler that could not run here. Pan
-  // runs here now and its payloads carry `state`, so the reasoning expired.
-  // react-native-drawer-layout re-exports this as `GestureState`, seeds a
-  // shared value with UNDETERMINED and tests `=== ACTIVE`; those six numbers
-  // were the last runtime symbol standing between it and this platform.
-  expect(State.UNDETERMINED).toBe(0)
-  expect(State.FAILED).toBe(1)
-  expect(State.BEGAN).toBe(2)
-  expect(State.CANCELLED).toBe(3)
-  expect(State.ACTIVE).toBe(4)
-  expect(State.END).toBe(5)
+it("gives State upstream's six numbers, under the name an app imports", () => {
+  // It threw until the recognizers landed, on the reasoning that the enum is
+  // only meaningful against an event from a handler that could not run here.
+  // All three run now and their payloads carry `state`, so the reasoning
+  // expired. react-native-drawer-layout re-exports this as `GestureState`,
+  // seeds a shared value with UNDETERMINED and tests `=== ACTIVE`.
+  //
+  // THIS is the pin, and it is deliberately by whole-object equality rather
+  // than member by member: a silently different number is the failure mode
+  // and nothing about it is loud — `state === State.ACTIVE` goes on compiling,
+  // goes on running, and quietly answers false. Transcribed from
+  // react-native-gesture-handler 3.1.0's `src/State.ts`, which is that file
+  // in its entirety.
+  expect(State).toEqual({
+    UNDETERMINED: 0,
+    FAILED: 1,
+    BEGAN: 2,
+    CANCELLED: 3,
+    ACTIVE: 4,
+    END: 5,
+  })
+  // `toEqual` alone would still pass if a member were dropped and the
+  // expectation edited to match, so the count is pinned separately.
+  expect(Object.keys(State)).toHaveLength(6)
 })
 
 it("throws when an unsupported handler component is rendered", async () => {

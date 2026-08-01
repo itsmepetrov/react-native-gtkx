@@ -72,7 +72,8 @@ export const GestureDetector = ({
   if (!isGestureSpec(gesture)) {
     throw new Error(
       "react-native-gtkx: `GestureDetector` was given something that is not a gesture. " +
-        "Build one with `Gesture.Pan()` or `usePanGesture()`; the other recognizers are not " +
+        "Build one with `Gesture.Pan()`, `Gesture.Tap()` or `Gesture.LongPress()` — or the hook " +
+        "spelling of any of the three. The remaining recognizers and the composers are not " +
         "implemented yet and throw by name. See docs/api.md.",
     )
   }
@@ -88,8 +89,12 @@ export const GestureDetector = ({
   // Upstream reassigns tags when the gesture object changes; here the object
   // is not the identity — both spellings rebuild it every render — the
   // mounted detector is.
+  // The KIND is fixed for the detector's life along with the tag, because it
+  // decides which predicates the recognizer was built with. Swapping a `Pan`
+  // for a `Tap` on the same detector is a different gesture, not a config
+  // change, and upstream mints a new handler for it too.
   const [runtime] = useState(() =>
-    createDetectorRuntime(mintHandlerTag(), gesture.config),
+    createDetectorRuntime(mintHandlerTag(), gesture.kind, gesture.config),
   )
 
   const childProps = children.props as Record<string, unknown>

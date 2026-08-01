@@ -1,6 +1,6 @@
-// `GestureDetector` and `Gesture.Pan()` against a real pointer, with every
-// assertion taken from GTK's own allocation rather than from a value the test
-// stored itself.
+// `GestureDetector` and all three recognizers against a real pointer, with
+// every assertion taken from GTK's own allocation rather than from a value the
+// test stored itself.
 //
 // Everything here is driven by a `zwlr_virtual_pointer_v1`. That is not
 // gold-plating: the whole design rests on a recognizer that watches an
@@ -18,6 +18,7 @@ import { afterEach, expect, it, vi } from "vitest"
 import {
   Gesture,
   GestureDetector,
+  State,
 } from "../../../src/gesture-handler-compat/index"
 import { Gtk, type Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
 import { Root, Text, View, type ViewHandle } from "../../../src/index"
@@ -595,5 +596,277 @@ it("does not jump when a already-moved view is grabbed again", async () => {
   // It carried on from where it was rather than restarting from zero.
   expect(offset).toBeGreaterThan(afterFirst)
 
+  expect(neighbour).not.toHaveBeenCalled()
+})
+
+it("taps a real card, and the card next to it stays silent", async () => {
+  const device = await withPointer()
+  if (!device) {
+    return
+  }
+  const card = createRef<ViewHandle>()
+  const neighbour = vi.fn()
+  const trace: string[] = []
+  const tap = Gesture.Tap()
+    .onBegin(() => trace.push("begin"))
+    .onStart((event) => trace.push(`start(${event.state})`))
+    .onEnd((_event, success) => trace.push(`end(${success})`))
+
+  await mount(
+    <View style={{ flexDirection: "row", gap: 20, padding: 20 }}>
+      <GestureDetector gesture={tap}>
+        <View
+          ref={card}
+          style={{ width: 200, height: 200, backgroundColor: "#8ff0a4" }}
+        >
+          <Text>tap target</Text>
+        </View>
+      </GestureDetector>
+      <View
+        style={{ width: 200, height: 200, backgroundColor: "#c01c28" }}
+        onTouchStart={neighbour}
+        onStartShouldSetResponder={neighbour}
+      >
+        <Text>tap control</Text>
+      </View>
+    </View>,
+    "tap target",
+  )
+
+  const centre = centreOf(card.current!)
+  await step(() => device.moveTo(centre.x, centre.y))
+  await step(() => device.press())
+  // Still nothing: a tap activates on the RELEASE, which is what leaves the
+  // interaction available to anything else watching the same pointer.
+  expect(trace).toEqual(["begin"])
+
+  await step(() => device.release())
+  expect(trace).toEqual(["begin", `start(${State.ACTIVE})`, "end(true)"])
+  expect(neighbour).not.toHaveBeenCalled()
+})
+
+it("TAP VS DRAG: a press that travels past maxDistance is not a tap", async () => {
+  const device = await withPointer()
+  if (!device) {
+    return
+  }
+  // The assertion that proves the slice. Both gestures below are real and
+  // both are driven by the same injected pointer over the same card; what
+  // separates them is how far it moved before it came back up, and nothing
+  // else. A recognizer that ignored maxDistance would report a tap for the
+  // drag, and one that never activated would report neither.
+  const card = createRef<ViewHandle>()
+  const neighbour = vi.fn()
+  const trace: string[] = []
+  const tap = Gesture.Tap()
+    .maxDistance(10)
+    .onBegin(() => trace.push("begin"))
+    .onStart(() => trace.push("TAPPED"))
+    .onFinalize((_event, success) => trace.push(`finalize(${success})`))
+
+  await mount(
+    <View style={{ flexDirection: "row", gap: 20, padding: 20 }}>
+      <GestureDetector gesture={tap}>
+        <View
+          ref={card}
+          style={{ width: 200, height: 200, backgroundColor: "#dc8add" }}
+        >
+          <Text>drag-or-tap target</Text>
+        </View>
+      </GestureDetector>
+      <View
+        style={{ width: 200, height: 200, backgroundColor: "#c01c28" }}
+        onTouchStart={neighbour}
+      >
+        <Text>drag-or-tap control</Text>
+      </View>
+    </View>,
+    "drag-or-tap target",
+  )
+
+  const centre = centreOf(card.current!)
+
+  // A. a drag. It stays inside the card the whole way, so nothing but the
+  // distance rule can refuse it.
+  await step(() => device.moveTo(centre.x, centre.y))
+  await step(() => device.press())
+  await dragBy(device, centre, 0, 60, 4)
+  await step(() => device.release())
+  expect(trace).toEqual(["begin", "finalize(false)"])
+
+  // B. the same press, without the travel.
+  trace.length = 0
+  await step(() => device.moveTo(centre.x, centre.y))
+  await step(() => device.press())
+  await step(() => device.release())
+  expect(trace).toEqual(["begin", "TAPPED", "finalize(true)"])
+
+  expect(neighbour).not.toHaveBeenCalled()
+})
+
+it("counts two real taps as one double tap, and one tap as none", async () => {
+  const device = await withPointer()
+  if (!device) {
+    return
+  }
+  const card = createRef<ViewHandle>()
+  const neighbour = vi.fn()
+  const trace: string[] = []
+  const tap = Gesture.Tap()
+    .numberOfTaps(2)
+    .maxDelay(600)
+    .onBegin(() => trace.push("begin"))
+    .onStart(() => trace.push("DOUBLE"))
+    .onFinalize((_event, success) => trace.push(`finalize(${success})`))
+
+  await mount(
+    <View style={{ flexDirection: "row", gap: 20, padding: 20 }}>
+      <GestureDetector gesture={tap}>
+        <View
+          ref={card}
+          style={{ width: 200, height: 200, backgroundColor: "#ffbe6f" }}
+        >
+          <Text>double target</Text>
+        </View>
+      </GestureDetector>
+      <View
+        style={{ width: 200, height: 200, backgroundColor: "#c01c28" }}
+        onTouchStart={neighbour}
+      >
+        <Text>double control</Text>
+      </View>
+    </View>,
+    "double target",
+  )
+
+  const centre = centreOf(card.current!)
+  await step(() => device.moveTo(centre.x, centre.y))
+  await step(() => device.press())
+  await step(() => device.release())
+  await step(() => device.press())
+  await step(() => device.release())
+  // One `begin` for the whole sequence, which is upstream's shape: it reaches
+  // `begin()` from the UNDETERMINED branch only.
+  expect(trace).toEqual(["begin", "DOUBLE", "finalize(true)"])
+
+  // A lone tap is not a double tap, and says so once maxDelay runs out.
+  trace.length = 0
+  await step(() => device.press())
+  await step(() => device.release())
+  expect(trace).toEqual(["begin"])
+  await settle(700)
+  expect(trace).toEqual(["begin", "finalize(false)"])
+
+  expect(neighbour).not.toHaveBeenCalled()
+})
+
+it("LongPress activates on the timer with the pointer standing still", async () => {
+  const device = await withPointer()
+  if (!device) {
+    return
+  }
+  const card = createRef<ViewHandle>()
+  const neighbour = vi.fn()
+  const trace: string[] = []
+  let heldFor = 0
+  const hold = Gesture.LongPress()
+    .minDuration(250)
+    .onBegin(() => trace.push("begin"))
+    .onStart((event) => {
+      heldFor = event.duration
+      trace.push("HELD")
+    })
+    .onFinalize((_event, success) => trace.push(`finalize(${success})`))
+
+  await mount(
+    <View style={{ flexDirection: "row", gap: 20, padding: 20 }}>
+      <GestureDetector gesture={hold}>
+        <View
+          ref={card}
+          style={{ width: 200, height: 200, backgroundColor: "#62a0ea" }}
+        >
+          <Text>hold-press target</Text>
+        </View>
+      </GestureDetector>
+      <View
+        style={{ width: 200, height: 200, backgroundColor: "#c01c28" }}
+        onTouchStart={neighbour}
+      >
+        <Text>hold-press control</Text>
+      </View>
+    </View>,
+    "hold-press target",
+  )
+
+  const centre = centreOf(card.current!)
+
+  // A. a quick press is not a hold.
+  await step(() => device.moveTo(centre.x, centre.y))
+  await step(() => device.press())
+  await step(() => device.release())
+  expect(trace).toEqual(["begin", "finalize(false)"])
+
+  // B. hold, and it matures WITHOUT the pointer moving — the out-of-event
+  // grant channel again, which for a press-and-hold is the only way it can
+  // ever happen.
+  trace.length = 0
+  await step(() => device.press())
+  await settle(400)
+  expect(trace).toEqual(["begin", "HELD"])
+  expect(heldFor).toBeGreaterThanOrEqual(250)
+
+  await step(() => device.release())
+  expect(trace).toEqual(["begin", "HELD", "finalize(true)"])
+  expect(neighbour).not.toHaveBeenCalled()
+})
+
+it("cancels a hold that wanders past maxDistance after it matured", async () => {
+  const device = await withPointer()
+  if (!device) {
+    return
+  }
+  const card = createRef<ViewHandle>()
+  const neighbour = vi.fn()
+  const trace: string[] = []
+  const hold = Gesture.LongPress()
+    .minDuration(250)
+    .maxDistance(12)
+    .onBegin(() => trace.push("begin"))
+    .onStart(() => trace.push("HELD"))
+    .onEnd((_event, success) => trace.push(`end(${success})`))
+    .onFinalize((_event, success) => trace.push(`finalize(${success})`))
+
+  await mount(
+    <View style={{ flexDirection: "row", gap: 20, padding: 20 }}>
+      <GestureDetector gesture={hold}>
+        <View
+          ref={card}
+          style={{ width: 200, height: 200, backgroundColor: "#62a0ea" }}
+        >
+          <Text>wander target</Text>
+        </View>
+      </GestureDetector>
+      <View
+        style={{ width: 200, height: 200, backgroundColor: "#c01c28" }}
+        onTouchStart={neighbour}
+      >
+        <Text>wander control</Text>
+      </View>
+    </View>,
+    "wander target",
+  )
+
+  const centre = centreOf(card.current!)
+  await step(() => device.moveTo(centre.x, centre.y))
+  await step(() => device.press())
+  await settle(400)
+  expect(trace).toEqual(["begin", "HELD"])
+
+  // Still well inside the card, so `shouldCancelWhenOutside` is not what does
+  // this — `maxDistance` is, and it keeps applying after activation.
+  await dragBy(device, centre, 0, 40, 4)
+  expect(trace).toEqual(["begin", "HELD", "end(false)", "finalize(false)"])
+
+  await step(() => device.release())
   expect(neighbour).not.toHaveBeenCalled()
 })

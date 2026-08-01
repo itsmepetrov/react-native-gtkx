@@ -1,14 +1,14 @@
-// Four `Gesture.Pan()` shapes, drag-able with a real mouse, plus a negative
-// control that must stay silent.
+// All three recognizers, drivable with a real mouse, plus a negative control
+// that must stay silent.
 //
 // Every import below is the REAL package name. `react-native-gesture-handler`
 // and `react-native-reanimated` are not installed in this example; the vite
 // preset aliases both onto react-native-gtkx, which is the whole claim: a
 // ported app changes nothing in its source.
 //
-// The four cards are not decorative. Each is the exact configuration one of
-// the libraries the epic targets uses, so dragging them by hand is a check on
-// the same shapes the tests assert:
+// The cards are not decorative. Each is the exact configuration one of the
+// libraries the epic targets uses, or the exact rule a test asserts, so
+// driving them by hand checks the same shapes:
 //
 //   lift   — `activateAfterLongPress`, react-native-reanimated-dnd's useDraggable
 //   sheet  — `activeOffsetY` + `failOffsetX`, @gorhom/bottom-sheet's handle
@@ -16,6 +16,12 @@
 //            react-native-drawer-layout's closed drawer
 //   hook   — the same recognizer through `usePanGesture()`, the spelling
 //            upstream deprecated the builder in favour of
+//   tap    — `Gesture.Tap()` with `maxDistance`: the tap-vs-drag rule. Click
+//            it and it counts; press and drag it and it refuses
+//   double — `numberOfTaps(2)`, including the gap timing
+//   hold   — `Gesture.LongPress()`, which activates on its timer with the
+//            pointer standing still, and cancels if the pointer then wanders
+//            further than `maxDistance`
 //
 // The immutability rule is off for this file on purpose: writing
 // `sharedValue.value` from a gesture callback is Reanimated's own documented
@@ -28,6 +34,7 @@ import {
   Gesture,
   GestureDetector,
   GestureHandlerRootView,
+  useLongPressGesture,
   usePanGesture,
 } from "react-native-gesture-handler"
 import Animated, {
@@ -37,6 +44,8 @@ import Animated, {
 
 const LONG_PRESS_MS = 250
 const EDGE_WIDTH = 32
+const TAP_MAX_DISTANCE = 10
+const HOLD_MS = 400
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#241f31", padding: 20, gap: 16 },
@@ -57,6 +66,9 @@ const styles = StyleSheet.create({
   sheet: { backgroundColor: "#8ff0a4" },
   edge: { backgroundColor: "#dc8add" },
   hook: { backgroundColor: "#ffbe6f" },
+  tap: { backgroundColor: "#f9f06b" },
+  double: { backgroundColor: "#99c1f1" },
+  hold: { backgroundColor: "#f66151" },
   cardText: { color: "#1a1a1a", fontSize: 12, fontWeight: "700" },
   edgeStrip: {
     position: "absolute",
@@ -210,6 +222,42 @@ const App = () => {
     },
   })
 
+  // The tap-vs-drag rule, by hand. Click the card and it counts; press it and
+  // drag more than TAP_MAX_DISTANCE before letting go and it refuses — which
+  // is the one assertion that proves a tap is not just "a press that ended".
+  const [taps, setTaps] = useState(0)
+  const tapGesture = Gesture.Tap()
+    .maxDistance(TAP_MAX_DISTANCE)
+    .onBegin(() => say("tap", "pressed — let go without moving"))
+    .onStart(() => setTaps((n) => n + 1))
+    .onFinalize((_event, success) => {
+      say("tap", success ? "TAPPED" : "refused — that was a drag")
+    })
+
+  const [doubles, setDoubles] = useState(0)
+  const doubleGesture = Gesture.Tap()
+    .numberOfTaps(2)
+    .maxDistance(TAP_MAX_DISTANCE)
+    .onBegin(() => say("double", "one…"))
+    .onStart(() => setDoubles((n) => n + 1))
+    .onFinalize((_event, success) => {
+      say("double", success ? "DOUBLE TAP" : "too slow, or only one")
+    })
+
+  // The hook spelling of the third recognizer. It activates on its timer with
+  // the pointer standing still — the out-of-event grant channel — and then
+  // cancels if the pointer wanders further than maxDistance.
+  const holdGesture = useLongPressGesture({
+    minDuration: HOLD_MS,
+    maxDistance: 20,
+    onBegin: () => say("hold", `pressed — hold ${HOLD_MS}ms`),
+    onActivate: (event) =>
+      say("hold", `HELD for ${Math.round(event.duration)}ms`),
+    onFinalize: (event) => {
+      say("hold", event.canceled ? "cancelled — you moved" : "released")
+    },
+  })
+
   const countControl = () => {
     setControlEvents((n) => n + 1)
     return false
@@ -219,7 +267,8 @@ const App = () => {
     <GestureHandlerRootView>
       <View style={styles.screen}>
         <Text style={styles.heading}>
-          GestureDetector — Pan, on React Native&apos;s own responder system
+          GestureDetector — Pan, Tap and LongPress, on React Native&apos;s own
+          responder system
         </Text>
         <Text style={styles.subheading}>
           renders: {status.renders ?? "0"} (state changes only — dragging costs
@@ -282,6 +331,45 @@ const App = () => {
               </Animated.View>
             </GestureDetector>
             <Text style={styles.status}>{status.hook ?? "—"}</Text>
+          </View>
+        </View>
+
+        <View style={styles.row}>
+          <View style={styles.column}>
+            <Text style={styles.label}>
+              Gesture.Tap().maxDistance({TAP_MAX_DISTANCE})
+            </Text>
+            <Text style={styles.hint}>click it; dragging it refuses</Text>
+            <GestureDetector gesture={tapGesture}>
+              <View style={[styles.card, styles.tap]}>
+                <Text style={styles.cardText}>taps: {taps}</Text>
+              </View>
+            </GestureDetector>
+            <Text style={styles.status}>{status.tap ?? "—"}</Text>
+          </View>
+
+          <View style={styles.column}>
+            <Text style={styles.label}>Gesture.Tap().numberOfTaps(2)</Text>
+            <Text style={styles.hint}>two clicks, within 500ms</Text>
+            <GestureDetector gesture={doubleGesture}>
+              <View style={[styles.card, styles.double]}>
+                <Text style={styles.cardText}>doubles: {doubles}</Text>
+              </View>
+            </GestureDetector>
+            <Text style={styles.status}>{status.double ?? "—"}</Text>
+          </View>
+
+          <View style={styles.column}>
+            <Text style={styles.label}>
+              useLongPressGesture({"{ minDuration: " + HOLD_MS + " }"})
+            </Text>
+            <Text style={styles.hint}>hold still; it fires without moving</Text>
+            <GestureDetector gesture={holdGesture}>
+              <View style={[styles.card, styles.hold]}>
+                <Text style={styles.cardText}>hold me</Text>
+              </View>
+            </GestureDetector>
+            <Text style={styles.status}>{status.hold ?? "—"}</Text>
           </View>
         </View>
 

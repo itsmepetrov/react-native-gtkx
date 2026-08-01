@@ -6,8 +6,12 @@
 // it crosses a `failOffset*` bound; and, with `activateAfterLongPress` set,
 // movement past the default minimum before the timer fires is a failure,
 // because that press was a drag and not a hold.
-import type { RecognizerDecider, RecognizerView } from "./recognizer"
-import type { OffsetBound, PanRecognizerConfig } from "./types"
+import type {
+  RecognizerDecider,
+  RecognizerTimer,
+  RecognizerView,
+} from "./recognizer"
+import type { OffsetBound, RecognizerConfig } from "./types"
 
 /** Upstream's default minimum travel before an unconfigured pan activates. */
 export const DEFAULT_MIN_DISTANCE = 10
@@ -46,7 +50,7 @@ const crosses = (value: number, bound: OffsetBound | undefined): boolean => {
  * treating a failure bound as an activation criterion would pin `minDistance`
  * at infinity and the gesture could never start at all.
  */
-const hasCustomActivationCriteria = (config: PanRecognizerConfig): boolean =>
+const hasCustomActivationCriteria = (config: RecognizerConfig): boolean =>
   config.activeOffsetX !== undefined ||
   config.activeOffsetY !== undefined ||
   config.minVelocity !== undefined ||
@@ -61,7 +65,7 @@ const hasCustomActivationCriteria = (config: PanRecognizerConfig): boolean =>
  * offsets are the criteria, and a 10px fallback underneath them would
  * activate diagonal drags neither offset asked for.
  */
-export const effectiveMinDistance = (config: PanRecognizerConfig): number => {
+export const effectiveMinDistance = (config: RecognizerConfig): number => {
   if (config.minDistance !== undefined) {
     return config.minDistance
   }
@@ -74,8 +78,14 @@ const exceeds = (value: number, floor: number | undefined): boolean =>
   floor !== undefined && Math.abs(value) >= floor
 
 export const panDecider: RecognizerDecider = {
-  shouldFail: (view: RecognizerView, config: PanRecognizerConfig): boolean => {
-    if (config.activateAfterLongPress !== undefined && !view.longPressElapsed) {
+  /** Only `activateAfterLongPress` arms one; an ordinary pan has no clock. */
+  timer: (config: RecognizerConfig): RecognizerTimer | null =>
+    config.activateAfterLongPress === undefined
+      ? null
+      : { delay: config.activateAfterLongPress, elapsed: "activate" },
+
+  shouldFail: (view: RecognizerView, config: RecognizerConfig): boolean => {
+    if (config.activateAfterLongPress !== undefined && !view.timerElapsed) {
       // Before the timer, travelling further than the default minimum says
       // this was a drag rather than a hold, and the gesture is done. Past the
       // timer the press has matured and the ordinary bounds take over.
@@ -89,14 +99,11 @@ export const panDecider: RecognizerDecider = {
     )
   },
 
-  shouldActivate: (
-    view: RecognizerView,
-    config: PanRecognizerConfig,
-  ): boolean => {
+  shouldActivate: (view: RecognizerView, config: RecognizerConfig): boolean => {
     // The timer is an activation criterion in its own right, and the only one
     // that does not come from the pointer. Checked first because the pointer
     // has not necessarily moved at all when it fires.
-    if (view.longPressElapsed) {
+    if (view.timerElapsed) {
       return true
     }
     if (

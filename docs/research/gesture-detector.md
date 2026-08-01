@@ -408,9 +408,14 @@ in `docs/research/gestures.md`.
    over one implementation. Unblocks `react-native-reanimated-dnd` and
    `react-native-drawer-layout` on their own.
 2. **`Tap` and `LongPress`**, plus `State` as a real enum. Small once slice 1
-   exists — both are the same machine with different predicates — and `State`
-   is what stops `@gorhom/bottom-sheet` and `react-native-draggable-flatlist`
-   at import.
+   exists — both are the same machine with different predicates. **Shipped**,
+   and it corrected this line: `State` is NOT what stopped either library.
+   `@gorhom/bottom-sheet` imports it with `import type` in both places and so
+   never read it at runtime; `react-native-draggable-flatlist` reads it inside
+   a hook body, so it would have failed at first render rather than at import.
+   What stops that one at import is slice 4's `FlatList`/`ScrollView`
+   re-exports, which it feeds to `createAnimatedComponent` at module scope.
+   `docs/api.md` has the per-library detail with file names.
 3. **The orchestrator.** The three relation maps, `tryActivate`/`makeActive`,
    the awaiting list, and `Race`/`Simultaneous`/`Exclusive` as list-builders
    over them. This is where cross-component relations live and it is the

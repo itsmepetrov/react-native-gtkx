@@ -40,22 +40,37 @@ import type { StyleProp } from "../contracts"
 import { createUnsupportedFactory } from "../unsupported-export"
 import { Gesture } from "./builder"
 import { GestureDetector } from "./detector"
-import { usePanGesture } from "./hooks"
+import { useLongPressGesture, usePanGesture, useTapGesture } from "./hooks"
 import { GESTURE_STATE } from "./types"
 
-export { Gesture, GestureDetector, usePanGesture }
-export { PanGestureBuilder } from "./builder"
+export {
+  Gesture,
+  GestureDetector,
+  useLongPressGesture,
+  usePanGesture,
+  useTapGesture,
+}
+export {
+  LongPressGestureBuilder,
+  PanGestureBuilder,
+  TapGestureBuilder,
+} from "./builder"
 export type { GestureDetectorProps } from "./detector"
-export type { PanGestureHookConfig } from "./hooks"
 export type {
+  LongPressGestureHookConfig,
+  PanGestureHookConfig,
+  TapGestureHookConfig,
+} from "./hooks"
+export type {
+  GestureEndEventPayload,
+  GestureEventPayload,
   GestureHitSlop,
+  GestureKind,
   GestureSpec,
   GestureStateManagerApi,
   GestureTouchData,
   GestureTouchEvent,
   OffsetBound,
-  PanEndEventPayload,
-  PanEventPayload,
 } from "./types"
 
 /**
@@ -101,11 +116,12 @@ export const GestureHandlerRootView = ({
 
 const unsupported = createUnsupportedFactory(
   "react-native-gesture-handler",
-  "Implemented: GestureHandlerRootView, GestureDetector, and Pan in both spellings " +
-    "(`Gesture.Pan()` and `usePanGesture()`). Tap, LongPress and `State` are the next slice; " +
-    "cross-gesture relations and the composers need the orchestrator; Pinch and Rotation need " +
-    "a machine that can produce a touchpad gesture to test them on. RN's own responder system " +
-    "and PanResponder also work (docs/api.md); drag-and-drop is react-native-gtkx/dnd.",
+  "Implemented: GestureHandlerRootView, GestureDetector, `State`, and Pan, Tap and LongPress " +
+    "in both spellings (`Gesture.Pan()` and `usePanGesture()`, and so on). Cross-gesture " +
+    "relations and the composers need the orchestrator; Native needs it and the scroll " +
+    "arbitration; Pinch and Rotation need a machine that can produce a touchpad gesture to " +
+    "test them on. RN's own responder system and PanResponder also work (docs/api.md); " +
+    "drag-and-drop is react-native-gtkx/dnd.",
 )
 
 // Every runtime value `react-native-gesture-handler` 3.1.0 exports, minus
@@ -141,9 +157,10 @@ export const legacy_createNativeWrapper: any = unsupported(
 )
 
 // --- the new (v3) gesture API ---
-// `Gesture`, `GestureDetector` and `usePanGesture` are re-exported at the top
-// of this file. `Gesture` is a real namespace whose eleven unimplemented
-// statics throw individually, so `Gesture.Pinch()` still names itself.
+// `Gesture`, `GestureDetector` and the three implemented hooks are re-exported
+// at the top of this file. `Gesture` is a real namespace whose nine
+// unimplemented statics throw individually, so `Gesture.Pinch()` still names
+// itself.
 export const GestureDetectorType: any = unsupported("GestureDetectorType")
 export const GestureStateManager: any = unsupported("GestureStateManager")
 export const InterceptingGestureDetector: any = unsupported(
@@ -154,7 +171,6 @@ export const useCompetingGestures: any = unsupported("useCompetingGestures")
 export const useExclusiveGestures: any = unsupported("useExclusiveGestures")
 export const useFlingGesture: any = unsupported("useFlingGesture")
 export const useHoverGesture: any = unsupported("useHoverGesture")
-export const useLongPressGesture: any = unsupported("useLongPressGesture")
 export const useManualGesture: any = unsupported("useManualGesture")
 export const useNativeGesture: any = unsupported("useNativeGesture")
 export const usePinchGesture: any = unsupported("usePinchGesture")
@@ -162,7 +178,6 @@ export const useRotationGesture: any = unsupported("useRotationGesture")
 export const useSimultaneousGestures: any = unsupported(
   "useSimultaneousGestures",
 )
-export const useTapGesture: any = unsupported("useTapGesture")
 
 // --- enums and constants ---
 // These are plain data upstream, so throwing on them looks harsh. It is not:
@@ -171,14 +186,18 @@ export const useTapGesture: any = unsupported("useTapGesture")
 // has already gone wrong by the time it reads the enum. Failing at that line
 // beats silently comparing against `undefined`.
 //
-// `State` is the exception, and the reason it throws expired with this slice:
-// `Gesture.Pan()`'s payloads now carry a faithful `state`, so comparing one
+// `State` is the exception, and the reason it throws expired with slice 1:
+// every recognizer's payloads carry a faithful `state`, so comparing one
 // against `State.ACTIVE` is ordinary correct code rather than a symptom.
 // `react-native-drawer-layout` does exactly that — it re-exports it as
 // `GestureState`, seeds a shared value with `GestureState.UNDETERMINED` and
 // tests `=== GestureState.ACTIVE` — and it was the ONLY runtime symbol still
 // standing between that library and running here. Six numbers, and the
 // alternative was a refusal that no longer described anything true.
+//
+// All six are pinned by a test against 3.1.0's own `src/State.ts`, because
+// nothing about a wrong number is loud: `state === State.ACTIVE` would go on
+// compiling, running, and quietly answering false.
 export const State = GESTURE_STATE
 export const Directions: any = unsupported("Directions")
 export const HoverEffect: any = unsupported("HoverEffect")
