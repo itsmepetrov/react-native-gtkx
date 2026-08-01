@@ -139,6 +139,26 @@ updates:
       - dependency-name: "metro-*"
         update-types: ["version-update:semver-major"]
 
+      # rolldown must resolve to the same version vite resolves to, and vite
+      # pins `~1.1.5` — so anything past 1.1.x is a second copy, not an
+      # upgrade. Measured on the PR that proposed 1.2.0 (#68): one rolldown
+      # on main became two, and `@rolldown`'s native bindings went from 16 MB
+      # to 16 + 26 MB, the nested copy also pulling binding-wasm32-wasi
+      # alongside the native one.
+      #
+      # That cost falls on the reason rolldown is here at all: it is already
+      # installed everywhere, because vite depends on it. Diverging from
+      # vite's pin throws that away. It is a runtime dependency of the
+      # published package, so the duplication lands on consumers, not on us.
+      #
+      # Patches still flow, and still dedupe, because vite's tilde accepts
+      # them. Minor and major are what break the shared copy — revisit when
+      # vite's own pin moves, which is the only thing that makes 1.2.x
+      # adoptable.
+      - dependency-name: "rolldown"
+        update-types:
+          ["version-update:semver-minor", "version-update:semver-major"]
+
       # Not ignored, on purpose: yoga-layout. It is the only runtime dependency
       # we do not pin, so its majors must surface.
 
