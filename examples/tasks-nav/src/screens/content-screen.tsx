@@ -45,7 +45,7 @@ import type {
   SidebarNavigationOptions,
   SidebarScreenProps,
 } from "react-native-gtkx/navigation"
-import { requestDeleteTask } from "../components/dialogs"
+import { useRequestDeleteTask } from "../components/dialogs"
 import { MainMenu } from "../components/main-menu"
 import { TaskDetail } from "../components/task-detail"
 import { TaskRow } from "../components/task-row"
@@ -84,6 +84,7 @@ export const ContentScreen = ({ route, navigation }: SidebarScreenProps) => {
     setSearchQuery,
     setActiveRoute,
   } = useStore()
+  const requestDeleteTask = useRequestDeleteTask()
   const [filter, setFilter] = useState<Filter>("all")
   const [sortOrder] = useSortOrder()
 
@@ -97,7 +98,8 @@ export const ContentScreen = ({ route, navigation }: SidebarScreenProps) => {
   //
   // `focus` does the same for a DIFFERENT row being selected. The open task
   // and the search term live in the store (they have to: Escape and Ctrl+F
-  // are window shortcuts, mounted outside this tree), so unlike the local
+  // are window-wide shortcuts, declared beside the window's actions rather
+  // than in this screen), so unlike the local
   // state they replaced they are shared by every screen — arriving at
   // another list still holding the previous list's open task would be
   // wrong. This is examples/tasks-app's `select()` reset, moved to where
@@ -241,6 +243,7 @@ export const ContentScreen = ({ route, navigation }: SidebarScreenProps) => {
     // captures everything this effect reads from the route.
   }, [
     openedTask,
+    requestDeleteTask,
     isTrash,
     filter,
     searchMode,

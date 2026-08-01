@@ -1,8 +1,10 @@
-// Window-scoped shortcuts, handed to AppRegistry's `windowControllers`
-// (src/index.tsx). This renders OUTSIDE the app's own tree — it is a prop
-// of the window AppRegistry builds — which is exactly why the store had to
-// stop being a React context (see src/store.ts's header). The hook still
-// works here because the store is module-level; a context would not have.
+// Window-scoped shortcuts. Rendered inside <WindowControllers>
+// (components/window-chrome.tsx), so this is an ordinary component of the
+// app's tree that happens to attach its controller to the window — which is
+// why `useStore()` below is just the React context every screen uses. It
+// used to be handed to AppRegistry's `windowControllers` option instead,
+// outside the tree, and that is what forced the store to be module-level
+// (see src/store.tsx's header).
 //
 // Escape is deliberately conditional. When nothing is open and search is
 // off it stays unbound (Gtk.NeverTrigger), so the collapsed split view
@@ -11,8 +13,8 @@
 // documented in the README would quietly stop working.
 import type { ReactElement } from "react"
 import { Gtk, GtkShortcut, GtkShortcutController } from "react-native-gtkx/gtk"
-import { getStore, useStore } from "../store"
-import { requestDeleteTask } from "./dialogs"
+import { useStore } from "../store"
+import { useRequestDeleteTask } from "./dialogs"
 
 const shortcut = (
   accelerator: string,
@@ -33,7 +35,9 @@ const shortcut = (
 )
 
 export const AppShortcuts = () => {
-  const { selectedTaskId, searchMode, openTask, setSearchMode } = useStore()
+  const { selectedTaskId, searchMode, tasks, openTask, setSearchMode } =
+    useStore()
+  const requestDeleteTask = useRequestDeleteTask()
 
   const escape = (): void => {
     if (selectedTaskId !== null) {
@@ -53,14 +57,13 @@ export const AppShortcuts = () => {
           {shortcut(
             "Delete",
             () => {
-              // Through the same helper the row's trash button uses, so the
-              // keyboard path gets the undo toast too. `getStore()` rather
-              // than the destructured state above: this controller is
-              // mounted outside the app's tree, and the task has to be
-              // looked up at press time regardless.
-              const store = getStore()
-              const task = store.tasks.find(
-                (candidate) => candidate.id === store.selectedTaskId,
+              // Through the same hook the row's trash button uses, so the
+              // keyboard path gets the undo toast too — and it IS the same
+              // hook now: this controller is a component of the app's tree
+              // (window-chrome.tsx renders it inside <WindowControllers>),
+              // not a prop of the window.
+              const task = tasks.find(
+                (candidate) => candidate.id === selectedTaskId,
               )
               if (task) {
                 requestDeleteTask(task)

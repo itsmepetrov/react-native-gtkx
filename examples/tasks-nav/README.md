@@ -319,13 +319,23 @@ afterwards.
    than by counting.
 2. `windowActions`/`windowControllers` render as props of the window
    `AppRegistry.runApplication` builds — **siblings of the app's own tree,
-   not descendants**. No React context from inside the app can reach them,
+   not descendants**. No React context from inside the app could reach them,
    so this example's Context store had to become a module-level external
    store (`useSyncExternalStore`) before `Ctrl+N` could add a task at all.
    Not a defect — those elements have to exist before the app mounts — but
    a real constraint on any app that wants window actions, and one
    `examples/tasks-app` never met because zustand is module-global anyway.
-   Worth a line in `docs/api.md` if it bites a third app.
+
+   **Since fixed at the platform level, and every workaround it forced is
+   gone.** `<WindowActions>`/`<ApplicationActions>`/`<WindowControllers>`
+   ([`react-native-gtkx/gtk`](../../docs/platform-layer.md#actions-and-shortcuts-declared-in-the-app-tree))
+   declare the same things from inside the app tree, so this example's store
+   is an ordinary Context + `useReducer` again (`src/store.tsx`), its toast
+   overlay is an ordinary context provider (`src/toast.tsx`) rather than a
+   module-level slot, `requestDeleteTask` is a hook again, and the actions
+   read the store through the same `useStore()` every screen uses
+   (`src/components/window-chrome.tsx`). The options still work and are
+   deprecated.
 
 ### The second parity pass (storage, reminders, toasts, New List, Today, notes)
 
@@ -342,10 +352,11 @@ so anything that could be done with a key was):
   read 1, and the save file on disk carried the versioned envelope with no
   `.tmp` left beside it. The seed fixture was NOT re-applied.
 - **Toasts**: `"New Task" moved to Trash` with an **Undo** button,
-  raised by the **Delete key** — which lives in `AppShortcuts`,
-  mounted as `windowControllers` OUTSIDE the app's tree. That is the case
-  a React context could not have served (see `src/toast.ts`), so it is the
-  one worth showing.
+  raised by the **Delete key** — which lives in `AppShortcuts`. At the time
+  that was mounted as `windowControllers`, OUTSIDE the app's tree, which is
+  why the overlay was reached through a module-level slot rather than a
+  context; `<WindowControllers>` has since put it back in the tree and
+  `src/toast.tsx` is a plain provider again.
 - **The task editor**: Notes and the Created timestamp render, and
   `Ctrl+N` opened the task it had just created rather than a seeded one —
   the id-collision fix from #33 still holding now that ids are random.
