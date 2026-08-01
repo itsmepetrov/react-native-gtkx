@@ -207,6 +207,52 @@ Two GTK details to build around: controllers on one widget run **LIFO**
 (`gtk_widget_add_controller` prepends), and a legacy controller returning
 `TRUE` also skips the remaining controllers on its own widget.
 
+## What building slice 2 changed about the plan
+
+Four corrections, recorded because the plan was wrong in each and the code is
+right.
+
+**Capture-phase GTK controllers are not needed.** The plan called for two
+controllers per view — a capture-phase one for the `*Capture` props and a
+bubble-phase one for the rest. Once the central JS module owns the path walk
+it runs capture root-to-target and bubble target-to-root itself, so one
+bubble-phase `GtkGestureDrag` per responder-declaring view is the whole event
+source. Half the controllers, and the phase ordering stops depending on GTK
+agreeing with RN about it.
+
+**The lock is global, exactly as in RN.** The plan said the responder lock
+should be scoped to a `Root`. That was the wrong conclusion from a right
+observation: there is one pointer, so one lock is both simpler and more
+faithful. What is genuinely island-scoped is the negotiation _path_ — the
+walk climbs GTK parents and finds nothing registered above a layout root, so
+native widgets between or above views take no part without any special
+casing.
+
+**No drag threshold belongs in this layer.** The research said
+`gtk-dnd-drag-threshold` (8 px) was "ours to apply" because `GtkGestureDrag`
+has none. Applying it would have been a bug: RN's responder system has no
+threshold either, and `PanResponder` users supply their own inside
+`onMoveShouldSetPanResponder`. A threshold here would silently break every
+gesture that claims on press.
+
+**Task 011 is much smaller than it looked.** `@gtkx/vitest` already opens a
+Wayland connection and binds `zwlr_virtual_pointer_manager_v1`, creating a
+virtual pointer so the headless compositor advertises pointer capability —
+it simply never sends events through it. Real input injection is therefore
+`motion_absolute`/`button`/`frame` requests on an object the harness already
+holds, not a new protocol.
+
+### What slice 2's tests do and do not prove
+
+`userEvent.drag` emits `drag-begin`/`drag-update`/`drag-end` on the named
+widget's own controllers. So the tests prove everything from the gesture
+signal inward — negotiation, touch history, `PanResponder`'s `gestureState`,
+`dx`/`dy`/`vx`/`vy` — and do **not** prove GDK-event-to-`GtkGestureDrag`
+delivery. That last hop is the same one `Pressable`'s `GtkGestureClick` has
+been making in shipped apps since the beginning, on the same widget class,
+which is why this was judged an acceptable gap rather than a blocker. Closing
+it properly is task 011.
+
 ## Landmines other platforms hit
 
 - **Timestamp resolution is load-bearing.** `ResponderTouchHistoryStore`
