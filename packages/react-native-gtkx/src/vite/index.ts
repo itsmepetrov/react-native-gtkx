@@ -34,6 +34,8 @@ const REACT_NATIVE_SVG = "react-native-svg"
 const REACT_NATIVE_GTKX_SVG = "react-native-gtkx/svg"
 const REANIMATED_DND = "react-native-reanimated-dnd"
 const REACT_NATIVE_GTKX_DND = "react-native-gtkx/dnd"
+const REANIMATED = "react-native-reanimated"
+const REACT_NATIVE_GTKX_REANIMATED = "react-native-gtkx/reanimated"
 const GESTURE_HANDLER = "react-native-gesture-handler"
 const GTKX_GESTURE_HANDLER = "react-native-gtkx/gesture-handler"
 
@@ -65,11 +67,22 @@ export const rewriteReactNativeImport = (source: string): string | null => {
   if (source.startsWith(`${REACT_NATIVE_SVG}/`)) {
     return `${REACT_NATIVE_GTKX_SVG}${source.slice(REACT_NATIVE_SVG.length)}`
   }
+  // The -dnd package is checked BEFORE plain reanimated below, and both use
+  // the exact-or-slash-prefix guard: `react-native-reanimated-dnd` is a
+  // lookalike of `react-native-reanimated`, and the slice() tail transplant
+  // would turn it into `react-native-gtkx/reanimated-dnd` under a loose
+  // prefix match. Order plus guard, not order alone.
   if (source === REANIMATED_DND) {
     return REACT_NATIVE_GTKX_DND
   }
   if (source.startsWith(`${REANIMATED_DND}/`)) {
     return `${REACT_NATIVE_GTKX_DND}${source.slice(REANIMATED_DND.length)}`
+  }
+  if (source === REANIMATED) {
+    return REACT_NATIVE_GTKX_REANIMATED
+  }
+  if (source.startsWith(`${REANIMATED}/`)) {
+    return `${REACT_NATIVE_GTKX_REANIMATED}${source.slice(REANIMATED.length)}`
   }
   if (source === GESTURE_HANDLER) {
     return GTKX_GESTURE_HANDLER
@@ -206,7 +219,17 @@ export const reactNativeGtkx = (
       // Flow package (SyntaxError: Unexpected token 'typeof') instead of
       // our alias. Only bites on the dev path — a production build inlines
       // everything anyway.
-      noExternal: ["react-native-gtkx", "react-native", /^@react-navigation\//],
+      // "react-native-reanimated" for the same reason as "react-native": an
+      // app that also ships iOS/Android keeps the real package installed, it
+      // resolves natively, and ssr.external: true would hand Node a codebase
+      // built around a Babel plugin and a worklet runtime before the alias
+      // ever gets a chance to rewrite the import.
+      noExternal: [
+        "react-native-gtkx",
+        "react-native",
+        "react-native-reanimated",
+        /^@react-navigation\//,
+      ],
     },
     resolve: {
       // RC3-WORKAROUND(runtime-dedupe): see docs/gtkx-rc3-notes.md

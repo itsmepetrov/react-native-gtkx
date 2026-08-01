@@ -72,6 +72,7 @@ const BUNDLER_ONLY = [
   "./common",
   "./dnd",
   "./gesture-handler",
+  "./reanimated",
 ]
 
 const readExportKeys = (): string[] => {

@@ -115,10 +115,11 @@ with libadwaita. Copy the file if you want this look; reach for
 
 **Why not a React Native drag library.** `react-native-draggable-flatlist`
 and every relative of it are built on `react-native-gesture-handler` plus
-`react-native-reanimated`. This platform implements neither, and neither is
-shimmed or aliased — `docs/research/gestures.md` names draggable-flatlist
-by name as blocked on Reanimated, and puts Reanimated-dependent consumers
-out of scope. They would fail at import, not at runtime. A hand-rolled JS
+`react-native-reanimated`. When this screen was written the platform
+implemented neither and aliased neither, so they failed at import rather than
+at runtime. Reanimated is implemented now
+(`react-native-gtkx/reanimated`), but RNGH's `GestureDetector` is not, so
+those libraries remain blocked — on one dependency instead of two. A hand-rolled JS
 drag is blocked one level lower: `View` has no touch or responder props at
 all (only `Pressable`'s discrete press/hover, whose event carries just
 `{x, y}`), and there is no `measure()`/`measureInWindow` to turn a row's

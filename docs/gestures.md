@@ -5,11 +5,14 @@ React Native's own gesture model runs here: the Gesture Responder System,
 JavaScript on top of GTK4 event controllers, so the source you write is
 ordinary `react-native` and the same file runs on iOS and Android.
 
-`react-native-gesture-handler` and `react-native-reanimated` do **not** work
-here, and neither does anything built on them. RNGH's package name is aliased
-to a shim so that a ported app's root `GestureHandlerRootView` needs no edit,
-but that is the only symbol it implements. This is the platform's largest
-single portability gap — see [Porting an app](#porting-an-app) below.
+`react-native-reanimated` **does** work here — as
+[`react-native-gtkx/reanimated`](api.md#react-native-reanimated-react-native-gtkxreanimated),
+a reimplementation of its semantics on one runtime, aliased onto the package
+name. `react-native-gesture-handler` does not: its package name is aliased to
+a shim so that a ported app's root `GestureHandlerRootView` needs no edit, but
+that is the only symbol it implements. RNGH is now the platform's largest
+single portability gap on its own, and libraries needing `GestureDetector`
+stay blocked on it — see [Porting an app](#porting-an-app) below.
 
 Why the responder system rather than RNGH, and every measurement behind the
 decisions on this page:
@@ -171,10 +174,16 @@ Android.
 
 ## Porting an app
 
-Neither library is implemented. `react-native-reanimated` is not aliased
-either, so anything taking it as a hard peer dependency fails at _import_,
-not at runtime — that includes `react-native-draggable-flatlist`,
-`@gorhom/bottom-sheet` and `@react-navigation/drawer`.
+`react-native-gesture-handler` is not implemented.
+`react-native-reanimated` now is — as
+[`react-native-gtkx/reanimated`](api.md#react-native-reanimated-react-native-gtkxreanimated),
+a reimplementation of its semantics on one runtime, aliased onto the package
+name by both presets. That removes the _import_-time failure Reanimated used
+to cause, but it does not by itself unblock the libraries that were blocked
+by it: `react-native-draggable-flatlist`, `@gorhom/bottom-sheet` and
+`@react-navigation/drawer` all need `GestureDetector` as well, and that is
+still RNGH's.
+
 `react-native-gesture-handler`'s package name _is_ aliased, onto
 [`react-native-gtkx/gesture-handler`](api.md#react-native-gesture-handler-react-native-gtkxgesture-handler):
 `GestureHandlerRootView` is implemented faithfully, because it is the one
@@ -189,8 +198,10 @@ What to do instead:
   [`react-native-gtkx/dnd`](api.md#drag-and-drop-react-native-gtkxdnd)
   mirrors `react-native-reanimated-dnd`'s API on GTK's own drag-and-drop,
   and both presets alias that package name onto it;
-- **swipeable rows / bottom sheets** — `PanResponder` plus `Animated`
-  by hand today.
+- **swipeable rows / bottom sheets** — by hand today: `PanResponder` for the
+  gesture, plus either `Animated` or
+  [`react-native-gtkx/reanimated`](api.md#react-native-reanimated-react-native-gtkxreanimated)
+  for the motion.
 
 `examples/gallery`'s Gestures section is a working reference written entirely
 in portable `react-native`, with no platform-layer import in it at all.

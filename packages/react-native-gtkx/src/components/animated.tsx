@@ -1,36 +1,24 @@
-import { useLayoutEffect, useRef, type ReactNode } from "react"
-import { createAnimated, type FrameScheduler } from "../animated/index"
+import {
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  type ReactNode,
+  type Ref,
+} from "react"
+import { createAnimated } from "../animated/index"
 import type { FlatStyle, StyleProp, TransformPart } from "../contracts"
-import { GLib, GtkBox, queueAllocate, type Gtk } from "../gtkx/bridge/index"
+import { GtkBox, queueAllocate, type Gtk } from "../gtkx/bridge/index"
 import type { ResponderProps } from "../responder/types"
 import { useResponder } from "../responder/use-responder"
+import { glibScheduler } from "./frame-scheduler"
 import { HostNodeContext } from "./host-node"
+import { createMeasureHandle, type MeasureHandle } from "./measure"
 import { setStoredTransform } from "./rect-store"
 import {
   useLayoutChild,
   useRnContainer,
   type LayoutEvent,
 } from "./use-layout-child"
-
-// ~60fps one-shot ticks off the GLib main loop. A frame-clock driver (per
-// window) is a later optimization; timeouts keep the driver widget-free.
-const glibScheduler: FrameScheduler = {
-  schedule(callback) {
-    let cancelled = false
-    const id = GLib.timeoutAdd(GLib.PRIORITY_DEFAULT, 16, () => {
-      if (!cancelled) {
-        callback(Number(GLib.getMonotonicTime()) / 1000)
-      }
-      return false
-    })
-    return () => {
-      if (!cancelled) {
-        cancelled = true
-        GLib.Source.remove(id)
-      }
-    }
-  },
-}
 
 const api = createAnimated(glibScheduler)
 
@@ -92,6 +80,11 @@ export type AnimatedViewProps = ResponderProps & {
   children?: ReactNode
   onLayout?: (event: LayoutEvent) => void
   testID?: string
+  // Same handle a plain View exposes. RN gives every host component the
+  // imperative geometry methods, and Reanimated's `useAnimatedRef` +
+  // `measure()` is written against an Animated.View having them — without
+  // this, measuring an animated view means wrapping it in a plain one.
+  ref?: Ref<MeasureHandle>
 }
 
 const splitAnimated = (
@@ -153,6 +146,7 @@ const AnimatedView = ({
   children,
   onLayout,
   testID,
+  ref,
   ...responderProps
 }: AnimatedViewProps) => {
   const widgetRef = useRef<Gtk.Box | null>(null)
@@ -164,6 +158,8 @@ const AnimatedView = ({
   })
   useRnContainer(widgetRef, node)
   useResponder(widgetRef, responderProps)
+
+  useImperativeHandle(ref, () => createMeasureHandle(widgetRef, node), [node])
 
   // The effect reads the slots of the render that (re)armed it; the values
   // inside are then owned by the listeners.
