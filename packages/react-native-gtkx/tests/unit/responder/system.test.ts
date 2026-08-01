@@ -526,3 +526,120 @@ describe("responder termination", () => {
     expect(system.getSource()).toBeNull()
   })
 })
+
+describe("the out-of-event grant channel", () => {
+  // The one extension the gesture work makes to RN's model. RN negotiates
+  // inside touch events only, and `activateAfterLongPress` changes a
+  // recognizer's mind on a TIMER — so without this the gesture cannot take
+  // the interaction until the pointer next moves, which for a press-and-hold
+  // is never. react-native-web's precedent is two negotiation channels of its
+  // own; docs/research/gestures.md records the reasoning.
+
+  it("grants between touch events, and claims GTK exactly as a normal grant does", () => {
+    const { leaf, parents } = tree()
+    const onClaim = vi.fn()
+    const system = systemFor(parents, onClaim)
+    let wants = false
+    const onResponderGrant = vi.fn()
+
+    system.register(leaf, () => ({
+      onMoveShouldSetResponder: () => wants,
+      onResponderGrant,
+    }))
+
+    system.touchStart(leaf, touchAt(10, 10, 1))
+    expect(system.getResponder()).toBeNull()
+
+    // Nothing moved. The recognizer changed its own mind and asks.
+    wants = true
+    expect(system.requestResponder(leaf)).toBe(true)
+    expect(system.getResponder()).toBe(leaf)
+    expect(onResponderGrant).toHaveBeenCalledTimes(1)
+    expect(onClaim).toHaveBeenCalledTimes(1)
+  })
+
+  it("negotiates rather than assigning: an ancestor's capture handler still wins", () => {
+    const { root, leaf, parents } = tree()
+    const system = systemFor(parents)
+    const rootGrant = vi.fn()
+    const leafGrant = vi.fn()
+
+    system.register(root, () => ({
+      onMoveShouldSetResponderCapture: () => true,
+      onResponderGrant: rootGrant,
+    }))
+    system.register(leaf, () => ({
+      onMoveShouldSetResponder: () => true,
+      onResponderGrant: leafGrant,
+    }))
+
+    system.touchStart(leaf, touchAt(10, 10, 1))
+    // The leaf asked, and lost — capture beats bubble here exactly as it does
+    // inside a touch event, because this reuses the same negotiation.
+    expect(system.requestResponder(leaf)).toBe(false)
+    expect(system.getResponder()).toBe(root)
+    expect(rootGrant).toHaveBeenCalledTimes(1)
+    expect(leafGrant).not.toHaveBeenCalled()
+  })
+
+  it("does nothing when no interaction is under way", () => {
+    const { leaf, parents } = tree()
+    const system = systemFor(parents)
+    system.register(leaf, () => ({ onMoveShouldSetResponder: () => true }))
+
+    // A timer that fires after the pointer is up is a timer that lost.
+    expect(system.requestResponder(leaf)).toBe(false)
+    system.touchStart(leaf, touchAt(0, 0, 1))
+    system.touchEnd(leaf, touchAt(0, 0, 2))
+    expect(system.requestResponder(leaf)).toBe(false)
+  })
+
+  it("refuses a node the interaction is not travelling through", () => {
+    const { root, leaf, parents } = tree()
+    const outsider: Node = { name: "outsider" }
+    parents.set(outsider, null)
+    const system = systemFor(parents)
+
+    system.register(root, () => ({}))
+    system.register(leaf, () => ({}))
+    system.register(outsider, () => ({ onMoveShouldSetResponder: () => true }))
+
+    system.touchStart(leaf, touchAt(0, 0, 1))
+    expect(system.requestResponder(outsider)).toBe(false)
+    expect(system.getResponder()).toBeNull()
+  })
+
+  it("dispatches no fabricated move after the grant", () => {
+    const { leaf, parents } = tree()
+    const system = systemFor(parents)
+    const onResponderMove = vi.fn()
+
+    system.register(leaf, () => ({
+      onMoveShouldSetResponder: () => true,
+      onResponderMove,
+    }))
+
+    system.touchStart(leaf, touchAt(10, 10, 1))
+    system.requestResponder(leaf)
+    // The pointer did not move. Announcing the grant with an invented move
+    // would put a fabricated coordinate into every consumer's translation.
+    expect(onResponderMove).not.toHaveBeenCalled()
+  })
+
+  it("is idempotent for the node that already holds the lock", () => {
+    const { leaf, parents } = tree()
+    const onClaim = vi.fn()
+    const system = systemFor(parents, onClaim)
+    const onResponderGrant = vi.fn()
+
+    system.register(leaf, () => ({
+      onStartShouldSetResponder: () => true,
+      onResponderGrant,
+    }))
+
+    system.touchStart(leaf, touchAt(0, 0, 1))
+    expect(system.requestResponder(leaf)).toBe(true)
+    expect(onResponderGrant).toHaveBeenCalledTimes(1)
+    expect(onClaim).toHaveBeenCalledTimes(1)
+  })
+})

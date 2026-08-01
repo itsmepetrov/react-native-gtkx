@@ -175,6 +175,51 @@ entirely in JS and `CLAIMED` is only the final one-way declaration.
 Note the asymmetry: a parent stealing from a child maps onto capture-phase
 claiming; a child stealing from a claimed ancestor is not expressible.
 
+### RN negotiates only inside touch events, and some gestures decide on a timer
+
+**The one extension this platform makes to RN's responder model**, added with
+`GestureDetector` (`docs/research/gesture-detector.md`, "the one extension the
+epic needs"). Everything else in `responder/system.ts` is RN's model
+reproduced; this is the single addition, and it is here so that it is written
+down rather than discovered.
+
+RN's responder system asks "does anyone want this interaction?" only while
+dispatching a touch event. That is fine for every gesture whose mind is
+changed by the pointer — which is every gesture RN itself ships. It is not
+fine for `activateAfterLongPress`, whose whole point is that the press
+matures **while the pointer is still**: the recognizer knows it has won at the
+instant the timer fires, and the next chance to say so is the next pointer
+movement. For a drag that is one frame late; for a press-and-hold that never
+moves again it is never, and the gesture simply does not happen.
+
+So `ResponderSystem` gained one method:
+
+```ts
+requestResponder(host: ResponderHost): boolean
+```
+
+A registered node asks for the responder between touch events, and **the
+ordinary negotiation runs** against an event synthesized from
+`session.lastTouch` — the same synthesis `terminate()` already does, for the
+same reason. Capture still beats bubble, the LCA pruning still applies, an
+ancestor that wants the interaction still wins it, and the GTK `CLAIMED`
+declaration still happens exactly once per interaction. The only thing that is
+new is _when_ the question gets asked.
+
+Two things it deliberately does not do. It dispatches no `onResponderMove`
+afterwards: the pointer did not move, and announcing a grant with an invented
+move would put a fabricated coordinate into every consumer's translation
+arithmetic. And it refuses a node that is not on the path the interaction is
+travelling, which the touch paths enforce by construction and this one has to
+check, because it is reached from a timer rather than from an event that
+already walked the tree.
+
+**Precedent.** react-native-web added `onScrollShouldSetResponder` and
+`onSelectionChangeShouldSetResponder` — two negotiation channels of its own —
+because its platform had realities RN's model did not cover. This is the same
+move and a smaller one: no new prop, no new grant path, one entry point into
+the negotiation that already exists.
+
 ### RN is touch-first, GTK on the desktop is pointer-first
 
 `gdk_event_get_event_sequence()` returns `NULL` for every mouse event and

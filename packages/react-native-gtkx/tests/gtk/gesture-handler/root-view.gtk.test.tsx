@@ -8,18 +8,23 @@
 // allocated geometry rather than against the props, because the props would
 // have passed for a passthrough too.
 //
-// Half two — every other export throws where it is used, naming itself. That
-// is the whole reason RNGH is aliased at all rather than left to fail at
-// resolution: the failure has to stay loud. docs/research/gestures.md records
-// what a silent no-op costs.
+// Half two — every export that is NOT implemented throws where it is used,
+// naming itself. That is the whole reason RNGH is aliased at all rather than
+// left to fail at resolution: the failure has to stay loud.
+// docs/research/gestures.md records what a silent no-op costs. `Pan` and
+// `GestureDetector` are implemented and have their own suite next door
+// (gesture-detector.gtk.test.tsx); what is asserted here is that implementing
+// them did not quieten anything else.
 import { act, render, screen } from "@gtkx/testing"
 import { expect, it } from "vitest"
 import {
+  Directions,
   Gesture,
-  GestureDetector,
   GestureHandlerRootView,
   PanGestureHandler,
+  RectButton,
   State,
+  useTapGesture,
 } from "../../../src/gesture-handler-compat/index"
 import type { Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
 import { Root, Text, View } from "../../../src/index"
@@ -104,19 +109,43 @@ it("renders its children", async () => {
 
 it("throws with the symbol's name when an unsupported export is called", () => {
   // A hook or factory: called directly.
-  expect(() => (Gesture as () => void)()).toThrow(/`Gesture` is not supported/)
+  expect(() => (useTapGesture as () => void)()).toThrow(
+    /`useTapGesture` is not supported/,
+  )
 })
 
-it("throws with the symbol's name when an unsupported export is read as a namespace", () => {
-  // The idiomatic new-API call, `Gesture.Pan()` — the read is what fails, so
-  // the error arrives before anything can be built from undefined.
-  expect(() => (Gesture as { Pan: () => void }).Pan).toThrow(
-    /`Gesture` is not supported/,
+it("throws per unimplemented recognizer rather than for the namespace", () => {
+  // `Gesture` itself is real now — `Gesture.Pan()` is implemented — so the
+  // refusal moved down one level. Each of the other eleven statics names
+  // ITSELF, which is strictly more useful than the old whole-namespace throw:
+  // an app calling `Gesture.Pinch()` is told about Pinch, not about Gesture.
+  expect(Gesture.Pan()).toBeTruthy()
+  expect(() => (Gesture.Pinch as () => void)()).toThrow(
+    /`Gesture\.Pinch` is not supported/,
+  )
+  expect(() => (Gesture.Simultaneous as () => void)()).toThrow(
+    /`Gesture\.Simultaneous` is not supported/,
   )
   // And an enum comparison, which is the other way these symbols get reached.
-  expect(() => (State as { ACTIVE: number }).ACTIVE).toThrow(
-    /`State` is not supported/,
+  // `Directions` has no handler that could produce one, so it still refuses.
+  expect(() => (Directions as { LEFT: number }).LEFT).toThrow(
+    /`Directions` is not supported/,
   )
+})
+
+it("gives State real numbers, because Pan now produces events worth comparing", () => {
+  // It threw until this slice, on the reasoning that the enum is only
+  // meaningful against an event from a handler that could not run here. Pan
+  // runs here now and its payloads carry `state`, so the reasoning expired.
+  // react-native-drawer-layout re-exports this as `GestureState`, seeds a
+  // shared value with UNDETERMINED and tests `=== ACTIVE`; those six numbers
+  // were the last runtime symbol standing between it and this platform.
+  expect(State.UNDETERMINED).toBe(0)
+  expect(State.FAILED).toBe(1)
+  expect(State.BEGAN).toBe(2)
+  expect(State.CANCELLED).toBe(3)
+  expect(State.ACTIVE).toBe(4)
+  expect(State.END).toBe(5)
 })
 
 it("throws when an unsupported handler component is rendered", async () => {
@@ -144,9 +173,11 @@ it("throws when an unsupported handler component is rendered", async () => {
 })
 
 it("points at the replacement rather than only refusing", () => {
-  // A refusal that does not say what to use instead is half an answer.
-  expect(() => (GestureDetector as () => void)()).toThrow(
-    /react-native-gtkx\/dnd/,
+  // A refusal that does not say what to use instead is half an answer, and
+  // the explanation now leads with what IS implemented.
+  expect(() => (RectButton as () => void)()).toThrow(/`RectButton` is not/)
+  expect(() => (RectButton as () => void)()).toThrow(
+    /Gesture\.Pan\(\)` and `usePanGesture\(\)/,
   )
 })
 

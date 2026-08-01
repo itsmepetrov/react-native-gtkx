@@ -1,0 +1,788 @@
+// The Pan recognizer, driven through the REAL responder system.
+//
+// Not a mock of the negotiation: `createResponderSystem` is the shipped one,
+// with a fake host tree standing in for the GTK widget hierarchy exactly as
+// tests/unit/responder/system.test.ts does it. That matters because the whole
+// design rests on the recognizer holding no lock while it decides, and a fake
+// responder system could be made to agree with any implementation.
+//
+// What is NOT covered here, by construction: rendering, real widgets and real
+// pointers. That is tests/gtk/gesture-handler/gesture-detector.gtk.test.tsx,
+// which drives the same code with an injected `zwlr_virtual_pointer_v1`.
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { Gesture } from "../../../src/gesture-handler-compat/builder"
+import { usePanGesture } from "../../../src/gesture-handler-compat/hooks"
+import {
+  asRange,
+  DEFAULT_MIN_DISTANCE,
+  effectiveMinDistance,
+  panDecider,
+} from "../../../src/gesture-handler-compat/pan"
+import {
+  createRecognizer,
+  hitSlopRect,
+  type Rect,
+} from "../../../src/gesture-handler-compat/recognizer"
+import { GESTURE_STATE } from "../../../src/gesture-handler-compat/types"
+import type {
+  GestureStateValue,
+  PanRecognizerConfig,
+} from "../../../src/gesture-handler-compat/types"
+import { createResponderSystem } from "../../../src/responder/system"
+import type { NativeTouch } from "../../../src/responder/types"
+
+type Node = { name: string }
+
+const touchAt = (x: number, y: number, timestamp: number): NativeTouch => ({
+  identifier: 0,
+  target: 1,
+  locationX: x,
+  locationY: y,
+  pageX: x,
+  pageY: y,
+  timestamp,
+  force: 0,
+})
+
+/** The view the gesture is attached to, in window coordinates. */
+const BOUNDS: Rect = { x: 100, y: 100, width: 200, height: 200 }
+
+/**
+ * One mounted `GestureDetector`, minus React and minus GTK: the recognizer's
+ * handlers registered on a host, and a clock the caller advances by hand.
+ */
+const mount = (config: PanRecognizerConfig, bounds: Rect | null = BOUNDS) => {
+  const view: Node = { name: "view" }
+  const root: Node = { name: "root" }
+  const parents = new Map<object, object | null>([
+    [view, root],
+    [root, null],
+  ])
+  const onClaim = vi.fn()
+  const system = createResponderSystem({
+    parentOf: (host) => parents.get(host) ?? null,
+    onClaim,
+  })
+
+  let current = config
+  const recognizer = createRecognizer(7, panDecider, () => current, {
+    boundsInWindow: () => bounds,
+    requestResponder: () => system.requestResponder(view),
+  })
+  system.register(view, () => recognizer.handlers)
+
+  let time = 1000
+  const at = (x: number, y: number) => touchAt(x, y, time)
+
+  return {
+    view,
+    root,
+    system,
+    onClaim,
+    recognizer,
+    reconfigure: (next: PanRecognizerConfig) => {
+      current = next
+    },
+    advance: (ms: number) => {
+      time += ms
+      vi.advanceTimersByTime(ms)
+    },
+    press: (x: number, y: number) => {
+      system.touchStart(view, at(x, y))
+    },
+    moveTo: (x: number, y: number, stepMs = 16) => {
+      time += stepMs
+      system.touchMove(view, at(x, y))
+    },
+    release: (x: number, y: number) => {
+      time += 16
+      system.touchEnd(view, at(x, y))
+    },
+    holder: () => system.getResponder(),
+  }
+}
+
+/** The centre of BOUNDS, which is where every press below lands. */
+const CX = 200
+const CY = 200
+
+const tracer = () => {
+  const trace: string[] = []
+  const config: PanRecognizerConfig = {
+    onBegin: () => trace.push("begin"),
+    onActivate: () => trace.push("activate"),
+    onUpdate: () => trace.push("update"),
+    onDeactivate: (_event, success) => trace.push(`deactivate(${success})`),
+    onFinalize: (_event, success) => trace.push(`finalize(${success})`),
+  }
+  return { trace, config }
+}
+
+beforeEach(() => {
+  vi.useFakeTimers()
+})
+
+describe("the recognizer holds no lock while it is deciding", () => {
+  it("never takes the responder on press", () => {
+    const gd = mount({})
+    gd.press(CX, CY)
+    expect(gd.holder()).toBeNull()
+    // A pan that grabbed the interaction on press could not honour an
+    // activeOffset, which is the whole behaviour the offsets exist for.
+    expect(gd.onClaim).not.toHaveBeenCalled()
+  })
+
+  it("takes it at the instant it activates, and claims GTK exactly once", () => {
+    const gd = mount({})
+    gd.press(CX, CY)
+    gd.moveTo(CX, CY + 4)
+    expect(gd.holder()).toBeNull()
+
+    gd.moveTo(CX, CY + DEFAULT_MIN_DISTANCE)
+    expect(gd.holder()).toBe(gd.view)
+    expect(gd.onClaim).toHaveBeenCalledTimes(1)
+
+    gd.moveTo(CX, CY + 40)
+    expect(gd.onClaim).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("the four offset knobs", () => {
+  it("activeOffsetY holds the gesture BEGAN below the threshold", () => {
+    const { trace, config } = tracer()
+    const gd = mount({ ...config, activeOffsetY: [-10, 10] })
+    gd.press(CX, CY)
+    gd.moveTo(CX, CY + 6)
+    expect(trace).toEqual(["begin"])
+    expect(gd.holder()).toBeNull()
+
+    gd.moveTo(CX, CY + 60)
+    expect(trace).toContain("activate")
+    expect(gd.holder()).toBe(gd.view)
+  })
+
+  it("activeOffsetX ignores movement on the other axis entirely", () => {
+    const gd = mount({ activeOffsetX: [-10, 10] })
+    gd.press(CX, CY)
+    // 80px of pure vertical travel: an axis-blind minDistance would have
+    // activated four times over by here.
+    gd.moveTo(CX, CY + 80)
+    expect(gd.holder()).toBeNull()
+
+    gd.moveTo(CX + 20, CY + 80)
+    expect(gd.holder()).toBe(gd.view)
+  })
+
+  it("a single-number bound is directional, not symmetric", () => {
+    expect(asRange(20)).toEqual([-Infinity, 20])
+    expect(asRange(-20)).toEqual([-20, Infinity])
+
+    // activeOffsetX(20) bounds the POSITIVE side only, so dragging left is
+    // unbounded and never activates. Reading it as ±20 would make a one-way
+    // drawer two-way, silently.
+    const gd = mount({ activeOffsetX: 20 })
+    gd.press(CX, CY)
+    gd.moveTo(CX - 90, CY)
+    expect(gd.holder()).toBeNull()
+    gd.moveTo(CX + 30, CY)
+    expect(gd.holder()).toBe(gd.view)
+  })
+
+  it("failOffsetX kills the pan, and a later vertical move cannot revive it", () => {
+    const { trace, config } = tracer()
+    const gd = mount({
+      ...config,
+      activeOffsetY: [-10, 10],
+      failOffsetX: [-20, 20],
+    })
+    gd.press(CX, CY)
+    gd.moveTo(CX + 40, CY)
+    expect(trace).toEqual(["begin", "finalize(false)"])
+
+    // The gesture is over. 60px straight down would have activated it.
+    gd.moveTo(CX + 40, CY + 60)
+    gd.release(CX + 40, CY + 60)
+    expect(trace).toEqual(["begin", "finalize(false)"])
+    expect(gd.holder()).toBeNull()
+  })
+
+  it("failOffset alone does not disable the distance rule", () => {
+    // The correction to the spike this module grew out of: it treated any
+    // failOffset as a custom activation criterion, which pinned minDistance
+    // at infinity and left `Pan().failOffsetY(...)` unable to activate at all.
+    expect(effectiveMinDistance({ failOffsetY: [-5, 5] })).toBe(
+      DEFAULT_MIN_DISTANCE,
+    )
+    expect(effectiveMinDistance({ activeOffsetX: 10 })).toBe(Infinity)
+    expect(effectiveMinDistance({ minDistance: 3 })).toBe(3)
+
+    const gd = mount({ failOffsetY: [-500, 500] })
+    gd.press(CX, CY)
+    gd.moveTo(CX + 30, CY)
+    expect(gd.holder()).toBe(gd.view)
+  })
+})
+
+describe("activateAfterLongPress and the out-of-event grant", () => {
+  it("refuses a drag that starts immediately", () => {
+    const { trace, config } = tracer()
+    const gd = mount({ ...config, activateAfterLongPress: 200 })
+    gd.press(CX, CY)
+    gd.moveTo(CX, CY + 30)
+    expect(trace).toEqual(["begin", "finalize(false)"])
+    expect(gd.holder()).toBeNull()
+  })
+
+  it("activates ON THE TIMER, with no pointer event in flight", () => {
+    const { trace, config } = tracer()
+    const gd = mount({ ...config, activateAfterLongPress: 200 })
+    gd.press(CX, CY)
+    expect(gd.holder()).toBeNull()
+
+    // The extension under test. Nothing moves; the timer fires; the gesture
+    // takes the interaction anyway. Without the out-of-event channel the
+    // holder would still be null here and would stay null until the pointer
+    // next moved — which for a press-and-hold is never.
+    gd.advance(220)
+    expect(trace).toEqual(["begin", "activate"])
+    expect(gd.holder()).toBe(gd.view)
+    expect(gd.onClaim).toHaveBeenCalledTimes(1)
+  })
+
+  it("measures translation from the press, because the grant no longer waits for a move", () => {
+    const seen: number[] = []
+    const gd = mount({
+      activateAfterLongPress: 200,
+      onUpdate: (event) => seen.push(event.translationY),
+    })
+    gd.press(CX, CY)
+    gd.advance(220)
+    gd.moveTo(CX, CY + 40)
+    gd.moveTo(CX, CY + 120)
+
+    // The spike this replaced activated on the first move AFTER the timer and
+    // so lost that first step — 105 of an injected 120. Granting on the timer
+    // puts the activation point ON the press point, and the whole travel
+    // arrives.
+    expect(seen).toEqual([40, 120])
+  })
+
+  it("does not fire after the pointer is already up", () => {
+    const { trace, config } = tracer()
+    const gd = mount({ ...config, activateAfterLongPress: 200 })
+    gd.press(CX, CY)
+    gd.release(CX, CY)
+    gd.advance(400)
+    expect(trace).toEqual(["begin", "finalize(false)"])
+    expect(gd.holder()).toBeNull()
+  })
+})
+
+describe("the callbacks", () => {
+  it("fire in upstream's order for a completed drag", () => {
+    const { trace, config } = tracer()
+    const gd = mount(config)
+    gd.press(CX, CY)
+    gd.moveTo(CX, CY + 20)
+    gd.moveTo(CX, CY + 40)
+    gd.moveTo(CX, CY + 60)
+    gd.release(CX, CY + 60)
+
+    expect(trace).toEqual([
+      "begin",
+      "activate",
+      "update",
+      "update",
+      "deactivate(true)",
+      "finalize(true)",
+    ])
+  })
+
+  it("give a gesture that never activated onFinalize and nothing else", () => {
+    const { trace, config } = tracer()
+    const gd = mount({ ...config, activeOffsetY: [-100, 100] })
+    gd.press(CX, CY)
+    gd.moveTo(CX, CY + 5)
+    gd.release(CX, CY + 5)
+    // No `deactivate`: that is what lets a consumer distinguish a drag that
+    // finished from one that never happened. react-native-reanimated-dnd's
+    // useSortable relies on exactly this.
+    expect(trace).toEqual(["begin", "finalize(false)"])
+  })
+
+  it("report translation from the activation point, not from the press", () => {
+    const seen: number[] = []
+    const gd = mount({
+      activeOffsetY: [-10, 10],
+      onUpdate: (event) => seen.push(event.translationY),
+    })
+    gd.press(CX, CY)
+    gd.moveTo(CX, CY + 20) // crosses the threshold: this is the activation
+    gd.moveTo(CX, CY + 50)
+    // A pan reporting 20px the moment it activated would jump the content by
+    // the threshold on every single drag.
+    expect(seen).toEqual([30])
+  })
+
+  it("compute changeX/changeY as the delta of translation, and the first equals it", () => {
+    const changes: number[] = []
+    const gd = mount({ onChange: (event) => changes.push(event.changeY) })
+    gd.press(CX, CY)
+    gd.moveTo(CX, CY + 10) // activation
+    gd.moveTo(CX, CY + 35)
+    gd.moveTo(CX, CY + 45)
+    expect(changes).toEqual([25, 10])
+  })
+
+  it("report x/y relative to the gesture's own view", () => {
+    const points: { x: number; y: number }[] = []
+    const gd = mount({
+      onUpdate: (event) => points.push({ x: event.x, y: event.y }),
+    })
+    gd.press(CX, CY)
+    gd.moveTo(CX, CY + 20)
+    gd.moveTo(CX + 5, CY + 30)
+    // BOUNDS starts at (100, 100), so a pointer at (205, 230) is at (105, 130)
+    // inside the view — NOT the locationX the event carried, which is
+    // relative to whichever widget the event arrived on.
+    expect(points).toEqual([{ x: 105, y: 130 }])
+  })
+
+  it("hand onTouchesDown a working state manager", () => {
+    const { trace, config } = tracer()
+    const gd = mount({
+      ...config,
+      // Nothing would activate this by movement.
+      activeOffsetY: [-1000, 1000],
+      onTouchesDown: (_event, manager) => {
+        setTimeout(() => manager.activate(), 50)
+      },
+    })
+    gd.press(CX, CY)
+    expect(gd.holder()).toBeNull()
+    gd.advance(60)
+    // Same out-of-event channel, reached from a callback rather than from
+    // activateAfterLongPress's own timer.
+    expect(trace).toEqual(["begin", "activate"])
+    expect(gd.holder()).toBe(gd.view)
+  })
+})
+
+describe("enabled, pointer counts and bounds", () => {
+  it("ignores the press entirely when disabled", () => {
+    const { trace, config } = tracer()
+    const gd = mount({ ...config, enabled: false })
+    gd.press(CX, CY)
+    gd.moveTo(CX, CY + 60)
+    expect(trace).toEqual([])
+    expect(gd.holder()).toBeNull()
+  })
+
+  it("takes a change of `enabled` without remounting", () => {
+    const { trace, config } = tracer()
+    const gd = mount({ ...config, enabled: false })
+    gd.press(CX, CY)
+    expect(trace).toEqual([])
+
+    // The responder system opened a session on that press even though the
+    // recognizer refused it — it has no way to know — so the interaction has
+    // to end before another can start.
+    gd.release(CX, CY)
+
+    // Both spellings rebuild their gesture object every render; the detector
+    // reads it through a ref, so a re-render must take effect mid-flight
+    // without swapping the handler set.
+    gd.reconfigure({ ...config, enabled: true })
+    gd.press(CX, CY)
+    gd.moveTo(CX, CY + 40)
+    expect(trace).toEqual(["begin", "activate"])
+  })
+
+  it("never activates when minPointers exceeds what this platform can deliver", () => {
+    // Honest rather than silently ignored: there is no virtual-touch protocol
+    // on wlroots, so the responder system fabricates exactly one touch. A
+    // two-finger pan is unreachable, and pretending otherwise would be worse.
+    const gd = mount({ minPointers: 2 })
+    gd.press(CX, CY)
+    gd.moveTo(CX, CY + 60)
+    expect(gd.holder()).toBeNull()
+  })
+
+  it("refuses a press outside the view", () => {
+    const { trace, config } = tracer()
+    const gd = mount(config)
+    gd.press(10, 10)
+    expect(trace).toEqual([])
+  })
+
+  it("shouldCancelWhenOutside terminates an ACTIVE pan that leaves", () => {
+    const { trace, config } = tracer()
+    const gd = mount({ ...config, shouldCancelWhenOutside: true })
+    gd.press(CX, CY)
+    gd.moveTo(CX, CY + 20)
+    expect(trace).toContain("activate")
+    gd.moveTo(CX, CY + 400)
+    // No `update` for the move that left: the position is outside the view,
+    // and reporting it before cancelling would hand the consumer one frame of
+    // travel it is about to be told never counted.
+    expect(trace).toEqual([
+      "begin",
+      "activate",
+      "deactivate(false)",
+      "finalize(false)",
+    ])
+  })
+
+  it("keeps an ACTIVE pan that leaves when the flag is off, which is the default", () => {
+    const gd = mount({})
+    gd.press(CX, CY)
+    gd.moveTo(CX, CY + 20)
+    gd.moveTo(CX, CY + 400)
+    expect(gd.holder()).toBe(gd.view)
+  })
+})
+
+describe("hitSlop", () => {
+  const bounds: Rect = { x: 0, y: 0, width: 100, height: 100 }
+
+  it("grows on a positive number and SHRINKS on a negative one", () => {
+    // The capability RN's own View hitSlop does not have.
+    expect(hitSlopRect(bounds, 10)).toEqual({
+      x: -10,
+      y: -10,
+      width: 120,
+      height: 120,
+    })
+    expect(hitSlopRect(bounds, -20)).toEqual({
+      x: 20,
+      y: 20,
+      width: 60,
+      height: 60,
+    })
+  })
+
+  it("anchors a width to whichever side was named", () => {
+    // react-native-drawer-layout's closed-drawer edge strip, verbatim.
+    expect(hitSlopRect(bounds, { left: 0, width: 32 })).toEqual({
+      x: 0,
+      y: 0,
+      width: 32,
+      height: 100,
+    })
+    expect(hitSlopRect(bounds, { right: 0, width: 32 })).toEqual({
+      x: 68,
+      y: 0,
+      width: 32,
+      height: 100,
+    })
+  })
+
+  it("lets an explicit side override horizontal/vertical", () => {
+    expect(hitSlopRect(bounds, { horizontal: 5, left: 40 })).toEqual({
+      x: -40,
+      y: 0,
+      width: 145,
+      height: 100,
+    })
+  })
+
+  it("actually gates the press", () => {
+    const { trace, config } = tracer()
+    // The leftmost 20px of a view that starts at x=100.
+    const gd = mount({ ...config, hitSlop: { left: 0, width: 20 } })
+    // The centre of the view is now outside the gesture's area.
+    gd.press(CX, CY)
+    expect(trace).toEqual([])
+    gd.release(CX, CY)
+
+    // 10px in from the left edge is inside the 20px strip.
+    gd.press(110, CY)
+    expect(trace).toEqual(["begin"])
+  })
+})
+
+describe("the two spellings are one implementation", () => {
+  it("produce the same recognizer config for the same gesture", () => {
+    const builder = Gesture.Pan()
+      .activeOffsetY([-10, 10])
+      .failOffsetX([-20, 20])
+      .activateAfterLongPress(200)
+      .shouldCancelWhenOutside(false)
+      .enabled(true)
+
+    const hook = usePanGesture({
+      activeOffsetY: [-10, 10],
+      failOffsetX: [-20, 20],
+      activateAfterLongPress: 200,
+      shouldCancelWhenOutside: false,
+      enabled: true,
+    })
+
+    expect(builder.kind).toBe(hook.kind)
+    for (const key of [
+      "activeOffsetY",
+      "failOffsetX",
+      "activateAfterLongPress",
+      "shouldCancelWhenOutside",
+      "enabled",
+    ] as const) {
+      expect(hook.config[key]).toEqual(builder.config[key])
+    }
+  })
+
+  it("behave identically when driven", () => {
+    const runWith = (config: PanRecognizerConfig) => {
+      const gd = mount(config)
+      gd.press(CX, CY)
+      gd.moveTo(CX, CY + 6)
+      const early = gd.holder()
+      gd.moveTo(CX, CY + 60)
+      return { early, late: gd.holder(), view: gd.view }
+    }
+
+    const fromBuilder = runWith(Gesture.Pan().activeOffsetY([-10, 10]).config)
+    const fromHook = runWith(usePanGesture({ activeOffsetY: [-10, 10] }).config)
+
+    expect(fromBuilder.early).toBeNull()
+    expect(fromHook.early).toBeNull()
+    expect(fromBuilder.late).toBe(fromBuilder.view)
+    expect(fromHook.late).toBe(fromHook.view)
+  })
+
+  it("rename the callbacks exactly as upstream does", () => {
+    // The builder's onStart/onEnd/onTouchesCancelled are the hook's
+    // onActivate/onDeactivate/onTouchesCancel. Getting this wrong would make
+    // one spelling a silent no-op.
+    const start = vi.fn()
+    const end = vi.fn()
+    const builder = Gesture.Pan().onStart(start).onEnd(end)
+    expect(builder.config.onActivate).toBe(start)
+    expect(builder.config.onDeactivate).toBe(end)
+
+    const hook = usePanGesture({ onActivate: start })
+    expect(hook.config.onActivate).toBe(start)
+  })
+
+  it("give the hook spelling `canceled` instead of a success argument", () => {
+    const onDeactivate = vi.fn()
+    const gd = mount(usePanGesture({ onDeactivate }).config)
+    gd.press(CX, CY)
+    gd.moveTo(CX, CY + 20)
+    gd.release(CX, CY + 20)
+    expect(onDeactivate).toHaveBeenCalledTimes(1)
+    expect(onDeactivate.mock.calls[0]![0]).toMatchObject({ canceled: false })
+  })
+
+  it("refuse the configs upstream refuses, at the point of writing them", () => {
+    expect(() => usePanGesture({ activeOffsetX: [10, 20] })).toThrow(
+      /should be negative/,
+    )
+    expect(() =>
+      usePanGesture({ minDistance: 5, failOffsetY: [-5, 5] }),
+    ).toThrow(/not supported to use minDistance with failOffset/)
+  })
+})
+
+describe("what is not implemented stays loud", () => {
+  it("throws on a relation rather than silently ignoring it", () => {
+    // Two gestures that were meant to cooperate racing instead, with no error,
+    // is the exact failure this repo refuses. The orchestrator is slice 3.
+    expect(() =>
+      Gesture.Pan().simultaneousWithExternalGesture(Gesture.Pan()),
+    ).toThrow(/simultaneousWithExternalGesture` is not supported/)
+    expect(() =>
+      Gesture.Pan().requireExternalGestureToFail(Gesture.Pan()),
+    ).toThrow(/requireExternalGestureToFail` is not supported/)
+  })
+
+  it("accepts the knobs upstream itself ignores off-platform", () => {
+    // runOnJS asks for the JS runtime; there is one runtime here, so every
+    // callback already runs where it is asking. @gorhom/bottom-sheet sets it.
+    expect(() =>
+      Gesture.Pan().runOnJS(true).averageTouches(true).mouseButton(1),
+    ).not.toThrow()
+  })
+
+  it("keeps the state machine's states as upstream numbers", () => {
+    expect(GESTURE_STATE.ACTIVE).toBe(4)
+    expect(GESTURE_STATE.FAILED).toBe(1)
+  })
+})
+
+describe("the two libraries this slice exists to unblock", () => {
+  // Both chains are transcribed from the shipped packages, not paraphrased:
+  // react-native-drawer-layout 4.2.9's `src/views/Drawer.native.tsx` and
+  // react-native-reanimated-dnd 2.0.0's `lib/hooks/useDraggable.js`. What is
+  // asserted is that the CHAIN builds and DRIVES, which is the acceptance
+  // criterion; what else each package needs is recorded in docs/gestures.md.
+  const SWIPE_MIN_OFFSET = 5
+
+  it("builds and drives react-native-drawer-layout's pan", () => {
+    const seen: string[] = []
+    const startX = { value: 0 }
+    const translationX = { value: 0 }
+    // Typed as the union rather than inferred as the literal 0, which is
+    // exactly the shared value react-native-drawer-layout declares.
+    const gestureState: { value: GestureStateValue } = {
+      value: GESTURE_STATE.UNDETERMINED,
+    }
+
+    const pan = Gesture.Pan()
+      .onBegin((event) => {
+        startX.value = translationX.value
+        gestureState.value = event.state
+        seen.push("begin")
+      })
+      .onStart(() => seen.push("start"))
+      .onChange((event) => {
+        translationX.value = startX.value + event.translationX
+        gestureState.value = event.state
+      })
+      .onEnd((event, success) => {
+        gestureState.value = event.state
+        seen.push(`end(${success})`)
+      })
+      .activeOffsetX([-SWIPE_MIN_OFFSET, SWIPE_MIN_OFFSET])
+      .failOffsetY([-SWIPE_MIN_OFFSET, SWIPE_MIN_OFFSET])
+      .hitSlop({ left: 0, width: 32 })
+      .enabled(true)
+
+    // The drawer grabs from the leftmost 32px of its view, which starts at
+    // x=100 — so x=110 is inside the strip and the centre is not.
+    const gd = mount(pan.config)
+    gd.press(110, CY)
+    gd.moveTo(150, CY)
+    gd.moveTo(200, CY)
+    gd.release(200, CY)
+
+    expect(seen).toEqual(["begin", "start", "end(true)"])
+    expect(translationX.value).toBeGreaterThan(0)
+    // The comparison the library actually makes. `State` throwing was the
+    // last runtime symbol standing between drawer-layout and this platform.
+    expect(gestureState.value).toBe(GESTURE_STATE.END)
+    expect(GESTURE_STATE.ACTIVE).toBe(4)
+  })
+
+  it("builds and drives react-native-reanimated-dnd's useDraggable pan", () => {
+    const seen: string[] = []
+    const translateY = { value: 0 }
+
+    const pan = Gesture.Pan()
+      .activateAfterLongPress(200)
+      .shouldCancelWhenOutside(false)
+      .onStart(() => seen.push("start"))
+      .onUpdate((event) => {
+        translateY.value = event.translationY
+      })
+      .onFinalize(() => seen.push("finalize"))
+      .enabled(true)
+
+    const gd = mount(pan.config)
+    gd.press(CX, CY)
+    // Drag before the press matures: refused, exactly as a long-press drag
+    // handle should be.
+    gd.moveTo(CX, CY + 40)
+    expect(seen).toEqual(["finalize"])
+
+    seen.length = 0
+    gd.release(CX, CY + 40)
+    gd.press(CX, CY)
+    gd.advance(220)
+    gd.moveTo(CX, CY + 60)
+    gd.release(CX, CY + 60)
+
+    expect(seen).toEqual(["start", "finalize"])
+    expect(translateY.value).toBe(60)
+  })
+})
+
+describe("a second drag on an already-moved view", () => {
+  // The bug this reproduces was reported by hand: after moving a card, a NEW
+  // drag on it made it snap before it followed. Two candidate causes, and
+  // they predict different numbers — so they are separated by measurement
+  // rather than by argument.
+  //
+  //   1. the CONSUMER writes `y = translationY` instead of
+  //      `y = start + translationY`, so the view snaps back toward its origin
+  //      by whatever it had accumulated. Predicts a jump proportional to the
+  //      previous offset.
+  //   2. the RECOGNIZER reports travel since touch-down rather than since
+  //      activation, so activating at the threshold reports the threshold.
+  //      Predicts a jump equal to the activation threshold, whatever the
+  //      history.
+  //
+  // Upstream settles what correct is: `PanGestureHandler.activate()` calls
+  // `resetProgress()`, which sets `startX = lastX` and does NOT touch
+  // `offsetX`, while `getTranslationX()` is `lastX - startX + offsetX`. So
+  // translation is zero at activation. Cause 2 is not a thing.
+
+  it("reports zero translation at the moment of activation, whatever the threshold", () => {
+    const seen: number[] = []
+    const gd = mount({
+      activeOffsetY: [-10, 10],
+      onActivate: (event) => seen.push(event.translationY),
+    })
+    gd.press(CX, CY)
+    gd.moveTo(CX, CY + 40)
+    // Crossed the bound by 40px, and activation still reports 0 — the
+    // threshold is not handed to the consumer as travel. This is the
+    // measurement that rules cause 2 out.
+    expect(seen).toEqual([0])
+  })
+
+  it("starts a re-grab from zero, so the accumulated offset is the consumer's to keep", () => {
+    // The documented pattern, and the one every example must show.
+    const offset = { value: 0 }
+    const start = { value: 0 }
+    const config: PanRecognizerConfig = {
+      onActivate: () => {
+        start.value = offset.value
+      },
+      onUpdate: (event) => {
+        offset.value = start.value + event.translationY
+      },
+    }
+
+    const gd = mount(config)
+    gd.press(CX, CY)
+    gd.moveTo(CX, CY + 20)
+    gd.moveTo(CX, CY + 70)
+    gd.release(CX, CY + 70)
+    const afterFirst = offset.value
+    expect(afterFirst).toBeGreaterThan(40)
+
+    // Re-grab, and the very first update must not move it at all.
+    gd.press(CX, CY)
+    gd.moveTo(CX, CY + 15)
+    const atActivation = offset.value
+    expect(atActivation).toBe(afterFirst)
+
+    gd.moveTo(CX, CY + 45)
+    expect(offset.value).toBe(afterFirst + 30)
+  })
+
+  it("shows the jump the naive consumer pattern produces, and its size", () => {
+    // `y = translationY`, with no accumulation: the shape the spike shipped.
+    const offset = { value: 0 }
+    const gd = mount({
+      onUpdate: (event) => {
+        offset.value = event.translationY
+      },
+    })
+    gd.press(CX, CY)
+    gd.moveTo(CX, CY + 20)
+    gd.moveTo(CX, CY + 90)
+    gd.release(CX, CY + 90)
+    const accumulated = offset.value
+    expect(accumulated).toBe(70)
+
+    gd.press(CX, CY)
+    gd.moveTo(CX, CY + 15) // activation: translation 0, so no update
+    gd.moveTo(CX, CY + 20)
+    // It snapped back to near its origin. The jump is 65 of the 70 it had
+    // accumulated — proportional to the HISTORY, not the 10px activation
+    // threshold, which is cause 1 measured rather than argued.
+    expect(offset.value).toBe(5)
+    expect(accumulated - offset.value).toBe(65)
+  })
+})

@@ -1,14 +1,22 @@
-// react-native-gtkx/gesture-handler — the one piece of
-// `react-native-gesture-handler` a ported app actually needs, and a loud
+// react-native-gtkx/gesture-handler — `Pan`, `GestureDetector` and the root
+// view, reimplemented over this platform's own responder system, and a loud
 // refusal for the rest.
 //
-// WHY this exists at all, given that docs/research/gestures.md rules RNGH out
-// of scope. Because exactly one RNGH symbol appears in apps that do not use
-// RNGH: `GestureHandlerRootView`. Every drag-and-drop app has it at the root,
-// because `react-native-reanimated-dnd`'s own quick start puts it there — so
-// after `react-native-gtkx/dnd` (#55) made the drag-and-drop code itself
-// portable, that single wrapper was the last line a ported app had to edit.
-// This removes it.
+// NOT A PORT. `docs/research/gestures.md` refused RNGH on four grounds, two of
+// which expired when `react-native-gtkx/reanimated` shipped; the other two —
+// no `exports` map on `src/web/`, no out-of-tree platform story, and a
+// react-native-windows precedent that has been a literal `// NO-OP` since
+// 2.8.0 — stand. So this is the third instance of the pattern that has worked
+// twice already: reimplement the SEMANTICS behind the package name, take the
+// upstream implementation as a blueprint rather than as a dependency. The
+// recognizer and its arbitration are the implementation (see ./recognizer,
+// ./pan); `Gesture.Pan()` and `usePanGesture()` are two thin spellings over
+// it, which is the mistake upstream made and had to undo in 3.1.0.
+//
+// The root view came first and for its own reason: exactly one RNGH symbol
+// appears in apps that do not otherwise use RNGH — `GestureHandlerRootView`.
+// Every drag-and-drop app has it at the root, because
+// `react-native-reanimated-dnd`'s own quick start puts it there.
 //
 // WHY it is not a bare passthrough. `GestureHandlerRootView` is a real layout
 // box: upstream renders `<View style={style ?? {flex: 1}}>`, so an app that
@@ -30,6 +38,25 @@ import type { ReactNode } from "react"
 import { View } from "../components/view"
 import type { StyleProp } from "../contracts"
 import { createUnsupportedFactory } from "../unsupported-export"
+import { Gesture } from "./builder"
+import { GestureDetector } from "./detector"
+import { usePanGesture } from "./hooks"
+import { GESTURE_STATE } from "./types"
+
+export { Gesture, GestureDetector, usePanGesture }
+export { PanGestureBuilder } from "./builder"
+export type { GestureDetectorProps } from "./detector"
+export type { PanGestureHookConfig } from "./hooks"
+export type {
+  GestureHitSlop,
+  GestureSpec,
+  GestureStateManagerApi,
+  GestureTouchData,
+  GestureTouchEvent,
+  OffsetBound,
+  PanEndEventPayload,
+  PanEventPayload,
+} from "./types"
 
 /**
  * Upstream's default, and note that it is `style ?? {flex: 1}` rather than
@@ -74,9 +101,11 @@ export const GestureHandlerRootView = ({
 
 const unsupported = createUnsupportedFactory(
   "react-native-gesture-handler",
-  "Only GestureHandlerRootView is implemented. " +
-    "Gestures on this platform are React Native's own responder system and PanResponder " +
-    "(docs/api.md); drag-and-drop is react-native-gtkx/dnd.",
+  "Implemented: GestureHandlerRootView, GestureDetector, and Pan in both spellings " +
+    "(`Gesture.Pan()` and `usePanGesture()`). Tap, LongPress and `State` are the next slice; " +
+    "cross-gesture relations and the composers need the orchestrator; Pinch and Rotation need " +
+    "a machine that can produce a touchpad gesture to test them on. RN's own responder system " +
+    "and PanResponder also work (docs/api.md); drag-and-drop is react-native-gtkx/dnd.",
 )
 
 // Every runtime value `react-native-gesture-handler` 3.1.0 exports, minus
@@ -112,8 +141,9 @@ export const legacy_createNativeWrapper: any = unsupported(
 )
 
 // --- the new (v3) gesture API ---
-export const Gesture: any = unsupported("Gesture")
-export const GestureDetector: any = unsupported("GestureDetector")
+// `Gesture`, `GestureDetector` and `usePanGesture` are re-exported at the top
+// of this file. `Gesture` is a real namespace whose eleven unimplemented
+// statics throw individually, so `Gesture.Pinch()` still names itself.
 export const GestureDetectorType: any = unsupported("GestureDetectorType")
 export const GestureStateManager: any = unsupported("GestureStateManager")
 export const InterceptingGestureDetector: any = unsupported(
@@ -127,7 +157,6 @@ export const useHoverGesture: any = unsupported("useHoverGesture")
 export const useLongPressGesture: any = unsupported("useLongPressGesture")
 export const useManualGesture: any = unsupported("useManualGesture")
 export const useNativeGesture: any = unsupported("useNativeGesture")
-export const usePanGesture: any = unsupported("usePanGesture")
 export const usePinchGesture: any = unsupported("usePinchGesture")
 export const useRotationGesture: any = unsupported("useRotationGesture")
 export const useSimultaneousGestures: any = unsupported(
@@ -141,11 +170,20 @@ export const useTapGesture: any = unsupported("useTapGesture")
 // cannot run here, so `event.nativeEvent.state === State.ACTIVE` is code that
 // has already gone wrong by the time it reads the enum. Failing at that line
 // beats silently comparing against `undefined`.
+//
+// `State` is the exception, and the reason it throws expired with this slice:
+// `Gesture.Pan()`'s payloads now carry a faithful `state`, so comparing one
+// against `State.ACTIVE` is ordinary correct code rather than a symptom.
+// `react-native-drawer-layout` does exactly that — it re-exports it as
+// `GestureState`, seeds a shared value with `GestureState.UNDETERMINED` and
+// tests `=== GestureState.ACTIVE` — and it was the ONLY runtime symbol still
+// standing between that library and running here. Six numbers, and the
+// alternative was a refusal that no longer described anything true.
+export const State = GESTURE_STATE
 export const Directions: any = unsupported("Directions")
 export const HoverEffect: any = unsupported("HoverEffect")
 export const MouseButton: any = unsupported("MouseButton")
 export const PointerType: any = unsupported("PointerType")
-export const State: any = unsupported("State")
 
 // --- the wrapped RN components and buttons ---
 export const BaseButton: any = unsupported("BaseButton")

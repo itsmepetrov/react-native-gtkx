@@ -103,6 +103,40 @@ export type ResponderSystem = {
    * nothing held it or the holder refused a reason that allows refusal.
    */
   terminate(reason: TerminationReason): boolean
+  /**
+   * THE OUT-OF-EVENT GRANT CHANNEL. A registered node asks for the responder
+   * between touch events, and the ordinary negotiation runs against a
+   * synthesized event at the last known pointer position.
+   *
+   * RN negotiates inside touch events only, so a recognizer that changes its
+   * mind on a TIMER has no way to take the interaction until the pointer next
+   * moves. `activateAfterLongPress` is exactly that recognizer: the press
+   * matures while the pointer is still, and waiting for the next move puts
+   * the "lifted" visual one frame late — or, for a press-and-hold that never
+   * moves again, never.
+   *
+   * The precedent is react-native-web, which added
+   * `onScrollShouldSetResponder` and `onSelectionChangeShouldSetResponder`
+   * for its own platform's realities; extending the model where the platform
+   * demands it is recorded as acceptable in docs/research/gestures.md, and
+   * this channel is documented there with its reason.
+   *
+   * Deliberately NOT a new prop and not a new grant path: it reuses
+   * `negotiateAndTransfer` unchanged, so capture still beats bubble, the LCA
+   * pruning still applies, and an ancestor that wants the interaction still
+   * wins it. The only thing that is new is WHEN the question gets asked. The
+   * synthesized event is the same one `terminate()` already builds from
+   * `session.lastTouch`, for the same reason.
+   *
+   * No `onResponderMove` is dispatched afterwards: the pointer did not move,
+   * and inventing a move to announce a grant would put a fabricated
+   * coordinate into every consumer's translation arithmetic.
+   *
+   * Returns whether `host` holds the responder once the negotiation is over
+   * — `false` when there is no interaction, when `host` is not on the path
+   * the interaction is travelling, or when somebody else won.
+   */
+  requestResponder(host: ResponderHost): boolean
   /** The node currently holding the responder, or null. */
   getResponder(): ResponderHost | null
   /** The node whose event source is carrying the interaction, or null. */
@@ -479,6 +513,28 @@ export const createResponderSystem = (
       responder = null
       notify(holder, "onResponderTerminate", event)
       return true
+    },
+
+    requestResponder(host) {
+      const current = session
+      if (current === null) {
+        // No interaction to take. A timer that fires after the pointer is up
+        // is a timer that lost, and there is nothing to negotiate over.
+        return false
+      }
+      if (responder === host) {
+        return true
+      }
+      const path = pathOf(current.host)
+      // A node off the interaction's path is not a candidate — the same rule
+      // the touch paths enforce by construction, stated here because this
+      // entry point is reached from a timer rather than from an event that
+      // already travelled the tree.
+      if (!path.includes(host)) {
+        return false
+      }
+      negotiateAndTransfer(path, createEvent(current.lastTouch, true), "move")
+      return responder === host
     },
 
     getResponder: () => responder,
