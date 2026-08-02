@@ -1,5 +1,5 @@
-// The layout-animation builders: `FadeIn`, `FadeOut`, `LinearTransition` and
-// `Keyframe`.
+// The layout-animation builders' base class, and the four that are written by
+// hand: `FadeIn`, `FadeOut`, `LinearTransition` and `Keyframe`.
 //
 // A builder is plain data with a fluent surface. `FadeIn`, the class itself,
 // is a valid `entering` value; so is `FadeIn.duration(400).delay(100)`, which
@@ -15,11 +15,15 @@
 // (layout-animation-runtime.ts) decides what of it this platform can honour
 // and drives it.
 //
-// SCOPE. `FadeIn`/`FadeOut`/`LinearTransition`/`Keyframe` and nothing else.
-// The other ~90 catalog entries (`BounceIn*`, `Pinwheel*`, `Roll*`,
-// `Stretch*`…) are presets over the same two animations and the same
-// `initialValues`/`animations` pair, so they are cheap once this exists — but
-// they are not here, and they still throw by name.
+// SCOPE. The base class plus the four builders that cannot be expressed as a
+// table: three because they are the primitives everything else is measured
+// against, and `Keyframe` because it is the one builder you INSTANTIATE with a
+// track rather than configure. The catalogue proper — `BounceIn*`,
+// `Pinwheel*`, `Roll*`, `Stretch*` and the rest — is exactly the same
+// `initialValues`/`animations` pair over a different pair of numbers, so it
+// lives as data in layout-animation-presets.ts; the four `*Transition`
+// builders beside `LinearTransition` live in layout-transitions.ts.
+import { parseAngle } from "../style/transform"
 import {
   withDelay,
   withSequence,
@@ -83,6 +87,7 @@ export class AnimationBuilder {
   springConfigV: WithSpringConfig = {}
   initialValuesV: Record<string, unknown> = {}
   callbackV: LayoutAnimationCallback | undefined = undefined
+  rotateV: string | number | undefined = undefined
 
   static createInstance<T extends typeof AnimationBuilder>(
     this: T,
@@ -115,7 +120,28 @@ export class AnimationBuilder {
     this.type = "spring"
     if (durationMs !== undefined) {
       this.springConfigV.duration = durationMs
+      // Upstream's `springify()` writes the same field `.duration()` does, so
+      // `getDuration()` reports the spring's length too. That matters here
+      // beyond parity: the retention fallback that keeps an exiting widget on
+      // screen is armed from `getMaxDuration()`, and a fallback shorter than
+      // the animation cuts the animation off.
+      this.durationV = durationMs
     }
+    return this
+  }
+
+  /**
+   * The angle `ZoomInRotate` / `ZoomOutRotate` spin through.
+   *
+   * Upstream takes a bare number of RADIANS in a string (its default is
+   * `'0.3'`, interpolated into `` `${rotate}rad` ``), and a united value like
+   * `'90deg'` reaches its template as `'90degrad'`. A bare number or numeric
+   * string is read as radians here, exactly as upstream; a value that carries
+   * its own `deg`/`rad` unit is parsed instead of being concatenated into
+   * nonsense.
+   */
+  rotate(angle: string | number): this {
+    this.rotateV = angle
     return this
   }
 
@@ -201,6 +227,23 @@ export class AnimationBuilder {
     return delay + this.getDuration()
   }
 
+  /**
+   * `.rotate()` resolved to degrees, or `fallbackDegrees` when it was never
+   * called. See {@link AnimationBuilder.rotate} for the unit rules.
+   */
+  protected getRotationDegrees(fallbackDegrees: number): number {
+    const configured = this.rotateV
+    if (configured === undefined) {
+      return fallbackDegrees
+    }
+    const bare =
+      typeof configured === "number" ? configured : Number(configured)
+    if (Number.isFinite(bare)) {
+      return (bare * 180) / Math.PI
+    }
+    return parseAngle(configured) ?? fallbackDegrees
+  }
+
   protected animation(): TimingLike {
     if (this.type === "spring") {
       const config = { ...this.springConfigV }
@@ -263,6 +306,13 @@ export class AnimationBuilder {
     durationMs?: number,
   ): InstanceType<T> {
     return this.createInstance().springify(durationMs) as InstanceType<T>
+  }
+
+  static rotate<T extends typeof AnimationBuilder>(
+    this: T,
+    angle: string | number,
+  ): InstanceType<T> {
+    return this.createInstance().rotate(angle) as InstanceType<T>
   }
 
   static damping<T extends typeof AnimationBuilder>(

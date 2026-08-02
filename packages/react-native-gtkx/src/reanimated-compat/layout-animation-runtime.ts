@@ -37,6 +37,7 @@ import {
   setStoredLayoutOffset,
   setStoredTransform,
 } from "../components/rect-store"
+import { parseAngle } from "../style/transform"
 import type { TransformPart } from "../contracts"
 import type { Gtk } from "../gtkx/bridge/index"
 import { queueAllocate } from "../gtkx/bridge/index"
@@ -128,11 +129,25 @@ export const runLayoutAnimation = (
   // exists to stop. Keyed on a token private to this animation so it can
   // never displace the commit's own deferred job for the same widget.
   const allocateToken = {}
+
+  // The container to re-allocate, and it is NOT always the one the caller
+  // named. An `entering` animation starts from a layout effect, and React
+  // attaches refs from the leaves up — so a view mounting in the same commit
+  // as its container sees `parentWidget` null, because the container's own
+  // ref has not been assigned yet. The widget is already PARENTED by then
+  // (the reconciler's mutation phase runs before any layout effect), so GTK
+  // itself has the answer. Without this, every transform- or position-driven
+  // entering animation wrote its frames into the rect store and never asked
+  // anyone to draw them: the first allocation picked up the initial value and
+  // the view froze there — a `ZoomIn` that mounts at scale 0 and stays.
+  let container: Gtk.Widget | null = parentWidget
   const requestAllocate = (): void => {
-    if (!parentWidget) {
+    container ??= widget.getParent() as Gtk.Widget | null
+    const containerWidget = container
+    if (!containerWidget) {
       return
     }
-    const queue = (): void => queueAllocate(parentWidget)
+    const queue = (): void => queueAllocate(containerWidget)
     if (!deferDuringAllocate(allocateToken, queue)) {
       queue()
     }
@@ -197,22 +212,35 @@ export const runLayoutAnimation = (
     }
   }
 
-  const transformChannel = (index: number, key: string): Channel => ({
-    apply(value) {
-      const numeric = numberOrNull(value)
-      if (numeric !== null) {
-        transformParts[index] = { [key]: numeric }
+  // An angle slot takes upstream's own spelling as well as a number: the
+  // catalogue emits degrees (a numeric animation cannot carry a unit), but
+  // `.withInitialValues({ transform: [{ rotate: "45deg" }] })` is written by
+  // hand and would otherwise be dropped as "not a number". `parseAngle` is
+  // the same reader src/style/transform.ts uses to build the matrix, so both
+  // spellings land on the same rotation.
+  const ANGLE_KEYS = new Set(["rotate", "rotateZ"])
+
+  const transformChannel = (index: number, key: string): Channel => {
+    const read = ANGLE_KEYS.has(key)
+      ? (value: unknown): number | null => parseAngle(value)
+      : numberOrNull
+    return {
+      apply(value) {
+        const numeric = read(value)
+        if (numeric !== null) {
+          transformParts[index] = { [key]: numeric }
+          flushTransform()
+        }
+      },
+      start(value) {
+        return read(value)
+      },
+      push(value) {
+        transformParts[index] = { [key]: value }
         flushTransform()
-      }
-    },
-    start(value) {
-      return numberOrNull(value)
-    },
-    push(value) {
-      transformParts[index] = { [key]: value }
-      flushTransform()
-    },
-  })
+      },
+    }
+  }
 
   // --- initial values ----------------------------------------------------
 
