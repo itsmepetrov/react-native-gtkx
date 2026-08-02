@@ -1,11 +1,16 @@
 // API modules: Platform, Dimensions/useWindowDimensions (live),
-// useColorScheme, AppState, Alert with button variants, Linking.
-import { useState } from "react"
+// useColorScheme, AppState, Alert with button variants, Linking — and the
+// four core `react-native` exports that exist so an ported app's imports
+// resolve, one of which is interesting precisely because it does nothing.
+import { useEffect, useRef, useState } from "react"
 import {
   Alert,
   AppState,
   Dimensions,
+  findNodeHandle,
+  Keyboard,
   Linking,
+  LogBox,
   Platform,
   Pressable,
   StyleSheet,
@@ -13,10 +18,33 @@ import {
   useColorScheme,
   useWindowDimensions,
   View,
+  VirtualizedList,
+  type ViewHandle,
 } from "react-native"
 import { Caption, DemoCard, palette, Section } from "../ui"
 
+const VIRTUALIZED_ROWS = Array.from(
+  { length: 40 },
+  (_value, index) => `VirtualizedList row ${index + 1}`,
+)
+
 const styles = StyleSheet.create({
+  handleTarget: {
+    backgroundColor: palette.cardAlt,
+    borderRadius: 8,
+    padding: 10,
+  },
+  virtualized: {
+    height: 120,
+    backgroundColor: palette.cardAlt,
+    borderRadius: 8,
+  },
+  virtualizedRow: {
+    color: palette.text,
+    fontSize: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
   kvRow: {
     flexDirection: "row",
     gap: 8,
@@ -27,7 +55,7 @@ const styles = StyleSheet.create({
     width: 220,
   },
   value: {
-    color: "#8ff0a4",
+    color: palette.success,
     fontSize: 13,
     fontFamily: "Monospace",
   },
@@ -72,6 +100,76 @@ const Button = ({ label, onPress }: { label: string; onPress: () => void }) => (
     <Text style={styles.buttonText}>{label}</Text>
   </Pressable>
 )
+
+/**
+ * The four core exports, exercised rather than listed.
+ *
+ * `VirtualizedList` is `FlatList`'s own engine and is re-exported for the apps
+ * that reach past FlatList to it; `LogBox` is a no-op surface whose calls must
+ * not throw; `findNodeHandle` returns the widget behind a ref.
+ */
+const CoreExports = () => {
+  const boxRef = useRef<ViewHandle>(null)
+  const [handle, setHandle] = useState("press to resolve")
+  const [keyboardEvents, setKeyboardEvents] = useState(0)
+
+  useEffect(() => {
+    // Accepted, retained, and never called — see the caption.
+    const shown = Keyboard.addListener("keyboardDidShow", () =>
+      setKeyboardEvents((count) => count + 1),
+    )
+    const hidden = Keyboard.addListener("keyboardDidHide", () =>
+      setKeyboardEvents((count) => count + 1),
+    )
+    return () => {
+      shown.remove()
+      hidden.remove()
+    }
+  }, [])
+
+  return (
+    <>
+      <View
+        ref={boxRef}
+        style={styles.handleTarget}
+      >
+        <Text style={styles.value}>findNodeHandle target</Text>
+      </View>
+      <View style={styles.buttonRow}>
+        <Button
+          label="findNodeHandle(ref)"
+          onPress={() => {
+            const node = findNodeHandle(boxRef.current)
+            setHandle(node === null ? "null" : `resolved: ${String(node)}`)
+          }}
+        />
+        <Button
+          label="LogBox.ignoreLogs([…])"
+          onPress={() => {
+            LogBox.ignoreLogs(["a pattern nothing matches"])
+            LogBox.ignoreAllLogs(false)
+            setHandle("LogBox accepted both calls")
+          }}
+        />
+      </View>
+      <Text style={styles.result}>{handle}</Text>
+      <Text style={styles.result}>
+        Keyboard listeners registered: 2 · events received: {keyboardEvents}
+      </Text>
+      <VirtualizedList<string>
+        style={styles.virtualized}
+        data={VIRTUALIZED_ROWS}
+        initialNumToRender={6}
+        getItemCount={(data: string[]) => data.length}
+        getItem={(data: string[], index: number) => data[index]!}
+        keyExtractor={(item: string) => item}
+        renderItem={({ item }: { item: string }) => (
+          <Text style={styles.virtualizedRow}>{item}</Text>
+        )}
+      />
+    </>
+  )
+}
 
 export const ApisSection = () => {
   const window = useWindowDimensions()
@@ -247,6 +345,23 @@ export const ApisSection = () => {
         <Caption>
           Alert and Linking are async and fire-and-forget — just like in
           react-native.
+        </Caption>
+      </DemoCard>
+
+      <DemoCard
+        title="findNodeHandle, LogBox, Keyboard, VirtualizedList"
+        hint="the four core exports a ported app imports without thinking about them"
+      >
+        <CoreExports />
+        <Caption>
+          `Keyboard` is the interesting one, and it is interesting because it
+          does NOTHING. It accepts every listener upstream does and never fires
+          one, because a desktop has no software keyboard to show or hide — so
+          there is no event to report and no height to measure. Accepting the
+          subscription is the point: a ported screen that adds a
+          `keyboardDidShow` listener in an effect keeps working, its layout
+          simply never shifts. Refusing the call would crash a screen over a
+          notification that is correctly never sent.
         </Caption>
       </DemoCard>
     </Section>

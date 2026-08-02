@@ -100,7 +100,7 @@ Forget the wrapper and you get an error naming the widget and where the
 content landed, not a wrong-looking window: without a root, content inside a
 widget would join the ENCLOSING Yoga tree — laid out against the window's
 viewport while GTK hands it the widget's own rectangle.
-`examples/bottom-sheet` is that whole story in one screen.
+The gallery's "Widget hosting" section is that whole story in one screen.
 
 Which of the two is yours to choose, and the platform deliberately does not
 guess: `AdwBottomSheet` alone FILLS in its content child but HUGS in both
@@ -159,7 +159,7 @@ So:
 
 - **want a native list** → `AdwActionRow`, `AdwEntryRow` and friends from
   [`react-native-gtkx/adw`](api.md), in a `GtkListBox` with
-  `cssClasses={["boxed-list"]}` — see `examples/adwaita-primitives`;
+  `cssClasses={["boxed-list"]}` — see the gallery's "Adwaita stack" section;
 - **want that look written in React Native** → copy
   [`examples/tasks-nav/src/components/list.tsx`](../examples/tasks-nav/src/components/list.tsx).
   It is 200 lines of `View`, `Pressable`, `Text` and `StyleSheet` with the
@@ -597,8 +597,13 @@ const App = () => {
 }
 ```
 
-A runnable version is `examples/adwaita-primitives` — three levels deep, with
-React Native content in the header bar and a raw `GtkButton` beside it.
+A runnable version is the gallery's "Adwaita stack" section — three levels
+deep, with React Native content in the header bar and a raw `GtkButton` beside
+it. Note that it wraps the `NavigationStack` in a `Widget`: the component
+renders a RAW `Adw.NavigationView`, which has no Yoga node of its own, so
+nesting it inside a React Native layout root needs the measured leaf `Widget`
+provides. As an app's root, where GTK allocates it directly, that is not
+needed.
 
 ### `NavigationStack` props
 

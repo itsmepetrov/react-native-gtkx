@@ -8,7 +8,8 @@
 // are now real tests against the real module
 // (packages/react-native-gtkx/tests/unit/gesture-handler/recognizer.test.ts
 // and tests/gtk/gesture-handler/gesture-detector.gtk.test.tsx), and
-// examples/gesture-detector is the app to drag by hand. Keeping a second
+// The gallery's "Gesture detector" section is the screen to drag by hand.
+// Keeping a second
 // implementation of a shipped module next to it would only rot.
 //
 // What stays is what nothing else reproduces: probe 1's measurement of claim

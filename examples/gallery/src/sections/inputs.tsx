@@ -8,7 +8,7 @@ import { Caption, DemoCard, palette, Section } from "../ui"
 
 const styles = StyleSheet.create({
   echo: {
-    color: "#8ff0a4",
+    color: palette.success,
     fontSize: 13,
   },
   status: {
@@ -16,7 +16,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   limitation: {
-    color: "#f8e45c",
+    color: palette.warning,
     fontSize: 12,
   },
 })

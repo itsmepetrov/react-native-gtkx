@@ -66,6 +66,27 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "700",
   },
+  responsive: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  responsiveColumn: {
+    // Pure flexbox responsiveness, no measurement anywhere: while two >=260px
+    // columns fit they sit in a row; once narrower, the second wraps below
+    // and both stretch.
+    flexBasis: 260,
+    flexGrow: 1,
+    gap: 8,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: palette.cardAlt,
+  },
+  responsiveTitle: {
+    color: palette.text,
+    fontSize: 13,
+    fontWeight: "700",
+  },
 })
 
 const Boxes = ({ count }: { count: number }) => (
@@ -230,6 +251,28 @@ export const LayoutSection = () => (
             <Text style={styles.chipLabel}>{label}</Text>
           </View>
         ))}
+      </View>
+    </DemoCard>
+
+    <DemoCard
+      title="Responsive columns"
+      hint="flexBasis + flexGrow + flexWrap, and nothing else: drag the window narrower and the second column drops below the first"
+    >
+      <View style={styles.responsive}>
+        <View style={styles.responsiveColumn}>
+          <Text style={styles.responsiveTitle}>flexBasis: 260</Text>
+          <Caption>
+            The basis is the width each column ASKS for; flexGrow: 1 lets both
+            share whatever is left over.
+          </Caption>
+        </View>
+        <View style={styles.responsiveColumn}>
+          <Text style={styles.responsiveTitle}>flexGrow: 1</Text>
+          <Caption>
+            No onLayout, no Dimensions, no media query — the wrap is the layout
+            engine deciding that two bases no longer fit on one line.
+          </Caption>
+        </View>
       </View>
     </DemoCard>
 

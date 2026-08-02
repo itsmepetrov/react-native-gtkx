@@ -95,7 +95,7 @@ const TasksNav = () => {
             // React Native now — ScrollView/View/Text/TextInput plus
             // `common`'s List and ListRow — which is what this project's
             // showcase should be showing. The option itself stays supported
-            // (examples/bottom-sheet still uses that shape); see
+            // (the gallery's "Widget hosting" section still uses that shape); see
             // screens/content-screen.tsx for what closing the last gap took.
           >
             <Sidebar.Screen

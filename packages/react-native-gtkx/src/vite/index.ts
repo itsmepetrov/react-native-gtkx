@@ -230,7 +230,7 @@ export const reactNativeGtkx = (
         // serve. `react-native-gesture-handler` proved it — this list once held
         // three of the six names, its real package loaded, and it failed on an
         // extensionless internal import Node cannot resolve (found by running
-        // examples/upstream-libraries, which installs it).
+        // the gallery's upstream-libraries section, which installs it).
         //
         // So the list is DERIVED rather than written out: it is exactly the
         // table's package names, and a name can no longer go missing from one
