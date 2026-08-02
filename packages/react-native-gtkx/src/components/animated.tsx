@@ -26,10 +26,12 @@ import {
   driveableColorsToCss,
   type DriveableColorProperty,
 } from "../style/imperative-css"
+import { StyleSheet } from "../style/index"
 import { createAnimated } from "../animated/index"
 import type {
   DimensionValue,
   FlatStyle,
+  PointerEventsValue,
   StyleProp,
   TransformPart,
 } from "../contracts"
@@ -37,6 +39,8 @@ import {
   createWidgetCss,
   GtkBox,
   queueAllocate,
+  setBoxPassthrough,
+  setPointerTarget,
   type Gtk,
   type WidgetCss,
 } from "../gtkx/bridge/index"
@@ -162,6 +166,19 @@ export type AnimatedViewProps = ResponderProps & {
   children?: ReactNode
   onLayout?: (event: LayoutEvent) => void
   testID?: string
+  // Reanimated's `Animated.View` IS `createAnimatedComponent(View)` upstream,
+  // so it takes every View prop — `pointerEvents` included. Dropping it made
+  // an invisible full-screen overlay swallow every press underneath it, which
+  // is exactly how `react-native-drawer-layout`'s `Overlay` is built
+  // (opacity 0 plus `pointerEvents: "none"`): the drawer's own edge swipe
+  // worked and NOTHING inside the app did.
+  pointerEvents?: PointerEventsValue
+  // The other half of the same parity gap. `useAnimatedProps` returns an
+  // object of current values, and `createAnimatedComponent` already spreads
+  // it — but `Animated.View` is written by hand here rather than produced by
+  // that factory, so it has to spread it too. Upstream's `Overlay` sets
+  // `pointerEvents` through THIS channel, not as a static prop.
+  animatedProps?: Record<string, unknown>
   // Same handle a plain View exposes. RN gives every host component the
   // imperative geometry methods, and Reanimated's `useAnimatedRef` +
   // `measure()` is written against an Animated.View having them — without
@@ -211,8 +228,8 @@ const warnInsetNotTranslatable = (
         ? `The node IS absolutely positioned, but ${reason}, so there is no translation that reproduces it. `
         : "`top`/`left`/`right`/`bottom` are driven at frame rate only on a node whose own `position` is " +
           '"absolute", where moving it is exactly a translation and touches no sibling. Anything else needs a ' +
-          "Yoga pass over the container plus its commit walk, which costs what the CONTAINER costs (52 µs at " +
-          "five children, 496 µs at three hundred) against a transform's 1.5 µs. ") +
+          "Yoga pass over the container plus its commit walk, which costs what the CONTAINER costs (71 µs at " +
+          "five children, 509 µs at three hundred) against a transform's 0.12 µs. ") +
       `Animate \`transform: [{ ${spec}: … }]\` instead. ` +
       "The value is still applied on the next React render. See docs/api.md.",
   )
@@ -245,7 +262,7 @@ const warnSizeNotDriveable = (property: SizeProperty, reason: string): void => {
       "node's own subtree is then re-laid-out pinned to the driven value (7.1 µs for a leaf, 21.7 µs with " +
       "wrapped text, the same at five children and at three hundred) and one allocation puts it on screen. " +
       "Anything else needs a Yoga pass over the container plus its commit walk, which costs what the " +
-      "CONTAINER costs: 52 µs at five children, 496 µs at three hundred, against a transform's 1.5 µs. " +
+      "CONTAINER costs: 71 µs at five children, 509 µs at three hundred, against a transform's 0.6 µs. " +
       `The closest transform is \`transform: [{ ${scale}: … }]\`, but it is NOT the same thing — a scale ` +
       "grows about the view's centre, so the box moves as it grows, and it scales the content with the box " +
       "instead of re-laying it out, so text stretches rather than re-wrapping. " +
@@ -676,6 +693,8 @@ const AnimatedView = ({
   onLayout,
   testID,
   ref,
+  pointerEvents,
+  animatedProps,
   ...responderProps
 }: AnimatedViewProps) => {
   const widgetRef = useRef<Gtk.Box | null>(null)
@@ -687,6 +706,26 @@ const AnimatedView = ({
   })
   useRnContainer(widgetRef, node)
   useResponder(widgetRef, responderProps)
+
+  // `animatedProps` LAST, matching `createAnimatedComponent`'s
+  // `{ ...rest, ...animatedProps }` — a value produced by the updater is the
+  // live one and wins over the static prop. Only the picking mode is read
+  // here: a numeric animated prop has no meaning on a View, and the SVG
+  // shapes that do take them go through `createAnimatedComponent` already.
+  const mode: PointerEventsValue =
+    (animatedProps?.pointerEvents as PointerEventsValue | undefined) ??
+    pointerEvents ??
+    StyleSheet.flatten(staticStyle)?.pointerEvents ??
+    "auto"
+
+  useLayoutEffect(() => {
+    const widget = widgetRef.current
+    if (!widget) {
+      return
+    }
+    setPointerTarget(widget, mode !== "none")
+    setBoxPassthrough(widget, mode === "box-none")
+  }, [mode])
 
   useImperativeHandle(ref, () => createMeasureHandle(widgetRef, node), [node])
 

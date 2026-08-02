@@ -95,6 +95,7 @@ import {
 } from "./layout-animation-view"
 import { cancelAnimation, createMakeMutable, isSharedValue } from "./mutable"
 import {
+  scrollTo,
   useAnimatedScrollHandler,
   type AnimatedScrollEvent,
   type ScrollHandlerCallback,
@@ -144,6 +145,7 @@ export {
   runOnUI,
   scheduleOnRN,
   scheduleOnUI,
+  scrollTo,
   useAnimatedProps,
   useAnimatedReaction,
   useAnimatedRef,
@@ -342,7 +344,8 @@ const unsupported = createUnsupportedFactory(
   "react-native-reanimated",
   "Implemented here: shared values, useAnimatedStyle/useAnimatedProps/useDerivedValue/useAnimatedReaction, " +
     "withTiming/withSpring/withDecay/withClamp/withSequence/withRepeat/withDelay, interpolate, " +
-    "interpolateColor, Easing, useAnimatedRef + measure, runOnUI/runOnJS, " +
+    "interpolateColor, Easing, useAnimatedRef + measure, " +
+    "useAnimatedScrollHandler + scrollTo, runOnUI/runOnJS, " +
     "the entering/exiting/layout props with FadeIn/FadeOut/LinearTransition/Keyframe, " +
     "Animated.View/Text/Image/ScrollView and createAnimatedComponent. " +
     "See docs/api.md for what is not, and why.",
@@ -550,7 +553,6 @@ export const executeOnUIRuntimeSync: any = unsupported("executeOnUIRuntimeSync")
 // --- platform functions with no analogue here ---
 export const dispatchCommand: any = unsupported("dispatchCommand")
 export const getRelativeCoords: any = unsupported("getRelativeCoords")
-export const scrollTo: any = unsupported("scrollTo")
 export const setGestureState: any = unsupported("setGestureState")
 export const setNativeProps: any = unsupported("setNativeProps")
 export const getViewProp: any = unsupported("getViewProp")

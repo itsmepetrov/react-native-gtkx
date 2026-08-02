@@ -256,11 +256,26 @@ export const reactNativeGtkx = (
       // ever gets a chance to rewrite the import.
       // "react-native-worklets" is the same case one package over — it is
       // where that worklet runtime actually lives since Reanimated 4.
+      //
+      // The rule the three of them are instances of, stated once so the next
+      // alias does not have to rediscover it: EVERY package name
+      // `rewriteReactNativeImport` rewrites must be listed here. An alias is
+      // a resolveId hook, and a bare specifier that vite externalizes never
+      // reaches one — so on the dev path the alias silently loses to whatever
+      // is installed under the real name. That is not hypothetical for the
+      // last three: an app that also ships iOS and Android has all of them in
+      // node_modules, which is the case the alias exists to serve.
+      // `react-native-gesture-handler` was the one that proved it — its real
+      // package loaded, and failed on an extensionless internal import Node
+      // cannot resolve (examples/upstream-libraries, which installs it).
       noExternal: [
         "react-native-gtkx",
         "react-native",
         "react-native-reanimated",
         "react-native-worklets",
+        "react-native-gesture-handler",
+        "react-native-reanimated-dnd",
+        "react-native-svg",
         /^@react-navigation\//,
       ],
     },
