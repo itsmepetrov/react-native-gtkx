@@ -8,12 +8,14 @@ ordinary `react-native` and the same file runs on iOS and Android.
 `react-native-reanimated` **does** work here — as
 [`react-native-gtkx/reanimated`](api.md#react-native-reanimated-react-native-gtkxreanimated),
 a reimplementation of its semantics on one runtime, aliased onto the package
-name. So does `react-native-gesture-handler`, as far as `Pan` goes — as
+name. So does `react-native-gesture-handler` — as
 [`react-native-gtkx/gesture-handler`](api.md#react-native-gesture-handler-react-native-gtkxgesture-handler),
-which implements `GestureHandlerRootView`, `GestureDetector` and
-`Gesture.Pan()` (and `usePanGesture()`, the spelling upstream is migrating
-to) over the responder system described here. The recognizers that are not
-`Pan` throw by name — see [Porting an app](#porting-an-app) below.
+which implements `GestureHandlerRootView`, `GestureDetector`, `Gesture.Pan()`,
+`Tap()`, `LongPress()` and `Native()` (and `usePanGesture()`, the spelling
+upstream is migrating to), the `Race`/`Simultaneous`/`Exclusive` composers and
+the cross-gesture relations, over the responder system described here. The
+recognizers that remain — `Pinch`, `Rotation`, `Fling`, `Hover`, `Manual`,
+`ForceTouch` — throw by name; see [Porting an app](#porting-an-app) below.
 
 Why the responder system rather than RNGH, and every measurement behind the
 decisions on this page:
@@ -180,21 +182,19 @@ onto reimplementations by both presets, so their imports resolve and their
 `Pan` code runs unedited. What is implemented of RNGH is
 `GestureHandlerRootView`, `GestureDetector`, `State`, `Pan`, `Tap`,
 `LongPress` and `Native` in both spellings (`Gesture.Pan()` and
-`usePanGesture()`, and so on), and the components it re-exports from
-`react-native` — `ScrollView`, `FlatList`, `TextInput`, `Switch`, `Pressable`
-and the three `Touchable`s. See
+`usePanGesture()`, and so on), the `Race`/`Simultaneous`/`Exclusive` composers
+and the cross-gesture relations (`simultaneousWithExternalGesture`,
+`requireExternalGestureToFail`, `blocksExternalGesture` — arbitrated in a
+second, JS-only registry over the responder lock, because the lock has one
+holder by design and simultaneity is a set), and the components it re-exports
+from `react-native` — `ScrollView`, `FlatList`, `TextInput`, `Switch`,
+`Pressable` and the three `Touchable`s. See
 [the API reference](api.md#react-native-gesture-handler-react-native-gtkxgesture-handler)
 for the tables, and `examples/gesture-detector` for the shapes running.
 
 What is not implemented throws where it is used, naming itself, rather than
 silently doing nothing:
 
-- **cross-gesture relations** (`simultaneousWithExternalGesture`,
-  `requireExternalGestureToFail`, `blocksExternalGesture`) and the
-  `Race`/`Simultaneous`/`Exclusive` composers — these need an arbitration
-  registry separate from the responder lock, because the lock has one holder
-  by design and simultaneity is a set. This is what still stops
-  `@gorhom/bottom-sheet`;
 - **`Pinch` and `Rotation`** — GTK feeds touchpad gestures properly, and
   nothing in this project's test rig can produce one, so they wait for a
   machine that can;
@@ -206,8 +206,8 @@ Two libraries measured by BUILDING them rather than by reading them are
 blocked on `react-native` core rather than on any of the above:
 `react-native-draggable-flatlist` needs `findNodeHandle`, `LogBox` and
 `useAnimatedScrollHandler`; `@gorhom/bottom-sheet` needs those two plus
-`Keyboard` and `VirtualizedList`, and the relations. The API reference has the
-file names.
+`Keyboard` and `VirtualizedList`. Neither is blocked on gesture code any
+more — the relations they need shipped. The API reference has the file names.
 
 What to do instead, where something is still missing:
 

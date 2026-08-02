@@ -7,11 +7,29 @@ import { PlatformColor, Pressable, StyleSheet, Text, View } from "react-native"
 // the whole app follows the desktop's light/dark setting without a render.
 // The saturated demo colours are content and stay fixed — a panel about
 // interpolating between two colours must not have them move under it.
+//
+// Nothing a reader has to READ is a hand-picked grey. A fixed hex can only be
+// right on one of the two themes, and the wrong half of the time it is the
+// unreadable half; every text colour below is a theme variable that Adwaita
+// keeps legible on both.
 export const palette = {
   window: PlatformColor("window-bg-color"),
   card: PlatformColor("card-bg-color"),
   cardAlt: PlatformColor("card-shade-color"),
   text: PlatformColor("window-fg-color"),
+  // Adwaita's own dimmed foreground (libadwaita 1.7+), falling back to the
+  // plain foreground where it is missing — degrading to MORE contrast, never
+  // less. For labels and legends only: prose is `text`.
+  textDim: PlatformColor("dimmed-fg-color", "window-fg-color"),
+  // The amber Adwaita means for TEXT — dark on light, pale on dark.
+  // `--warning-bg-color` is the saturated FILL that goes behind
+  // `--warning-fg-color`, and using it on type is how the warnings ended up
+  // unreadable on the light theme.
+  warning: PlatformColor("warning-color", "@yellow_5"),
+  // A tint rather than a variable: 15% amber reads as a warning surface over
+  // either card colour, where a theme fill would have to be paired with its
+  // own foreground.
+  warningTint: "rgba(229, 165, 10, 0.15)",
   accent: "#1c71d8",
   accentPressed: "#1a5fb4",
   green: "#26a269",
@@ -19,10 +37,6 @@ export const palette = {
   purple: "#813d9c",
   red: "#c01c28",
   yellow: "#f6d32d",
-  // No dim/faint Adwaita variable exists — neutral greys picked to stay
-  // readable on both card surfaces.
-  textDim: "#8f929c",
-  textFaint: "#82858f",
   onColor: "#ffffff",
 } as const
 
@@ -47,12 +61,17 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   panelSubtitle: {
-    color: palette.textFaint,
-    fontSize: 13,
-  },
-  caption: {
     color: palette.textDim,
-    fontSize: 12,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  // Captions are the prose of this app, so they get the foreground colour and
+  // a line height rather than being dimmed small print. Keeping them readable
+  // is only half of it — there are few enough of them now to read.
+  caption: {
+    color: palette.text,
+    fontSize: 13,
+    lineHeight: 19,
   },
   row: {
     flexDirection: "row",
@@ -89,7 +108,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   statLabel: {
-    color: palette.textFaint,
+    color: palette.textDim,
     fontSize: 11,
   },
   statValue: {

@@ -35,7 +35,7 @@ const styles = StyleSheet.create({
     backgroundColor: palette.orange,
   },
   lastLabel: {
-    color: palette.textFaint,
+    color: palette.textDim,
     fontSize: 12,
   },
 })
@@ -116,18 +116,10 @@ export const AnimationsPanel = () => {
       </Row>
       <Text style={styles.lastLabel}>last fired: {last}</Text>
       <Caption>
-        Defaults are upstream&apos;s: timing is 300 ms on `inOut(quad)` and
-        spring is `GentleSpringConfig` (damping 120, mass 4, stiffness 900). The
-        spring solver differs from upstream in its rest condition only —
-        upstream stops on remaining energy, this one on displacement and speed
-        thresholds derived from the same energy budget, and the stopping point
-        differs by well under a pixel.
-      </Caption>
-      <Caption>
-        `withRepeat` counts repetitions rather than running forever here; pass
-        -1 (or any number ≤ 0) for endless, as the box in panel 2 does.
-        `cancelAnimation` stops a running animation and leaves the value where
-        it was — press it mid-repeat.
+        Defaults are upstream&apos;s: 300 ms on `inOut(quad)` for timing,
+        `GentleSpringConfig` for spring. `withRepeat` takes a count — pass -1
+        for endless, as panel 2 does — and `cancelAnimation` leaves the value
+        where it stood, so press it mid-repeat.
       </Caption>
     </Panel>
   )

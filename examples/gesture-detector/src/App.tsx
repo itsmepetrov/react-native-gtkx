@@ -66,8 +66,12 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: 16 },
   column: { flex: 1, gap: 4 },
   label: { color: "#ffffff", fontSize: 12, fontWeight: "700" },
-  hint: { color: "#9a9996", fontSize: 11 },
-  status: { color: "#f6d32d", fontSize: 11, fontWeight: "700" },
+  // The screen is a fixed dark surface on purpose — the cards are saturated
+  // pastels picked to read on it — so these two are checked against #241f31
+  // rather than against a theme. 11 px at #9a9996 was under 5:1 and the first
+  // thing to become unreadable; both are a step lighter and a step larger now.
+  hint: { color: "#c0bfbc", fontSize: 12 },
+  status: { color: "#f8e45c", fontSize: 12, fontWeight: "700" },
   card: {
     height: 92,
     borderRadius: 12,

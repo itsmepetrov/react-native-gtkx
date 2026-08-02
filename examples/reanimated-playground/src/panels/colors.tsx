@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   autoLabel: {
-    color: palette.textFaint,
+    color: palette.textDim,
     fontSize: 12,
   },
 })
@@ -210,21 +210,15 @@ export const ColorsPanel = () => (
     <HandDriven />
     <Caption>
       Drag the pill or press a stop. One shared value walks 0 → 1;
-      `interpolateColor` turns it into blue → red → green and the animated style
-      writes it. The colour reaches GTK through a `GtkCssProvider` private to
-      that one widget, reloaded in place — 11.2 µs per frame, the same at any
-      tree size, and deliberately NOT through the memoised class registry the
-      static styles use (that one would mint a class per frame into a
-      process-wide stylesheet: 0.8 ms on the first frame, 6.8 ms by the
-      six-hundredth, still climbing).
+      `interpolateColor` turns it into blue → red → green. The colour reaches
+      GTK through a `GtkCssProvider` private to that one widget, reloaded in
+      place — 11.2 µs a frame, flat in the size of the tree, and no React
+      render.
     </Caption>
     <AutoPair />
     <Caption>
-      Both squares are the same `withRepeat(withTiming(...), -1, true)` on one
-      shared value, blue → yellow, differing only in the colour space. RGB
-      crosses through the desaturated middle; HSV takes the hue path and stays
-      saturated. &apos;LAB&apos; throws here, by name — upstream&apos;s is a
-      vendored slice of culori fed the wrong channel scale.
+      One loop, two colour spaces: RGB crosses the desaturated middle, HSV takes
+      the hue path and stays saturated. &apos;LAB&apos; throws here, by name.
     </Caption>
   </Panel>
 )
