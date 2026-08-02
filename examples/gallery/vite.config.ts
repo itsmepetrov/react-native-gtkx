@@ -4,17 +4,18 @@ import { defineConfig, type Plugin } from "vite"
 // The gallery dogfoods the preset: sources import "react-native" and the
 // alias + platform extensions resolve it to react-native-gtkx.
 //
-// The two things below exist for the three `src/sections/upstream-*.tsx`
+// The two things below exist for the four `src/sections/upstream-*.tsx`
 // screens, and removing either silently changes what they prove rather than
 // breaking them loudly. Every other section resolves through the preset alone.
 //
-// Those three are the opposite of `examples/reanimated-dnd` and of the `dnd`
+// Those four are the opposite of `examples/reanimated-dnd` and of the `dnd`
 // section here, both of which run against `react-native-gtkx/dnd` through the
 // preset's rewrite, so the real package never loads. They prove what happens
-// when it DOES — both `react-native-reanimated-dnd@2.0.0` (Upstream drop
-// zones, Upstream sortables) and `react-native-drawer-layout@4.2.9` (Upstream
-// drawer) are installed here for real, and both run on top of this platform's
-// Reanimated, worklets and gesture-handler compat surfaces.
+// when it DOES — `react-native-reanimated-dnd@2.0.0` (Upstream drop zones,
+// Upstream sortables), `react-native-drawer-layout@4.2.9` (Upstream drawer)
+// and `@gorhom/bottom-sheet@5.2.14` (Upstream bottom sheet) are installed
+// here for real, and all three run on top of this platform's Reanimated,
+// worklets and gesture-handler compat surfaces.
 //
 // See docs/research/upstream-libraries.md for what that measured.
 
@@ -75,13 +76,13 @@ export default defineConfig({
   ],
   ssr: {
     // `gtkx dev` runs vite with `ssr.external: true`, which hands every bare
-    // dependency straight to Node. `react-native-drawer-layout` imports
-    // `react-native` at module scope, and an externalized copy resolves that
-    // to the REAL react-native — a Flow codebase Node cannot parse. Keeping
-    // it inside the pipeline is what lets the preset's alias reach its
-    // imports. The preset does this for every name in the alias table
-    // itself, so `react-native-reanimated-dnd` needs no entry here even
-    // though its alias is off.
-    noExternal: ["react-native-drawer-layout"],
+    // dependency straight to Node. Both of these import `react-native` at
+    // module scope, and an externalized copy resolves that to the REAL
+    // react-native — a Flow codebase Node cannot parse. Keeping them inside
+    // the pipeline is what lets the preset's alias reach their imports. The
+    // preset does this for every name in the alias table itself, so
+    // `react-native-reanimated-dnd` needs no entry here even though its
+    // alias is off.
+    noExternal: ["react-native-drawer-layout", "@gorhom/bottom-sheet"],
   },
 })

@@ -12,6 +12,16 @@ export const palette = {
   sidebar: PlatformColor("sidebar-bg-color"),
   card: PlatformColor("card-bg-color"),
   cardAlt: PlatformColor("card-shade-color"),
+  // An OPAQUE surface, for the one thing a card colour cannot do: float ABOVE
+  // other content. Adwaita's `--card-bg-color` is opaque white on the light
+  // theme and `rgba(255, 255, 255, 0.08)` on the dark one — an overlay tint
+  // meant to sit ON the window background — so a sheet painted with it looks
+  // right until it slides over a card, and then the text underneath reads
+  // straight through it. `--popover-bg-color` is the variable Adwaita means
+  // for surfaces that cover things (#ffffff / #36363a), opaque and distinct
+  // from `--window-bg-color` on both schemes; the window colour behind it is
+  // the fallback for a runtime that lacks it.
+  overlay: PlatformColor("popover-bg-color", "window-bg-color"),
   accent: "#1c71d8",
   accentPressed: "#1a5fb4",
   green: "#26a269",
