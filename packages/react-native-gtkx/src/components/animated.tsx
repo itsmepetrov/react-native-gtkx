@@ -242,7 +242,7 @@ const warnSizeNotDriveable = (property: SizeProperty, reason: string): void => {
   console.warn(
     `react-native-gtkx: an animated \`${property}\` cannot be driven here, because ${reason}. ` +
       `\`width\`/\`height\` run at frame rate only where the change stops at the node that owns it — the ` +
-      "node's own subtree is then re-laid-out pinned to the driven value (6.6 µs for a leaf, 23 µs with " +
+      "node's own subtree is then re-laid-out pinned to the driven value (7.1 µs for a leaf, 21.7 µs with " +
       "wrapped text, the same at five children and at three hundred) and one allocation puts it on screen. " +
       "Anything else needs a Yoga pass over the container plus its commit walk, which costs what the " +
       "CONTAINER costs: 71 µs at five children, 509 µs at three hundred, against a transform's 0.6 µs. " +
