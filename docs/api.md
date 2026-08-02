@@ -1827,12 +1827,23 @@ Both halves of it are here — the `onScroll`/`onBeginDrag`/`onEndDrag`/
 `onMomentumEnd` handlers it registers, and the `scrollTo` they call to pin the
 list — and driving the sheet with a real pointer showed the lock never
 executes, because the sheet's scrollable **emits no scroll event at all**. The
-cause is a layer below this surface: a scrollable with no style of its own,
-inside a parent with a bounded height, does not become a viewport here — it
-grows to its content, so its scroll range stays empty. `<FlatList style={{
-flex: 1 }} />` in that parent scrolls and `<FlatList />` does not, measured
-side by side in `spike/core-exports`, which keeps the failing check rather than
-deleting it.
+cause is a layer below this surface, and it is no longer the scrollable's own
+style: with the base style above, `<FlatList />` carrying no style of its own
+inside a BOUNDED parent scrolls — `spike/core-exports` measures it beside its
+controls, row one moving 406 → 278 where it used to report 170 → 170.
+**gorhom's parent is not bounded.** It bounds the list with an animated
+`height` (`contentMaskContainerAnimatedStyle` in `BottomSheetContent`), and a
+driven size on this platform lives as an override in the rect store that is
+deliberately never written into Yoga — which is exactly what buys 7.1 µs a
+frame instead of 496 at 300 children
+([research/animated-size.md](research/animated-size.md)). So the container
+allocates and clips at the right size while its child, for layout, sees no
+bound at all and grows to its content. Everything else about the sheet works:
+it snaps between its detents under a real pointer drag, which is what the
+gallery's "Upstream bottom sheet" section shows — and says, next to the list
+that does not move. That is what makes the diagnosis specific: it is the
+animated **height**, a layout property, that does not arrive.
+`spike/core-exports` keeps the failing check rather than deleting it.
 
 **`@gorhom/bottom-sheet` and `react-native-draggable-flatlist` both run now**,
 and this surface is one of the three they needed: the other two are

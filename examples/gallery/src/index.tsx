@@ -44,6 +44,7 @@ import { SvgSection } from "./sections/svg"
 import { TextSection } from "./sections/text"
 import { TogglesSection } from "./sections/toggles"
 import { TransformsSection } from "./sections/transforms"
+import { UpstreamBottomSheetSection } from "./sections/upstream-bottom-sheet"
 import { UpstreamDrawerSection } from "./sections/upstream-drawer"
 import { UpstreamDropZonesSection } from "./sections/upstream-drop-zones"
 import { UpstreamSortablesSection } from "./sections/upstream-sortables"
@@ -122,7 +123,7 @@ const SECTION_DEFS: Record<SectionId, SectionDef> = {
   },
 
   // 3 — the third-party ecosystem, reached through the presets' aliases —
-  // and, in the last three, deliberately not aliased at all.
+  // and, in the last four, deliberately not aliased at all.
   reanimated: {
     title: "Reanimated values",
     group: GROUP.modules,
@@ -173,7 +174,7 @@ const SECTION_DEFS: Record<SectionId, SectionDef> = {
     Component: DndSection,
   },
   svg: { title: "Svg", group: GROUP.modules, Component: SvgSection },
-  // The last three are the ecosystem un-aliased: two published npm tarballs
+  // The last four are the ecosystem un-aliased: three published npm tarballs
   // installed for real, one screen per library — and, for the drag-and-drop
   // one, one screen per idea.
   "upstream-drop-zones": {
@@ -192,6 +193,12 @@ const SECTION_DEFS: Record<SectionId, SectionDef> = {
     title: "Upstream drawer",
     group: GROUP.modules,
     Component: UpstreamDrawerSection,
+    fillsCanvas: true,
+  },
+  "upstream-bottom-sheet": {
+    title: "Upstream bottom sheet",
+    group: GROUP.modules,
+    Component: UpstreamBottomSheetSection,
     fillsCanvas: true,
   },
 }
