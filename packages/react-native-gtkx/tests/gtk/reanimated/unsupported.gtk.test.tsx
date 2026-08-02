@@ -9,8 +9,8 @@ import { act, render, screen, waitFor } from "@gtkx/testing"
 import { expect, it } from "vitest"
 import { Root, Text } from "../../../src/index"
 import Animated, {
-  BounceIn,
   css,
+  FlipInEasyX,
   isConfigured,
   isWorkletFunction,
   makeShareableCloneRecursive,
@@ -18,7 +18,7 @@ import Animated, {
   ReduceMotion,
   runOnJS,
   runOnUI,
-  SequencedTransition,
+  SharedTransition,
   useAnimatedSensor,
   useReducedMotion,
 } from "../../../src/reanimated-compat/index"
@@ -46,30 +46,31 @@ it("throws with the symbol's name when an unsupported export is called", () => {
 })
 
 it("throws when an unsupported export is read as a namespace", () => {
-  // `css.create({...})` and `BounceIn.duration(300)` are how these are
+  // `css.create({...})` and `FlipInEasyX.duration(300)` are how these are
   // actually reached, so the READ has to fail — before anything is built from
-  // undefined. `FadeIn`, `FadeOut`, `LinearTransition` and `Keyframe` are
-  // implemented and are covered by layout-animation.gtk.test.tsx; the ~90
-  // preset builders around them are still refused, by name.
+  // undefined. Sixty of the seventy-six presets are implemented now and are
+  // covered by layout-animation.gtk.test.tsx; the sixteen that need a
+  // transform this platform does not compose — `Flip*` (3D) and `LightSpeed*`
+  // (skew) — still refuse, by name.
   expect(() => (css as { create: () => void }).create).toThrow(
     /`css` is not supported/,
   )
-  expect(() => (BounceIn as { duration: () => void }).duration).toThrow(
-    /`BounceIn` is not supported/,
+  expect(() => (FlipInEasyX as { duration: () => void }).duration).toThrow(
+    /`FlipInEasyX` is not supported/,
   )
   expect(
-    () => (SequencedTransition as { springify: () => void }).springify,
-  ).toThrow(/`SequencedTransition` is not supported/)
+    () => (SharedTransition as { springify: () => void }).springify,
+  ).toThrow(/`SharedTransition` is not supported/)
 })
 
 it("points at what IS implemented rather than only refusing", () => {
-  expect(() => (BounceIn as () => void)()).toThrow(/useAnimatedStyle/)
-  expect(() => (BounceIn as () => void)()).toThrow(/docs\/api\.md/)
+  expect(() => (FlipInEasyX as () => void)()).toThrow(/useAnimatedStyle/)
+  expect(() => (FlipInEasyX as () => void)()).toThrow(/docs\/api\.md/)
 })
 
 it("survives the introspection React and console do before use", () => {
-  expect(() => (BounceIn as { $$typeof?: symbol }).$$typeof).not.toThrow()
-  expect(() => String(BounceIn.name)).not.toThrow()
+  expect(() => (FlipInEasyX as { $$typeof?: symbol }).$$typeof).not.toThrow()
+  expect(() => String(FlipInEasyX.name)).not.toThrow()
 })
 
 it("throws when Animated.FlatList is rendered, and says what to do instead", async () => {

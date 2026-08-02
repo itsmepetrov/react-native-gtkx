@@ -9,8 +9,15 @@ import type { EasingFunction } from "./easing"
 // scheduler in tests). schedule() books a one-shot callback for the next
 // frame — re-book from inside the callback to keep ticking — and returns an
 // unsubscribe that cancels the pending callback.
+//
+// `now()` reads the SAME clock the frame callback is stamped with, off-frame.
+// It is what lets an animation anchor t = 0 to the moment it was started
+// rather than to the first frame that happens to arrive — see
+// value-animation.ts, which explains why that distinction is worth a method.
+// Optional so a driver that only has frame stamps still satisfies the type.
 export type FrameScheduler = {
   schedule(cb: (timeMs: number) => void): () => void
+  now?(): number
 }
 
 export type EndResult = { finished: boolean }

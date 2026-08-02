@@ -56,6 +56,7 @@ import type {
   LayoutAnimationBuilderLike,
   LayoutAnimationValues,
 } from "./layout-animation"
+import { useLayoutAnimationSkip } from "./layout-animation-config"
 import {
   runLayoutAnimation,
   type RunningLayoutAnimation,
@@ -197,6 +198,11 @@ export const withLayoutAnimations = <C extends ElementType>(
   }) => {
     const host = useHostNode()
     const handleRef = useRef<unknown>(null)
+    // Null unless a `<LayoutAnimationConfig>` is above. Captured once and read
+    // from inside the effects below: the object identity is stable for the
+    // life of that wrapper, and both of its flags are only meaningful at the
+    // moment the effect (or its cleanup) actually runs.
+    const skip = useLayoutAnimationSkip()
 
     // Read by an unmount cleanup and by a rect observer, both of which
     // outlive the render that produced them. Refreshed in an insertion effect
@@ -239,7 +245,7 @@ export const withLayoutAnimations = <C extends ElementType>(
     )
     useLayoutEffect(() => {
       const builder = enteringRef.current
-      if (!builder) {
+      if (!builder || skip?.entering.current) {
         return
       }
       const widget = widgetForHandle(handleRef.current)
@@ -319,7 +325,10 @@ export const withLayoutAnimations = <C extends ElementType>(
     useLayoutEffect(() => {
       return () => {
         const builder = exitingRef.current
-        if (!builder) {
+        // `skip.exiting` is set by a `<LayoutAnimationConfig skipExiting>`
+        // above us, whose own cleanup React already ran — deletions tear down
+        // outside in, which is the same ordering `exiting` itself relies on.
+        if (!builder || skip?.exiting.current) {
           return
         }
         const widget = widgetForHandle(handleRef.current)

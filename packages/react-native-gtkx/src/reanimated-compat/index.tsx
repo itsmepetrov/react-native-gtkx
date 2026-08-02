@@ -31,10 +31,12 @@
 //
 // WHAT IS AND IS NOT HERE. Shared values, animations, the mapper core,
 // `useAnimatedStyle`, `useAnimatedProps`, `interpolateColor`,
-// `createAnimatedComponent`, `Animated.View`/`Text`/`Image`/`ScrollView` and
-// the `entering`/`exiting`/`layout` props with `FadeIn`/`FadeOut`/
-// `LinearTransition`/`Keyframe` (the other ~90 preset builders are presets
-// over the same two animations and are not here yet)
+// `createAnimatedComponent`, `Animated.View`/`Text`/`Image`/`ScrollView`, the
+// `entering`/`exiting`/`layout` props with the layout-animation catalogue —
+// `FadeIn`/`FadeOut`/`Keyframe`, the five `*Transition` builders and sixty of
+// the seventy-six presets (the sixteen that are not are `Flip*`, which needs
+// a 3D rotation, and `LightSpeed*`, which needs a skew) — `LayoutAnimationConfig`,
+// and the test helpers that drive the frame clock
 // are implemented. Everything else throws through the `unsupported()` proxy,
 // naming itself. The boundary is `opacity`, `transform` and colours — the
 // things this platform can write to a mounted widget without a React render
@@ -416,7 +418,9 @@ const unsupported = createUnsupportedFactory(
     "withTiming/withSpring/withDecay/withClamp/withSequence/withRepeat/withDelay, interpolate, " +
     "interpolateColor, Easing, useAnimatedRef + measure, " +
     "useAnimatedScrollHandler + scrollTo, runOnUI/runOnJS, " +
-    "the entering/exiting/layout props with FadeIn/FadeOut/LinearTransition/Keyframe, " +
+    "the entering/exiting/layout props with Keyframe, the five *Transition builders and 60 of the 76 " +
+    "presets (Flip* and LightSpeed* are the exceptions), LayoutAnimationConfig, " +
+    "withReanimatedTimer/advanceAnimationByTime, " +
     "Animated.View/Text/Image/ScrollView and createAnimatedComponent. " +
     "See docs/api.md for what is not, and why.",
 )
@@ -491,7 +495,7 @@ export const defineAnimation: any = unsupported("defineAnimation")
 export const processColor: any = unsupported("processColor")
 export const DynamicColorIOS: any = unsupported("DynamicColorIOS")
 
-// --- layout animations: the four that are implemented ---
+// --- layout animations: the four written by hand ---
 //
 // `BaseAnimationBuilder` and `ComplexAnimationBuilder` are upstream's two
 // halves of one hierarchy — the plain chain and the chain plus the spring
@@ -503,35 +507,104 @@ export const ComplexAnimationBuilder = LayoutAnimationBuilder
 /** Upstream's own deprecated alias of {@link LinearTransition}. */
 export const Layout = LinearTransition
 
-// --- layout animations: the rest of the catalog ---
-export const LayoutAnimationConfig: any = unsupported("LayoutAnimationConfig")
-export const CurvedTransition: any = unsupported("CurvedTransition")
-export const EntryExitTransition: any = unsupported("EntryExitTransition")
-export const FadingTransition: any = unsupported("FadingTransition")
-export const JumpingTransition: any = unsupported("JumpingTransition")
-export const SequencedTransition: any = unsupported("SequencedTransition")
-export const SharedTransition: any = unsupported("SharedTransition")
-export const SharedTransitionBoundary: any = unsupported(
-  "SharedTransitionBoundary",
-)
-export const FadeInDown: any = unsupported("FadeInDown")
-export const FadeInLeft: any = unsupported("FadeInLeft")
-export const FadeInRight: any = unsupported("FadeInRight")
-export const FadeInUp: any = unsupported("FadeInUp")
-export const FadeOutDown: any = unsupported("FadeOutDown")
-export const FadeOutLeft: any = unsupported("FadeOutLeft")
-export const FadeOutRight: any = unsupported("FadeOutRight")
-export const FadeOutUp: any = unsupported("FadeOutUp")
-export const BounceIn: any = unsupported("BounceIn")
-export const BounceInDown: any = unsupported("BounceInDown")
-export const BounceInLeft: any = unsupported("BounceInLeft")
-export const BounceInRight: any = unsupported("BounceInRight")
-export const BounceInUp: any = unsupported("BounceInUp")
-export const BounceOut: any = unsupported("BounceOut")
-export const BounceOutDown: any = unsupported("BounceOutDown")
-export const BounceOutLeft: any = unsupported("BounceOutLeft")
-export const BounceOutRight: any = unsupported("BounceOutRight")
-export const BounceOutUp: any = unsupported("BounceOutUp")
+// --- layout animations: the catalogue ---
+//
+// Sixty presets over the same base class, minted from upstream's own
+// parameters — see layout-animation-presets.ts, which is the table, and
+// layout-transitions.ts for the four `*Transition` builders beside
+// `LinearTransition`. What is NOT here is directly below.
+export {
+  BounceIn,
+  BounceInDown,
+  BounceInLeft,
+  BounceInRight,
+  BounceInUp,
+  BounceOut,
+  BounceOutDown,
+  BounceOutLeft,
+  BounceOutRight,
+  BounceOutUp,
+  FadeInDown,
+  FadeInLeft,
+  FadeInRight,
+  FadeInUp,
+  FadeOutDown,
+  FadeOutLeft,
+  FadeOutRight,
+  FadeOutUp,
+  PinwheelIn,
+  PinwheelOut,
+  RollInLeft,
+  RollInRight,
+  RollOutLeft,
+  RollOutRight,
+  RotateInDownLeft,
+  RotateInDownRight,
+  RotateInUpLeft,
+  RotateInUpRight,
+  RotateOutDownLeft,
+  RotateOutDownRight,
+  RotateOutUpLeft,
+  RotateOutUpRight,
+  SlideInDown,
+  SlideInLeft,
+  SlideInRight,
+  SlideInUp,
+  SlideOutDown,
+  SlideOutLeft,
+  SlideOutRight,
+  SlideOutUp,
+  StretchInX,
+  StretchInY,
+  StretchOutX,
+  StretchOutY,
+  ZoomIn,
+  ZoomInDown,
+  ZoomInEasyDown,
+  ZoomInEasyUp,
+  ZoomInLeft,
+  ZoomInRight,
+  ZoomInRotate,
+  ZoomInUp,
+  ZoomOut,
+  ZoomOutDown,
+  ZoomOutEasyDown,
+  ZoomOutEasyUp,
+  ZoomOutLeft,
+  ZoomOutRight,
+  ZoomOutRotate,
+  ZoomOutUp,
+} from "./layout-animation-presets"
+export {
+  CurvedTransition,
+  EntryExitTransition,
+  FadingTransition,
+  JumpingTransition,
+  SequencedTransition,
+} from "./layout-transitions"
+export {
+  enableLayoutAnimations,
+  LayoutAnimationConfig,
+} from "./layout-animation-config"
+export type { LayoutAnimationConfigProps } from "./layout-animation-config"
+
+// --- layout animations: what the catalogue cannot reach ---
+//
+// Two refusals, both structural, both named rather than approximated — a
+// `FlipInEasyX` that quietly rotated in the plane instead of out of it is
+// exactly the "compiled, ran, did the wrong thing" failure this surface
+// exists to avoid.
+//
+// The twelve `Flip*` builders are `perspective` plus `rotateX`/`rotateY`: a
+// real 3D rotation with a projection. This platform folds a transform array
+// into ONE 2D affine matrix and hands it to `gsk_transform_matrix2d()`, which
+// is 3.2x cheaper than a GskTransform chain (docs/research/transforms.md) and
+// has no third axis in it.
+//
+// The four `LightSpeed*` builders need `skewX`, which a 2D affine matrix
+// COULD carry — it is left out on purpose, across the whole platform's
+// transform surface (docs/api.md, src/style/README.md), and the catalogue is
+// not the place to reverse that.
 export const FlipInEasyX: any = unsupported("FlipInEasyX")
 export const FlipInEasyY: any = unsupported("FlipInEasyY")
 export const FlipInXDown: any = unsupported("FlipInXDown")
@@ -548,49 +621,23 @@ export const LightSpeedInLeft: any = unsupported("LightSpeedInLeft")
 export const LightSpeedInRight: any = unsupported("LightSpeedInRight")
 export const LightSpeedOutLeft: any = unsupported("LightSpeedOutLeft")
 export const LightSpeedOutRight: any = unsupported("LightSpeedOutRight")
-export const PinwheelIn: any = unsupported("PinwheelIn")
-export const PinwheelOut: any = unsupported("PinwheelOut")
-export const RollInLeft: any = unsupported("RollInLeft")
-export const RollInRight: any = unsupported("RollInRight")
-export const RollOutLeft: any = unsupported("RollOutLeft")
-export const RollOutRight: any = unsupported("RollOutRight")
-export const RotateInDownLeft: any = unsupported("RotateInDownLeft")
-export const RotateInDownRight: any = unsupported("RotateInDownRight")
-export const RotateInUpLeft: any = unsupported("RotateInUpLeft")
-export const RotateInUpRight: any = unsupported("RotateInUpRight")
-export const RotateOutDownLeft: any = unsupported("RotateOutDownLeft")
-export const RotateOutDownRight: any = unsupported("RotateOutDownRight")
-export const RotateOutUpLeft: any = unsupported("RotateOutUpLeft")
-export const RotateOutUpRight: any = unsupported("RotateOutUpRight")
-export const SlideInDown: any = unsupported("SlideInDown")
-export const SlideInLeft: any = unsupported("SlideInLeft")
-export const SlideInRight: any = unsupported("SlideInRight")
-export const SlideInUp: any = unsupported("SlideInUp")
-export const SlideOutDown: any = unsupported("SlideOutDown")
-export const SlideOutLeft: any = unsupported("SlideOutLeft")
-export const SlideOutRight: any = unsupported("SlideOutRight")
-export const SlideOutUp: any = unsupported("SlideOutUp")
-export const StretchInX: any = unsupported("StretchInX")
-export const StretchInY: any = unsupported("StretchInY")
-export const StretchOutX: any = unsupported("StretchOutX")
-export const StretchOutY: any = unsupported("StretchOutY")
-export const ZoomIn: any = unsupported("ZoomIn")
-export const ZoomInDown: any = unsupported("ZoomInDown")
-export const ZoomInEasyDown: any = unsupported("ZoomInEasyDown")
-export const ZoomInEasyUp: any = unsupported("ZoomInEasyUp")
-export const ZoomInLeft: any = unsupported("ZoomInLeft")
-export const ZoomInRight: any = unsupported("ZoomInRight")
-export const ZoomInRotate: any = unsupported("ZoomInRotate")
-export const ZoomInUp: any = unsupported("ZoomInUp")
-export const ZoomOut: any = unsupported("ZoomOut")
-export const ZoomOutDown: any = unsupported("ZoomOutDown")
-export const ZoomOutEasyDown: any = unsupported("ZoomOutEasyDown")
-export const ZoomOutEasyUp: any = unsupported("ZoomOutEasyUp")
-export const ZoomOutLeft: any = unsupported("ZoomOutLeft")
-export const ZoomOutRight: any = unsupported("ZoomOutRight")
-export const ZoomOutRotate: any = unsupported("ZoomOutRotate")
-export const ZoomOutUp: any = unsupported("ZoomOutUp")
-export const enableLayoutAnimations: any = unsupported("enableLayoutAnimations")
+
+// --- shared element transitions ---
+//
+// A different mechanism, not a preset: it matches two views in two different
+// screens by a `sharedTransitionTag`, lifts one into an overlay above both,
+// and interpolates it towards the other while a navigator drives the screen
+// change. None of those three pieces exists here — there is no
+// `sharedTransitionTag` prop on any component, no overlay layer above the
+// navigation stack, and the retention primitive an exit animation rides on
+// deliberately holds a widget in its OWN parent (src/components/
+// widget-retention.ts) rather than reparenting it, which is the one thing a
+// shared element has to do. Upstream's own web path does not implement it
+// either.
+export const SharedTransition: any = unsupported("SharedTransition")
+export const SharedTransitionBoundary: any = unsupported(
+  "SharedTransitionBoundary",
+)
 
 // --- Reanimated 4's CSS animations ---
 export const css: any = unsupported("css")
@@ -646,11 +693,36 @@ export const getDynamicFeatureFlag: any = unsupported("getDynamicFeatureFlag")
 export const getStaticFeatureFlag: any = unsupported("getStaticFeatureFlag")
 export const setDynamicFeatureFlag: any = unsupported("setDynamicFeatureFlag")
 
-// --- the Jest helpers, which drive upstream's own mock ---
-export const advanceAnimationByFrame: any = unsupported(
-  "advanceAnimationByFrame",
-)
-export const advanceAnimationByTime: any = unsupported("advanceAnimationByTime")
+// --- the test helpers ---
+//
+// The three that control TIME are real, and they are not an emulation:
+// upstream fakes Jest's timers and synthesises frames on top of them, while
+// the frame driver every animation on this platform runs on is this repo's
+// own, so a test simply takes it. See test-timers.ts.
+export {
+  advanceAnimationByFrame,
+  advanceAnimationByTime,
+  withReanimatedTimer,
+} from "./test-timers"
+
+// The two that read a STYLE BACK are refused, and it is the same refusal
+// twice. Upstream's `getAnimatedStyle` returns the style object its updater
+// produced, which exists on mobile only because its Jest path keeps a mirror
+// of it on the component (`props.animatedStyle.value`). There is no such
+// object here at any point after bind time: `useAnimatedStyle`'s result is
+// taken apart into per-property channels — opacity to the widget, colours to
+// a private CSS provider, and the whole `transform` array folded into ONE 2D
+// matrix in the rect store, from which the array cannot be recovered. A
+// `getAnimatedStyle` here would therefore answer a different question than
+// the one it was asked, silently.
+//
+// What to assert instead is what every GTK test in this repo already
+// asserts, and it is strictly stronger — the widget itself:
+// `widget.getOpacity()`, `widget.computeBounds(stage)`, `widget.measure()`.
+// Drive the clock with `withReanimatedTimer` + `advanceAnimationByTime` and
+// those reads are deterministic.
+//
+// `setUpTests` exists only to install `toHaveAnimatedStyle` /
+// `toHaveAnimatedProps`, both of which are `getAnimatedStyle` in a matcher.
 export const getAnimatedStyle: any = unsupported("getAnimatedStyle")
 export const setUpTests: any = unsupported("setUpTests")
-export const withReanimatedTimer: any = unsupported("withReanimatedTimer")

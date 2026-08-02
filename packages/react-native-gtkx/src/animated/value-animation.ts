@@ -2,9 +2,22 @@
 // spring). Implements the RN semantics: a value runs at most one animation —
 // a newer start() preempts the previous one with { finished: false }; natural
 // completion reports { finished: true }; a finished or stopped run drops its
-// frame subscription immediately (no idle ticks). The first frame after
-// start() establishes t = 0 — there is no wall clock in this module, time
-// only ever comes from the scheduler.
+// frame subscription immediately (no idle ticks).
+//
+// t = 0 IS THE MOMENT start() WAS CALLED, read off the scheduler's own clock.
+// It used to be the first frame that arrived, which cost every animation on
+// this platform a frame it never used: the first callback lands ~16 ms after
+// start(), evaluates step(0) — the start value by definition — and writes it
+// back unchanged, so nothing MOVES until the second frame, ~32 ms in. A 300 ms
+// fade also RAN for 316 ms rather than 300. Anchoring at start() is what RN's
+// own TimingAnimation (`_startTime = Date.now()` inside start()) and
+// Reanimated both do, and it is time-based in the way a stalled main loop
+// demands: a late frame resumes the curve where the clock says, instead of
+// stretching the animation by the length of the stall.
+//
+// There is still no wall clock in this module — `scheduler.now()` reads the
+// same clock the frame stamps come from, so `timeMs - startTime` stays
+// coherent. A scheduler that offers no clock keeps the first-frame anchoring.
 
 import { createFrameLoop } from "./frame-loop"
 import type { CompositeAnimation, EndCallback, FrameScheduler } from "./types"
@@ -28,7 +41,7 @@ export const createValueAnimation = (
 
   const start = (callback?: EndCallback): void => {
     const step = makeStep(value.__getValue())
-    let startTime: number | null = null
+    let startTime: number | null = scheduler.now?.() ?? null
     let ended = false
 
     const loop = createFrameLoop(scheduler, (timeMs) => {

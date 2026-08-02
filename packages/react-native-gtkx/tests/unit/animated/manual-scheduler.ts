@@ -20,6 +20,11 @@ export const createManualScheduler = (): ManualScheduler => {
   const pending = new Set<Entry>()
   return {
     scheduler: {
+      // The virtual clock, readable off-frame — the production scheduler has
+      // one too, and an animation anchors t = 0 to it rather than to its
+      // first frame. `advance(0)` at the top of a test therefore no longer
+      // ESTABLISHES t = 0; it just delivers the frame that publishes it.
+      now: () => now,
       schedule(cb) {
         const entry: Entry = { cb, cancelled: false }
         pending.add(entry)
