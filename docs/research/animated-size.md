@@ -11,6 +11,9 @@ files' without conversion. Upstream numbers are read from
 **Status: shipped.** §1–§7 are the recon this file was written as. §8 is what
 was built from it and what the built thing costs, which is not the same table
 — the recon timed the mechanism, §8 times the whole write an app produces.
+§9 is the correction: the wall a real consumer hit next was blamed on §8's
+override and was not in §8 at all, and the probe that found it is the reason
+the blame moved.
 
 ## Verdict
 
@@ -451,3 +454,141 @@ moves it exactly as it moves everything else.
   to whoever needs them: the commit walk visits every child the container
   re-solved even when 299 of 300 rects are identical, and `setStyle` re-applies
   ~40 Yoga fields to change one. Neither is an animation feature.
+
+## 9. The wall after the carve-out, and where it actually was
+
+Date: 2026-08-03, same machine and harness. The consumer this section is about
+is `@gorhom/bottom-sheet` 5.2.14, unedited from npm, driven by a real Wayland
+pointer in `spike/core-exports/`.
+
+After [PR #100](../api.md) gave `ScrollView` RN's own `{flexGrow: 1,
+flexShrink: 1}` base style, the sheet's list still did not scroll and the probe
+said why: the list was allocated **792 px, exactly its own content height**
+(18 rows × 44), so its parent was content-sized rather than sheet-sized. gorhom
+bounds that list with an animated `height` from `useAnimatedStyle` on
+`BottomSheetContent`, and the diagnosis on the file was that §8's driven size
+lives as a rect-store override which Yoga never sees — so the container paints
+at the right size while its child, for layout, has no bound.
+
+**That diagnosis was wrong, and the probe is what showed it.** Instrumenting
+the style layer in a real run of the sheet:
+
+```
+[leavesOf] height: typeof=object value={"kind":"spring","toValue":543.4452371609451,…}
+```
+
+The height never became a **number**. `useAnimatedStyle` did not run animations
+returned from the updater at all: outside `initialUpdaterRun` a `with*` builder
+returns a marked descriptor (§`animation.ts`), the style layer's leaf test is
+`typeof value === "number"`, and an object is not one — so the property was
+neither driven, nor written into the static style, nor warned about. It sat in
+the style object as `{kind: "spring", toValue: 543.4, …}`. The driven-size path
+was never reached: in a full probe run, `splitAnimated` created **zero** size
+slots and `drivenSizeRefusal` was asked **zero** times.
+
+So the wall was one layer earlier than layout, and it was not the carve-out's
+cost decision at all. `useAnimatedStyle(() => ({ height: withTiming(320) }))`
+is how every page of Reanimated's documentation writes an animation, and on
+this platform it did nothing — silently, which is the failure mode this repo
+ranks worst.
+
+### The three candidates, and what each measured
+
+**(3) — can the value arrive through React at all? Yes, and it already
+does.** This was the cheapest to check and it is the answer. `splitAnimated`
+already writes a driven size back into the static style as a plain number on
+every render (§8, "THE REBASE"), so the ordinary React path carries it into
+Yoga — it just never had a number to carry. Collapsing each descriptor to its
+target as a throwaway probe, changing nothing else, took `spike/core-exports`
+from **3 FAILED to 0 FAILED** on the first run: the sheet's list went from
+`allocated height=792` to `468` (543 px of mask minus 75 px of padding), its
+`onScroll` from 0 calls to 158, and both halves of gorhom's scroll lock —
+held at the top when collapsed, released when extended — passed.
+
+**(1) — the dependent-child rule: not needed, and it would not have
+fired.** With the descriptors resolved, the rule is finally asked about
+gorhom's node, and it refuses:
+
+> the container's `height` is derived from its children, so the node growing
+> would grow the container and move everything around it
+
+which is correct: gorhom's sheet is `{position: "absolute", top: 0, left: 0,
+right: 0, flexDirection: "column-reverse"}` with no height, so its height
+genuinely does come from its children. A "has a size-dependent child" test
+would have changed nothing here — the refusal is about the node's CONTAINER,
+not about its children — and buying this case with a per-frame Yoga pass would
+have cost the 52–496 µs of §3 to reproduce, at 60 Hz, something one render
+already produces. The cheap path is untouched: §8's table, §8's rule and
+`tests/unit/style/animated-size.test.ts`'s 32 configurations are unchanged by
+this section.
+
+**(2) — a loud refusal: already shipped, and the missing half was the second
+sentence.** The platform does warn, by name and with the reason, and it ends
+every layout warning with _"the new value is applied on the next React
+render."_ For a value that only ever moves inside a `useAnimatedStyle` there
+IS no next render, so that sentence was a promise nothing kept. It is kept now.
+
+### What shipped
+
+`src/reanimated-compat/updater-animations.ts` runs one animation per animated
+key on the platform's own `Animated.Value` and its one frame scheduler —
+the same `buildAnimation` a shared value uses, so `withTiming`, `withSpring`,
+`withDelay`, `withSequence`, `withRepeat`, `withDecay` and `withClamp` arrive
+already implemented. Two rules, both upstream's:
+
+- a key appearing for the FIRST time is seeded at the target rather than
+  animated to it (nothing to animate from — the same collapse
+  `initialUpdaterRun` performs);
+- a later run producing an EQUIVALENT descriptor does not restart it, compared
+  by target and shape rather than by object identity. This one is not
+  cosmetic: gorhom's mapper re-runs on every frame of the sheet's own
+  transition and rebuilds the spring each time, and restarting on each rebuild
+  left the height crawling — measured, it reached 66 px of a 543 px target and
+  stopped.
+
+And the settle. When an animation on a property this platform will not drive
+at frame rate reaches its target, the style is published through React once:
+`AnimatedStyle.renew()` gives the style object a new identity and one render
+follows. The identity is load-bearing rather than tidy —
+`BottomSheetDraggableView` is `memo`'d, so a re-render of the component that
+owns the `useAnimatedStyle` stopped at that boundary with every prop identical,
+and the mask stayed at the animation's first frame (`allocated height=0`) while
+the animation itself ran on to 543 px. Measured in one full probe run:
+
+| what                                                         | count |
+| ------------------------------------------------------------ | ----- |
+| animation frames published on the two refused properties     | 176   |
+| animations that reached their target (`finished`)            | 4     |
+| React renders produced for them                              | **4** |
+| Yoga passes a per-frame layout write would have cost instead | 176   |
+
+At the naive write's 52 µs for a five-child container that is 208 µs instead of
+9.2 ms, and the ratio grows with the container: at 300 children it is 2 ms
+instead of 87 ms. A cancelled animation deliberately does not count as a
+settle — reporting one would publish through React on every frame the target
+moves, which is exactly the cost the refusal exists to avoid.
+
+Nothing on the driven path changed. A frame of an animated `opacity`,
+`transform`, colour, inset or confined size costs what §8's table says; the
+only new per-frame work is one shallow object copy and one map lookup per
+animated key, and an updater result with no animation in it is published by
+identity and not copied at all.
+
+### Where this differs from upstream, said out loud
+
+A restart picks the animation up at the value it is currently at, with the
+velocity the new descriptor asks for. Upstream's `prepareAnimation` also
+carries the PREVIOUS animation's velocity across. For a target that moves once
+the two are the same animation; for a target that moves every frame ours is
+slightly more damped. It converges to the same place — the probe's 176 frames
+end at 543.445 px, which is the value gorhom asked for.
+
+### What the probe says now
+
+`spike/core-exports`: **0 FAILED**. The sheet's list receives scroll events
+(158 in a collapsed run), the lock holds it at the top while the sheet is
+collapsed (`row-one y 559 → 559` with the events arriving, so the lock is
+tested rather than vacuous) and releases when it is extended (`y 240 → -84`
+under the same injected wheel), the negative-control zone the pointer never
+visited stayed silent, and the draggable-list and plain-scroller controls are
+unchanged.

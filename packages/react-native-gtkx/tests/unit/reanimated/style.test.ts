@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest"
 import {
   createAnimatedStyle,
   resetUndriveableWarnings,
+  settlesThroughReact,
   type StyleNode,
 } from "../../../src/reanimated-compat/style"
 
@@ -446,4 +447,45 @@ test("the upstream useSortable style shape drives exactly one leaf", () => {
   ).toBe(true)
   expect(nodeValue(animated.style.zIndex)).toBe(1)
   expect(warn).not.toHaveBeenCalled()
+})
+
+test("renew gives the style a new identity and carries everything into it", () => {
+  // The identity is what a `memo` boundary looks at. `@gorhom/bottom-sheet`
+  // wraps the view its animated height lands on in one, so a re-render of the
+  // component that owns the `useAnimatedStyle` stopped there with every prop
+  // identical and the value never reached Yoga — measured by
+  // `spike/core-exports`, where the content mask sat at the animation's first
+  // frame while the animation itself ran on to 543 px.
+  vi.spyOn(console, "warn").mockImplementation(() => {})
+  const animated = createAnimatedStyle({ opacity: 1, marginTop: 4 })
+  const before = animated.style
+
+  animated.renew()
+  const after = animated.style
+  expect(after).not.toBe(before)
+  // The nodes are the same objects, so nothing in the view layer rebinds for
+  // a reason it cannot see.
+  expect(after.opacity).toBe(before.opacity)
+  expect(after.marginTop).toBe(4)
+
+  // And a value that cannot be driven, written after the renew, lands in the
+  // object that is now published rather than in the one left behind.
+  animated.apply({ opacity: 1, marginTop: 12 })
+  expect(animated.style.marginTop).toBe(12)
+  expect(animated.style).toBe(after)
+})
+
+test("settlesThroughReact is the layout set, and only the layout set", () => {
+  // The properties whose warning ends "applied on the next React render" are
+  // exactly the ones that need a render produced for them when the value only
+  // ever moves inside an animation.
+  expect(settlesThroughReact("height")).toBe(true)
+  expect(settlesThroughReact("width")).toBe(true)
+  expect(settlesThroughReact("paddingBottom")).toBe(true)
+  expect(settlesThroughReact("flex")).toBe(true)
+  // Written to the widget on the frame they change, so a render afterwards
+  // would be a render for nothing.
+  expect(settlesThroughReact("opacity")).toBe(false)
+  expect(settlesThroughReact("backgroundColor")).toBe(false)
+  expect(settlesThroughReact("transform")).toBe(false)
 })

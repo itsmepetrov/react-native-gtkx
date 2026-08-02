@@ -303,6 +303,30 @@ export const resetUndriveableWarnings = (): void => {
 }
 
 /**
+ * Whether a property that finishes an animation has to be published through a
+ * React render to land at all.
+ *
+ * Every warning on the layout path ends with "the new value is applied on the
+ * next React render", and until now that was true only by luck: a value that
+ * moves solely inside a `useAnimatedStyle` produces no render, so the last
+ * frame of the animation was the last place it existed. `@gorhom/bottom-sheet`
+ * is exactly that case — it bounds its scrollable with an animated `height`
+ * and nothing else re-renders — and `spike/core-exports` is what found it.
+ *
+ * Layout properties only. `opacity`, `transform` and colours are written to
+ * the widget on the frame they change, so a render at the end would be a
+ * render for nothing; a `width`/`height` the driven-size rule ACCEPTS is on
+ * screen at the right size already, and the render is what puts the same value
+ * into Yoga so the committed layout and the override agree.
+ *
+ * One render per animation, not one per frame — which is the whole difference
+ * between this and the naive layout write the refusal is about
+ * (docs/research/animated-size.md §3).
+ */
+export const settlesThroughReact = (property: string): boolean =>
+  LAYOUT_PROPERTIES.has(property)
+
+/**
  * Collects the animatable leaves of a style, in the order the view layer
  * composes them (the transform array's order IS the composition order in RN).
  */
@@ -371,7 +395,12 @@ const signatureOf = (leaves: { key: string }[]): string =>
   leaves.map((leaf) => leaf.key).join("|")
 
 export type AnimatedStyle = {
-  /** Stable object handed to `Animated.View`; never replaced in place. */
+  /**
+   * The object handed to `Animated.View`. Stable while an animation runs — a
+   * driven frame is a write into a node, not a new style — and replaced by a
+   * shallow copy exactly once per `renew()`, which is how a value that cannot
+   * be driven reaches the view layer at all.
+   */
   readonly style: StyleObject
   /** The nodes behind it, reusable when the style has to be rebuilt. */
   readonly nodes: ReadonlyMap<string, StyleNode>
@@ -382,6 +411,23 @@ export type AnimatedStyle = {
    * view layer were made against the old one.
    */
   apply(next: StyleObject): boolean
+  /**
+   * Gives the style a new identity, so a render that follows actually reaches
+   * the view.
+   *
+   * A stable object was the right default and it is still what a running
+   * animation gets, but it is not enough on its own: `@gorhom/bottom-sheet`
+   * wraps the view this style lands on in `memo`, and a re-render of the
+   * component that OWNS the `useAnimatedStyle` stops at that boundary with
+   * every prop identical. The value then exists in the style and never reaches
+   * Yoga — measured, `spike/core-exports`: the sheet's content mask stayed at
+   * the height of the animation's first frame while the animation itself ran
+   * to 543 px.
+   *
+   * Called once per settled animation on a property the platform will not
+   * drive at frame rate, never per frame.
+   */
+  renew(): void
 }
 
 /**
@@ -406,7 +452,11 @@ export const createAnimatedStyle = (
     }
   }
 
-  const style: StyleObject = { ...source }
+  // Reassigned by `renew()` only. Every other write below — the node
+  // substitutions here, and `apply`'s update of a value it cannot drive — goes
+  // INTO the object currently published, so a renewed copy carries the latest
+  // of everything rather than a snapshot taken when it was made.
+  let style: StyleObject = { ...source }
   const opacityNode = nodes.get(OPACITY)
   if (opacityNode) {
     style[OPACITY] = opacityNode
@@ -455,8 +505,13 @@ export const createAnimatedStyle = (
   let staticSnapshot = source
 
   return {
-    style,
+    get style() {
+      return style
+    },
     nodes,
+    renew() {
+      style = { ...style }
+    },
     apply(next) {
       const nextLeaves = leavesOf(next)
       if (signatureOf(nextLeaves) !== signature) {
