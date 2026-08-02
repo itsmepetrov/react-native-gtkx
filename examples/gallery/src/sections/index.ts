@@ -49,6 +49,7 @@ export const SECTION_IDS = [
   "gesture-detector",
   "gesture-pinch",
   "gesture-relations",
+  "gesture-fling",
   "dnd",
   "svg",
   "upstream",

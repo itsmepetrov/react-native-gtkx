@@ -14,7 +14,11 @@
 // Its own file, and free of every platform import, so a test can mount a
 // recognizer of any kind without pulling in GTK — which is what lets the
 // arbitration tests drive several real recognizers off Linux.
+import { flingDecider } from "./fling"
+import { forceTouchDecider } from "./force-touch"
+import { hoverDecider } from "./hover"
 import { longPressDecider } from "./long-press"
+import { manualDecider } from "./manual"
 import { nativeDecider } from "./native"
 import { panDecider } from "./pan"
 import type { RecognizerDecider } from "./recognizer"
@@ -32,4 +36,14 @@ export const DECIDERS: Record<GestureKind, RecognizerDecider> = {
   // touchpad pinch is not in the pointer stream, and are otherwise ordinary.
   pinch: pinchDecider,
   rotation: rotationDecider,
+  // The last four, and the map is the evidence for the claim the epic has been
+  // making since slice 2: ten recognizers, one state machine. Each of these
+  // is a pair of predicates and at most two flags —
+  // `Fling` adds `endsOnActivate`, `Manual` adds a release outcome that
+  // decides nothing, `Hover` and `ForceTouch` add a `source`. None of them
+  // adds a state, an event stream, a grant channel or an arbitration rule.
+  fling: flingDecider,
+  manual: manualDecider,
+  hover: hoverDecider,
+  forceTouch: forceTouchDecider,
 }

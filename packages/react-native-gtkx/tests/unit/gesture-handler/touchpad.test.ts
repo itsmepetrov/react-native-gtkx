@@ -25,6 +25,7 @@ import {
 import { createOrchestrator } from "../../../src/gesture-handler-compat/orchestrator"
 import {
   createRecognizer,
+  type ControllerSample,
   type Recognizer,
   type RecognizerDecider,
   type Rect,
@@ -35,7 +36,6 @@ import {
   pinchDecider,
   ROTATION_RECOGNITION_THRESHOLD,
   rotationDecider,
-  type TouchpadSample,
 } from "../../../src/gesture-handler-compat/touchpad"
 import {
   GESTURE_STATE,
@@ -47,11 +47,11 @@ import {
 /** The gesture's view, in window coordinates. */
 const BOUNDS: Rect = { x: 100, y: 100, width: 200, height: 200 }
 
-const sample = (over: Partial<TouchpadSample> = {}): TouchpadSample => ({
+const sample = (over: Partial<ControllerSample> = {}): ControllerSample => ({
   scale: 1,
   rotation: 0,
-  focalX: 60,
-  focalY: 40,
+  x: 60,
+  y: 40,
   pointers: 2,
   ...over,
 })
@@ -116,8 +116,8 @@ const mount = (
     reconfigure: (next: RecognizerConfig) => {
       current = next
     },
-    channel: (): NonNullable<Recognizer["touchpad"]> => {
-      const channel = recognizer.touchpad
+    channel: (): NonNullable<Recognizer["controller"]> => {
+      const channel = recognizer.controller
       if (channel === null) {
         throw new Error("this kind has no touchpad channel")
       }
@@ -138,7 +138,7 @@ describe("the touchpad entry surface", () => {
     // cannot happen; `detector-runtime` merges these props into the child
     // unconditionally, so an empty set is what stops it.
     expect(Object.keys(recognizer.handlers)).toEqual([])
-    expect(recognizer.touchpad).not.toBeNull()
+    expect(recognizer.controller).not.toBeNull()
   })
 
   it("is absent on every pointer kind, so a pinch cannot drive a pan", () => {
@@ -148,7 +148,7 @@ describe("the touchpad entry surface", () => {
       { kind: "pan", shouldFail: () => false, shouldActivate: () => false },
       {},
     )
-    expect(recognizer.touchpad).toBeNull()
+    expect(recognizer.controller).toBeNull()
     expect(Object.keys(recognizer.handlers).length).toBeGreaterThan(0)
   })
 })
@@ -250,8 +250,8 @@ describe("Pinch", () => {
   it("puts the focal point in the VIEW's coordinates", () => {
     const { calls, config } = recorder()
     const { channel } = mount(pinchDecider, config)
-    channel().begin(sample({ focalX: 60, focalY: 40 }))
-    channel().update(sample({ scale: 1.3, focalX: 60, focalY: 40 }))
+    channel().begin(sample({ x: 60, y: 40 }))
+    channel().update(sample({ scale: 1.3, x: 60, y: 40 }))
 
     const event = calls.activate[0]!
     expect(event.focalX).toBe(60)
@@ -313,10 +313,10 @@ describe("Pinch", () => {
     const { calls, config } = recorder()
     const { channel } = mount(pinchDecider, { ...config, hitSlop: -50 })
     // 10px into a 200px view, with every edge pulled 50px inwards.
-    channel().begin(sample({ focalX: 10, focalY: 10 }))
+    channel().begin(sample({ x: 10, y: 10 }))
     expect(calls.begin).toHaveLength(0)
 
-    channel().begin(sample({ focalX: 100, focalY: 100 }))
+    channel().begin(sample({ x: 100, y: 100 }))
     expect(calls.begin).toHaveLength(1)
   })
 
@@ -400,8 +400,8 @@ describe("Rotation", () => {
   it("puts the anchor in the VIEW's coordinates", () => {
     const { calls, config } = recorder()
     const { channel } = mount(rotationDecider, config)
-    channel().begin(sample({ focalX: 30, focalY: 90 }))
-    channel().update(sample({ rotation: 0.5, focalX: 30, focalY: 90 }))
+    channel().begin(sample({ x: 30, y: 90 }))
+    channel().update(sample({ rotation: 0.5, x: 30, y: 90 }))
     expect(calls.activate[0]!.anchorX).toBe(30)
     expect(calls.activate[0]!.anchorY).toBe(90)
   })

@@ -17,11 +17,15 @@
 // them did not quieten anything else.
 import { act, render, screen } from "@gtkx/testing"
 import { expect, it } from "vitest"
+import * as entry from "../../../src/gesture-handler-compat/index"
 import {
   Directions,
   Gesture,
   GestureHandlerRootView,
+  HoverEffect,
+  MouseButton,
   PanGestureHandler,
+  PointerType,
   RectButton,
   State,
   useFlingGesture,
@@ -108,23 +112,81 @@ it("renders its children", async () => {
 })
 
 it("throws with the symbol's name when an unsupported export is called", () => {
-  // A hook or factory: called directly. `useTapGesture` stood here first and
-  // `usePinchGesture` after it, and both are implemented now — which is the
-  // point of the two slices. `useFlingGesture` is next in that line and is not
-  // blocked on anything but writing it.
-  expect(() => (useFlingGesture as () => void)()).toThrow(
-    /`useFlingGesture` is not supported/,
+  // A hook or factory: called directly. `useTapGesture` stood here first,
+  // `usePinchGesture` after it and `useFlingGesture` after that; all three are
+  // implemented now, so the assertion has moved to a symbol that is refused on
+  // purpose rather than one waiting to be written. `GestureStateManager` is
+  // upstream's standalone `create(tag)` factory, which needs the process-wide
+  // tag-to-handler registry this platform deliberately does not have — the
+  // manager an app actually receives is handed into `onTouches*`, and that one
+  // works and is what drives `Gesture.Manual()`.
+  expect(() => (entry.GestureStateManager as () => void)()).toThrow(
+    /`GestureStateManager` is not supported/,
   )
+  expect(useFlingGesture().kind).toBe("fling")
 })
 
-it("throws per unimplemented recognizer rather than for the namespace", () => {
-  // `Gesture` itself is real — nine of its statics are implemented — so the
-  // refusal moved down one level. Each of the other four names ITSELF, which
-  // is strictly more useful than the old whole-namespace throw: an app calling
-  // `Gesture.Fling()` is told about Fling, not about Gesture.
+it("keeps the hook spelling exactly as wide as upstream's", () => {
+  // Nine hooks, not ten: `src/v3/hooks/gestures/` upstream has nine
+  // directories and no `forceTouch`, `SingleGesture` omits ForceTouch, and
+  // `useForceTouchGesture` exists nowhere in 3.1.0. `Gesture.ForceTouch()` is
+  // the whole API upstream offers for it, so it is the whole API here — the
+  // alternative would be the one kind whose second spelling this platform
+  // invented.
+  expect(entry.useFlingGesture).toBeTypeOf("function")
+  expect(entry.useManualGesture).toBeTypeOf("function")
+  expect(entry.useHoverGesture).toBeTypeOf("function")
+  expect(
+    (entry as unknown as Record<string, unknown>).useForceTouchGesture,
+  ).toBeUndefined()
+})
+
+it("still refuses the 1.x component API, the buttons and the tag registry", () => {
+  // The refusals that REMAIN, now that all ten recognizers ship. Each carries
+  // its reason in src/gesture-handler-compat/index.tsx and in docs/api.md
+  // rather than being a bare `unsupported()`, and this pins the list so that
+  // "still refused" stays a decision rather than drift.
+  for (const name of [
+    // the RNGH 1.x COMPONENT API — a second public surface over the same
+    // recognizers, deprecated upstream before the builder was
+    "PanGestureHandler",
+    "TapGestureHandler",
+    "FlingGestureHandler",
+    "ForceTouchGestureHandler",
+    "legacy_createNativeWrapper",
+    // native button views with an Android ripple and no GTK counterpart
+    "RawButton",
+    "BaseButton",
+    "RectButton",
+    "BorderlessButton",
+    "TouchableNativeFeedback",
+    "Touchable",
+    "RefreshControl",
+    // the global tag-to-handler registry this platform deliberately lacks
+    "GestureStateManager",
+    "VirtualGestureDetector",
+    "InterceptingGestureDetector",
+    // 2.x aliases for components whose 3.x spelling is implemented or refused
+    "LegacyRectButton",
+    "LegacyScrollView",
+    "LegacyDrawerLayoutAndroid",
+  ]) {
+    const symbol = (entry as unknown as Record<string, unknown>)[name]
+    expect(symbol, `${name} should still be exported`).toBeDefined()
+    expect(() => (symbol as () => void)(), name).toThrow(
+      new RegExp(`\`${name}\` is not supported`),
+    )
+  }
+})
+
+it("builds every recognizer in the namespace, none of which throws now", () => {
+  // This assertion has been inverted twice and that history is the point: it
+  // began as "the namespace throws", became "each unimplemented static throws
+  // by name", and is now "there are none". All ten build.
   expect(Gesture.Pan()).toBeTruthy()
   expect(Gesture.Tap()).toBeTruthy()
   expect(Gesture.LongPress()).toBeTruthy()
+  expect(Gesture.Native()).toBeTruthy()
   // The three composers stopped throwing when the relation maps landed; they
   // are list-builders over those maps and needed nothing else.
   expect(Gesture.Simultaneous(Gesture.Pan(), Gesture.Tap())).toBeTruthy()
@@ -134,14 +196,44 @@ it("throws per unimplemented recognizer rather than for the namespace", () => {
   // they build here and only DO anything on a machine with a touchpad.
   expect(Gesture.Pinch()).toBeTruthy()
   expect(Gesture.Rotation()).toBeTruthy()
-  expect(() => (Gesture.Fling as () => void)()).toThrow(
-    /`Gesture\.Fling` is not supported/,
-  )
-  // And an enum comparison, which is the other way these symbols get reached.
-  // `Directions` has no handler that could produce one, so it still refuses.
-  expect(() => (Directions as { LEFT: number }).LEFT).toThrow(
-    /`Directions` is not supported/,
-  )
+  // And the last four. `Fling` and `Manual` run off the pointer like `Pan`
+  // does; `Hover` runs off GtkEventControllerMotion, which a plain mouse
+  // drives; `ForceTouch` runs off GtkGestureStylus and needs a tablet tool.
+  expect(Gesture.Fling().kind).toBe("fling")
+  expect(Gesture.Manual().kind).toBe("manual")
+  expect(Gesture.Hover().kind).toBe("hover")
+  expect(Gesture.ForceTouch().kind).toBe("forceTouch")
+})
+
+it("gives the four enums upstream's numbers, under the names an app imports", () => {
+  // `Directions` used to refuse, on the reasoning that an enum is meaningless
+  // without a handler that could produce one. That reasoning expired the
+  // moment `Gesture.Fling()` shipped — and this enum is not merely harmless
+  // now, it is REQUIRED: `.direction()` takes these bits, so a refusal would
+  // make the recognizer unusable in its documented spelling.
+  //
+  // A wrong bit is the quiet kind of wrong, exactly like a wrong `State`
+  // number: `direction === Directions.LEFT` goes on compiling, goes on
+  // running, and answers false. Transcribed from 3.1.0's `src/Directions.ts`,
+  // `src/PointerType.ts`, `handlers/gestureHandlerCommon.ts` and
+  // `handlers/gestures/hoverGesture.ts`.
+  expect(Directions).toEqual({ RIGHT: 1, LEFT: 2, UP: 4, DOWN: 8 })
+  expect(HoverEffect).toEqual({ NONE: 0, LIFT: 1, HIGHLIGHT: 2 })
+  expect(MouseButton).toEqual({
+    LEFT: 1,
+    RIGHT: 2,
+    MIDDLE: 4,
+    BUTTON_4: 8,
+    BUTTON_5: 16,
+    ALL: 31,
+  })
+  expect(PointerType).toEqual({
+    TOUCH: 0,
+    STYLUS: 1,
+    MOUSE: 2,
+    KEY: 3,
+    OTHER: 4,
+  })
 })
 
 it("gives State upstream's six numbers, under the name an app imports", () => {

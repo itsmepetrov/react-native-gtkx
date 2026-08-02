@@ -19,7 +19,6 @@
 // `onTouchesCancelled` is `onTouchesCancel`, and `onChange` — which the hook
 // spelling dropped — is an ordinary callback over the same payload, because
 // the payload already carries `changeX`/`changeY`.
-import { createUnsupportedFactory } from "../unsupported-export"
 import {
   exclusiveGestures,
   raceGestures,
@@ -43,12 +42,6 @@ type TouchHandler = (
   event: GestureTouchEvent,
   manager: GestureStateManagerApi,
 ) => void
-
-const unsupported = createUnsupportedFactory(
-  "react-native-gesture-handler",
-  "Pan, Tap, LongPress, Native, Pinch, Rotation, GestureDetector, the cross-gesture " +
-    "relations and the three composers are implemented. See docs/api.md.",
-)
 
 /**
  * Everything upstream's `BaseGesture` has, which is everything the three
@@ -447,12 +440,123 @@ export class RotationGestureBuilder extends BaseGestureBuilder {
 }
 
 /**
- * `Gesture`, the namespace of statics.
+ * `Gesture.Fling()` — a directional swipe, and the one DISCRETE gesture with a
+ * velocity criterion.
  *
- * `Pan`, `Tap`, `LongPress`, `Native`, `Pinch`, `Rotation` and the three
- * composers are real. The other four throw by name, and that is the point:
- * docs/research/gestures.md records the failure mode this repo most wants to
- * avoid — a component that accepts its props, renders, and does nothing.
+ * No `onUpdate`/`onChange`, and that is upstream's shape rather than an
+ * omission: `FlingGesture` extends `BaseGesture` and not
+ * `ContinousBaseGesture`, because a fling activates and ends in the same
+ * breath (see ./fling) and there is never an update to report between them.
+ * Offering the methods would invite a callback that cannot fire.
+ */
+export class FlingGestureBuilder extends BaseGestureBuilder {
+  readonly kind = "fling" as const
+
+  /** A BITMASK of `Directions`; several are one value, OR'd together. */
+  direction(direction: number): this {
+    this.config.direction = direction
+    return this
+  }
+  numberOfPointers(count: number): this {
+    this.config.numberOfPointers = count
+    return this
+  }
+}
+
+/**
+ * `Gesture.Manual()` — no configuration at all, because there is nothing to
+ * configure: the app drives the state machine through the manager handed to
+ * the `onTouches*` callbacks.
+ *
+ * Verified against 3.1.0, where `ManualGesture` adds zero builder methods over
+ * `ContinousBaseGesture` and v3's `ManualGestureProperties` is
+ * `Record<string, never>`. Continuous, so `onUpdate`/`onChange` are here.
+ */
+export class ManualGestureBuilder extends BaseGestureBuilder {
+  readonly kind = "manual" as const
+
+  onUpdate(callback: (event: GestureEventPayload) => void): this {
+    this.config.onUpdate = callback
+    return this
+  }
+  onChange(callback: (event: GestureEventPayload) => void): this {
+    this.config.onChange = callback
+    return this
+  }
+}
+
+/**
+ * `Gesture.Hover()` — the pointer being over the view, with no button down.
+ *
+ * `effect()` is upstream's one knob and it is iOS-only there; it is recorded
+ * and inert here, exactly as it is inert in upstream's own web handler, which
+ * never branches on it either. Continuous, so it reports travel.
+ */
+export class HoverGestureBuilder extends BaseGestureBuilder {
+  readonly kind = "hover" as const
+
+  effect(effect: number): this {
+    this.config.hoverEffect = effect
+    return this
+  }
+
+  onUpdate(callback: (event: GestureEventPayload) => void): this {
+    this.config.onUpdate = callback
+    return this
+  }
+  onChange(callback: (event: GestureEventPayload) => void): this {
+    this.config.onChange = callback
+    return this
+  }
+}
+
+/**
+ * `Gesture.ForceTouch()` — pressure, and the one recognizer in this module
+ * whose input the test rig cannot fully produce. See ./force-touch, which
+ * says so at length, and docs/api.md, which says it where an app will read it.
+ *
+ * Continuous, matching upstream's `ContinousBaseGesture`.
+ */
+export class ForceTouchGestureBuilder extends BaseGestureBuilder {
+  readonly kind = "forceTouch" as const
+
+  minForce(force: number): this {
+    this.config.minForce = force
+    return this
+  }
+  maxForce(force: number): this {
+    this.config.maxForce = force
+    return this
+  }
+  /** Haptics. Recorded and inert: there is no haptic device on this platform. */
+  feedbackOnActivation(value: boolean): this {
+    this.config.feedbackOnActivation = value
+    return this
+  }
+
+  onUpdate(callback: (event: GestureEventPayload) => void): this {
+    this.config.onUpdate = callback
+    return this
+  }
+  onChange(callback: (event: GestureEventPayload) => void): this {
+    this.config.onChange = callback
+    return this
+  }
+}
+
+/**
+ * `Gesture`, the namespace of statics — all ten of them, and the three
+ * composers.
+ *
+ * Nothing here throws any more. The four that used to (`Fling`, `Hover`,
+ * `Manual`, `ForceTouch`) are the last of upstream's surface and the reasons
+ * they were refused have been re-examined one at a time rather than inherited:
+ * `Fling` and `Manual` were always reachable and merely unwritten, `Hover` was
+ * refused on a judgement about the rig that was simply wrong (a mouse hovers,
+ * and the virtual pointer moves a mouse), and `ForceTouch` is the one that
+ * needs hardware — it ships with upstream's documented semantics and an
+ * explicit note about what is unverified, rather than a refusal that says
+ * nothing.
  */
 export const Gesture = {
   Pan: (): PanGestureBuilder => new PanGestureBuilder(),
@@ -469,8 +573,8 @@ export const Gesture = {
     exclusiveGestures(...gestures),
   Pinch: (): PinchGestureBuilder => new PinchGestureBuilder(),
   Rotation: (): RotationGestureBuilder => new RotationGestureBuilder(),
-  Fling: unsupported("Gesture.Fling"),
-  Hover: unsupported("Gesture.Hover"),
-  Manual: unsupported("Gesture.Manual"),
-  ForceTouch: unsupported("Gesture.ForceTouch"),
+  Fling: (): FlingGestureBuilder => new FlingGestureBuilder(),
+  Hover: (): HoverGestureBuilder => new HoverGestureBuilder(),
+  Manual: (): ManualGestureBuilder => new ManualGestureBuilder(),
+  ForceTouch: (): ForceTouchGestureBuilder => new ForceTouchGestureBuilder(),
 }

@@ -32,7 +32,6 @@
 // because whether a `Pan` holds the lock is a fact about this interaction.
 import type { GestureResponderEvent } from "../responder/types"
 import type { Orchestrator, Participant } from "./orchestrator"
-import type { TouchpadSample } from "./touchpad"
 import {
   GESTURE_STATE,
   POINTER_TYPE,
@@ -106,6 +105,14 @@ export type RecognizerView = {
    */
   scale: number
   rotation: number
+  /**
+   * `ForceTouch`: the pressure, normalised to `[0, 1]`.
+   *
+   * 0 for every other kind — an input with no pressure axis reports no
+   * pressure, and a predicate reading this on the wrong kind gets the number
+   * that is true rather than one that looks plausible.
+   */
+  force: number
 }
 
 /**
@@ -126,6 +133,14 @@ export type ReleaseOutcome =
   | { kind: "fail" }
   /** Not over — wait this long for another press, then fail. */
   | { kind: "await"; delay: number }
+  /**
+   * Nothing at all: stay BEGAN, with no timer and no decision.
+   *
+   * `Manual` alone, and it is upstream's documented rule for it — "it will not
+   * fail when all the pointers are lifted from the screen". A gesture the app
+   * drives has no business being failed by a lift the app did not ask about.
+   */
+  | { kind: "hold" }
 
 /**
  * What a recognizer kind contributes: predicates over the current state of
@@ -177,22 +192,42 @@ export type RecognizerDecider = {
    */
   claimsResponder?: boolean
   /**
+   * Activating IS the whole gesture: end it, successfully, in the same breath.
+   *
+   * `Fling` alone, and it is upstream's own shape rather than a shortcut —
+   * `FlingGestureHandler.activate()` is overridden to call `this.end()`
+   * immediately after `super.activate()`. A fling is a verdict about a motion
+   * that has already happened, so there is nothing left to report once it is
+   * reached: BEGAN -> ACTIVE -> END, synchronously, with `onStart` and `onEnd`
+   * one after the other and no `onUpdate` between them.
+   */
+  endsOnActivate?: boolean
+  /**
    * Which entry surface drives this kind. Absent means `"pointer"`.
    *
-   * The one structural concession slice 5 makes, and it is about where events
-   * COME FROM rather than about what happens to them. `Pinch` and `Rotation`
-   * are fed by `GtkGestureZoom`/`GtkGestureRotate` because a touchpad pinch is
-   * not in the pointer stream at all — no button goes down, so there is no GTK
-   * sequence and no responder session. Everything downstream is this same
-   * machine: the same states, the same callbacks, the same payload, the same
-   * `tryActivate` and the same relation maps.
+   * The one structural concession this module makes, and it is about where
+   * events COME FROM rather than about what happens to them. Three kinds of
+   * input are simply not in the pointer stream:
    *
-   * Exactly one surface is live per recognizer. A `"touchpad"` kind's
-   * touch/responder props are empty, so a mouse press cannot begin a pinch; a
-   * `"pointer"` kind's `touchpad` channel is inert, so a pinch cannot begin a
-   * pan.
+   *   - `"touchpad"` — `Pinch`/`Rotation`, fed by
+   *     `GtkGestureZoom`/`GtkGestureRotate`, because a touchpad pinch presses
+   *     no button and so opens no GTK sequence and no responder session;
+   *   - `"hover"` — `Hover`, fed by `GtkEventControllerMotion`, because a
+   *     pointer that is merely OVER a view has pressed nothing either, and
+   *     RN's touch props fire only from a press;
+   *   - `"stylus"` — `ForceTouch`, fed by `GtkGestureStylus`, because pressure
+   *     is a tablet axis and `wl_pointer` has none.
+   *
+   * Everything downstream of the entry point is this same machine: the same
+   * states, the same callbacks, the same payload, the same `tryActivate` and
+   * the same relation maps. There is no second arbitration path.
+   *
+   * Exactly one surface is live per recognizer. A non-pointer kind's
+   * touch/responder props are empty, so a mouse press cannot begin a pinch or
+   * a hover; a `"pointer"` kind's controller channel is inert, so a pinch
+   * cannot begin a pan.
    */
-  source?: "pointer" | "touchpad"
+  source?: "pointer" | "touchpad" | "hover" | "stylus"
 }
 
 type Timer = ReturnType<typeof setTimeout> | null
@@ -276,7 +311,10 @@ type Runtime = {
   rotationVelocity: number
   changeFromScale: number
   changeFromRotation: number
-  /** Wall clock of the last touchpad sample, for the per-second velocities. */
+  /** `ForceTouch`'s pressure, and the value the previous update reported. */
+  force: number
+  changeFromForce: number
+  /** Wall clock of the last controller sample, for the per-second velocities. */
   lastSampleTime: number
 }
 
@@ -312,6 +350,8 @@ const newRuntime = (): Runtime => ({
   rotationVelocity: 0,
   changeFromScale: 1,
   changeFromRotation: 0,
+  force: 0,
+  changeFromForce: 0,
   lastSampleTime: 0,
 })
 
@@ -396,21 +436,58 @@ const contains = (rect: Rect, x: number, y: number): boolean =>
   y <= rect.y + rect.height
 
 /**
- * The touchpad entry surface, for the kinds GTK feeds rather than the pointer.
- * Null on every other kind — see `RecognizerDecider.source`.
+ * One frame from whichever GTK controller feeds a non-pointer kind, in the
+ * terms the recognizer reads.
+ *
+ * ONE sample type for three sources rather than three, because what the
+ * machine needs from all of them is the same short list and only two fields
+ * differ per kind. `scale` and `rotation` are CUMULATIVE since GTK recognized
+ * the gesture, which is what `gtk_gesture_zoom_get_scale_delta` ("the zooming
+ * difference since the gesture was recognized, hence the starting point is
+ * considered 1:1") and `gtk_gesture_rotate_get_angle_delta` already are — the
+ * same shape as upstream's own accumulators, so nothing is re-derived on the
+ * way in.
  */
-export type TouchpadChannel = {
-  begin: (sample: TouchpadSample) => void
-  update: (sample: TouchpadSample) => void
+export type ControllerSample = {
+  /**
+   * Where the gesture is, in the gesture VIEW's own coordinates.
+   *
+   * A pinch's bounding-box centre, a hover's pointer, a stylus tip: three
+   * names for the position the payload's `x`/`y`, `focalX`/`focalY` and
+   * `anchorX`/`anchorY` are all filled from, which is why they are one pair
+   * of fields and not three.
+   */
+  x: number
+  y: number
+  /** `Pinch`: 1 at the start of the gesture, above 1 for a spread. */
+  scale?: number
+  /** `Rotation`: 0 at the start; radians, positive clockwise. */
+  rotation?: number
+  /** `ForceTouch`: pressure normalised to `[0, 1]`. */
+  force?: number
+  /** Pointers GTK reported. A touchpad pinch is always two; a hover is one. */
+  pointers: number
+}
+
+/**
+ * The non-pointer entry surface, for the kinds GTK feeds rather than the
+ * pointer stream. Null on every pointer kind — see `RecognizerDecider.source`.
+ */
+export type ControllerChannel = {
+  begin: (sample: ControllerSample) => void
+  update: (sample: ControllerSample) => void
   end: () => void
   cancel: () => void
 }
 
 export type Recognizer = {
-  /** The responder props to put on the gesture's view. Empty for a touchpad kind. */
+  /** The responder props to put on the gesture's view. Empty for a controller kind. */
   handlers: Record<string, (event: GestureResponderEvent) => boolean | void>
-  /** Where `GtkGestureZoom`/`GtkGestureRotate` deliver, or null. */
-  touchpad: TouchpadChannel | null
+  /**
+   * Where `GtkGestureZoom`/`GtkGestureRotate`/`GtkEventControllerMotion`/
+   * `GtkGestureStylus` deliver, or null for a pointer kind.
+   */
+  controller: ControllerChannel | null
   /** This gesture's seat in the arbitration loop. */
   participant: Participant
   /** Cancels any pending timer and leaves the loop; called on unmount. */
@@ -433,6 +510,17 @@ export const createRecognizer = (
 
   const isEnabled = (): boolean => readConfig().enabled !== false
 
+  /**
+   * What kind of device this gesture's events come from.
+   *
+   * `MOUSE` for everything except `ForceTouch`, and that is not a default with
+   * a hole in it: this platform has one pointer and no touch injection, so
+   * every other kind really is a mouse. A pressure reading can only have come
+   * from a tablet tool, so the one kind that reads pressure reports `STYLUS`.
+   */
+  const pointerType =
+    decider.source === "stylus" ? POINTER_TYPE.STYLUS : POINTER_TYPE.MOUSE
+
   const setState = (next: GestureStateValue): void => {
     runtime.oldState = runtime.state
     runtime.state = next
@@ -453,6 +541,7 @@ export const createRecognizer = (
     taps: runtime.taps,
     scale: runtime.scale,
     rotation: runtime.rotation,
+    force: runtime.force,
   })
 
   /**
@@ -477,7 +566,7 @@ export const createRecognizer = (
     return {
       handlerTag,
       numberOfPointers: pointerCount,
-      pointerType: POINTER_TYPE.MOUSE,
+      pointerType,
       state: runtime.state,
       oldState: runtime.oldState,
       // RNGH's `x`/`y` are relative to the GESTURE's view. The responder
@@ -521,6 +610,14 @@ export const createRecognizer = (
         : runtime.rotation,
       anchorX: bounds ? pageX - bounds.x : (fallback?.locationX ?? pageX),
       anchorY: bounds ? pageY - bounds.y : (fallback?.locationY ?? pageY),
+      force: runtime.force,
+      // A DIFFERENCE, like `rotationChange` and unlike `scaleChange`, because
+      // upstream's `changeEventCalculator` for `ForceTouch` subtracts. On the
+      // first update it is the force itself, which is upstream's rule there
+      // and the same rule `changeX` follows.
+      forceChange: runtime.hasEmittedUpdate
+        ? runtime.force - runtime.changeFromForce
+        : runtime.force,
       velocity:
         decider.kind === "rotation"
           ? runtime.rotationVelocity
@@ -563,7 +660,7 @@ export const createRecognizer = (
       allTouches: event.nativeEvent.touches.map(toData),
       changedTouches: event.nativeEvent.changedTouches.map(toData),
       state: runtime.state,
-      pointerType: POINTER_TYPE.MOUSE,
+      pointerType,
     }
   }
 
@@ -700,6 +797,21 @@ export const createRecognizer = (
     runtime.hasActivated = true
   }
 
+  /**
+   * `Fling`'s ending, which is the same instant as its activation.
+   *
+   * Called at the tail of every path into ACTIVE, so the one-shot kind behaves
+   * identically however it got there — a grant, an authorization without one,
+   * or a controller channel. Upstream reaches this by overriding `activate()`
+   * to call `end()`; a flag on the decider is the same statement without a
+   * subclass to put it on.
+   */
+  const endIfOneShot = (): void => {
+    if (decider.endsOnActivate === true) {
+      finalize(payloadNow, true)
+    }
+  }
+
   /** Becoming ACTIVE without a grant to carry the position or the payload. */
   const activateHere = (): void => {
     enterActive(runtime.lastX, runtime.lastY)
@@ -710,6 +822,7 @@ export const createRecognizer = (
     // grants it, and an ancestor can still win.
     env.orchestrator.activated(participant)
     readConfig().onActivate?.(payload)
+    endIfOneShot()
   }
 
   /**
@@ -799,22 +912,69 @@ export const createRecognizer = (
    */
   const stateNow = (): GestureStateValue => runtime.state
 
+  /**
+   * The four transitions an app may drive by hand — upstream's
+   * `GestureStateManager`, and the whole of what `Gesture.Manual()` is.
+   *
+   * These used to be two real transitions and two deferrals: `fail()` and
+   * `end()` both set a flag that the next `onTouchMove` noticed, which was
+   * enough while the only caller was a `Pan` narrowing its own criteria, and
+   * is not enough for a gesture that has NO criteria. `Manual` is driven
+   * entirely from here, so each of the four has to mean what upstream's means,
+   * at the moment it is called:
+   *
+   *   begin     UNDETERMINED -> BEGAN
+   *   activate  BEGAN -> ACTIVE, through the orchestrator like every other
+   *             activation — a manual gesture takes part in arbitration
+   *             rather than bypassing it, which is the point of having it
+   *   end       BEGAN or ACTIVE -> END, successfully
+   *   fail      BEGAN or ACTIVE -> FAILED
+   *
+   * `activate()` is FORCED past `manualActivation`, exactly as upstream's web
+   * state manager calls `handler.activate(true)`: that flag exists to stop the
+   * gesture's own predicates activating it, and this is not them.
+   */
   const stateManager: GestureStateManagerApi = {
     begin: () => {
       if (runtime.state === GESTURE_STATE.UNDETERMINED) {
         setState(GESTURE_STATE.BEGAN)
+        readConfig().onBegin?.(payloadNow())
       }
     },
     activate: () => {
+      // Upstream forces the BEGAN step first when asked to activate a gesture
+      // that never began, "to preserve the correct state transition flow" —
+      // and here it also matters that the orchestrator has been told about the
+      // gesture, which `record()` on the press is what does.
+      if (runtime.state === GESTURE_STATE.UNDETERMINED) {
+        setState(GESTURE_STATE.BEGAN)
+        env.orchestrator.record(participant)
+        readConfig().onBegin?.(payloadNow())
+      }
       if (runtime.state === GESTURE_STATE.BEGAN) {
         decide()
       }
     },
     fail: () => {
-      runtime.forcedFailure = true
+      if (
+        runtime.state === GESTURE_STATE.BEGAN ||
+        runtime.state === GESTURE_STATE.ACTIVE
+      ) {
+        // Kept as well as acted on: a gesture failed from inside
+        // `onTouchesDown` has not reached the move that would have consulted
+        // its predicates, and the flag is what stops a later move reviving it.
+        runtime.forcedFailure = true
+        failNow()
+      }
     },
     end: () => {
-      runtime.forcedFailure = true
+      if (
+        runtime.state === GESTURE_STATE.BEGAN ||
+        runtime.state === GESTURE_STATE.ACTIVE
+      ) {
+        runtime.forcedFailure = true
+        finalize(payloadNow, true)
+      }
     },
   }
 
@@ -1072,6 +1232,7 @@ export const createRecognizer = (
       const payload = payloadOf(event)
       env.orchestrator.activated(participant)
       readConfig().onActivate?.(payload)
+      endIfOneShot()
     },
 
     onResponderMove: (event: GestureResponderEvent) => {
@@ -1125,6 +1286,15 @@ export const createRecognizer = (
       runtime.taps += 1
       const outcome = decider.onRelease?.(viewOf(), config) ?? { kind: "fail" }
 
+      if (outcome.kind === "hold") {
+        // `Manual`: the pointer lifting decides nothing, because nothing about
+        // this gesture is decided by the pointer. It stays BEGAN, holding no
+        // lock and running no timer, until the app says otherwise — and the
+        // `onTouchesUp` above has just given it the state manager to say it
+        // with. The next press resets it, as it resets any BEGAN gesture.
+        return
+      }
+
       if (outcome.kind === "await") {
         // Not over. The gesture stays BEGAN with its count intact, holding no
         // lock, and the next press continues it — or this timer fails it.
@@ -1139,7 +1309,15 @@ export const createRecognizer = (
       }
 
       if (outcome.kind === "fail") {
-        finalizeAt(event, false)
+        // `fail()` rather than a bare `finalizeAt(..., false)`, because the
+        // payload has to carry the state the gesture ENDED in and this path
+        // was reporting BEGAN. Upstream's `fail()` moves to FAILED first, and
+        // a consumer comparing `event.state` against `State.FAILED` — which is
+        // exactly what two of the four target libraries do with `State` — was
+        // being told the gesture was still deciding. `Fling` made it visible
+        // because failing on the lift is its ordinary ending rather than an
+        // edge case, but `Tap` and `Pan` were reporting it too.
+        fail(event)
         return
       }
 
@@ -1193,8 +1371,16 @@ export const createRecognizer = (
   }
 
   /**
-   * The second entry surface: GTK's touchpad gestures, for the two kinds the
-   * pointer stream cannot carry.
+   * The second entry surface: a GTK controller, for the kinds the pointer
+   * stream cannot carry.
+   *
+   * THREE sources arrive here and the machine cannot tell them apart, which is
+   * the point — `GtkGestureZoom`/`GtkGestureRotate` for `Pinch`/`Rotation`,
+   * `GtkEventControllerMotion` for `Hover`, `GtkGestureStylus` for
+   * `ForceTouch`. What they have in common is everything that matters: no
+   * button goes down, so there is no GTK sequence, no responder session and
+   * nothing to claim; and the numbers they carry are already in the shape the
+   * payload wants.
    *
    * Everything below the entry point is the machine above, unchanged. `begin`
    * does what `onTouchStart` does (record with the orchestrator, BEGAN,
@@ -1203,23 +1389,23 @@ export const createRecognizer = (
    * `onTouchEnd` does. `decide()` is the same call into the same
    * `tryActivate`, and `finalize` is the same one exit.
    *
-   * ONE DIFFERENCE FROM `Pan`, and it is upstream's: `scale` and `rotation`
-   * are NOT re-based when the gesture activates. Translation is, because a pan
-   * that reported its `activeOffset` as travel would jump the content by the
-   * threshold on every drag. Upstream's `scale` is not — `resetProgress()`
-   * resets it only while the handler is not yet ACTIVE, so the value that
-   * crossed the activation threshold is the value the first `onUpdate`
-   * reports. GTK measures from its own recognition point for the same reason,
-   * so the two origins already agree and nothing is re-derived.
+   * ONE DIFFERENCE FROM `Pan`, and it is upstream's: `scale`, `rotation` and
+   * `force` are NOT re-based when the gesture activates. Translation is,
+   * because a pan that reported its `activeOffset` as travel would jump the
+   * content by the threshold on every drag. Upstream's `scale` is not —
+   * `resetProgress()` resets it only while the handler is not yet ACTIVE, so
+   * the value that crossed the activation threshold is the value the first
+   * `onUpdate` reports. GTK measures from its own recognition point for the
+   * same reason, so the two origins already agree and nothing is re-derived.
    */
-  const touchpad = {
-    begin: (sample: TouchpadSample): void => {
+  const controller: ControllerChannel = {
+    begin: (sample: ControllerSample): void => {
       if (!isEnabled() || runtime.state !== GESTURE_STATE.UNDETERMINED) {
         return
       }
       const bounds = env.boundsInWindow()
-      const pageX = (bounds?.x ?? 0) + sample.focalX
-      const pageY = (bounds?.y ?? 0) + sample.focalY
+      const pageX = (bounds?.x ?? 0) + sample.x
+      const pageY = (bounds?.y ?? 0) + sample.y
       if (
         bounds !== null &&
         !contains(hitSlopRect(bounds, readConfig().hitSlop), pageX, pageY)
@@ -1235,6 +1421,9 @@ export const createRecognizer = (
       runtime.pressY = pageY
       runtime.lastX = pageX
       runtime.lastY = pageY
+      runtime.scale = sample.scale ?? 1
+      runtime.rotation = sample.rotation ?? 0
+      runtime.force = sample.force ?? 0
       runtime.pointerCount = sample.pointers
       runtime.maxPointerCount = sample.pointers
       setState(GESTURE_STATE.BEGAN)
@@ -1242,39 +1431,68 @@ export const createRecognizer = (
       // `onTouchStart`, and the same islands answer follows from it.
       env.orchestrator.record(participant)
       readConfig().onBegin?.(payloadNow())
+      // `Hover` activates on the crossing itself: upstream's
+      // `onPointerMoveOver` calls `begin()` and `activate()` one after the
+      // other, because a pointer that is over the view IS the gesture and
+      // there is nothing further to wait for. Asked through the decider rather
+      // than flagged, so it is the same question `onTouchStart` asks of a
+      // `Native` that activates on the press.
+      if (
+        readConfig().manualActivation !== true &&
+        decider.shouldActivate(viewOf(), readConfig())
+      ) {
+        decide()
+      }
     },
 
-    update: (sample: TouchpadSample): void => {
+    update: (sample: ControllerSample): void => {
       if (
         runtime.state !== GESTURE_STATE.BEGAN &&
         runtime.state !== GESTURE_STATE.ACTIVE
       ) {
         return
       }
+      const scale = sample.scale ?? 1
+      const rotation = sample.rotation ?? 0
       const now = Date.now()
       const elapsed = now - runtime.lastSampleTime
       if (elapsed > 0) {
         // Per SECOND, which upstream documents and neither of its web paths
         // computes. See `GestureEventPayload.velocity`.
-        runtime.scaleVelocity =
-          ((sample.scale - runtime.scale) / elapsed) * 1000
+        runtime.scaleVelocity = ((scale - runtime.scale) / elapsed) * 1000
         runtime.rotationVelocity =
-          ((sample.rotation - runtime.rotation) / elapsed) * 1000
+          ((rotation - runtime.rotation) / elapsed) * 1000
         runtime.lastSampleTime = now
       }
-      runtime.scale = sample.scale
-      runtime.rotation = sample.rotation
+      runtime.scale = scale
+      runtime.rotation = rotation
+      runtime.force = sample.force ?? 0
       runtime.pointerCount = sample.pointers
       runtime.maxPointerCount = Math.max(
         runtime.maxPointerCount,
         sample.pointers,
       )
       const bounds = env.boundsInWindow()
-      runtime.lastX = (bounds?.x ?? 0) + sample.focalX
-      runtime.lastY = (bounds?.y ?? 0) + sample.focalY
+      runtime.lastX = (bounds?.x ?? 0) + sample.x
+      runtime.lastY = (bounds?.y ?? 0) + sample.y
 
       const config = readConfig()
+      // A kind that can be cancelled by its own numbers while ACTIVE gets the
+      // same treatment `advance` gives `LongPress` — `ForceTouch` is the one
+      // that wants it, because `maxForce` keeps applying after activation.
+      if (
+        runtime.state === GESTURE_STATE.ACTIVE &&
+        decider.shouldCancelWhileActive?.(viewOf(), config) === true
+      ) {
+        setState(GESTURE_STATE.CANCELLED)
+        finalize(payloadNow, false)
+        return
+      }
       if (runtime.state === GESTURE_STATE.BEGAN) {
+        if (decider.shouldFail(viewOf(), config)) {
+          failNow()
+          return
+        }
         if (config.manualActivation === true) {
           return
         }
@@ -1293,6 +1511,7 @@ export const createRecognizer = (
         // granted the responder.
         runtime.changeFromScale = runtime.scale
         runtime.changeFromRotation = runtime.rotation
+        runtime.changeFromForce = runtime.force
         return
       }
       const payload = payloadNow()
@@ -1302,6 +1521,7 @@ export const createRecognizer = (
       runtime.changeFromY = payload.translationY
       runtime.changeFromScale = runtime.scale
       runtime.changeFromRotation = runtime.rotation
+      runtime.changeFromForce = runtime.force
       runtime.hasEmittedUpdate = true
     },
 
@@ -1329,13 +1549,16 @@ export const createRecognizer = (
     },
   }
 
+  const drivenByController =
+    decider.source !== undefined && decider.source !== "pointer"
+
   return {
-    // Exactly one surface is live. A touchpad kind that also answered the
+    // Exactly one surface is live. A controller kind that also answered the
     // touch props would begin on a mouse press — `onBegin` on every click, on
-    // a gesture that cannot happen — and a pointer kind with a live touchpad
+    // a gesture that cannot happen — and a pointer kind with a live controller
     // channel would pan on a pinch.
-    handlers: decider.source === "touchpad" ? {} : handlers,
-    touchpad: decider.source === "touchpad" ? touchpad : null,
+    handlers: drivenByController ? {} : handlers,
+    controller: drivenByController ? controller : null,
     participant,
     dispose: () => {
       clearActivationTimer()
