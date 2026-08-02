@@ -13,11 +13,14 @@ import type {
 import {
   allocateChild,
   attachRnLayout,
+  cacheChildOrder,
   detachRnLayout,
   Gtk,
+  invalidateZOrder,
   measureWidget,
   queueAllocate,
   queueResize,
+  setZIndex,
 } from "../gtkx/bridge/index"
 import {
   perfAddTime,
@@ -203,6 +206,32 @@ export const useLayoutChild = (
   useLayoutEffect(() => {
     widgetRef.current?.setOverflow(WIDGET_OVERFLOW[overflow])
   }, [widgetRef, overflow])
+
+  // RN's `zIndex`, which is neither a Yoga input nor a CSS declaration: the
+  // PARENT container sorts its snapshot and its picking by it
+  // (gtkx/bridge/view-box.ts). Applied unconditionally, as RN does — CSS
+  // needs a non-static `position` for `z-index` to take effect and RN does
+  // not, so nothing here consults `position`. `undefined` is 0, and negative
+  // values are legal (they paint below unraised siblings).
+  const zIndex = flat?.zIndex ?? 0
+  useLayoutEffect(() => {
+    const widget = widgetRef.current
+    if (!widget) {
+      return
+    }
+    setZIndex(widget, zIndex)
+    return () => {
+      // Cleared before the widget leaves the tree, so the container that is
+      // losing it drops its cached order and the process-wide "anything
+      // raised at all" counter comes back down to zero.
+      setZIndex(widget, 0)
+      const parentWidget = host.widgetRef.current
+      if (parentWidget) {
+        invalidateZOrder(parentWidget)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zIndex])
 
   // RN transforms are visual only: the widget keeps the box Yoga gave it, so
   // a transform never touches the shadow tree — it only asks the parent
@@ -423,6 +452,12 @@ export const useRnContainer = (
     const widget = widgetRef.current
     if (widget) {
       syncChildOrder(widget, node)
+      // The paint order caches a child list, and a commit is the only thing
+      // that can change one without any zIndex being written — a mount, an
+      // unmount, or a MOVE. Dropping it here is a WeakMap delete on a
+      // container that has a raised child and nothing at all on one that does
+      // not (`invalidateZOrder` only redraws when there was a cache to drop).
+      invalidateZOrder(widget)
     }
   })
 
@@ -455,7 +490,13 @@ export const useRnContainer = (
         optionsRef.current?.beforeAllocate?.(width, height)
         let child = widget.getFirstChild()
         let children = 0
+        // Collected while this loop walks the sibling chain anyway, and handed
+        // to the paint pass, which would otherwise have to walk it again: each
+        // getNextSibling() mints a native wrapper and is the single most
+        // expensive thing a JS snapshot vfunc does (docs/research/z-index.md).
+        const order: Gtk.Widget[] = []
         while (child) {
+          order.push(child)
           const rect = getStoredRect(child)
           if (rect) {
             const offset = getStoredOffset(child)
@@ -477,6 +518,7 @@ export const useRnContainer = (
           }
           child = child.getNextSibling()
         }
+        cacheChildOrder(widget, order)
         perfAllocDepth -= 1
         if (perfEnabled) {
           perfCount("gtk.allocPass")

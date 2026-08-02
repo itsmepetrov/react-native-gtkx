@@ -213,6 +213,9 @@ purely as a performance switch with no caveat attached. The bug was
 was a BLANK list rather than a short one, and the prop is gone from the
 example. See [dnd-differential.md](dnd-differential.md).
 
+> **Fixed since, and shown fixed in this same example:**
+> [z-index.md](z-index.md). The paragraph below records the measurement.
+
 **The dragged view is painted behind the drop zone.** GTK4 has no z-order
 property: a container paints its children in sibling order. Upstream's
 `useSortable` and `useDraggable` both set `zIndex` in their animated style to
@@ -266,7 +269,8 @@ What would make it a shorter conversation:
   Metro side) is a small change, and it is what an app that wants the real
   package would use. Deliberately not added here, because its shape depends
   on the decision above.
-- **`zIndex` during a drag** is the one gap that makes the real library look
-  worse than it is. Reordering siblings for paint would reorder the layout
-  (`components/use-layout-child.ts` keeps the two in one order), so this needs
-  a real answer rather than a flag.
+- ~~**`zIndex` during a drag** is the one gap that makes the real library look
+  worse than it is.~~ Answered: paint order and layout order were separated in
+  the container widget rather than by reordering siblings, and picking follows
+  the paint. [z-index.md](z-index.md), and the chip in this example now rides
+  over the zone under a real pointer.

@@ -317,9 +317,12 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
 
     // --- sticky headers -------------------------------------------------
     // The RN model, faithfully: the REAL child is translated (no duplicate,
-    // state preserved). RN gives the pinned cell a zIndex; GTK's z-order is
-    // sibling paint order, so the active slot is reordered to be the LAST
-    // content child while pinned and restored afterwards. Per-frame movement
+    // state preserved). RN gives the pinned cell a zIndex; this reorders the
+    // active slot to be the LAST content child while pinned and restores it
+    // afterwards, which predates `zIndex` working (gtkx/bridge/view-box.ts)
+    // and is kept because it is exact: the slots here are the ScrollView's own
+    // and their Yoga order is rebuilt from the same list, so the reorder that
+    // would be a hazard for arbitrary app children is not one for these. Per-frame movement
     // goes through the rect-store offset fast path — zero React work while
     // scrolling.
     const stickySet = stickyHeaderIndices ?? []

@@ -424,7 +424,8 @@ already know.
   The gap that remains is which style properties can be driven per frame —
   and the row shape quoted above (`position: absolute`, `left: 0`, `right: 0`,
   `top: <shared value>`) is now one of the ones that can be:
-  [absolute-insets.md](absolute-insets.md). `zIndex` is still inert.
+  [absolute-insets.md](absolute-insets.md), and so is the `zIndex` beside it:
+  [z-index.md](z-index.md).
 - Any RNGH import beyond `GestureHandlerRootView` throws when it runs. That
   is deliberate — see the shim above — but it does mean an app that mixes
   real RNGH gestures into its drag-and-drop screens has work to do that no

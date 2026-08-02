@@ -202,6 +202,12 @@ know which of the two numbers moved.
 
 ## 6. `zIndex`, which is in that style object every frame
 
+> **Superseded — this section records how the gap was established, not the
+> current behaviour.** `zIndex` is implemented, for paint and for picking:
+> [z-index.md](z-index.md). The reasoning below is why it could not be done by
+> reordering the widgets, which is still true and is why the fix lives in the
+> container's `snapshot()` vfunc instead.
+
 Established rather than assumed. Today a `zIndex` in any style — animated or
 not — produces `[react-native-gtkx] Unknown style property "zIndex" is not
 supported and will be ignored` from the style splitter, once per session, and
@@ -239,7 +245,7 @@ it wants them painted. That is a real gap and it is recorded in
   the property back on the ordinary refusal path. Deliberate: the alternative
   is resolving a percentage against a container size that the animation is not
   watching.
-- **`zIndex`.** Above.
+- **`zIndex`.** Above — and implemented since, in [z-index.md](z-index.md).
 - **Everything else in animated-colors.md §4.** `width`, `height`, `flex`,
   `margin*`, `padding*`, `gap`, `aspectRatio`, `flexBasis`, `min*`/`max*`:
   unchanged, refused by name, for the reason measured there.

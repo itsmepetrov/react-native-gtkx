@@ -16,6 +16,7 @@ import {
   GtkLabel,
   measureWidget,
   Pango,
+  setPaintOnlyLeaf,
 } from "../gtkx/bridge/index"
 import { createMeasureHandle, type MeasureHandle } from "./measure"
 import { useLayoutChild, type LayoutEvent } from "./use-layout-child"
@@ -153,6 +154,18 @@ export const Text = ({
   })
 
   useImperativeHandle(ref, () => createMeasureHandle(widgetRef, node), [node])
+
+  // A GtkLabel is targetable by default and `Text` has no press prop, so the
+  // label only ever shadowed its own container in gtk_widget_pick(). Declaring
+  // it paint-only is what lets a raised sibling occlude the text inside a
+  // covered view — see the zIndex block in gtkx/bridge/view-box.ts. Nothing
+  // changes until something in the tree is actually raised.
+  useLayoutEffect(() => {
+    const label = widgetRef.current
+    if (label) {
+      setPaintOnlyLeaf(label)
+    }
+  }, [])
 
   // Keep the probe in sync with everything that affects metrics, then
   // invalidate the Yoga leaf so the next pass re-measures.

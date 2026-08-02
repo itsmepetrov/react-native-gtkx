@@ -41,6 +41,7 @@ import {
   queueAllocate,
   setBoxPassthrough,
   setPointerTarget,
+  setZIndex,
   type Gtk,
   type WidgetCss,
 } from "../gtkx/bridge/index"
@@ -143,12 +144,14 @@ const nodeId = (value: object): number => {
 export type AnimatedViewStyle = Omit<
   FlatStyle,
   | "opacity"
+  | "zIndex"
   | "transform"
   | DriveableColorProperty
   | InsetProperty
   | SizeProperty
 > & {
   opacity?: number | AnimatedNode
+  zIndex?: number | AnimatedNode
   transform?: (TransformPart | AnimatedTransformPart)[]
 } & Partial<Record<DriveableColorProperty, string | AnimatedNode>> &
   Partial<Record<InsetProperty, DimensionValue | AnimatedNode>> &
@@ -280,6 +283,7 @@ const splitAnimated = (
 ): {
   staticStyle: StyleProp
   opacity: AnimatedNode | null
+  zIndex: AnimatedNode | null
   slots: TransformSlot[]
   colors: ColorSlot[]
   sizes: SizeSlot[]
@@ -300,6 +304,7 @@ const splitAnimated = (
   collect(style)
 
   let opacity: AnimatedNode | null = null
+  let zIndex: AnimatedNode | null = null
   const slots: TransformSlot[] = []
   const colors: ColorSlot[] = []
   const sizes: SizeSlot[] = []
@@ -307,6 +312,13 @@ const splitAnimated = (
   if (isAnimatedNode(flat.opacity)) {
     opacity = flat.opacity
     delete flat.opacity
+  }
+  // `zIndex` is in `useSortable`'s style object on every frame and changes
+  // value about twice per drag. It takes the same door opacity does — one
+  // widget-level write, no Yoga, no CSS — so there is nothing to refuse.
+  if (isAnimatedNode(flat.zIndex)) {
+    zIndex = flat.zIndex
+    delete flat.zIndex
   }
   for (const property of DRIVEABLE_COLOR_PROPERTIES) {
     const value = flat[property]
@@ -426,6 +438,7 @@ const splitAnimated = (
   return {
     staticStyle: flat as StyleProp,
     opacity,
+    zIndex,
     slots: insetSlots.length > 0 ? [...insetSlots, ...slots] : slots,
     colors,
     sizes,
@@ -453,6 +466,7 @@ const useAnimatedBinding = (
   getWidget: () => Gtk.Widget | null,
   host: HostNode,
   opacity: AnimatedNode | null,
+  zIndex: AnimatedNode | null,
   slots: TransformSlot[],
   colors: ColorSlot[],
   sizes: SizeSlot[],
@@ -483,6 +497,7 @@ const useAnimatedBinding = (
   // this effect in the same commit that gives Yoga the new position.
   const bindingKey =
     (opacity ? `opacity#${nodeId(opacity)}` : "") +
+    (zIndex ? `zIndex#${nodeId(zIndex)}` : "") +
     slots
       .map((slot) => {
         const inset = slot.inset ? `~${slot.inset.sign}:${slot.inset.base}` : ""
@@ -566,6 +581,28 @@ const useAnimatedBinding = (
         }),
       })
       applyOpacity(opacity.__getValue())
+    }
+
+    // The container's paint and pick order (gtkx/bridge/view-box.ts). The
+    // write drops the container's cached order and queues a redraw; nothing
+    // is re-measured and nothing is re-allocated, because zIndex changes
+    // neither.
+    if (zIndex) {
+      const applyZIndex = (value: AnimatedValue): void => {
+        const widget = getWidgetRef.current()
+        if (!widget) {
+          return
+        }
+        const numeric = typeof value === "number" ? value : parseFloat(value)
+        setZIndex(widget, Number.isFinite(numeric) ? Math.round(numeric) : 0)
+      }
+      subscriptions.push({
+        node: zIndex,
+        id: zIndex.addListener(({ value }) => {
+          applyZIndex(value)
+        }),
+      })
+      applyZIndex(zIndex.__getValue())
     }
 
     // Colours take the other imperative door: a CSS provider private to this
@@ -698,7 +735,8 @@ const AnimatedView = ({
   ...responderProps
 }: AnimatedViewProps) => {
   const widgetRef = useRef<Gtk.Box | null>(null)
-  const { staticStyle, opacity, slots, colors, sizes } = splitAnimated(style)
+  const { staticStyle, opacity, zIndex, slots, colors, sizes } =
+    splitAnimated(style)
 
   const { host, node, cssClass } = useLayoutChild(widgetRef, {
     style: staticStyle,
@@ -733,6 +771,7 @@ const AnimatedView = ({
     () => widgetRef.current,
     host,
     opacity,
+    zIndex,
     slots,
     colors,
     sizes,
@@ -847,9 +886,11 @@ export const createAnimatedComponent = <C extends ElementType>(
     // by, exactly as it would be without the wrapper.
     const host = useHostNode()
     const handleRef = useRef<unknown>(null)
-    const { staticStyle, opacity, slots, colors, sizes } = splitAnimated(style)
+    const { staticStyle, opacity, zIndex, slots, colors, sizes } =
+      splitAnimated(style)
     const driven =
       opacity !== null ||
+      zIndex !== null ||
       slots.length > 0 ||
       colors.length > 0 ||
       sizes.length > 0
@@ -873,6 +914,7 @@ export const createAnimatedComponent = <C extends ElementType>(
       () => widgetForHandle(handleRef.current),
       host,
       opacity,
+      zIndex,
       slots,
       colors,
       sizes,

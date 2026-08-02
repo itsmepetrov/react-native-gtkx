@@ -184,6 +184,11 @@ export type PointerEventsValue = "auto" | "none" | "box-none" | "box-only"
 // of reporting them as unknown — the drift this type was born from.
 export type BehavioralStyle = Partial<{
   pointerEvents: PointerEventsValue
+  // RN's paint order among siblings. Not a Yoga property (it changes nothing
+  // about where anything is laid out) and not a CSS one (GTK4 has no z-order
+  // declaration): the container widget sorts its snapshot and its picking by
+  // it — see gtkx/bridge/view-box.ts.
+  zIndex: number
 }>
 
 export type FlatStyle = LayoutStyle & VisualStyle & BehavioralStyle
