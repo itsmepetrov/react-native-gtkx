@@ -46,8 +46,8 @@ type TouchHandler = (
 
 const unsupported = createUnsupportedFactory(
   "react-native-gesture-handler",
-  "Pan, Tap, LongPress, Native, GestureDetector, the cross-gesture relations and the " +
-    "three composers are implemented. See docs/api.md.",
+  "Pan, Tap, LongPress, Native, Pinch, Rotation, GestureDetector, the cross-gesture " +
+    "relations and the three composers are implemented. See docs/api.md.",
 )
 
 /**
@@ -393,12 +393,66 @@ export class NativeGestureBuilder extends BaseGestureBuilder {
 }
 
 /**
+ * `Gesture.Pinch()` and `Gesture.Rotation()`, which have no configuration of
+ * their own at all — verified against 3.1.0, where `PinchGesture` and
+ * `RotationGesture` add zero builder methods over `ContinousBaseGesture`, and
+ * where v3's `PinchGestureNativeProperties` is literally
+ * `Record<string, never>`. Both are CONTINUOUS, so `onUpdate`/`onChange` are
+ * here for the same reason they are on `PanGestureBuilder`.
+ *
+ * `shouldCancelWhenOutside` is off, set from the constructor because upstream
+ * sets it from `PinchGestureHandler.init`/`RotationGestureHandler.init` — a
+ * pinch whose focal point wanders off the view keeps running, unlike a tap.
+ *
+ * What they do NOT have is a pointer: see ./touchpad. Their numbers come from
+ * `GtkGestureZoom`/`GtkGestureRotate`, and everything else about them — the
+ * states, the callbacks, the arbitration — is the machine every other kind
+ * runs on.
+ */
+export class PinchGestureBuilder extends BaseGestureBuilder {
+  readonly kind = "pinch" as const
+
+  constructor() {
+    super()
+    this.shouldCancelWhenOutside(false)
+  }
+
+  onUpdate(callback: (event: GestureEventPayload) => void): this {
+    this.config.onUpdate = callback
+    return this
+  }
+  onChange(callback: (event: GestureEventPayload) => void): this {
+    this.config.onChange = callback
+    return this
+  }
+}
+
+/** `Gesture.Rotation()`. Same shape as `Pinch`, same reasons. */
+export class RotationGestureBuilder extends BaseGestureBuilder {
+  readonly kind = "rotation" as const
+
+  constructor() {
+    super()
+    this.shouldCancelWhenOutside(false)
+  }
+
+  onUpdate(callback: (event: GestureEventPayload) => void): this {
+    this.config.onUpdate = callback
+    return this
+  }
+  onChange(callback: (event: GestureEventPayload) => void): this {
+    this.config.onChange = callback
+    return this
+  }
+}
+
+/**
  * `Gesture`, the namespace of statics.
  *
- * `Pan`, `Tap`, `LongPress`, `Native` and the three composers are real. The
- * other five throw by name, and that is the point: docs/research/gestures.md
- * records the failure mode this repo most wants to avoid — a component that
- * accepts its props, renders, and does nothing.
+ * `Pan`, `Tap`, `LongPress`, `Native`, `Pinch`, `Rotation` and the three
+ * composers are real. The other four throw by name, and that is the point:
+ * docs/research/gestures.md records the failure mode this repo most wants to
+ * avoid — a component that accepts its props, renders, and does nothing.
  */
 export const Gesture = {
   Pan: (): PanGestureBuilder => new PanGestureBuilder(),
@@ -413,8 +467,8 @@ export const Gesture = {
     simultaneousGestures(...gestures),
   Exclusive: (...gestures: AnyGestureSpec[]): ComposedGestureSpec =>
     exclusiveGestures(...gestures),
-  Pinch: unsupported("Gesture.Pinch"),
-  Rotation: unsupported("Gesture.Rotation"),
+  Pinch: (): PinchGestureBuilder => new PinchGestureBuilder(),
+  Rotation: (): RotationGestureBuilder => new RotationGestureBuilder(),
   Fling: unsupported("Gesture.Fling"),
   Hover: unsupported("Gesture.Hover"),
   Manual: unsupported("Gesture.Manual"),

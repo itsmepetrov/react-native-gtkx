@@ -24,7 +24,7 @@ import {
   PanGestureHandler,
   RectButton,
   State,
-  usePinchGesture,
+  useFlingGesture,
 } from "../../../src/gesture-handler-compat/index"
 import type { Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
 import { Root, Text, View } from "../../../src/index"
@@ -108,19 +108,20 @@ it("renders its children", async () => {
 })
 
 it("throws with the symbol's name when an unsupported export is called", () => {
-  // A hook or factory: called directly. `useTapGesture` used to stand here
-  // and is implemented now, which is the point of the slice; `usePinchGesture`
-  // needs a machine that can produce a touchpad gesture to test it on.
-  expect(() => (usePinchGesture as () => void)()).toThrow(
-    /`usePinchGesture` is not supported/,
+  // A hook or factory: called directly. `useTapGesture` stood here first and
+  // `usePinchGesture` after it, and both are implemented now — which is the
+  // point of the two slices. `useFlingGesture` is next in that line and is not
+  // blocked on anything but writing it.
+  expect(() => (useFlingGesture as () => void)()).toThrow(
+    /`useFlingGesture` is not supported/,
   )
 })
 
 it("throws per unimplemented recognizer rather than for the namespace", () => {
-  // `Gesture` itself is real — six of its statics are implemented — so the
-  // refusal moved down one level. Each of the other six names ITSELF, which
+  // `Gesture` itself is real — nine of its statics are implemented — so the
+  // refusal moved down one level. Each of the other four names ITSELF, which
   // is strictly more useful than the old whole-namespace throw: an app calling
-  // `Gesture.Pinch()` is told about Pinch, not about Gesture.
+  // `Gesture.Fling()` is told about Fling, not about Gesture.
   expect(Gesture.Pan()).toBeTruthy()
   expect(Gesture.Tap()).toBeTruthy()
   expect(Gesture.LongPress()).toBeTruthy()
@@ -129,9 +130,10 @@ it("throws per unimplemented recognizer rather than for the namespace", () => {
   expect(Gesture.Simultaneous(Gesture.Pan(), Gesture.Tap())).toBeTruthy()
   expect(Gesture.Exclusive(Gesture.Tap(), Gesture.Tap())).toBeTruthy()
   expect(Gesture.Race(Gesture.Pan(), Gesture.LongPress())).toBeTruthy()
-  expect(() => (Gesture.Pinch as () => void)()).toThrow(
-    /`Gesture\.Pinch` is not supported/,
-  )
+  // Driven by GtkGestureZoom/GtkGestureRotate rather than by the pointer, so
+  // they build here and only DO anything on a machine with a touchpad.
+  expect(Gesture.Pinch()).toBeTruthy()
+  expect(Gesture.Rotation()).toBeTruthy()
   expect(() => (Gesture.Fling as () => void)()).toThrow(
     /`Gesture\.Fling` is not supported/,
   )

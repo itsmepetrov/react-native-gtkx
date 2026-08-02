@@ -46,6 +46,8 @@ import {
   useLongPressGesture,
   useNativeGesture,
   usePanGesture,
+  usePinchGesture,
+  useRotationGesture,
   useSimultaneousGestures,
   useTapGesture,
 } from "./hooks"
@@ -59,6 +61,8 @@ export {
   useLongPressGesture,
   useNativeGesture,
   usePanGesture,
+  usePinchGesture,
+  useRotationGesture,
   useSimultaneousGestures,
   useTapGesture,
 }
@@ -66,6 +70,8 @@ export {
   LongPressGestureBuilder,
   NativeGestureBuilder,
   PanGestureBuilder,
+  PinchGestureBuilder,
+  RotationGestureBuilder,
   TapGestureBuilder,
 } from "./builder"
 export type { GestureDetectorProps } from "./detector"
@@ -136,11 +142,12 @@ export const GestureHandlerRootView = ({
 const unsupported = createUnsupportedFactory(
   "react-native-gesture-handler",
   "Implemented: GestureHandlerRootView, GestureDetector, `State`, the re-exported " +
-    "ScrollView/FlatList/TextInput/Switch and the three Touchables, and Pan, Tap, LongPress " +
-    "and Native in both spellings (`Gesture.Pan()` and `usePanGesture()`, and so on), plus " +
-    "the three cross-gesture relations and the three composers. Pinch and Rotation " +
-    "need a machine that can produce a touchpad gesture to test them on. RN's own responder " +
-    "system and PanResponder also work (docs/api.md); drag-and-drop is react-native-gtkx/dnd.",
+    "ScrollView/FlatList/TextInput/Switch and the three Touchables, and Pan, Tap, LongPress, " +
+    "Native, Pinch and Rotation in both spellings (`Gesture.Pan()` and `usePanGesture()`, and " +
+    "so on), plus the three cross-gesture relations and the three composers. Pinch and " +
+    "Rotation need a TOUCHPAD — they are driven by GtkGestureZoom/GtkGestureRotate, and a " +
+    "mouse cannot produce one. RN's own responder system and PanResponder also work " +
+    "(docs/api.md); drag-and-drop is react-native-gtkx/dnd.",
 )
 
 // Every runtime value `react-native-gesture-handler` 3.1.0 exports, minus
@@ -168,6 +175,8 @@ export const NativeViewGestureHandler: any = unsupported(
   "NativeViewGestureHandler",
 )
 export const PanGestureHandler: any = unsupported("PanGestureHandler")
+// Refused even though `Gesture.Pinch()` works: these are the LEGACY component
+// spellings, which upstream deprecated years before it deprecated the builder.
 export const PinchGestureHandler: any = unsupported("PinchGestureHandler")
 export const RotationGestureHandler: any = unsupported("RotationGestureHandler")
 export const TapGestureHandler: any = unsupported("TapGestureHandler")
@@ -176,10 +185,10 @@ export const legacy_createNativeWrapper: any = unsupported(
 )
 
 // --- the new (v3) gesture API ---
-// `Gesture`, `GestureDetector`, the four implemented gesture hooks and the
+// `Gesture`, `GestureDetector`, the six implemented gesture hooks and the
 // three composer hooks are re-exported at the top of this file. `Gesture` is a
-// real namespace whose five unimplemented statics throw individually, so
-// `Gesture.Pinch()` still names itself.
+// real namespace whose four unimplemented statics throw individually, so
+// `Gesture.Fling()` still names itself.
 export const GestureDetectorType: any = unsupported("GestureDetectorType")
 export const GestureStateManager: any = unsupported("GestureStateManager")
 export const InterceptingGestureDetector: any = unsupported(
@@ -189,8 +198,6 @@ export const VirtualGestureDetector: any = unsupported("VirtualGestureDetector")
 export const useFlingGesture: any = unsupported("useFlingGesture")
 export const useHoverGesture: any = unsupported("useHoverGesture")
 export const useManualGesture: any = unsupported("useManualGesture")
-export const usePinchGesture: any = unsupported("usePinchGesture")
-export const useRotationGesture: any = unsupported("useRotationGesture")
 
 // --- enums and constants ---
 // These are plain data upstream, so throwing on them looks harsh. It is not:

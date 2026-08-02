@@ -127,6 +127,18 @@ export type NativeGestureHookConfig = CommonGestureHookConfig & {
 }
 
 /**
+ * The config object `usePinchGesture` and `useRotationGesture` accept.
+ *
+ * Nothing of their own, and that is upstream's shape rather than an omission:
+ * `PinchGestureNativeProperties` and `RotationGestureNativeProperties` are
+ * both `Record<string, never>` in 3.1.0's `src/v3`, and the builder classes
+ * add no methods either. Both are continuous, so `onUpdate` is here.
+ */
+export type TouchpadGestureHookConfig = CommonGestureHookConfig & {
+  onUpdate?: (event: GestureEventPayload) => void
+}
+
+/**
  * Upstream's dev-time validation, reproduced because both messages describe
  * configs that look reasonable and silently never activate.
  */
@@ -317,6 +329,40 @@ export const useNativeGesture = (
     shouldActivateOnStart: config.shouldActivateOnStart,
     disallowInterruption: config.disallowInterruption,
     yieldsToContinuousGestures: config.yieldsToContinuousGestures,
+    onUpdate: config.onUpdate,
+  },
+})
+
+const EMPTY_TOUCHPAD: TouchpadGestureHookConfig = {}
+
+/**
+ * `usePinchGesture`, the hook spelling of `Gesture.Pinch()` — and the spelling
+ * upstream's own `@deprecated` tag on `Gesture.Pinch()` points at.
+ *
+ * `shouldCancelWhenOutside` defaults to FALSE, matching the builder and
+ * matching `PinchGestureHandler.init`: a pinch is not addressed to a point the
+ * way a tap is, and a focal point that drifts off the view mid-gesture is not
+ * a reason to cancel it.
+ */
+export const usePinchGesture = (
+  config: TouchpadGestureHookConfig = EMPTY_TOUCHPAD,
+): GestureSpec => ({
+  kind: "pinch",
+  config: {
+    ...adaptCommon(config),
+    shouldCancelWhenOutside: config.shouldCancelWhenOutside ?? false,
+    onUpdate: config.onUpdate,
+  },
+})
+
+/** `useRotationGesture`, the hook spelling of `Gesture.Rotation()`. */
+export const useRotationGesture = (
+  config: TouchpadGestureHookConfig = EMPTY_TOUCHPAD,
+): GestureSpec => ({
+  kind: "rotation",
+  config: {
+    ...adaptCommon(config),
+    shouldCancelWhenOutside: config.shouldCancelWhenOutside ?? false,
     onUpdate: config.onUpdate,
   },
 })

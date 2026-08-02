@@ -295,6 +295,120 @@ missing is a way to _test_ it, and that is the same shape of gap as touch:
 it needs a real device on a seated session, not a code change. Until then
 `Pinch`/`Rotation` should keep throwing by name.
 
+**Closed by probe 6 below**, which found that the missing device could be
+built rather than bought. The sentence "the VM has no touchpad either" was
+true and the conclusion drawn from it was not: a touchpad is a kernel object,
+and `/dev/uinput` makes one.
+
+## Probe 6: the touchpad, built rather than waited for
+
+Probe 4's verdict — "the mechanism exists, what is missing is a way to test
+it" — held for one day. What broke it is that probe 4 measured the wrong
+layer. Its finding was that **no Wayland protocol can inject a pinch**, which
+is true and permanent: `zwlr_virtual_pointer_v1` has motion, button, axis and
+frame and no gesture requests, and there is no other injection protocol in
+wlroots. The conclusion drawn from it — that the rig therefore cannot produce
+a touchpad gesture — does not follow, because a pinch is not injected by a
+client at all. It is **concluded by libinput** from two fingers moving on a
+device it has classified as a touchpad. So the injection point is one layer
+lower than any protocol: the kernel.
+
+`/dev/uinput` creates a device the kernel and udev treat as real, which is the
+technique libinput's own `litest` suite uses for every one of its touchpad
+tests. `packages/react-native-gtkx/tests/gtk/support/virtual-touchpad.ts` is
+that device — 100x60mm at 40 units/mm, two MT slots, `INPUT_PROP_POINTER`,
+`BTN_TOOL_DOUBLETAP` — with the ioctls in a Python sibling, because uinput
+needs them and Node has none.
+
+libinput accepted it on the first attempt:
+
+```
+event5  DEVICE_ADDED  rn-gtkx virtual touchpad  seat0 default group6
+        cap:pg  size 100x60mm  tap (dl off) left scroll-nat scroll-2fg-edge
+event5  GESTURE_PINCH_BEGIN   +1.487s  2
+event5  GESTURE_PINCH_UPDATE  +1.500s  2  ...  1.09 @ 0.00
+event5  GESTURE_PINCH_UPDATE  +1.734s  2  ...  1.82 @ 0.00
+event5  GESTURE_PINCH_END     +1.747s  2
+```
+
+`cap:pg` is pointer **and gesture**. The `1.82 @ 0.00` is scale and angle: a
+2.0x spread reaches libinput as 1.82, and a 60° rotation reaches it as 3° per
+frame at scale 1.00. **Rotation is delivered as well as pinch**, which was the
+open question — `libinput_event_gesture_get_angle_delta` is real and the
+compositor forwards it.
+
+### What the chain delivers, measured end to end
+
+`spike/gesture-detector/run-session.sh`, against the desktop session's own
+compositor, with both a raw `GtkGestureZoom` on a plain `GtkBox` and the
+shipped `Gesture.Pinch()` watching the same injected gesture:
+
+| Question                                      | Measured                                                                      |
+| --------------------------------------------- | ----------------------------------------------------------------------------- |
+| Does an injected two-finger spread reach GTK? | Yes. `scale-changed` 17 times, ending at **1.816** for a 2.0x spread          |
+| Does a squeeze arrive as a scale below 1?     | Yes. **0.555** for a 0.5x squeeze                                             |
+| Does a rotation reach `GtkGestureRotate`?     | Yes. **0.8907 rad (51.0°)** for a 60° rotation                                |
+| Is a rotation also a zoom?                    | No. Scale stayed at **1.000** throughout it                                   |
+| Does GTK know where the gesture is?           | Yes. `gtk_gesture_get_bounding_box_center` = **{379.5, 101.2}**, widget-local |
+| Does the SHIPPED module see the same thing?   | Yes. `Gesture.Pinch()` reported **1.81640625** — GTK's number, bit for bit    |
+| Does it run the whole progression?            | `begin=1 start=1 updates=16 end=1`, velocity 3.31/s, focal {379.5, 101.2}     |
+| `Gesture.Rotation()`                          | **0.8907 rad**, velocity 4.30 rad/s, anchor {379.6, 101.2}, 15 updates        |
+| Negative control, raw GTK                     | The half the pointer never visited: **0** zoom begins, 0 rotate begins        |
+| Negative control, the module                  | The detector the pointer never visited: **0** begins, 0 updates               |
+
+**So `Pinch` and `Rotation` both ship, and neither is a partial.** The angle
+question the slice was told to expect a refusal on — "wlroots may not
+synthesize rotate the way it does pinch" — did not arise, because the rotation
+is libinput's, computed from the two fingers before any compositor sees it.
+
+### The constraint that stays, and why no test in the suite can do this
+
+**The compositor has to have a libinput backend.** That is the whole of the
+remaining gap, and it is measured in both directions with the same probe and
+the same device present:
+
+| Compositor                                           | Result                                                        |
+| ---------------------------------------------------- | ------------------------------------------------------------- |
+| The desktop session's (GNOME/mutter, native backend) | The full chain, every number above                            |
+| Headless sway, as `@gtkx/vitest` starts it           | **Nothing.** No gesture activity, and the pointer never moved |
+
+`@gtkx/vitest`'s `headless-display.js` starts each worker's compositor with
+`WLR_BACKENDS=headless` and `WLR_LIBINPUT_NO_DEVICES=1`, applied
+unconditionally with no environment escape. A headless wlroots backend
+enumerates no input devices, so the uinput touchpad is invisible to it — and
+that is not a bug to route around: a compositor with a libinput backend needs
+a seat, and a second libseat client on a seat logind has already given to
+gnome-shell cannot have one.
+
+So the split is the honest one and it is drawn at the GTK controller:
+
+- **below it** — uinput, evdev, libinput, the compositor, GDK — is probe 6,
+  run by hand against the session compositor, with its own negative controls;
+- **above it** — the detector attaching the right controller to the right
+  widget, the recognizer, the arbitration, the payload — is
+  `tests/gtk/gesture-handler/touchpad-gestures.gtk.test.tsx`, which emits GTK's
+  own signals on the real controllers, and
+  `tests/unit/gesture-handler/touchpad.test.ts` for the semantics.
+
+Six mutations were run against that pair to check the tests are sensitive to
+what they claim. Every one is caught, and by the right test: removing the pinch
+activation gate (2 unit + 1 gtk), changing upstream's 5° rotation constant
+(1 unit + 1 gtk), putting `velocity` back on upstream-web's per-millisecond
+denominator (3 unit), making `scaleChange` a difference instead of a ratio
+(1 unit), letting a touchpad kind answer the pointer props (1 unit + 1 gtk),
+and letting `Pinch` reach for the responder lock (13 unit + 3 gtk).
+
+### Two things the injection needed that are not obvious
+
+- **`BTN_RIGHT`.** Without it libinput logs `kernel bug: missing right button,
+assuming it is a clickpad` and reclassifies the device. Harmless here, but a
+  clickpad is a different device with different rules.
+- **Frame pacing.** libinput decides pinch-versus-two-finger-scroll from the
+  first frames of motion and computes its velocities from the timestamps, so
+  the injector sleeps 12ms between frames and does not dwell before moving. A
+  long glide also has to be split — one step per 3mm — or libinput discards
+  frames as `Touch jump detected`.
+
 ## Probe 5: the spike — which has since shipped
 
 **Superseded, and deliberately deleted.** Slice 1 turned this probe into the
@@ -429,7 +543,9 @@ in `docs/research/gestures.md`.
    a real GTK gesture into the arbitration. **Shipped**, and it corrected
    two more lines — see below.
 5. **`Pinch`/`Rotation`**, when there is a machine that can produce a
-   touchpad gesture to test them with. Not before.
+   touchpad gesture to test them with. Not before. **Shipped**, and what
+   unblocked it was not a machine — see probe 6, which built the device the
+   slice was waiting for.
 
 ### What slice 4 corrected, by building the libraries instead of reading them
 
@@ -624,8 +740,11 @@ between siblings is inert for the same reason and by the same mechanism.
   injection protocol wlroots offers and there is no virtual-touch protocol at
   all — the same wall `docs/research/gestures.md` recorded for ScrollView
   arbitration, unchanged.
-- **A real touchpad**, therefore `Pinch`/`Rotation` end to end. The VM has no
-  touchpad device and no protocol can synthesize one.
+- ~~**A real touchpad**, therefore `Pinch`/`Rotation` end to end. The VM has no
+  touchpad device and no protocol can synthesize one.~~ **Wrong, and probe 6
+  shows why**: no WAYLAND protocol can synthesize one, which is what was
+  measured; the kernel can, through `/dev/uinput`, and libinput's own test
+  suite has done it that way for a decade.
 - **The consumer libraries actually running.** This recon measured their
   sources; nothing here was run against `react-native-reanimated-dnd`'s
   example app. That is the epic's own acceptance criterion, not the recon's.

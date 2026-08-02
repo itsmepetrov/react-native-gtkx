@@ -32,6 +32,7 @@
 // because whether a `Pan` holds the lock is a fact about this interaction.
 import type { GestureResponderEvent } from "../responder/types"
 import type { Orchestrator, Participant } from "./orchestrator"
+import type { TouchpadSample } from "./touchpad"
 import {
   GESTURE_STATE,
   POINTER_TYPE,
@@ -96,6 +97,15 @@ export type RecognizerView = {
   maxPointerCount: number
   /** Completed press-release cycles, including the one being decided. */
   taps: number
+  /**
+   * `Pinch`: the scale since GTK recognized the gesture, 1 at the start.
+   * `Rotation`: radians since it did, 0 at the start and positive clockwise.
+   *
+   * Both are 1 and 0 for every pointer-driven kind, so a predicate that reads
+   * them on the wrong kind gets the identity rather than a lie.
+   */
+  scale: number
+  rotation: number
 }
 
 /**
@@ -166,6 +176,23 @@ export type RecognizerDecider = {
    * come from `onTouchMove` and its ending from `onTouchEnd`/`onTouchCancel`.
    */
   claimsResponder?: boolean
+  /**
+   * Which entry surface drives this kind. Absent means `"pointer"`.
+   *
+   * The one structural concession slice 5 makes, and it is about where events
+   * COME FROM rather than about what happens to them. `Pinch` and `Rotation`
+   * are fed by `GtkGestureZoom`/`GtkGestureRotate` because a touchpad pinch is
+   * not in the pointer stream at all — no button goes down, so there is no GTK
+   * sequence and no responder session. Everything downstream is this same
+   * machine: the same states, the same callbacks, the same payload, the same
+   * `tryActivate` and the same relation maps.
+   *
+   * Exactly one surface is live per recognizer. A `"touchpad"` kind's
+   * touch/responder props are empty, so a mouse press cannot begin a pinch; a
+   * `"pointer"` kind's `touchpad` channel is inert, so a pinch cannot begin a
+   * pan.
+   */
+  source?: "pointer" | "touchpad"
 }
 
 type Timer = ReturnType<typeof setTimeout> | null
@@ -233,6 +260,24 @@ type Runtime = {
    */
   hasResponder: boolean
   forcedFailure: boolean
+  /**
+   * The touchpad gesture's own accumulators, and the values the previous
+   * update reported — which is what `scaleChange`/`rotationChange` and
+   * `velocity` are computed from.
+   *
+   * Held here rather than read back off the GTK controller so that a
+   * recognizer measures what it was TOLD. `gtk_gesture_zoom_get_scale_delta`
+   * returns 1 the moment the gesture is no longer active, so an `end` handler
+   * that asked GTK would report the gesture undoing itself.
+   */
+  scale: number
+  rotation: number
+  scaleVelocity: number
+  rotationVelocity: number
+  changeFromScale: number
+  changeFromRotation: number
+  /** Wall clock of the last touchpad sample, for the per-second velocities. */
+  lastSampleTime: number
 }
 
 const newRuntime = (): Runtime => ({
@@ -261,6 +306,13 @@ const newRuntime = (): Runtime => ({
   authorized: false,
   hasResponder: false,
   forcedFailure: false,
+  scale: 1,
+  rotation: 0,
+  scaleVelocity: 0,
+  rotationVelocity: 0,
+  changeFromScale: 1,
+  changeFromRotation: 0,
+  lastSampleTime: 0,
 })
 
 /**
@@ -343,9 +395,22 @@ const contains = (rect: Rect, x: number, y: number): boolean =>
   y >= rect.y &&
   y <= rect.y + rect.height
 
+/**
+ * The touchpad entry surface, for the kinds GTK feeds rather than the pointer.
+ * Null on every other kind — see `RecognizerDecider.source`.
+ */
+export type TouchpadChannel = {
+  begin: (sample: TouchpadSample) => void
+  update: (sample: TouchpadSample) => void
+  end: () => void
+  cancel: () => void
+}
+
 export type Recognizer = {
-  /** The responder props to put on the gesture's view. */
+  /** The responder props to put on the gesture's view. Empty for a touchpad kind. */
   handlers: Record<string, (event: GestureResponderEvent) => boolean | void>
+  /** Where `GtkGestureZoom`/`GtkGestureRotate` deliver, or null. */
+  touchpad: TouchpadChannel | null
   /** This gesture's seat in the arbitration loop. */
   participant: Participant
   /** Cancels any pending timer and leaves the loop; called on unmount. */
@@ -386,6 +451,8 @@ export const createRecognizer = (
     pointerCount: runtime.pointerCount,
     maxPointerCount: runtime.maxPointerCount,
     taps: runtime.taps,
+    scale: runtime.scale,
+    rotation: runtime.rotation,
   })
 
   /**
@@ -434,6 +501,30 @@ export const createRecognizer = (
         ? translationY - runtime.changeFromY
         : translationY,
       duration: Date.now() - runtime.pressTime,
+      scale: runtime.scale,
+      // A RATIO, not a difference — scale composes by multiplication, and
+      // upstream's `changeEventCalculator` for `Pinch` divides where the one
+      // for `Rotation` subtracts. On the first update it is the scale itself,
+      // which is upstream's rule for both and the same rule `changeX` follows.
+      scaleChange: runtime.hasEmittedUpdate
+        ? runtime.scale / runtime.changeFromScale
+        : runtime.scale,
+      // The focal point IS the position for these two kinds: the touchpad
+      // channel writes the gesture's bounding-box centre into the same
+      // last-position fields the pointer kinds write a touch into, so `x`/`y`
+      // and `focalX`/`focalY` are the same number arrived at the same way.
+      focalX: bounds ? pageX - bounds.x : (fallback?.locationX ?? pageX),
+      focalY: bounds ? pageY - bounds.y : (fallback?.locationY ?? pageY),
+      rotation: runtime.rotation,
+      rotationChange: runtime.hasEmittedUpdate
+        ? runtime.rotation - runtime.changeFromRotation
+        : runtime.rotation,
+      anchorX: bounds ? pageX - bounds.x : (fallback?.locationX ?? pageX),
+      anchorY: bounds ? pageY - bounds.y : (fallback?.locationY ?? pageY),
+      velocity:
+        decider.kind === "rotation"
+          ? runtime.rotationVelocity
+          : runtime.scaleVelocity,
     }
   }
 
@@ -1101,8 +1192,150 @@ export const createRecognizer = (
     },
   }
 
+  /**
+   * The second entry surface: GTK's touchpad gestures, for the two kinds the
+   * pointer stream cannot carry.
+   *
+   * Everything below the entry point is the machine above, unchanged. `begin`
+   * does what `onTouchStart` does (record with the orchestrator, BEGAN,
+   * `onBegin`), `update` does what `onTouchMove` and `advance` do between them
+   * (test the kind's predicate, `decide()`, emit), and `end` does what
+   * `onTouchEnd` does. `decide()` is the same call into the same
+   * `tryActivate`, and `finalize` is the same one exit.
+   *
+   * ONE DIFFERENCE FROM `Pan`, and it is upstream's: `scale` and `rotation`
+   * are NOT re-based when the gesture activates. Translation is, because a pan
+   * that reported its `activeOffset` as travel would jump the content by the
+   * threshold on every drag. Upstream's `scale` is not — `resetProgress()`
+   * resets it only while the handler is not yet ACTIVE, so the value that
+   * crossed the activation threshold is the value the first `onUpdate`
+   * reports. GTK measures from its own recognition point for the same reason,
+   * so the two origins already agree and nothing is re-derived.
+   */
+  const touchpad = {
+    begin: (sample: TouchpadSample): void => {
+      if (!isEnabled() || runtime.state !== GESTURE_STATE.UNDETERMINED) {
+        return
+      }
+      const bounds = env.boundsInWindow()
+      const pageX = (bounds?.x ?? 0) + sample.focalX
+      const pageY = (bounds?.y ?? 0) + sample.focalY
+      if (
+        bounds !== null &&
+        !contains(hitSlopRect(bounds, readConfig().hitSlop), pageX, pageY)
+      ) {
+        return
+      }
+      runtime = newRuntime()
+      runtime.pressTime = Date.now()
+      runtime.lastSampleTime = runtime.pressTime
+      runtime.originX = pageX
+      runtime.originY = pageY
+      runtime.pressX = pageX
+      runtime.pressY = pageY
+      runtime.lastX = pageX
+      runtime.lastY = pageY
+      runtime.pointerCount = sample.pointers
+      runtime.maxPointerCount = sample.pointers
+      setState(GESTURE_STATE.BEGAN)
+      // On the gesture, not on mount — the same rule and the same line as
+      // `onTouchStart`, and the same islands answer follows from it.
+      env.orchestrator.record(participant)
+      readConfig().onBegin?.(payloadNow())
+    },
+
+    update: (sample: TouchpadSample): void => {
+      if (
+        runtime.state !== GESTURE_STATE.BEGAN &&
+        runtime.state !== GESTURE_STATE.ACTIVE
+      ) {
+        return
+      }
+      const now = Date.now()
+      const elapsed = now - runtime.lastSampleTime
+      if (elapsed > 0) {
+        // Per SECOND, which upstream documents and neither of its web paths
+        // computes. See `GestureEventPayload.velocity`.
+        runtime.scaleVelocity =
+          ((sample.scale - runtime.scale) / elapsed) * 1000
+        runtime.rotationVelocity =
+          ((sample.rotation - runtime.rotation) / elapsed) * 1000
+        runtime.lastSampleTime = now
+      }
+      runtime.scale = sample.scale
+      runtime.rotation = sample.rotation
+      runtime.pointerCount = sample.pointers
+      runtime.maxPointerCount = Math.max(
+        runtime.maxPointerCount,
+        sample.pointers,
+      )
+      const bounds = env.boundsInWindow()
+      runtime.lastX = (bounds?.x ?? 0) + sample.focalX
+      runtime.lastY = (bounds?.y ?? 0) + sample.focalY
+
+      const config = readConfig()
+      if (runtime.state === GESTURE_STATE.BEGAN) {
+        if (config.manualActivation === true) {
+          return
+        }
+        if (!decider.shouldActivate(viewOf(), config)) {
+          return
+        }
+        // The same request into the same loop every other kind makes. It can
+        // come back as an activation, as a parking behind
+        // `requireExternalGestureToFail`, or as a cancellation.
+        decide()
+        if (stateNow() !== GESTURE_STATE.ACTIVE) {
+          return
+        }
+        // `onActivate` has just reported this sample; emitting it again as an
+        // update would double it, exactly as `advance` refuses the event that
+        // granted the responder.
+        runtime.changeFromScale = runtime.scale
+        runtime.changeFromRotation = runtime.rotation
+        return
+      }
+      const payload = payloadNow()
+      config.onUpdate?.(payload)
+      config.onChange?.(payload)
+      runtime.changeFromX = payload.translationX
+      runtime.changeFromY = payload.translationY
+      runtime.changeFromScale = runtime.scale
+      runtime.changeFromRotation = runtime.rotation
+      runtime.hasEmittedUpdate = true
+    },
+
+    /** GTK's `end`: a success if it activated, a failure if it never did. */
+    end: (): void => {
+      if (runtime.state === GESTURE_STATE.ACTIVE) {
+        finalize(payloadNow, true)
+        return
+      }
+      if (runtime.state === GESTURE_STATE.BEGAN) {
+        setState(GESTURE_STATE.FAILED)
+        finalize(payloadNow, false)
+      }
+    },
+
+    /** GTK's `cancel`: the sequence was taken away. */
+    cancel: (): void => {
+      if (
+        runtime.state === GESTURE_STATE.BEGAN ||
+        runtime.state === GESTURE_STATE.ACTIVE
+      ) {
+        setState(GESTURE_STATE.CANCELLED)
+        finalize(payloadNow, false)
+      }
+    },
+  }
+
   return {
-    handlers,
+    // Exactly one surface is live. A touchpad kind that also answered the
+    // touch props would begin on a mouse press — `onBegin` on every click, on
+    // a gesture that cannot happen — and a pointer kind with a live touchpad
+    // channel would pan on a pinch.
+    handlers: decider.source === "touchpad" ? {} : handlers,
+    touchpad: decider.source === "touchpad" ? touchpad : null,
     participant,
     dispose: () => {
       clearActivationTimer()
