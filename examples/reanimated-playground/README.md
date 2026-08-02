@@ -4,7 +4,8 @@ Seven panels on one scrolling screen, each one a thing
 [`react-native-gtkx/reanimated`](../../docs/api.md#react-native-reanimated-react-native-gtkxreanimated)
 either does or deliberately does not do. It is meant to be **run and poked
 at**, not read: drag the box, press the buttons, watch the render counter not
-move.
+move — and in panel 07, watch two boxes on the same shared value disagree
+about whether they are allowed to animate.
 
 ```sh
 npm install                            # from the repo root (workspaces)
@@ -71,25 +72,38 @@ tally. No hook is given a dependency array and everything still updates,
 because tracking here is dynamic — recorded from the reads a mapper actually
 performs.
 
-**07 What it refuses.** The panel this example exists for as much as the
-counter does.
+**07 Where the boundary is.** The panel this example exists for as much as the
+counter does — and it is a boundary now rather than a wall, which is the whole
+reason it was rewritten.
 
-![Panel 07 after pressing "Animate width" then "Force a React render": the red box now 280 px wide with a "2" in it, the green box fully rounded, two yellow warnings quoting the LAYOUT-property refusal and the borderRadius refusal in full, and a table reading 64 µs / 128 µs / 496 µs for the Yoga pass at 5, 60 and 300 children against 0.7 µs for a transform and 11.2 µs for a colour.](../../docs/shots/reanimated-playground-refused.png)
+![Panel 07 after pressing "Animate width", "Animate height" and "Force a React render": the green box in the first lane 280 px wide with a "1" in it, the red box in the centred lane the same 280 px but only because the render was forced, the red box in the third lane grown to 76 px tall with the purple strip pushed down below it, two yellow warnings quoting in full the cross-axis-alignment refusal and the MAIN-axis one, and a table reading 7.1 µs for a driven size and 21.7 µs with wrapped text against 71 / 129 / 509 µs for a refused one at 5, 60 and 300 children.](../../docs/shots/reanimated-playground-refused.png)
 
-Press "Animate width" and **nothing moves**. The warning it produces is
+The first two lanes animate **the same shared value**, with the same box, and
+differ by one style on the lane that contains them. The first lane is an
+ordinary column, so `width` is its cross axis: the box grows from its leading
+edge, no sibling moves, and it runs at frame rate — 7.1 µs a frame, the same
+at five siblings or three hundred, with the render counter inside the box
+sitting still while it moves. The second lane says `alignItems: "center"`, so
+a wider box would also be a box in a different place, and that is refused.
+
+Press "Animate width" and the two disagree in front of you. The refusal is
 printed in the app (`src/warnings.ts` wraps `console.warn`; the panel renders
-the buffer), next to the measurement that justifies it: a Yoga pass plus
-commit for one animated `width` is 64 µs on a five-child tree, 128 µs at
-sixty and 496 µs at three hundred, while a transform write is 0.7 µs and a
-colour write 11.2 µs at every one of those sizes. A layout write is O(the
-tree); the two imperative paths are O(1). And `queueResize` propagates to the
-toplevel, so an animated `width` can resize the window it is in.
+the buffer), naming the style that stopped it. "Animate height" adds the other
+kind: `height` is the column's main axis, so growing the box would push the
+strip below it down, and the warning says so and quotes what that costs — a
+Yoga pass plus its commit walk is 71 µs on a five-child container, 129 µs at
+sixty and 509 µs at three hundred, against 7.1 µs for the driven path at all
+three. A refused layout write is O(the container); the driven one is O(the
+node).
 
-Then press "Force a React render" and the box jumps to where the animation
-ended — the documented behaviour, that the value is applied on the next React
-render rather than dropped. `borderRadius` gets the other message (not a
-layout property, still not driveable) and lands on the same render.
-`scaleX`, the transform the warning names, runs at frame rate next to them.
+Then press "Force a React render" and both refused boxes jump to where their
+animations ended — the documented behaviour, that a refused value is applied
+on the next React render rather than dropped. `borderRadius` gets the other
+message (not a layout property, still not driveable) and lands on the same
+render. `scaleX`, the transform the refusals name, runs at frame rate next to
+them — and is an approximation rather than a replacement, which the driven
+lane above it demonstrates by re-laying-out what is inside the box instead of
+stretching it.
 
 ## Three things this example found
 
@@ -106,8 +120,9 @@ for any gtkx app that polls a mutable value: **it will not repaint**.
 The same thing bites panel 07 in a subtler way. An `Animated.View` whose props
 are all stable is memoised, so a parent's `setState` does not re-render it and
 "applied on the next React render" is not demonstrable. The forced-render
-count is printed inside the refused boxes so that the next render actually
-reaches them.
+count is printed inside the boxes so that the next render actually reaches
+them — which in the driven lane doubles as the proof that the animation costs
+no renders at all.
 
 **2. `sharedValue.value = …` inside a component does not lint.** This repo's
 `eslint-plugin-react-hooks` v7 (`react-hooks/immutability`) rejects
@@ -125,8 +140,8 @@ init) and `spike/`.
 
 ## What is not here
 
-Nothing in the app is faked, and two things a reader might expect are absent
-because the platform does not have them:
+Nothing in the app is faked, and a few things a reader might expect are absent
+— none of them because the demo is hiding something:
 
 - **`GestureDetector` / `Gesture.Pan()`** — implemented, but demonstrated in
   `examples/gesture-detector` rather than here. Panel 01 deliberately uses
@@ -136,6 +151,18 @@ because the platform does not have them:
   implemented, and not yet demonstrated here. Worth a panel.
 - **`Animated.FlatList`** — throws rather than warns, so there is no running
   demo to show. Panel 07 names it; `docs/api.md` has the reasoning.
+- **The other four ways a size lands on the refused side** — a container sized
+  by its children, a node whose other axis comes from its content, an
+  `aspectRatio` or a `min`/`max` clamp, and a wrapping container. Panel 07
+  demonstrates two of the six (a centred container and a main-axis size) and
+  names the rest in its captions; six lanes that all do nothing would teach
+  less than two that disagree.
+
+An animated `width` **is** demonstrated as working, in panel 07's first lane.
+It used to be in this list, and this README used to say that pressing "Animate
+width" does nothing and that an animated `width` could resize the window it is
+in. Both were true when they were written and neither is now
+([docs/research/animated-size.md](../../docs/research/animated-size.md)).
 
 `useAnimatedProps` is not demonstrated either: its real consumer is the SVG
 shapes, and that case is already covered by the gallery's SVG section.
