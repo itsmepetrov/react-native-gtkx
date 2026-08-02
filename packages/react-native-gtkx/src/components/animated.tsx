@@ -211,8 +211,8 @@ const warnInsetNotTranslatable = (
         ? `The node IS absolutely positioned, but ${reason}, so there is no translation that reproduces it. `
         : "`top`/`left`/`right`/`bottom` are driven at frame rate only on a node whose own `position` is " +
           '"absolute", where moving it is exactly a translation and touches no sibling. Anything else needs a ' +
-          "Yoga pass over the container plus its commit walk, which costs what the CONTAINER costs (71 µs at " +
-          "five children, 509 µs at three hundred) against a transform's 0.12 µs. ") +
+          "Yoga pass over the container plus its commit walk, which costs what the CONTAINER costs (52 µs at " +
+          "five children, 496 µs at three hundred) against a transform's 1.5 µs. ") +
       `Animate \`transform: [{ ${spec}: … }]\` instead. ` +
       "The value is still applied on the next React render. See docs/api.md.",
   )
@@ -245,7 +245,7 @@ const warnSizeNotDriveable = (property: SizeProperty, reason: string): void => {
       "node's own subtree is then re-laid-out pinned to the driven value (7.1 µs for a leaf, 21.7 µs with " +
       "wrapped text, the same at five children and at three hundred) and one allocation puts it on screen. " +
       "Anything else needs a Yoga pass over the container plus its commit walk, which costs what the " +
-      "CONTAINER costs: 71 µs at five children, 509 µs at three hundred, against a transform's 0.6 µs. " +
+      "CONTAINER costs: 52 µs at five children, 496 µs at three hundred, against a transform's 1.5 µs. " +
       `The closest transform is \`transform: [{ ${scale}: … }]\`, but it is NOT the same thing — a scale ` +
       "grows about the view's centre, so the box moves as it grows, and it scales the content with the box " +
       "instead of re-laying it out, so text stretches rather than re-wrapping. " +
