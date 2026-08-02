@@ -1,0 +1,21 @@
+{
+  "name": "upstream-libraries-example",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "gtkx dev",
+    "build": "gtkx build",
+    "start": "node dist/bundle.js"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-native-drawer-layout": "4.2.9",
+    "react-native-gtkx": "0.2.0-alpha.2",
+    "react-native-reanimated-dnd": "2.0.0"
+  },
+  "devDependencies": {
+    "@gtkx/cli": "1.0.0-rc.3",
+    "@gtkx/config": "1.0.0-rc.3"
+  }
+}

@@ -84,13 +84,26 @@ test("a non-numeric prop that changes warns once, by name", () => {
 
   expect(warn).toHaveBeenCalledTimes(1)
   expect(String(warn.mock.calls[0]?.[0])).toContain("fill")
-  // Still updated in the object, so the next React render is correct.
+  // Still updated in the object, so the render it asks for is correct.
   expect(animated.props.fill).toBe("blue")
 })
 
-test("an unchanged non-numeric prop is not a warning", () => {
+test("a changed non-numeric prop asks for a render rather than only warning", () => {
+  vi.spyOn(console, "warn").mockImplementation(() => {})
+  const animated = createAnimatedProps({ r: 1, fill: "red" })
+
+  // False means "rebuild and re-render me", and it is the only channel a prop
+  // with no node behind it has. Mutating `props` alone left the new value
+  // sitting in an object React had already committed — which is how
+  // react-native-drawer-layout's overlay kept `pointerEvents: "auto"` for
+  // ever after the first open, swallowing every press in the app under it.
+  // See docs/research/upstream-libraries.md.
+  expect(animated.apply({ r: 2, fill: "green" })).toBe(false)
+})
+
+test("an unchanged non-numeric prop is not a warning and needs no render", () => {
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
   const animated = createAnimatedProps({ r: 1, fill: "red" })
-  animated.apply({ r: 2, fill: "red" })
+  expect(animated.apply({ r: 2, fill: "red" })).toBe(true)
   expect(warn).not.toHaveBeenCalled()
 })

@@ -19,9 +19,20 @@
 //
 // A NON-numeric prop is not driveable, for the same reason a colour is not
 // driveable in a style: nothing downstream subscribes to it, so it can only
-// land on the next React render — which, since the point of this surface is
-// that there ISN'T one, may be a long time. It says so once, by name, rather
-// than being dropped silently.
+// land on the next React render. It says so once, by name, rather than being
+// dropped silently — and it ASKS FOR that render rather than waiting for one
+// that may never come.
+//
+// The asking is not a refinement. `react-native-drawer-layout`'s `Overlay`
+// (measured in examples/upstream-libraries) is a full-screen `Animated.View`
+// whose `pointerEvents` is `"none"` until the drawer starts opening and
+// `"auto"` after; nothing else in that component re-renders, so a value only
+// applied "on the next render" was applied on no render at all. The overlay
+// went permanently targetable the first time the drawer opened and swallowed
+// every press in the app underneath it — the silent failure this package
+// refuses everywhere else. One React render per CHANGE (not per frame: the
+// value has to actually differ) is the honest cost, and the warning is what
+// makes it visible.
 import { createStyleNode, type StyleNode } from "./style"
 
 export type PropsObject = Record<string, unknown>
@@ -40,7 +51,8 @@ const warnUndriveableProp = (property: string): void => {
     console.warn(
       `react-native-reanimated: useAnimatedProps changed \`${property}\`, which is not a number, so nothing ` +
         "downstream subscribes to it — only numeric props are driven at frame rate here (the SVG geometry " +
-        "and paint numbers). The new value is applied on the next React render instead. See docs/api.md.",
+        "and paint numbers). The new value is applied by a React render instead, one per change. " +
+        "See docs/api.md.",
     )
   }
 }
@@ -108,20 +120,22 @@ export const createAnimatedProps = (
       for (const [key, node] of nodes) {
         node.__push(next[key] as number)
       }
+      let needsRender = false
       for (const key of Object.keys(next)) {
         if (nodes.has(key)) {
           continue
         }
         if (!Object.is(next[key], staticSnapshot[key])) {
           warnUndriveableProp(key)
-          // Kept up to date anyway: the next React render — whenever it
-          // happens, for whatever reason — applies the current value rather
-          // than the one from mount.
           props[key] = next[key]
+          // The caller rebuilds and re-renders on false, which is the only
+          // channel a non-node prop has. Mutating `props` alone left the new
+          // value sitting in an object React had already committed.
+          needsRender = true
         }
       }
       staticSnapshot = next
-      return true
+      return !needsRender
     },
   }
 }

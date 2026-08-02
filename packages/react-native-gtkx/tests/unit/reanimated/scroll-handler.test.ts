@@ -12,9 +12,12 @@
 // never called, because a wheel-driven desktop scroller has no drag or
 // momentum phase and this platform's ScrollView has no prop to report one.
 // The test pins that, so the day a source appears this fails and says so.
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, it, test, vi } from "vitest"
 import type { ScrollEvent } from "../../../src/components/scroll-view"
-import { createScrollHandler } from "../../../src/reanimated-compat/scroll-handler"
+import {
+  createScrollHandler,
+  scrollTo,
+} from "../../../src/reanimated-compat/scroll-handler"
 
 const scrollEvent = (y: number): ScrollEvent => ({
   nativeEvent: {
@@ -91,4 +94,34 @@ describe("useAnimatedScrollHandler", () => {
     expect(onMomentumBegin).not.toHaveBeenCalled()
     expect(onMomentumEnd).not.toHaveBeenCalled()
   })
+})
+
+// `scrollTo` — the write half. `react-native-reanimated-dnd`'s
+// `useSortableList` reads the offset through the handler above and pushes one
+// back through this, inside a `useAnimatedReaction`; both shapes of ref it
+// can be handed are covered here.
+test("scrollTo scrolls through a plain ref object", () => {
+  const handle = { scrollTo: vi.fn() }
+  scrollTo({ current: handle }, 0, 120, false)
+  expect(handle.scrollTo).toHaveBeenCalledWith({
+    x: 0,
+    y: 120,
+    animated: false,
+  })
+})
+
+// `useAnimatedRef` returns a ref that is also callable and reads back through
+// a call with no argument — see reanimated-compat/animated-ref.ts.
+test("scrollTo scrolls through a callable animated ref", () => {
+  const handle = { scrollTo: vi.fn() }
+  scrollTo(() => handle, 40, 0, true)
+  expect(handle.scrollTo).toHaveBeenCalledWith({ x: 40, y: 0, animated: true })
+})
+
+test("scrollTo ignores a ref pointing at nothing, or at a non-scrollable", () => {
+  expect(() => scrollTo({ current: null }, 0, 10, false)).not.toThrow()
+  expect(() => scrollTo(() => null, 0, 10, false)).not.toThrow()
+  expect(() => scrollTo(null, 0, 10, false)).not.toThrow()
+  expect(() => scrollTo(undefined, 0, 10, false)).not.toThrow()
+  expect(() => scrollTo({ current: {} }, 0, 10, false)).not.toThrow()
 })

@@ -8,6 +8,16 @@ Research behind the drag-and-drop decision, 2026-08-01.
 Metro and Vite presets — so an app that already uses that library changes
 nothing in its source at all.**
 
+> **Superseded on the one point below, 2026-08-02.** "Running the real library
+> is not possible" was true of the surface that existed when this was written,
+> and every wall it names has since shipped. The library was then installed
+> unaliased and run:
+> [upstream-libraries.md](upstream-libraries.md) — `Draggable`, `Droppable`,
+> `DropProvider` and `Sortable` all work, dragged by a real pointer. The
+> DECISION still stands, for the reason this document gives further down
+> (GDK's drag icon, the theme's cursors, cross-application drops) rather than
+> for impossibility. Everything else here is unchanged and still measured.
+
 Running the real library is not possible, and the reason is not a judgement
 call: it imports `react-native-reanimated`, `react-native-gesture-handler`
 and `react-native-worklets` at module scope in nine of its files, and its

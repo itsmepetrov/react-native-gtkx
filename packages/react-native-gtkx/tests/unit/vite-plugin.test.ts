@@ -4,7 +4,7 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { createServer, type Plugin, type ViteDevServer } from "vite"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
-import { reactNativeGtkx } from "../../src/vite/index"
+import { reactNativeGtkx, rewriteReactNativeImport } from "../../src/vite/index"
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), "fixtures")
 const importer = join(fixtures, "importer.ts")
@@ -68,6 +68,28 @@ describe("plugin shape", () => {
   test("defines __DEV__ from vite's mode, as RN's own dev flag", () => {
     expect(configFor("development").define?.__DEV__).toBe("true")
     expect(configFor("production").define?.__DEV__).toBe("false")
+  })
+
+  // The rule, not a list of names. `ssr.external: true` externalizes a bare
+  // specifier BEFORE any resolveId hook runs, so a package the preset aliases
+  // but does not keep inside the pipeline is a package whose alias silently
+  // loses to whatever is installed under the real name — which is exactly the
+  // app the aliases exist for, one that also ships iOS and Android. Measured
+  // in examples/upstream-libraries: the real react-native-gesture-handler
+  // loaded and died on an extensionless internal import.
+  test("every aliased package name is kept inside the vite pipeline", () => {
+    const noExternal = configFor("development").ssr?.noExternal ?? []
+    for (const name of [
+      "react-native",
+      "react-native-svg",
+      "react-native-reanimated",
+      "react-native-reanimated-dnd",
+      "react-native-worklets",
+      "react-native-gesture-handler",
+    ]) {
+      expect(rewriteReactNativeImport(name)).not.toBeNull()
+      expect(noExternal).toContain(name)
+    }
   })
 })
 

@@ -137,3 +137,46 @@ export const useAnimatedScrollHandler = <
   )
   return stable
 }
+
+/** Anything `scrollTo` can be pointed at: RN's scroll methods live on the ref. */
+type ScrollableHandle = {
+  scrollTo?: (options: { x?: number; y?: number; animated?: boolean }) => void
+}
+
+type ScrollableRef =
+  | (() => ScrollableHandle | null)
+  | { current: ScrollableHandle | null }
+  | null
+  | undefined
+
+/**
+ * Scrolls the view an `useAnimatedRef` points at — the other half of the pair
+ * above, and the reason it is in this file: a list that reads its own offset
+ * through the handler almost always writes one back, and
+ * `react-native-reanimated-dnd`'s `useSortableList` does exactly that inside
+ * a `useAnimatedReaction`.
+ *
+ * Upstream is a worklet reaching the shadow tree directly. Here it is the
+ * ordinary imperative `scrollTo` every RN scrollable already exposes, called
+ * synchronously, for the same reason the handler needs no event system: this
+ * IS the thread that owns the widget. The argument order is upstream's
+ * (`x` then `y`, not RN's options object), so library call sites are
+ * unchanged, and `animated` carries through to `ScrollView`, which ignores it.
+ *
+ * A ref that is not (yet) pointing at a scrollable is ignored rather than
+ * throwing: upstream does the same, and the first frames of a list whose ref
+ * has not been attached are a normal state, not an error.
+ */
+export const scrollTo = (
+  animatedRef: ScrollableRef,
+  x: number,
+  y: number,
+  animated: boolean,
+): void => {
+  if (!animatedRef) {
+    return
+  }
+  const handle =
+    typeof animatedRef === "function" ? animatedRef() : animatedRef.current
+  handle?.scrollTo?.({ x, y, animated })
+}
