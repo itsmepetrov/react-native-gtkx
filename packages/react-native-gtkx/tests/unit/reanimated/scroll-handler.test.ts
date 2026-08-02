@@ -7,12 +7,27 @@
 // the handler, and the handlers are read per event so a re-render is picked
 // up without a new function.
 //
-// The fourth reads like an omission and is a platform fact:
-// `onBeginDrag`/`onEndDrag`/`onMomentumBegin`/`onMomentumEnd` are accepted and
-// never called, because a wheel-driven desktop scroller has no drag or
-// momentum phase and this platform's ScrollView has no prop to report one.
-// The test pins that, so the day a source appears this fails and says so.
+// The fourth used to pin that `onBeginDrag`/`onEndDrag`/`onMomentumBegin`/
+// `onMomentumEnd` were accepted and NEVER CALLED — "a wheel-driven desktop
+// scroller has no drag or momentum phase and this platform's ScrollView has
+// no prop to report one" — with the note that the day a source appeared the
+// test would fail and say so.
+//
+// A source appeared, and the test says so. Half of the old claim survived
+// measurement and half did not: a wheel really does have no phase (GTK emits
+// `::scroll` per detent and nothing else), but a TOUCHPAD GLIDE emits
+// `::scroll-begin`, `::scroll-end` and a real kinetic deceleration after it.
+// The claim was about the wheel, not about the platform —
+// docs/research/scroll-phases.md has the traces. The four handlers are called
+// now, and what pins the wheel half is the GTK test beside this one, where a
+// real wheel produces `onScroll` and no phase at all.
+//
+// Here the phase half is pinned where it can be: the ROUTING. One handler
+// object, five callbacks, one shared context — and no phase sink offered at
+// all when the caller asked for no phase, which is what lets a `ScrollView`
+// install nothing.
 import { describe, expect, it, test, vi } from "vitest"
+import { scrollPhaseSink } from "../../../src/components/scroll-phase"
 import type { ScrollEvent } from "../../../src/components/scroll-view"
 import {
   createScrollHandler,
@@ -75,7 +90,7 @@ describe("useAnimatedScrollHandler", () => {
     }).not.toThrow()
   })
 
-  it("never calls the drag and momentum handlers — no phase exists to report", () => {
+  it("routes each phase to its own handler, under upstream's event name", () => {
     const onBeginDrag = vi.fn()
     const onEndDrag = vi.fn()
     const onMomentumBegin = vi.fn()
@@ -87,12 +102,73 @@ describe("useAnimatedScrollHandler", () => {
       onMomentumBegin,
       onMomentumEnd,
     }))
-    handle(scrollEvent(1))
+    const sink = scrollPhaseSink(handle)!
+    expect(sink).toBeTruthy()
+
+    sink.deliver("beginDrag", scrollEvent(10))
+    sink.deliver("endDrag", scrollEvent(20))
+    sink.deliver("momentumBegin", scrollEvent(30))
+    sink.deliver("momentumEnd", scrollEvent(40))
+
+    expect(onBeginDrag.mock.calls[0]![0]).toMatchObject({
+      contentOffset: { x: 0, y: 10 },
+      eventName: "onScrollBeginDrag",
+    })
+    expect(onEndDrag.mock.calls[0]![0].eventName).toBe("onScrollEndDrag")
+    expect(onMomentumBegin.mock.calls[0]![0].eventName).toBe(
+      "onMomentumScrollBegin",
+    )
+    expect(onMomentumEnd.mock.calls[0]![0].eventName).toBe(
+      "onMomentumScrollEnd",
+    )
+    // The phase event is flattened exactly as `onScroll`'s is.
+    expect("nativeEvent" in onEndDrag.mock.calls[0]![0]).toBe(false)
+  })
+
+  // The lock `@gorhom/bottom-sheet` performs is this and nothing more:
+  // `onBeginDrag` records where the drag started, `onScroll` reads it back
+  // and scrolls to it. One context object across both is the contract that
+  // makes it possible.
+  it("shares one context object between onScroll and the phases", () => {
+    const seen: unknown[] = []
+    const record = (
+      _event: unknown,
+      context: Record<string, unknown>,
+    ): void => {
+      seen.push(context)
+    }
+    const handle = createScrollHandler(() => ({
+      onScroll: record,
+      onBeginDrag: record,
+      onMomentumEnd: record,
+    }))
+    const sink = scrollPhaseSink(handle)!
+    sink.deliver("beginDrag", scrollEvent(1))
     handle(scrollEvent(2))
-    expect(onBeginDrag).not.toHaveBeenCalled()
-    expect(onEndDrag).not.toHaveBeenCalled()
-    expect(onMomentumBegin).not.toHaveBeenCalled()
-    expect(onMomentumEnd).not.toHaveBeenCalled()
+    sink.deliver("momentumEnd", scrollEvent(3))
+    expect(seen).toHaveLength(3)
+    expect(seen[0]).toBe(seen[1])
+    expect(seen[1]).toBe(seen[2])
+  })
+
+  // The cost bar: a handler that asked for no phase must not make a
+  // ScrollView install a GTK controller, a signal or a tick callback. The
+  // sink exists (one object per handler, built once) and reports that it
+  // wants nothing, which is what ScrollView reads.
+  it("asks for no phase when the caller registered none", () => {
+    const onlyScroll = createScrollHandler(() => ({ onScroll: vi.fn() }))
+    expect(scrollPhaseSink(onlyScroll)!.wants()).toBe(false)
+
+    const bareFunction = createScrollHandler(() => vi.fn())
+    expect(scrollPhaseSink(bareFunction)!.wants()).toBe(false)
+
+    let handlers: Record<string, unknown> = { onScroll: vi.fn() }
+    const grows = createScrollHandler(() => handlers)
+    expect(scrollPhaseSink(grows)!.wants()).toBe(false)
+    // Asked per render rather than once, so a component that grows a phase
+    // handler later gets the machinery then.
+    handlers = { onScroll: vi.fn(), onEndDrag: vi.fn() }
+    expect(scrollPhaseSink(grows)!.wants()).toBe(true)
   })
 })
 
