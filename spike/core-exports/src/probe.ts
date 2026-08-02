@@ -41,6 +41,12 @@ export const report = (message: string): void => {
 // never visited can be shown to have received nothing.
 let controlTouches = 0
 
+/** Scroll events the SHEET's own scrollable received. */
+export let sheetScrolls = 0
+export const sheetScrolled = (): void => {
+  sheetScrolls += 1
+}
+
 export const controlTouched = (): void => {
   controlTouches += 1
   report("CONTROL TOUCHED — the injection missed its target")
@@ -141,6 +147,123 @@ export const runPointerProbe = async (): Promise<void> => {
     check("the draggable list rendered rows", false, "row-a / row-c missing")
   }
 
+  // --- 1b. the sheet's scroll LOCK, which is the path this epic unblocked -
+  //
+  // While the sheet is collapsed, `useScrollEventsHandlersDefault` holds its
+  // scrollable at the top: every scroll event calls Reanimated's `scrollTo`
+  // to put it back. That is the real consumer of this surface — a user
+  // scrolling the sheet's list while it is down hits it on the first detent
+  // — and it is checked in both directions, because "the list did not move"
+  // is also what a list with nowhere to scroll looks like. The same list is
+  // scrolled again after the sheet is up, and then it MUST move.
+  const scrollList = async (
+    detents: number,
+    kind: "wheel" | "glide",
+  ): Promise<void> => {
+    const target = await measure("sheet-row-one")
+    if (!target) {
+      return
+    }
+    const aim = centreOf(target)
+    await step(() => pointer.moveTo(aim.x, aim.y), 120)
+    if (kind === "wheel") {
+      for (let i = 0; i < detents; i += 1) {
+        await step(() => pointer.scrollBy(1), 60)
+      }
+    } else {
+      for (let i = 0; i < detents * 3; i += 1) {
+        await step(() => pointer.glideBy(20), 16)
+      }
+      await step(() => pointer.glideEnd(), 1200)
+    }
+    await sleep(300)
+  }
+
+  // CONTROL: a plain FlatList of the same rows, same injected wheel. Without
+  // this, "the sheet's list did not move" cannot be told apart from "the
+  // wheel never arrived".
+  const svBefore = await measure("sv-row-one")
+  report(`sv row one: ${show(svBefore)}`)
+  if (svBefore) {
+    const aim = centreOf(svBefore)
+    await step(() => pointer.moveTo(aim.x, aim.y), 120)
+    for (let i = 0; i < 5; i += 1) {
+      await step(() => pointer.scrollBy(1), 60)
+    }
+    await sleep(300)
+  }
+  const svAfter = await measure("sv-row-one")
+  check(
+    "CONTROL: a plain ScrollView scrolls under the same injected wheel",
+    svBefore !== null && svAfter !== null && svBefore.y - svAfter.y > 20,
+    `sv row-one y ${svBefore ? Math.round(svBefore.y) : "?"} -> ${svAfter ? Math.round(svAfter.y) : "?"}`,
+  )
+
+  const unstyledBefore = await measure("unstyled-row-one")
+  report(`unstyled row one: ${show(unstyledBefore)}`)
+  if (unstyledBefore) {
+    const aim = centreOf(unstyledBefore)
+    await step(() => pointer.moveTo(aim.x, aim.y), 120)
+    for (let i = 0; i < 5; i += 1) {
+      await step(() => pointer.scrollBy(1), 60)
+    }
+    await sleep(300)
+  }
+  const unstyledAfter = await measure("unstyled-row-one")
+  // NOT a check, because it records a gap rather than a guarantee: the same
+  // list, in the same bounded parent, WITHOUT a style of its own never
+  // becomes a viewport — it grows to its content and no scroll event is ever
+  // emitted. That is the shape `@gorhom/bottom-sheet` renders its scrollable
+  // in, and it is what stops the sheet's scroll lock below.
+  report(
+    `FINDING unstyled scrollable in a bounded parent: row-one y ` +
+      `${unstyledBefore ? Math.round(unstyledBefore.y) : "?"} -> ` +
+      `${unstyledAfter ? Math.round(unstyledAfter.y) : "?"} ` +
+      `(unchanged means it never scrolled)`,
+  )
+
+  const plainBefore = await measure("plain-row-one")
+  report(`plain row one: ${show(plainBefore)}`)
+  if (plainBefore) {
+    const aim = centreOf(plainBefore)
+    await step(() => pointer.moveTo(aim.x, aim.y), 120)
+    for (let i = 0; i < 5; i += 1) {
+      await step(() => pointer.scrollBy(1), 60)
+    }
+    await sleep(300)
+  }
+  const plainAfter = await measure("plain-row-one")
+  check(
+    "CONTROL: a plain FlatList scrolls under the same injected wheel",
+    plainBefore !== null &&
+      plainAfter !== null &&
+      plainBefore.y - plainAfter.y > 20,
+    `plain row-one y ${plainBefore ? Math.round(plainBefore.y) : "?"} -> ${plainAfter ? Math.round(plainAfter.y) : "?"}`,
+  )
+
+  // The sheet's own scrollable, under the same wheel and the same glide.
+  // `sheetScrolls` counts the scroll events its `onScroll` receives — the
+  // lock is driven entirely by those, so the count is the thing to look at
+  // and the row's position is only the consequence.
+  const lockedBefore = await measure("sheet-row-one")
+  report(`sheet row one (collapsed): ${show(lockedBefore)}`)
+  await scrollList(5, "wheel")
+  await scrollList(4, "glide")
+  const lockedAfter = await measure("sheet-row-one")
+  report(
+    `sheet row-one y ${lockedBefore ? Math.round(lockedBefore.y) : "?"} -> ${
+      lockedAfter ? Math.round(lockedAfter.y) : "?"
+    }`,
+  )
+  check(
+    "the sheet's own scrollable receives scroll events at all",
+    sheetScrolls > 0,
+    `sheet list onScroll calls = ${sheetScrolls}` +
+      (sheetScrolls === 0
+        ? " — it never becomes a viewport, so there is nothing to lock (see the unstyled control above)"
+        : ""),
+  )
+
   // --- 2. drag the bottom sheet open -------------------------------------
   const handle = await measure("sheet-handle")
   report(`sheet handle: ${show(handle)}`)
@@ -161,6 +284,21 @@ export const runPointerProbe = async (): Promise<void> => {
   } else {
     check("the bottom sheet rendered its handle", false, "sheet-handle missing")
   }
+
+  // --- 3. the same list, unlocked ----------------------------------------
+  // The control on the lock: identical input, sheet extended, and now the
+  // list scrolls. Without this the two checks above are satisfied by a list
+  // that never could have moved.
+  const freeBefore = await measure("sheet-row-one")
+  report(`sheet row one (extended): ${show(freeBefore)}`)
+  await scrollList(5, "wheel")
+  const freeAfter = await measure("sheet-row-one")
+  report(
+    `sheet extended, same wheel: row-one y ${
+      freeBefore ? Math.round(freeBefore.y) : "?"
+    } -> ${freeAfter ? Math.round(freeAfter.y) : "?"}, ` +
+      `sheet list onScroll calls = ${sheetScrolls}`,
+  )
 
   check(
     "NEGATIVE CONTROL: the zone the pointer never visited saw nothing",

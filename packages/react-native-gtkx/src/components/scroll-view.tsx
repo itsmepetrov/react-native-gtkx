@@ -12,12 +12,12 @@ import {
 import { splitStyle, StyleSheet } from "../style/index"
 import type { StyleProp } from "../contracts"
 import {
+  Gtk,
   GtkBox,
   GtkScrolledWindow,
   queueAllocate,
   queueResize,
   useSignal,
-  type Gtk,
 } from "../gtkx/bridge/index"
 import {
   ensurePerfReporter,
@@ -36,6 +36,7 @@ import {
   type MeasureHandle,
 } from "./measure"
 import { deferDuringAllocate, setStoredOffset } from "./rect-store"
+import { scrollPhaseSink, type ScrollPhase } from "./scroll-phase"
 import {
   useLayoutChild,
   useRnContainer,
@@ -89,6 +90,20 @@ export type ScrollViewProps = ResponderProps & {
   // the top while scrolled past, each pushed out by the next one.
   stickyHeaderIndices?: readonly number[]
   onScroll?: (event: ScrollEvent) => void
+  // RN's four scroll PHASES. What each one is here — and which input devices
+  // produce it at all — is measured in docs/research/scroll-phases.md; the
+  // short version is that a mouse wheel produces none of them (GTK reports a
+  // detent, with no beginning and no end) while a touchpad glide produces
+  // all four. `onScroll` is unaffected either way.
+  //
+  // Every one of them is OPTIONAL in the strong sense: while no phase
+  // handler is attached — neither a prop here nor a Reanimated handler
+  // carrying a phase sink — no controller is installed, no signal is
+  // connected, and a scroll costs exactly what it cost before they existed.
+  onScrollBeginDrag?: (event: ScrollEvent) => void
+  onScrollEndDrag?: (event: ScrollEvent) => void
+  onMomentumScrollBegin?: (event: ScrollEvent) => void
+  onMomentumScrollEnd?: (event: ScrollEvent) => void
   // RN onContentSizeChange(contentWidth, contentHeight): fires when the
   // scrollable content changes size. GTK's adjustments emit "changed" right
   // after the allocation that resized their range — exactly the moment the
@@ -175,6 +190,10 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       horizontal = false,
       stickyHeaderIndices,
       onScroll,
+      onScrollBeginDrag,
+      onScrollEndDrag,
+      onMomentumScrollBegin,
+      onMomentumScrollEnd,
       onContentSizeChange,
       onLayout,
       children,
@@ -432,18 +451,20 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       }
     }
 
-    const emitScroll = (): void => {
-      if (!onScroll) {
-        return
-      }
+    // The one place the payload is read off the widget, shared by `onScroll`
+    // and by all four phases — RN hands the same `ScrollEvent` to every one
+    // of them, and reading it twice would be two sets of FFI calls for one
+    // truth. Null when there is nothing honest to report yet (no widget, or
+    // a content size the engine has not committed).
+    const readScrollEvent = (): ScrollEvent | null => {
       const widget = outerRef.current
       const contentRect = contentNode.getRect()
       if (!widget || !contentRect) {
-        return
+        return null
       }
       const hadjustment = widget.getHadjustment()
       const vadjustment = widget.getVadjustment()
-      onScroll({
+      return {
         nativeEvent: {
           contentOffset: {
             x: hadjustment?.getValue() ?? 0,
@@ -455,7 +476,17 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
             height: vadjustment?.getPageSize() ?? 0,
           },
         },
-      })
+      }
+    }
+
+    const emitScroll = (): void => {
+      if (!onScroll) {
+        return
+      }
+      const event = readScrollEvent()
+      if (event) {
+        onScroll(event)
+      }
     }
 
     const adjustment = horizontal
@@ -474,6 +505,238 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       emitScroll()
       perfAddTime("scroll.js", perfNow() - start)
     }
+
+    // --- the four scroll phases -----------------------------------------
+    //
+    // What GTK actually reports, measured on 4.22.4 under a real pointer
+    // (docs/research/scroll-phases.md, and the trace is in
+    // tests/gtk/components/scroll-phases.gtk.test.tsx):
+    //
+    //   - a mouse WHEEL emits `::scroll` per detent and NOTHING else. No
+    //     `::scroll-begin`, no `::scroll-end`, no `::decelerate`, and the
+    //     adjustment jumps a whole step in one frame with no animation
+    //     after it. There is no drag phase and no momentum phase to report,
+    //     so none is reported. This is the fact PR #88 recorded; what has
+    //     changed is that it is a fact about the WHEEL and not about the
+    //     platform.
+    //   - a touchpad GLIDE emits `::scroll-begin`, a stream of `::scroll`,
+    //     `::scroll-end` and `::decelerate` — a real sequence with a real
+    //     beginning and end — and the scrolled window's own kinetic
+    //     animation then carries the adjustment on for another second or so.
+    //     All four phases exist, and all four are reported.
+    //
+    // Drag maps onto the scroll SEQUENCE rather than onto a finger on the
+    // content: `::scroll-begin` is "the user started driving this scroller",
+    // which is what a consumer of `onScrollBeginDrag` acts on and is as close
+    // as a device that never touches the content can get. That is the one
+    // approximation here, and it is named in docs/api.md.
+    //
+    // Momentum is read off the ADJUSTMENT, not off `::decelerate`. The
+    // controller emits `decelerate` at every `scroll-end` — it reports the
+    // velocity it measured, not a decision to coast — while the scrolled
+    // window decides for itself whether that velocity is worth animating. RN
+    // fires `onMomentumScrollBegin` only when the view actually keeps
+    // moving, so the honest source is the movement itself.
+    const phaseSink = scrollPhaseSink(onScroll)
+    // `wants()` rather than the sink's mere presence: every Reanimated scroll
+    // handler carries one, and most of them ask for nothing but `onScroll`.
+    // Asking is what keeps the common case free.
+    const wantsPhases = Boolean(
+      onScrollBeginDrag ||
+      onScrollEndDrag ||
+      onMomentumScrollBegin ||
+      onMomentumScrollEnd ||
+      phaseSink?.wants(),
+    )
+
+    // Read per event rather than captured, exactly as `useAnimatedScrollHandler`
+    // does it: a re-render that changed a handler must be picked up without
+    // tearing the GTK controller down and building a new one.
+    const phaseHandlers = useRef({
+      onScrollBeginDrag,
+      onScrollEndDrag,
+      onMomentumScrollBegin,
+      onMomentumScrollEnd,
+      phaseSink,
+      readScrollEvent,
+    })
+    phaseHandlers.current = {
+      onScrollBeginDrag,
+      onScrollEndDrag,
+      onMomentumScrollBegin,
+      onMomentumScrollEnd,
+      phaseSink,
+      readScrollEvent,
+    }
+
+    useLayoutEffect(() => {
+      // The whole cost story is this early return. No phase handler means no
+      // controller, no signal, no tick callback and no bookkeeping — the
+      // widget is byte-for-byte the one this component built before the
+      // phases existed.
+      if (!wantsPhases) {
+        return
+      }
+      const widget = scrolled
+      if (!widget) {
+        return
+      }
+
+      const emitPhase = (phase: ScrollPhase): void => {
+        const handlers = phaseHandlers.current
+        const event = handlers.readScrollEvent()
+        if (!event) {
+          return
+        }
+        if (phase === "beginDrag") {
+          handlers.onScrollBeginDrag?.(event)
+        } else if (phase === "endDrag") {
+          handlers.onScrollEndDrag?.(event)
+        } else if (phase === "momentumBegin") {
+          handlers.onMomentumScrollBegin?.(event)
+        } else {
+          handlers.onMomentumScrollEnd?.(event)
+        }
+        handlers.phaseSink?.deliver(phase, event)
+      }
+
+      const axis = horizontal
+        ? widget.getHadjustment()
+        : widget.getVadjustment()
+
+      // Momentum is watched on the ADJUSTMENT, with two timers and no tick
+      // callback. A frame-polling watcher was the first shape and it was
+      // wrong twice over: it burns a callback per frame for the length of
+      // every coast, and it counts FRAMES, which is not a unit — under the
+      // headless compositor the frame clock free-runs at ~106 ticks per
+      // millisecond (measured, docs/research/scroll-phases.md), so a
+      // four-frame grace expired in microseconds. Wall time means the same
+      // thing everywhere.
+      //
+      // Milliseconds to wait after `::scroll-end` for the scrolled window's
+      // kinetic animation to take over before concluding it never will.
+      // Measured handoff: `::scroll-end` at 1921.9 ms, first inertial value
+      // change at 1927.5 ms — 5.6 ms. 120 is slack, not a guess.
+      const handoffMs = 120
+      // Milliseconds of a motionless adjustment that end the momentum. GTK's
+      // deceleration steps the value every frame right to the end (16.7 ms
+      // apart in the trace), so 60 ms is three and a half missed steps.
+      const restMs = 60
+
+      let watching = false
+      let coasting = false
+      let lastMoveAt = 0
+      let handoffTimer: ReturnType<typeof setTimeout> | null = null
+      let restTimer: ReturnType<typeof setTimeout> | null = null
+
+      const clearTimers = (): void => {
+        if (handoffTimer !== null) {
+          clearTimeout(handoffTimer)
+          handoffTimer = null
+        }
+        if (restTimer !== null) {
+          clearTimeout(restTimer)
+          restTimer = null
+        }
+      }
+
+      // Re-armed for the REMAINING idle time rather than reset on every step,
+      // so the number of timers a coast costs is bounded by its duration
+      // (one per `restMs`) and not by how many times the adjustment moved.
+      // The difference is not academic: under the headless compositor's
+      // free-running frame clock a single coast steps the value ~150,000
+      // times, and a clear-and-rearm per step is 150,000 timers.
+      const checkRest = (): void => {
+        const idle = perfNow() - lastMoveAt
+        if (idle < restMs) {
+          restTimer = setTimeout(checkRest, restMs - idle)
+          return
+        }
+        restTimer = null
+        stopMomentumWatch()
+        emitPhase("momentumEnd")
+      }
+
+      const onCoastStep = (): void => {
+        lastMoveAt = perfNow()
+        if (coasting) {
+          return
+        }
+        coasting = true
+        if (handoffTimer !== null) {
+          clearTimeout(handoffTimer)
+          handoffTimer = null
+        }
+        emitPhase("momentumBegin")
+        restTimer = setTimeout(checkRest, restMs)
+      }
+
+      const stopMomentumWatch = (): void => {
+        clearTimers()
+        if (watching) {
+          axis?.off("value-changed", onCoastStep)
+          watching = false
+        }
+        coasting = false
+      }
+
+      const watchMomentum = (): void => {
+        if (watching) {
+          return
+        }
+        watching = true
+        axis?.on("value-changed", onCoastStep)
+        handoffTimer = setTimeout(() => {
+          handoffTimer = null
+          if (!coasting) {
+            // The scroller came to rest with the drag. No inertia, so no
+            // momentum pair — which is RN's behaviour too.
+            stopMomentumWatch()
+          }
+        }, handoffMs)
+      }
+
+      const controller = Gtk.EventControllerScroll.new(
+        // An axis flag is REQUIRED, and not for the deltas: measured, a
+        // controller created with `KINETIC` alone emits nothing at all — not
+        // even `::scroll-begin`. `::scroll` is therefore emitted, and
+        // deliberately not connected: an unconnected GObject signal is a
+        // handler-list walk over an empty list in C, so the per-scroll-frame
+        // cost of this controller never reaches JS.
+        Gtk.EventControllerScrollFlags.BOTH_AXES |
+          Gtk.EventControllerScrollFlags.KINETIC,
+      )
+      // CAPTURE, so the phase is reported before the scrolled window's own
+      // controller acts on the same event and moves the adjustment. Nothing
+      // here handles the event, so propagation is untouched either way.
+      controller.setPropagationPhase(Gtk.PropagationPhase.CAPTURE)
+
+      const onScrollBegin = (): void => {
+        // A new drag during a coast: RN ends the momentum before beginning
+        // the drag, so a consumer never sees two live phases at once.
+        if (coasting) {
+          stopMomentumWatch()
+          emitPhase("momentumEnd")
+        } else {
+          stopMomentumWatch()
+        }
+        emitPhase("beginDrag")
+      }
+      const onScrollEnd = (): void => {
+        emitPhase("endDrag")
+        watchMomentum()
+      }
+      controller.on("scroll-begin", onScrollBegin)
+      controller.on("scroll-end", onScrollEnd)
+      widget.addController(controller)
+
+      return () => {
+        controller.off("scroll-begin", onScrollBegin)
+        controller.off("scroll-end", onScrollEnd)
+        widget.removeController(controller)
+        stopMomentumWatch()
+      }
+    }, [scrolled, wantsPhases, horizontal])
 
     // Content-size reports dedupe on the engine rect: "changed" also fires
     // for pure viewport (page-size) changes, which RN does not report.

@@ -42,12 +42,22 @@ const POINTER_BUTTON = 2
 const POINTER_AXIS = 3
 const POINTER_FRAME = 4
 const POINTER_AXIS_SOURCE = 5
+const POINTER_AXIS_STOP = 6
 const POINTER_AXIS_DISCRETE = 7
 
 // wl_pointer.axis
 const AXIS_VERTICAL_SCROLL = 0
 // wl_pointer.axis_source
 const AXIS_SOURCE_WHEEL = 0
+/**
+ * A touchpad two-finger glide. The distinction from a wheel is the whole
+ * point of this constant: libinput reports a wheel as DISCRETE detents with
+ * no beginning and no end, and a finger as a CONTINUOUS stream terminated by
+ * `axis_stop` — which is the only thing on this platform that gives GDK a
+ * scroll sequence to bracket, and therefore the only source of a scroll
+ * PHASE (docs/research/scroll-phases.md).
+ */
+const AXIS_SOURCE_FINGER = 1
 /** One wheel detent, in the units libinput reports for a discrete wheel. */
 const WHEEL_STEP = 15
 /** wl_fixed_t is 24.8 fixed point. */
@@ -255,6 +265,15 @@ export type VirtualPointer = {
   release(button?: PointerButton): void
   /** Vertical wheel, in detents; positive scrolls down, negative up. */
   scrollBy(detents: number): void
+  /**
+   * One step of a touchpad two-finger glide, in pixels; positive scrolls
+   * down. Continuous and unterminated — the sequence is only finished by
+   * {@link VirtualPointer.glideEnd}, which is what makes it a scroll with a
+   * beginning and an end rather than a detent.
+   */
+  glideBy(pixels: number): void
+  /** Lifts the fingers: `wl_pointer.axis_stop` on the vertical axis. */
+  glideEnd(): void
   dispose(): void
 }
 
@@ -346,6 +365,33 @@ export const createVirtualPointer = async (
         AXIS_VERTICAL_SCROLL,
         toFixed(detents * WHEEL_STEP),
         detents,
+      ])
+      frame()
+    },
+    glideBy(pixels) {
+      time += 8
+      // No `axis_discrete`: that request is what tells the compositor the
+      // motion came in detents, and it is exactly what a finger does not
+      // have. Without it libinput's continuous value stands alone and GDK
+      // builds a SMOOTH scroll event out of it.
+      sendRequest(connection, pointer, POINTER_AXIS_SOURCE, [
+        AXIS_SOURCE_FINGER,
+      ])
+      sendRequest(connection, pointer, POINTER_AXIS, [
+        time,
+        AXIS_VERTICAL_SCROLL,
+        toFixed(pixels),
+      ])
+      frame()
+    },
+    glideEnd() {
+      time += 8
+      sendRequest(connection, pointer, POINTER_AXIS_SOURCE, [
+        AXIS_SOURCE_FINGER,
+      ])
+      sendRequest(connection, pointer, POINTER_AXIS_STOP, [
+        time,
+        AXIS_VERTICAL_SCROLL,
       ])
       frame()
     },

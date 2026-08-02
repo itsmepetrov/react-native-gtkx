@@ -44,7 +44,7 @@
 // costs rather than what the animated value costs, so it is refused by name
 // with the transform to use instead. Both halves of that are measured in
 // docs/research/animated-colors.md. See docs/api.md.
-import type { ElementType, ReactNode } from "react"
+import { useState, type ElementType, type ReactNode } from "react"
 import { Animated as PlatformAnimated } from "../components/animated"
 import type {
   AnimatedViewStyle,
@@ -93,14 +93,23 @@ import {
   withLayoutAnimations,
   type LayoutAnimationProps,
 } from "./layout-animation-view"
-import { cancelAnimation, createMakeMutable, isSharedValue } from "./mutable"
+import {
+  cancelAnimation,
+  createMakeMutable,
+  isSharedValue,
+  type SharedValue,
+} from "./mutable"
 import {
   scrollTo,
   useAnimatedScrollHandler,
+  useEvent,
+  useHandler,
   type AnimatedScrollEvent,
   type ScrollHandlerCallback,
   type ScrollHandlers,
+  type UseHandlerContext,
 } from "./scroll-handler"
+import { createScrollOffsetHooks } from "./scroll-offset"
 import type { StyleObject } from "./style"
 import { isWorkletFunction } from "./threads"
 import { createMapper, type Mapper } from "./tracking"
@@ -123,6 +132,9 @@ const {
   useAnimatedStyle,
   useAnimatedProps,
 } = createHooks(makeMutable)
+
+const { useScrollOffset, useScrollViewOffset } =
+  createScrollOffsetHooks(makeMutable)
 
 // --- the implemented surface --------------------------------------------
 
@@ -152,6 +164,10 @@ export {
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useDerivedValue,
+  useEvent,
+  useHandler,
+  useScrollOffset,
+  useScrollViewOffset,
   useSharedValue,
   withClamp,
   withDecay,
@@ -184,7 +200,12 @@ export type {
 } from "./color"
 export type { EasingFunction, EasingFunctionFactory } from "./easing"
 export type { AnimatedRef, MeasuredDimensions } from "./animated-ref"
-export type { AnimatedScrollEvent, ScrollHandlerCallback, ScrollHandlers }
+export type {
+  AnimatedScrollEvent,
+  ScrollHandlerCallback,
+  ScrollHandlers,
+  UseHandlerContext,
+}
 export type { DependencyList } from "./hooks"
 export type { ExtrapolationConfig, ExtrapolationType } from "./interpolation"
 export type { DerivedValue, SharedValue } from "./mutable"
@@ -271,6 +292,55 @@ export const configureReanimatedLogger = (): void => {}
 
 /** No reduce-motion source is wired on this platform yet — see {@link ReduceMotion}. */
 export const useReducedMotion = (): boolean => false
+
+/**
+ * Upstream's keyboard states. Mirrored because {@link useAnimatedKeyboard}
+ * returns one of them, and because a caller comparing against
+ * `KeyboardState.CLOSED` should type-check and be right.
+ */
+export enum KeyboardState {
+  UNKNOWN = 0,
+  OPENING = 1,
+  OPEN = 2,
+  CLOSING = 3,
+  CLOSED = 4,
+}
+
+/**
+ * The keyboard's height and state as shared values — **honoured and never
+ * updated**, which is the same shape and the same reason as RN's `Keyboard`
+ * (src/apis/keyboard.ts): every number this hook reports describes a software
+ * panel sliding over the app and taking screen space from it, and a desktop
+ * has no such panel. The height a caller reads is 0 because the keyboard
+ * occupies nothing, and the state is `CLOSED` because it is.
+ *
+ * Both values are REAL shared values, so a `useAnimatedStyle` reading them
+ * subscribes, computes and settles exactly once, and a layout that offsets
+ * itself by `keyboard.height.value` lands where it should instead of
+ * throwing. That is the whole of the difference from refusing: an app written
+ * for three platforms keeps one source and gets the right answer here.
+ *
+ * `UNKNOWN` is deliberately not the state. Upstream seeds `UNKNOWN` and
+ * replaces it the moment the native side reports; here nothing ever will, so
+ * a permanent "we do not know" would be false — the state IS known.
+ *
+ * The measured caller is `@gorhom/bottom-sheet`, which has its own
+ * `useAnimatedKeyboard` over RN's `Keyboard` and never reaches this one; the
+ * hook is here for apps, which do.
+ */
+export const useAnimatedKeyboard = (
+  // Upstream's Android translucency options. Accepted and ignored: they
+  // describe how the keyboard's rectangle relates to a system bar, and there
+  // is neither.
+  options?: unknown,
+): { height: SharedValue<number>; state: SharedValue<KeyboardState> } => {
+  void options
+  const [keyboard] = useState(() => ({
+    height: makeMutable(0),
+    state: makeMutable(KeyboardState.CLOSED),
+  }))
+  return keyboard
+}
 
 /**
  * Both are deprecated warn-only aliases upstream, and libraries call them to
@@ -532,16 +602,11 @@ export const linear: any = unsupported("linear")
 export const steps: any = unsupported("steps")
 
 // --- hooks built on the event system, sensors and the keyboard ---
-export const useAnimatedKeyboard: any = unsupported("useAnimatedKeyboard")
 export const useAnimatedSensor: any = unsupported("useAnimatedSensor")
 export const useComposedEventHandler: any = unsupported(
   "useComposedEventHandler",
 )
-export const useEvent: any = unsupported("useEvent")
 export const useFrameCallback: any = unsupported("useFrameCallback")
-export const useHandler: any = unsupported("useHandler")
-export const useScrollOffset: any = unsupported("useScrollOffset")
-export const useScrollViewOffset: any = unsupported("useScrollViewOffset")
 export const useTimestamp: any = unsupported("useTimestamp")
 
 // --- a worklet runtime, which is structural by definition ---
@@ -567,7 +632,6 @@ export const getUseOfValueInStyleWarning: any = unsupported(
 // --- enums with no source of truth on a desktop ---
 export const InterfaceOrientation: any = unsupported("InterfaceOrientation")
 export const IOSReferenceFrame: any = unsupported("IOSReferenceFrame")
-export const KeyboardState: any = unsupported("KeyboardState")
 export const SensorType: any = unsupported("SensorType")
 
 // --- screen transitions ---

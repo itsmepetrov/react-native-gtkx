@@ -42,10 +42,39 @@ opens the window to drag by hand instead.
 - a row of the draggable list changes place under a real drag, measured with
   `measureInWindow` on the row rather than from a value the app stored;
 - the sheet moves up under a real drag of its handle;
+- a plain `ScrollView` and a plain `FlatList` scroll under an injected wheel,
+  which is the control on the scroll checks below — "the sheet's list did not
+  move" and "the wheel never arrived" look identical without it;
 - **the negative control**: a zone the pointer never visits reports every
   touch it receives, and must receive none. A Wayland pointer is addressed by
   position, not by focus, so without this the other three prove only that
   something happened somewhere.
+
+## The one check that fails, and why it is kept
+
+`the sheet's own scrollable receives scroll events at all` — **it receives
+none**, in either sheet state.
+
+This was found while verifying `@gorhom/bottom-sheet`'s scroll LOCK, which is
+the thing the scroll-phase work was supposed to unblock: while the sheet is
+collapsed, `useScrollEventsHandlersDefault` holds its scrollable at the top by
+calling Reanimated's `scrollTo` from every scroll event. Both halves of that
+are implemented here. The lock still cannot run, because **no scroll event is
+ever produced** — and the reason is one layer below scrolling entirely:
+
+> A scrollable with **no style of its own**, inside a parent with a bounded
+> height, does not become a viewport. It grows to its content and its scroll
+> range stays empty, so the adjustment never moves and `onScroll` never fires.
+
+The probe demonstrates exactly that, in isolation, next to its own controls:
+the same list, the same rows, the same bounded parent —
+`<FlatList style={{ flex: 1 }} />` scrolls, `<FlatList />` does not. That is
+the shape gorhom renders its scrollable in.
+
+So the failing check is not a scroll-event finding at all; it is a LAYOUT one,
+and it is left failing rather than removed because it names the next thing to
+fix and because the alternative — deleting it — is how "the sheet's list did
+not move" gets recorded as a lock working.
 
 ## Deliberate choices
 

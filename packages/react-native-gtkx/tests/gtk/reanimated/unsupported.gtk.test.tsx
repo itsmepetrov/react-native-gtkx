@@ -19,8 +19,8 @@ import Animated, {
   runOnJS,
   runOnUI,
   SequencedTransition,
+  useAnimatedSensor,
   useReducedMotion,
-  useScrollOffset,
 } from "../../../src/reanimated-compat/index"
 
 const settle = (ms = 60): Promise<void> =>
@@ -34,12 +34,14 @@ it("throws with the symbol's name when an unsupported export is called", () => {
   expect(() => (processColor as () => void)()).toThrow(
     /`processColor` is not supported/,
   )
-  // `useAnimatedScrollHandler` used to be here and is not any more — it is
-  // implemented over the ScrollView's own scroll events
-  // (src/reanimated-compat/scroll-handler.ts). `useScrollOffset` is the
-  // neighbour that still refuses.
-  expect(() => (useScrollOffset as () => void)()).toThrow(
-    /`useScrollOffset` is not supported/,
+  // `useAnimatedScrollHandler` used to be here, then `useScrollOffset`,
+  // `useEvent`, `useHandler` and `useAnimatedKeyboard` beside it. All five are
+  // implemented now over the ScrollView's own scroll events and its GTK
+  // phases (src/reanimated-compat/scroll-handler.ts, scroll-offset.ts).
+  // `useAnimatedSensor` is the neighbour that still refuses, and unlike them
+  // it has no source at all: an accelerometer.
+  expect(() => (useAnimatedSensor as () => void)()).toThrow(
+    /`useAnimatedSensor` is not supported/,
   )
 })
 

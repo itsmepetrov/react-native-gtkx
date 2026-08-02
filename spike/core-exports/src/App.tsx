@@ -10,13 +10,12 @@
 // `measureInWindow` on the real allocation instead of from constants in a
 // script. Wrapping is deliberate — a ref onto a library's own component
 // would measure whatever that library happened to render this frame.
-import BottomSheet, {
-  BottomSheetFlatList,
-  BottomSheetView,
-} from "@gorhom/bottom-sheet"
+import BottomSheet, { BottomSheetFlatList } from "@gorhom/bottom-sheet"
 import { useCallback, useState } from "react"
 import {
+  FlatList,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -27,7 +26,7 @@ import DraggableFlatList, {
   type RenderItemParams,
 } from "react-native-draggable-flatlist"
 import { GestureHandlerRootView } from "react-native-gesture-handler"
-import { controlTouched, registerZone, report } from "./probe"
+import { controlTouched, registerZone, report, sheetScrolled } from "./probe"
 
 type Row = { key: string; label: string; color: string }
 
@@ -39,7 +38,28 @@ const ROWS: Row[] = [
   { key: "e", label: "echo", color: "#f3e8fd" },
 ]
 
-const SHEET_ROWS = ["one", "two", "three", "four", "five", "six"]
+// Long enough that the list is scrollable at BOTH snap points — a lock that
+// cannot be told apart from "there was nowhere to scroll" proves nothing.
+const SHEET_ROWS = [
+  "one",
+  "two",
+  "three",
+  "four",
+  "five",
+  "six",
+  "seven",
+  "eight",
+  "nine",
+  "ten",
+  "eleven",
+  "twelve",
+  "thirteen",
+  "fourteen",
+  "fifteen",
+  "sixteen",
+  "seventeen",
+  "eighteen",
+]
 
 const DraggablePane = (): React.ReactNode => {
   const [rows, setRows] = useState(ROWS)
@@ -108,19 +128,38 @@ const SheetPane = (): React.ReactNode => (
     <BottomSheet
       index={0}
       snapPoints={["25%", "70%"]}
+      // Exactly two snap points, so the top one IS gorhom's EXTENDED state
+      // and the scroll lock releases there. With dynamic sizing on, a content
+      // taller than 70% adds a THIRD snap point above it — the sheet at 70%
+      // is then not extended, the list stays locked, and the probe's unlocked
+      // control fails for a reason that has nothing to do with this platform.
+      // (It did, once, and this comment is why.)
+      enableDynamicSizing={false}
       handleComponent={ProbeHandle}
       onChange={(index) => {
         report(`sheet index=${index}`)
       }}
     >
-      <BottomSheetView style={styles.sheetHeader}>
-        <Text style={styles.rowText}>sheet content</Text>
-      </BottomSheetView>
       <BottomSheetFlatList
         data={SHEET_ROWS}
         keyExtractor={(item) => item}
+        onScroll={(e: { nativeEvent: { contentOffset: { y: number } } }) => {
+          sheetScrolled()
+          report(`sheet list y=${e.nativeEvent.contentOffset.y.toFixed(1)}`)
+        }}
         renderItem={({ item }) => (
-          <View style={styles.sheetRow}>
+          <View
+            style={styles.sheetRow}
+            // The first row is the probe's ruler for the scroll lock: while
+            // the sheet is collapsed gorhom pins the list to the top, so this
+            // row must not move under a scroll, and once the sheet is
+            // extended it must.
+            ref={(handle: ViewHandle | null) => {
+              if (item === "one") {
+                registerZone("sheet-row-one", handle)
+              }
+            }}
+          >
             <Text style={styles.rowText}>{item}</Text>
           </View>
         )}
@@ -138,6 +177,84 @@ const App = (): React.ReactNode => (
       }}
     >
       <DraggablePane />
+      <View style={styles.pane}>
+        <Text style={styles.heading}>plain FlatList (control)</Text>
+        <ScrollView
+          style={{ height: 130 }}
+          onScroll={(e: { nativeEvent: { contentOffset: { y: number } } }) => {
+            report(
+              `control ScrollView y=${e.nativeEvent.contentOffset.y.toFixed(1)}`,
+            )
+          }}
+        >
+          {SHEET_ROWS.map((item) => (
+            <View
+              key={item}
+              style={styles.sheetRow}
+              ref={(handle: ViewHandle | null) => {
+                if (item === "one") {
+                  registerZone("sv-row-one", handle)
+                }
+              }}
+            >
+              <Text style={styles.rowText}>{item}</Text>
+            </View>
+          ))}
+        </ScrollView>
+        {/* The same list with NO style of its own, inside the same bounded
+            parent — the shape gorhom's scrollable arrives in. */}
+        <View style={{ height: 130 }}>
+          <FlatList
+            data={SHEET_ROWS}
+            keyExtractor={(item: string) => item}
+            onScroll={(e: {
+              nativeEvent: { contentOffset: { y: number } }
+            }) => {
+              report(
+                `unstyled FlatList y=${e.nativeEvent.contentOffset.y.toFixed(1)}`,
+              )
+            }}
+            renderItem={({ item }: { item: string }) => (
+              <View
+                style={styles.sheetRow}
+                ref={(handle: ViewHandle | null) => {
+                  if (item === "one") {
+                    registerZone("unstyled-row-one", handle)
+                  }
+                }}
+              >
+                <Text style={styles.rowText}>{item}</Text>
+              </View>
+            )}
+          />
+        </View>
+        <View style={{ height: 160 }}>
+          <FlatList
+            style={{ flex: 1 }}
+            data={SHEET_ROWS}
+            keyExtractor={(item: string) => item}
+            onScroll={(e: {
+              nativeEvent: { contentOffset: { y: number } }
+            }) => {
+              report(
+                `control FlatList y=${e.nativeEvent.contentOffset.y.toFixed(1)}`,
+              )
+            }}
+            renderItem={({ item }: { item: string }) => (
+              <View
+                style={styles.sheetRow}
+                ref={(handle: ViewHandle | null) => {
+                  if (item === "one") {
+                    registerZone("plain-row-one", handle)
+                  }
+                }}
+              >
+                <Text style={styles.rowText}>{item}</Text>
+              </View>
+            )}
+          />
+        </View>
+      </View>
       <SheetPane />
     </View>
     {/* The negative control: a zone the pointer never visits. A Wayland
