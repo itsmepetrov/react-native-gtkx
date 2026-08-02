@@ -265,12 +265,18 @@ export const runPointerProbe = async (): Promise<void> => {
     sheetScrolls > 0,
     `sheet list onScroll calls = ${sheetScrolls}` +
       (sheetScrolls === 0
-        ? " — its allocated height above equals its CONTENT height, so it is" +
-          " still not a viewport. The base style can only make a scroller" +
-          " fill a BOUNDED parent, and gorhom's is not bounded here: it" +
-          " bounds the list with an animated `height` from useAnimatedStyle" +
-          " on its content-mask container (BottomSheetContent), and that" +
-          " height is not reaching the Yoga node"
+        ? " — compare the allocated height reported above with the list's" +
+          " CONTENT height (18 rows x 44 = 792): equal means the list is not" +
+          " a viewport, because gorhom's content-mask container" +
+          " (BottomSheetContent) did not bound it. That container's height is" +
+          " an animated `height` from useAnimatedStyle, so the chain to check" +
+          " is: the updater's descriptor became a number" +
+          " (reanimated-compat/updater-animations.ts), the number reached the" +
+          " static style (components/animated.tsx, splitAnimated), and a" +
+          " render carried it into Yoga — the last of which happens once when" +
+          " the animation settles and needs the style's IDENTITY to change," +
+          " because the view is behind a memo. docs/research/animated-size.md" +
+          " §9"
         : ""),
   )
   // The lock itself, in both directions. Both are gated on events having

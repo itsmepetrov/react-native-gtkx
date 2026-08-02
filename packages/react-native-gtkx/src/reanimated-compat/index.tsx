@@ -133,7 +133,10 @@ const {
   useAnimatedReaction,
   useAnimatedStyle,
   useAnimatedProps,
-} = createHooks(makeMutable)
+} = createHooks(makeMutable, {
+  api: PlatformAnimated,
+  scheduler: glibScheduler,
+})
 
 const { useScrollOffset, useScrollViewOffset } =
   createScrollOffsetHooks(makeMutable)

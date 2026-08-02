@@ -549,8 +549,11 @@ export const toPlatformSpringConfig = (
 
 // --- building a running animation ---------------------------------------
 
-/** The last value an animation aims at, used by `withRepeat`'s reverse. */
-const targetOf = (spec: AnimationSpec): number | null => {
+/**
+ * The last value an animation aims at, used by `withRepeat`'s reverse and by
+ * `updater-animations.ts` to seed a key that is animating for the first time.
+ */
+export const targetOf = (spec: AnimationSpec): number | null => {
   switch (spec.kind) {
     case "timing":
     case "spring":
@@ -597,6 +600,39 @@ const aimedAt = (spec: AnimationSpec, toValue: number): AnimationSpec => {
     // Nothing to re-aim: see targetOf.
     case "decay":
       return spec
+  }
+}
+
+/**
+ * What makes two descriptors the SAME animation, for a caller that gets a
+ * freshly built one on every evaluation and must decide whether to restart.
+ *
+ * The target and the shape, not object identity and not the whole config: a
+ * mapper re-runs whenever anything it read changed, so `withSpring(open.value
+ * ? 320 : 0)` produces a new object many times a second while asking for the
+ * same animation every time. Config fields that change WHERE the animation
+ * ends are in (a `duration`, a decay's `velocity`); ones that only change how
+ * it gets there are not, because re-aiming a running animation at the value it
+ * is already aimed at is a no-op that costs a restart.
+ */
+export const animationSignature = (spec: AnimationSpec): string => {
+  switch (spec.kind) {
+    case "timing":
+      return `timing(${spec.toValue},${spec.config.duration ?? ""})`
+    case "spring":
+      return `spring(${spec.toValue})`
+    case "delay":
+      return `delay(${spec.delayMs},${animationSignature(spec.animation)})`
+    case "sequence":
+      return `sequence(${spec.animations.map(animationSignature).join(";")})`
+    case "repeat":
+      return `repeat(${spec.numberOfReps},${spec.reverse},${animationSignature(spec.animation)})`
+    case "clamp":
+      return `clamp(${spec.min},${spec.max},${animationSignature(spec.animation)})`
+    // A decay has no target (targetOf), so its identity is the push it was
+    // given: a new flick is a new animation, the same flick is not.
+    case "decay":
+      return `decay(${spec.config.velocity},${spec.config.deceleration})`
   }
 }
 

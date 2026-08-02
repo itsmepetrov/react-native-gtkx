@@ -50,47 +50,48 @@ opens the window to drag by hand instead.
   position, not by focus, so without this the other three prove only that
   something happened somewhere.
 
-## The checks that fail, and why they are kept
+## What it found, and what fixing it took
 
-`the sheet's own scrollable receives scroll events at all` — **it receives
-none**, in either sheet state — and with it the two halves of the lock,
-`COLLAPSED` and `EXTENDED`.
+Every check passes now. Three of them did not, and the sequence is worth
+keeping because the diagnosis was wrong twice before it was right — which is
+the reason this app exists rather than a reading of the libraries' sources.
 
-This is `@gorhom/bottom-sheet`'s scroll LOCK: while the sheet is collapsed,
-`useScrollEventsHandlersDefault` holds its scrollable at the top by calling
-Reanimated's `scrollTo` from every scroll event, and releases it once the
-sheet is extended. Both halves are implemented on this platform. The lock
-still cannot run, because **no scroll event is ever produced** — and the
-reason is one layer below scrolling entirely, in layout.
+**Cause one: an unstyled scrollable was never a viewport.** A `ScrollView`
+with no style of its own grew to its content instead of filling its parent, so
+its scroll range stayed empty and `onScroll` never fired. It now carries RN's
+own base style (`flexGrow: 1, flexShrink: 1`, composed under the app's), and
+the probe proves the difference in isolation next to its controls: `<FlatList
+/>` with no style in a bounded parent scrolls (`row-one y 406 -> 278`, where it
+used to report `170 -> 170`).
 
-**The first cause is fixed.** A scrollable with no style of its own did not
-become a viewport at all: it grew to its content, so its scroll range stayed
-empty and `onScroll` never fired. It now carries RN's own base style
-(`flexGrow: 1, flexShrink: 1`, composed under the app's style), and the probe
-proves the difference in isolation next to its controls — `<FlatList />` with
-no style in a bounded parent scrolls (`row-one y 406 -> 278`, where it used to
-report `170 -> 170`).
+**Cause two: the sheet's list had no bounded parent, and the reason was not
+the one on the file.** gorhom bounds it with an animated `height` —
+`contentMaskContainerAnimatedStyle` in `BottomSheetContent`, a
+`useAnimatedStyle` returning `height: animate({point: …})` — and the list
+reported `allocated height=792`, exactly its own content height (18 rows × 44).
+That was written down as the driven-size carve-out's known limit: a size that
+lives as a rect-store override, deliberately never written into Yoga, cannot
+bound a child.
 
-**The second cause is not, and it is why these checks still fail.** That base
-style can only make a scroller fill a **bounded** parent, and gorhom's parent
-is not bounded here. gorhom bounds its list with an animated `height` —
-`contentMaskContainerAnimatedStyle` in `BottomSheetContent`, a `useAnimatedStyle`
-returning `height: animate({point: ...})` on the content-mask container — and
-that height is not reaching the Yoga node on this platform. The probe measures
-it directly: the sheet's list reports `allocated height=792`, which is exactly
-its own content height (18 rows x 44), so its parent is content-sized rather
-than sheet-sized. Everything else about the sheet works, which is what makes
-the diagnosis specific: it snaps between detents and the handle drag moves it
-(`handle y 531 -> 212`), so the container height and the detents are known and
-`translateY` is applied — it is the animated **height**, a layout property,
-that is not.
+It was not. Instrumenting the style layer in a real run showed the height
+arriving as `{kind: "spring", toValue: 543.4, …}` — an animation DESCRIPTOR,
+never a number. `useAnimatedStyle` did not run animations returned from the
+updater at all, so the driven-size path was never even asked: zero size slots,
+zero refusals. The fix is `src/reanimated-compat/updater-animations.ts`, plus
+one React render published when an animation on a property the platform
+refuses to drive reaches its target — which needs the style object's IDENTITY
+to change, because `BottomSheetDraggableView` is `memo`'d and a re-render of
+the component owning the hook stops there. `docs/research/animated-size.md` §9
+has the numbers.
 
-So the failing checks are not scroll-event findings at all; they are LAYOUT
-ones, and they are left failing rather than removed because they name the next
-thing to fix. `COLLAPSED` is deliberately gated on scroll events having
-arrived: a list that cannot move satisfies "held at the top" for free, and
-letting that count as a pass is exactly how "the sheet's list did not move"
-gets recorded as a lock working.
+With that, the sheet's list reports `allocated height=468` (543 px of mask
+minus 75 px of padding), receives 158 scroll events under the injected wheel,
+and gorhom's own scroll LOCK is exercised in both directions: held at the top
+while the sheet is collapsed, released once it is extended (`row-one y 240 ->
+-84` under the identical wheel). `COLLAPSED` is deliberately gated on scroll
+events having arrived — a list that cannot move satisfies "held at the top"
+for free, and letting that count as a pass is exactly how "the sheet's list did
+not move" gets recorded as a lock working.
 
 ## Deliberate choices
 

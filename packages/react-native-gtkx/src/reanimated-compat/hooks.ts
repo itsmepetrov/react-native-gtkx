@@ -10,7 +10,7 @@
 // stale), never what it listens to. An app that passes the array and an app
 // that does not both work.
 import { useEffect, useReducer, useRef, useState } from "react"
-import { initialUpdaterRun } from "./animation"
+import { initialUpdaterRun, type AnimationEngine } from "./animation"
 import type { SharedValue } from "./mutable"
 import { cancelAnimation } from "./mutable"
 import {
@@ -20,10 +20,15 @@ import {
 } from "./props"
 import {
   createAnimatedStyle,
+  settlesThroughReact,
   type AnimatedStyle,
   type StyleObject,
 } from "./style"
 import { createMapper, untracked } from "./tracking"
+import {
+  createUpdaterAnimations,
+  type UpdaterAnimations,
+} from "./updater-animations"
 
 export type DependencyList = readonly unknown[]
 
@@ -45,7 +50,14 @@ const rebuildDependencies = (
   dependencies: DependencyList | undefined,
 ): DependencyList => dependencies ?? closureDependencies(updater)
 
-export const createHooks = (makeMutable: MakeMutable) => {
+export const createHooks = (
+  makeMutable: MakeMutable,
+  // The same clock everything else in this layer runs on, needed here because
+  // `useAnimatedStyle`/`useAnimatedProps` may have to RUN an animation the
+  // updater returned rather than merely publish a value — see
+  // ./updater-animations.ts.
+  engine: AnimationEngine,
+) => {
   /** A mutable value that survives renders and drives animations. */
   const useSharedValue = <T>(initialValue: T | (() => T)): SharedValue<T> => {
     const [shared] = useState(() =>
@@ -154,17 +166,53 @@ export const createHooks = (makeMutable: MakeMutable) => {
       pendingRef.current = null
     }
 
+    // Outside the mapper's effect on purpose: a shape change re-arms that
+    // effect, and an animation the updater started must not be cancelled and
+    // rebuilt because the set of leaves moved. It lives as long as the
+    // component does.
+    const animationsRef = useRef<UpdaterAnimations | null>(null)
+    if (animationsRef.current === null) {
+      animationsRef.current = createUpdaterAnimations(
+        engine,
+        (resolved) => {
+          const animated = animatedRef.current
+          if (animated && !animated.apply(resolved as StyleObject)) {
+            // The set of animatable leaves changed, so the nodes the view
+            // layer bound no longer describe this style. This is the ONE case
+            // that costs a React render, and it costs exactly one.
+            pendingRef.current = resolved as StyleObject
+            requestRebuild()
+          }
+        },
+        (key) => {
+          // A property this platform will not write at frame rate says so and
+          // promises the value "on the next React render". For a value that
+          // only ever moves inside an animation there IS no next render, so
+          // the promise is kept here — once, when the animation reaches its
+          // target, not once a frame.
+          //
+          // `renew` before the render and not merely the render: the view this
+          // style lands on may be behind a `memo`, and a re-render of the
+          // component that owns the hook stops there with every prop identical
+          // unless the style itself has a new identity.
+          if (settlesThroughReact(key)) {
+            animatedRef.current?.renew()
+            requestRebuild()
+          }
+        },
+      )
+    }
+    useEffect(
+      () => () => {
+        animationsRef.current?.dispose()
+        animationsRef.current = null
+      },
+      [],
+    )
+
     useEffect(() => {
       const mapper = createMapper(() => {
-        const next = updaterRef.current()
-        const animated = animatedRef.current
-        if (animated && !animated.apply(next)) {
-          // The set of animatable leaves changed, so the nodes the view layer
-          // bound no longer describe this style. This is the ONE case that
-          // costs a React render, and it costs exactly one.
-          pendingRef.current = next
-          requestRebuild()
-        }
+        animationsRef.current?.run(updaterRef.current())
       })
       mapper.run()
       return () => {
@@ -207,14 +255,30 @@ export const createHooks = (makeMutable: MakeMutable) => {
       pendingRef.current = null
     }
 
-    useEffect(() => {
-      const mapper = createMapper(() => {
-        const next = updaterRef.current()
+    // Same lifetime and the same reason as the style hook's. Every numeric
+    // prop here IS driven at frame rate, so there is no settle to publish
+    // through React.
+    const animationsRef = useRef<UpdaterAnimations | null>(null)
+    if (animationsRef.current === null) {
+      animationsRef.current = createUpdaterAnimations(engine, (resolved) => {
         const animated = animatedRef.current
-        if (animated && !animated.apply(next)) {
-          pendingRef.current = next
+        if (animated && !animated.apply(resolved as PropsObject)) {
+          pendingRef.current = resolved as PropsObject
           requestRebuild()
         }
+      })
+    }
+    useEffect(
+      () => () => {
+        animationsRef.current?.dispose()
+        animationsRef.current = null
+      },
+      [],
+    )
+
+    useEffect(() => {
+      const mapper = createMapper(() => {
+        animationsRef.current?.run(updaterRef.current())
       })
       mapper.run()
       return () => {
