@@ -1,0 +1,28 @@
+Verification result for the flexGrow/flexShrink base style (branch fix/scrollable-height)
+
+Static gates pass. Full suite: 1599 passed, 1 expected fail, **2 FAILED** —
+both in tests/gtk/components/viewability.gtk.test.tsx:
+
+  expected [0..9] to deeply equal [0..4]
+
+The test renders <FlatList style={{ height: 200 }}> inside a 400x400 Root and
+expects a 200px viewport (rows 0-4). With the base style applied it reports a
+400px viewport (rows 0-9).
+
+Cause: `flexGrow: 1` and an explicit `height` do not conflict as properties,
+so composing the style later does NOT protect the height. In flexbox an
+explicit main-axis size is the flex BASIS, and grow expands from there into
+free space — 200 basis in a 400 container grows to 400. So the base style
+silently overrides every explicit ScrollView height in a bounded flex parent.
+
+What is NOT yet established, and must be before this can ship: whether React
+Native behaves the same way. RN composes the same base style under the app's,
+so `<ScrollView style={{height: 200}}>` in a bounded column may well grow to
+400 there too — in which case our test encodes behaviour RN does not have and
+the TEST is what should change. Decide it by checking RN, not by reasoning:
+this session was wrong three times reasoning about what upstream does.
+
+Next step: run the same shape on real RN (or read ScrollView.js + its Yoga
+config) and then either
+  (a) narrow the base style so an explicit main-axis size wins, or
+  (b) change the two viewability tests and document the RN-parity behaviour.
