@@ -17,6 +17,7 @@
 import { widgetForHandle } from "../components/measure"
 import {
   computePointInWindow,
+  Gdk,
   Gtk,
   type Gtk as GtkNs,
 } from "../gtkx/bridge/index"
@@ -25,9 +26,13 @@ import { requestResponder } from "../responder/use-responder"
 import type { PreparedGesture } from "./composition"
 import { DECIDERS } from "./deciders"
 import { gestureOrchestrator } from "./orchestrator"
-import { createRecognizer, type Recognizer, type Rect } from "./recognizer"
+import {
+  createRecognizer,
+  type ControllerSample,
+  type Recognizer,
+  type Rect,
+} from "./recognizer"
 import { bindGestureTag, unbindGestureTag } from "./relations"
-import type { TouchpadSample } from "./touchpad"
 import { mintHandlerTag, type GestureKind, type GestureSpec } from "./types"
 
 /**
@@ -87,12 +92,166 @@ type Mounted = {
   readonly tag: number
   readonly recognizer: Recognizer
   /**
-   * The GTK controller feeding a `Pinch` or a `Rotation`, once the child has
-   * produced a widget to attach it to. Null for every other kind, and null
-   * until then — the child's ref lands before this parent's layout effect, but
-   * a child that carries no widget at all never gets one.
+   * The GTK controller feeding a kind the pointer stream cannot — a `Pinch`, a
+   * `Rotation`, a `Hover` or a `ForceTouch` — once the child has produced a
+   * widget to attach it to. Null for every pointer kind, and null until then:
+   * the child's ref lands before this parent's layout effect, but a child that
+   * carries no widget at all never gets one.
+   *
+   * Typed as the base controller rather than as `Gesture`, because `Hover`'s
+   * is a `GtkEventControllerMotion` and that is not a gesture at all.
    */
-  controller: GtkNs.Gesture | null
+  controller: GtkNs.EventController | null
+}
+
+/**
+ * `GtkGestureZoom` / `GtkGestureRotate` — `Pinch` and `Rotation`.
+ *
+ * The scale and the angle are taken from the SIGNAL ARGUMENTS rather than read
+ * back off the controller, and that is not a style preference:
+ * `gtk_gesture_zoom_get_scale_delta` returns 1 the instant the gesture stops
+ * being active, so anything asked after the fact reports the gesture undoing
+ * itself. The signal carries the same number GTK would have returned, at the
+ * moment it is true.
+ *
+ * The position is `gtk_gesture_get_bounding_box_center`, whose coordinates are
+ * relative to the widget the controller is attached to — which is the
+ * gesture's own view, so it is already the view-local space upstream's
+ * `focalX`/`anchorX` are in (`absoluteToLocal` in its web delegate). When GTK
+ * has no bounding box to report, the view's centre stands in: a touchpad
+ * pinch's focal point is the pointer, and a pinch with an unknown focal point
+ * is still a pinch.
+ */
+const touchpadController = (
+  kind: "pinch" | "rotation",
+  widget: GtkNs.Widget,
+  channel: NonNullable<Recognizer["controller"]>,
+): GtkNs.Gesture => {
+  let scale = 1
+  let rotation = 0
+  const controller: GtkNs.Gesture =
+    kind === "pinch" ? new Gtk.GestureZoom() : new Gtk.GestureRotate()
+
+  const sample = (): ControllerSample => {
+    let x = widget.getWidth() / 2
+    let y = widget.getHeight() / 2
+    const [known, centreX, centreY] = controller.getBoundingBoxCenter()
+    if (known) {
+      x = centreX
+      y = centreY
+    }
+    // `gtk_gesture_zoom_filter_event` only lets a touchpad pinch through at
+    // exactly two fingers, so this is a constant rather than a reading.
+    return { scale, rotation, x, y, pointers: 2 }
+  }
+
+  controller.on("begin", () => {
+    scale = 1
+    rotation = 0
+    channel.begin(sample())
+  })
+  if (kind === "pinch") {
+    ;(controller as GtkNs.GestureZoom).on("scale-changed", (value: number) => {
+      scale = value
+      channel.update(sample())
+    })
+  } else {
+    // `angle-changed` carries the current absolute angle first and the delta
+    // SINCE RECOGNITION second, which is upstream's `rotation` exactly:
+    // radians, cumulative, positive clockwise.
+    ;(controller as GtkNs.GestureRotate).on(
+      "angle-changed",
+      (_angle: number, delta: number) => {
+        rotation = delta
+        channel.update(sample())
+      },
+    )
+  }
+  controller.on("end", () => {
+    channel.end()
+  })
+  controller.on("cancel", () => {
+    channel.cancel()
+  })
+  return controller
+}
+
+/**
+ * `GtkEventControllerMotion` — `Hover`.
+ *
+ * The plainest of the three, and the reason this gesture turned out to be
+ * deliverable at all: `enter` and `motion` carry the pointer's position in the
+ * WIDGET's own coordinates, which is already the space every payload field
+ * wants, and `leave` carries nothing because there is nothing left to say.
+ *
+ * `leave` ends the gesture rather than cancelling it — upstream's
+ * `onPointerMoveOut` calls `end()`, and it is right to: the pointer leaving is
+ * the hover finishing normally, not something taking it away. GTK's own
+ * `cancel` has no counterpart on a motion controller, so the channel's
+ * `cancel` is reached only through the arbitration registry.
+ *
+ * Note that this is the same controller `components/pressable.tsx` attaches
+ * for its `hovered` state, on possibly the same widget. Two motion controllers
+ * on one widget both receive every crossing — they are observers, and neither
+ * claims anything — so a `Pressable` inside a `GestureDetector` keeps its own
+ * hover styling while the gesture runs.
+ */
+const hoverController = (
+  channel: NonNullable<Recognizer["controller"]>,
+): GtkNs.EventController => {
+  const controller = new Gtk.EventControllerMotion()
+  controller.on("enter", (x: number, y: number) => {
+    channel.begin({ x, y, pointers: 1 })
+  })
+  controller.on("motion", (x: number, y: number) => {
+    channel.update({ x, y, pointers: 1 })
+  })
+  controller.on("leave", () => {
+    channel.end()
+  })
+  return controller
+}
+
+/**
+ * `GtkGestureStylus` — `ForceTouch`, and the one controller here that needs
+ * hardware nothing in the test suite can synthesize.
+ *
+ * `getAxis(Gdk.AxisUse.PRESSURE)` returns `[known, value]` and may ONLY be
+ * called from inside one of the four signal handlers, which is why the sample
+ * is built in each of them rather than from a shared reader. GDK normalises
+ * pressure to `[0, 1]`, which is already upstream's documented range for
+ * `minForce`/`maxForce`, so nothing is rescaled.
+ *
+ * `stylusOnly` is left at GTK's default (true), so this controller sees tablet
+ * tools and nothing else. A mouse dragging across the widget produces no
+ * events here at all — which is the behaviour that keeps a `ForceTouch` from
+ * quietly activating at force 0 on a machine with no tablet.
+ */
+const stylusController = (
+  channel: NonNullable<Recognizer["controller"]>,
+): GtkNs.EventController => {
+  const controller = new Gtk.GestureStylus()
+  const pressure = (): number => {
+    const [known, value] = controller.getAxis(Gdk.AxisUse.PRESSURE)
+    // A tool with no pressure axis reports none, and 0 is the honest reading
+    // rather than a stand-in: a gesture whose `minForce` cannot be met simply
+    // never activates, which is what a device that cannot measure pressure
+    // should produce.
+    return known ? value : 0
+  }
+  controller.on("down", (x: number, y: number) => {
+    channel.begin({ x, y, force: pressure(), pointers: 1 })
+  })
+  controller.on("motion", (x: number, y: number) => {
+    channel.update({ x, y, force: pressure(), pointers: 1 })
+  })
+  controller.on("up", () => {
+    channel.end()
+  })
+  controller.on("cancel", () => {
+    channel.cancel()
+  })
+  return controller
 }
 
 export type DetectorRuntime = {
@@ -140,26 +299,17 @@ export const createDetectorRuntime = (): DetectorRuntime => {
   }
 
   /**
-   * Attaches `GtkGestureZoom` or `GtkGestureRotate` to the child's widget and
-   * pumps it into the recognizer's touchpad channel.
+   * Attaches the GTK controller a non-pointer kind is fed by, and pumps it
+   * into the recognizer's controller channel.
    *
-   * The scale and the angle are taken from the SIGNAL ARGUMENTS rather than
-   * read back off the controller, and that is not a style preference:
-   * `gtk_gesture_zoom_get_scale_delta` returns 1 the instant the gesture stops
-   * being active, so anything asked after the fact reports the gesture undoing
-   * itself. The signal carries the same number GTK would have returned, at the
-   * moment it is true.
-   *
-   * The focal point is `gtk_gesture_get_bounding_box_center`, whose
-   * coordinates are relative to the widget the controller is attached to —
-   * which is the gesture's own view, so it is already the view-local space
-   * upstream's `focalX`/`anchorX` are in (`absoluteToLocal` in its web
-   * delegate). When GTK has no bounding box to report, the view's centre
-   * stands in: a touchpad pinch's focal point is the pointer, and a pinch with
-   * an unknown focal point is still a pinch.
+   * FOUR KINDS, THREE CONTROLLERS, ONE CHANNEL. `GtkGestureZoom` for `Pinch`,
+   * `GtkGestureRotate` for `Rotation`, `GtkEventControllerMotion` for `Hover`
+   * and `GtkGestureStylus` for `ForceTouch`. Everything past `channel.begin`
+   * is the same state machine every pointer kind runs on — see
+   * `ControllerChannel` in ./recognizer.
    */
   const attachController = (gesture: Mounted): void => {
-    const channel = gesture.recognizer.touchpad
+    const channel = gesture.recognizer.controller
     if (channel === null || gesture.controller !== null) {
       return
     }
@@ -168,63 +318,12 @@ export const createDetectorRuntime = (): DetectorRuntime => {
       return
     }
 
-    let scale = 1
-    let rotation = 0
-    const sample = (): TouchpadSample => {
-      const controller = gesture.controller
-      let focalX = widget.getWidth() / 2
-      let focalY = widget.getHeight() / 2
-      if (controller) {
-        const [known, x, y] = controller.getBoundingBoxCenter()
-        if (known) {
-          focalX = x
-          focalY = y
-        }
-      }
-      // `gtk_gesture_zoom_filter_event` only lets a touchpad pinch through at
-      // exactly two fingers, so this is a constant rather than a reading.
-      return { scale, rotation, focalX, focalY, pointers: 2 }
-    }
-
-    if (gesture.kind === "pinch") {
-      const zoom = new Gtk.GestureZoom()
-      zoom.on("begin", () => {
-        scale = 1
-        rotation = 0
-        channel.begin(sample())
-      })
-      zoom.on("scale-changed", (value: number) => {
-        scale = value
-        channel.update(sample())
-      })
-      zoom.on("end", () => {
-        channel.end()
-      })
-      zoom.on("cancel", () => {
-        channel.cancel()
-      })
-      gesture.controller = zoom
+    if (gesture.kind === "pinch" || gesture.kind === "rotation") {
+      gesture.controller = touchpadController(gesture.kind, widget, channel)
+    } else if (gesture.kind === "hover") {
+      gesture.controller = hoverController(channel)
     } else {
-      const rotate = new Gtk.GestureRotate()
-      rotate.on("begin", () => {
-        scale = 1
-        rotation = 0
-        channel.begin(sample())
-      })
-      // `angle-changed` carries the current absolute angle first and the delta
-      // SINCE RECOGNITION second, which is upstream's `rotation` exactly:
-      // radians, cumulative, positive clockwise.
-      rotate.on("angle-changed", (_angle: number, delta: number) => {
-        rotation = delta
-        channel.update(sample())
-      })
-      rotate.on("end", () => {
-        channel.end()
-      })
-      rotate.on("cancel", () => {
-        channel.cancel()
-      })
-      gesture.controller = rotate
+      gesture.controller = stylusController(channel)
     }
     widget.addController(gesture.controller)
   }

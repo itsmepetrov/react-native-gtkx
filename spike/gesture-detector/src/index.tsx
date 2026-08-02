@@ -19,12 +19,25 @@
 // which no test in the suite can reach — the headless compositor the suite
 // runs under enumerates no input devices at all.
 //
-// Which one runs is `GD_PROBE`; run-headless.sh and run-session.sh set it.
+// Probe 7 joins them for the same reason probe 6 exists: `Gesture.ForceTouch()`
+// needs PRESSURE, which only a tablet tool reports, and a uinput tablet is
+// invisible to the headless compositor the suite runs under. Same split, same
+// runner shape — run-stylus.sh.
+//
+// Which one runs is `GD_PROBE`; run-headless.sh, run-session.sh and
+// run-stylus.sh set it.
 import { runGtkProbe } from "./probe-gtk"
+import { runStylusProbe } from "./probe-stylus"
 import { runTouchpadProbe } from "./probe-touchpad"
 
 if (process.env.GD_PROBE === "touchpad") {
   runTouchpadProbe()
+} else if (process.env.GD_PROBE === "stylus") {
+  // The only async entry point here, and it has to be: the stylus probe
+  // creates its tablet BEFORE the GTK application connects to Wayland,
+  // because a client that predates the device is never routed the tool. See
+  // `runStylusProbe`.
+  void runStylusProbe()
 } else {
   runGtkProbe()
 }

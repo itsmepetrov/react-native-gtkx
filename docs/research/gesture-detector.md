@@ -635,9 +635,12 @@ Two smaller things this slice settled:
   to prove a scroller was fully live rather than merely movable in one
   direction.
 
-Refusals that stand: `Fling`, `Hover`, `Manual`, `ForceTouch`, the legacy
+~~Refusals that stand: `Fling`, `Hover`, `Manual`, `ForceTouch`, the legacy
 `*GestureHandler` components, `RectButton` and the button family beyond the
-`Touchable` re-exports slice 4 needs. All keep throwing by name.
+`Touchable` re-exports slice 4 needs. All keep throwing by name.~~ **Half of
+that is now wrong and the wrong half is instructive — see "Probe 7" and "The
+last four" below.** All four recognizers ship. The legacy components and the
+button family keep throwing, with reasons recorded rather than implied.
 
 ## What building slice 3 changed about the specification above
 
@@ -733,6 +736,147 @@ between siblings is inert for the same reason and by the same mechanism.
   never see each other's interaction, so a relation between them is inert by
   construction rather than by test. The islands answer above says the same
   thing about `Root`s and for the same reason.
+
+## The last four, and what re-examining a refusal is worth
+
+The four names this file left standing — `Fling`, `Hover`, `Manual`,
+`ForceTouch` — all ship. What is worth recording is not that they were built
+but **how badly the four reasons differed once each was checked on its own**,
+because this file had grouped them into one sentence and the grouping was doing
+real damage.
+
+| Recognizer   | The reason recorded here                    | What checking it found                                                                                                                                                                                                                          |
+| ------------ | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Fling`      | unwritten                                   | Correct. A velocity predicate and a direction predicate over the existing machine.                                                                                                                                                              |
+| `Manual`     | unwritten                                   | Correct, and it was the smallest. What it actually needed was elsewhere: `GestureStateManager`'s `fail()` and `end()` were two deferred flags rather than two transitions, which nothing had noticed because no kind had ever depended on them. |
+| `Hover`      | "no input to run on"                        | **Wrong, and the wrongness was inherited rather than measured.**                                                                                                                                                                                |
+| `ForceTouch` | needs pressure, which no input here reports | **True of every ordinary input and false of the rig**, by the same reasoning probe 6 used one layer down.                                                                                                                                       |
+
+**`Hover` is the one that should not have been refused, and the mechanism of
+the mistake is worth naming.** It was never measured. It sat in a list with
+`Pinch`, `Rotation` and `ForceTouch` — three gestures that genuinely need input
+this rig did not have — and inherited their verdict. But a hover needs no
+button and no protocol the harness lacked: it needs `motion_absolute`, which is
+the one request `zwlr_virtual_pointer_v1` has always had and which every other
+probe in this file already used. The evidence was also sitting in the
+repository the whole time: `components/pressable.tsx` has driven `hovered` off
+`GtkEventControllerMotion` since long before this epic, and the gallery has had
+hovering rows on screen throughout. `Hover` is now the **most** verified of the
+four — a real injected crossing, a real widget, real `enter`/`motion`/`leave`,
+in the ordinary vitest suite that `Pinch` and `Rotation` cannot run in.
+
+The lesson is narrow and this file is the right place for it: **a refusal
+inherited from a neighbour is not a finding.** Each of the four needed its own
+sentence, and the one that had never had one was the one that was wrong.
+
+## Probe 7: pressure, at the same layer probe 6 found the touchpad
+
+Probe 6 established the technique and this is it applied once more: the thing
+that cannot be injected by a Wayland client can often be _synthesized below
+one_, at the kernel. The question was whether `ForceTouch` could be verified
+rather than merely written.
+
+The premise to discard first, and it is this file's own: "pressure, which no
+input this platform can reach reports". True of `wl_pointer`, which has no
+pressure axis and never will. Not true of the platform — the Wayland **tablet**
+protocol (`zwp_tablet_v2`) carries pressure, GTK surfaces it through
+`GtkGestureStylus.get_axis(GDK_AXIS_PRESSURE)`, and a tablet is a kernel object
+that `/dev/uinput` can make, exactly as the touchpad was.
+
+Measured, with a uinput stylus built from libinput's own litest Wacom Intuos5
+descriptor:
+
+| Question                                                       | Measured                                                                                                                                                                                                                                                                                                                                                                                             |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Does the session compositor advertise `zwp_tablet_manager_v2`? | Yes, v2. (GNOME/mutter — and note this corrects an assumption: the desktop session here is **not** wlroots.)                                                                                                                                                                                                                                                                                         |
+| Do any EXISTING devices report `ABS_PRESSURE`?                 | **No.** The "virtual digitizer" and the spice tablet both carry X/Y only, despite the names.                                                                                                                                                                                                                                                                                                         |
+| Does libinput classify a uinput stylus as a tablet?            | Yes — `Capabilities: tablet`, udev `ID_INPUT_TABLET=1`, `cap:T`, full `TABLET_TOOL_PROXIMITY`/`TIP`/`AXIS` semantics with a pressure value.                                                                                                                                                                                                                                                          |
+| Does a GTK4 client receive varying pressure?                   | Yes. A linear 0→1 kernel ramp arrives as 22 samples rising monotonically from **0.005 to 1.000**.                                                                                                                                                                                                                                                                                                    |
+| Is the transfer linear?                                        | **No, and this matters for any assertion.** Measured at BOTH layers on the same ramp: libinput's reading is exactly linear (0.04, 0.08 … 1.00) and GTK's is its SQUARE — so **mutter** is where the curve is applied, not libinput and not GDK. The GNOME `pressure-curve` setting is at its identity default, so this is not user configuration. Assert ordering and endpoints, never exact values. |
+| Negative control, no pen in proximity                          | **0 events** in 1.5s.                                                                                                                                                                                                                                                                                                                                                                                |
+| Negative control, pen hovering (`BTN_TOUCH=0`)                 | Axis present, value exactly **0.000**.                                                                                                                                                                                                                                                                                                                                                               |
+| Negative control, an ordinary mouse                            | `has_pressure=False`, tool `none` — the axis is genuinely **absent**, not zero. That third control is the one that matters most, and it is the property `stylus-only` gives the shipped recognizer.                                                                                                                                                                                                  |
+
+### What the SHIPPED module sees, on the same chain
+
+`spike/gesture-detector/run-stylus.sh` is probe 6's runner shape with a stylus
+in place of the touchpad, and it drives `Gesture.ForceTouch()` inside a real
+`GestureDetector` rather than a reimplementation of it:
+
+| Question                                               | Measured                                                                                                                                        |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Does a raw `GtkGestureStylus` see varying pressure?    | Yes — **23 readings, 23 distinct**, rising monotonically from 0.0016 to 1.000                                                                   |
+| Does the shipped recognizer run the whole progression? | Yes — `begin=1 start=1 updates=13 end=1 success=true`                                                                                           |
+| Does it activate AT `minForce` rather than below it?   | Yes — `minForce=0.2`, force at activation **0.2298**                                                                                            |
+| Are the reported forces monotonic?                     | Yes — 0.2713, 0.3141, 0.3601 … 0.8479, 0.9224, **1.0000**                                                                                       |
+| Does `maxForce` cancel an ALREADY ACTIVE gesture?      | Yes — `start=1 updates=11 end=1 success=false state=3` (CANCELLED)                                                                              |
+| Did the cancellation happen above the ceiling?         | Yes — cancelled at **0.5196** against `maxForce=0.5`, and the last update before it was 0.4641, so no update followed the ceiling being crossed |
+| `pointerType`                                          | **STYLUS (1)**, not MOUSE (2) — the only kind here that is not a mouse                                                                          |
+| Negative control                                       | The card the pen never touched: **0** begins, 0 starts, 0 updates, 0 ends                                                                       |
+
+Reproducible: a second run reports 25 readings and the same verdicts. So
+`ForceTouch` is not the partially-verified member of the set it was expected to
+be — the only thing it lacks relative to `Fling`, `Manual` and `Hover` is
+coverage inside the vitest suite, which is a property of the compositor the
+suite starts and not of the gesture.
+
+Two things the injection needed that are not obvious, and they are siblings of
+probe 6's two:
+
+- **`BTN_TOOL_PEN` with `ABS_X`/`ABS_Y` is what makes it a tablet**, because
+  that is precisely what systemd-udev's `input_id` builtin keys
+  `ID_INPUT_TABLET` off — and `ID_INPUT_TABLET` is what makes libinput build a
+  tablet dispatch rather than a pointer one. `INPUT_PROP_POINTER` then marks it
+  an _external_ tablet, which is what makes the compositor map the whole tablet
+  area onto the whole screen; `INPUT_PROP_DIRECT` would want an output bound to
+  it and gets no sensible mapping on a VM.
+- **THE CLIENT MUST CONNECT AFTER THE DEVICE EXISTS**, and this one cost the
+  most to find because the obvious diagnosis was wrong. The symptom is that the
+  client receives `tablet_added` and then is never told `tool_added`, so no
+  pressure arrives at all. It reads like "the first proximity after a hotplug is
+  swallowed", and burning a throwaway proximity cycle looks like it helps.
+  It is not that. Isolated by holding the client, the device and the ramp fixed
+  and changing only the order:
+
+  | order                               | pressure samples the client saw |
+  | ----------------------------------- | ------------------------------- |
+  | device -> throwaway cycle -> client | **24**                          |
+  | client -> device                    | **0**                           |
+  | client -> device -> throwaway cycle | **0**                           |
+
+  A Wayland client that has already bound `zwp_tablet_seat_v2` when the tablet
+  appears is told the tablet exists and never told about its TOOL. Confirmed on
+  the wire with `WAYLAND_DEBUG=1` against `libinput debug-events` one layer
+  below: libinput emitted every injected cycle, complete and correct and
+  perfectly linear, in every one of the three runs — so nothing below the
+  compositor differs, and mutter simply forwards the tool only to clients that
+  bound the seat after the device existed. The probe therefore creates the
+  device BEFORE `AppRegistry.runApplication`.
+
+- **A proximity cycle starting within ~1s of the previous `proximity_out` is
+  dropped in full**, so the probe uses ONE proximity cycle and presses and lifts
+  the tip several times inside it rather than going in and out of proximity.
+
+### The constraint that stays, and it is probe 6's, unchanged
+
+**The compositor has to have a libinput backend**, so the vitest suite cannot
+cover this and the split is drawn at the GTK controller exactly as it is for
+`Pinch` and `Rotation`:
+
+| Compositor                                 | Result                                                                           |
+| ------------------------------------------ | -------------------------------------------------------------------------------- |
+| The desktop session's (GNOME/mutter)       | The full chain, every number above                                               |
+| Headless sway, as `@gtkx/vitest` starts it | **Nothing.** Zero input devices enumerated; the uinput stylus is invisible to it |
+
+`WLR_BACKENDS=headless,libinput` does not rescue it: sway dies before opening a
+socket, because an SSH session has no VT and libseat cannot open one. That is
+the same wall the touch work recorded, and fixing it means launching a
+compositor on a real VT rather than changing any code.
+
+So `ForceTouch` is verified the way `Pinch` and `Rotation` are — below the GTK
+controller by a hand-run session probe with its own negative controls, and
+above it by the ordinary suite, which asserts the wiring and asserts that a real
+injected **mouse** drag over the widget produces nothing at all.
 
 ## What could not be checked, and will not be here
 

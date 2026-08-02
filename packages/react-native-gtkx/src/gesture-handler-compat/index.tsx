@@ -1,6 +1,14 @@
-// react-native-gtkx/gesture-handler — `Pan`, `GestureDetector` and the root
-// view, reimplemented over this platform's own responder system, and a loud
-// refusal for the rest.
+// react-native-gtkx/gesture-handler — all ten recognizers, `GestureDetector`,
+// the relations and the root view, reimplemented over this platform's own
+// responder system, and a loud refusal for what is left.
+//
+// WHAT IS LEFT is now a short and deliberate list rather than a backlog: the
+// RNGH 1.x component API, the native button family, and the three exports that
+// need a process-wide handler-tag registry this platform does not keep. Each
+// carries its reason where it is declared below and in docs/api.md, because a
+// refusal that does not say why is indistinguishable from one nobody has
+// revisited — which is exactly what happened to `Gesture.Hover()`, refused for
+// a year on a judgement about the test rig that turned out to be wrong.
 //
 // NOT A PORT. `docs/research/gestures.md` refused RNGH on four grounds, two of
 // which expired when `react-native-gtkx/reanimated` shipped; the other two —
@@ -43,7 +51,10 @@ import { GestureDetector } from "./detector"
 import {
   useCompetingGestures,
   useExclusiveGestures,
+  useFlingGesture,
+  useHoverGesture,
   useLongPressGesture,
+  useManualGesture,
   useNativeGesture,
   usePanGesture,
   usePinchGesture,
@@ -51,14 +62,23 @@ import {
   useSimultaneousGestures,
   useTapGesture,
 } from "./hooks"
-import { GESTURE_STATE } from "./types"
+import {
+  DIRECTIONS,
+  GESTURE_STATE,
+  HOVER_EFFECT,
+  MOUSE_BUTTON,
+  POINTER_TYPE,
+} from "./types"
 
 export {
   Gesture,
   GestureDetector,
   useCompetingGestures,
   useExclusiveGestures,
+  useFlingGesture,
+  useHoverGesture,
   useLongPressGesture,
+  useManualGesture,
   useNativeGesture,
   usePanGesture,
   usePinchGesture,
@@ -67,7 +87,11 @@ export {
   useTapGesture,
 }
 export {
+  FlingGestureBuilder,
+  ForceTouchGestureBuilder,
+  HoverGestureBuilder,
   LongPressGestureBuilder,
+  ManualGestureBuilder,
   NativeGestureBuilder,
   PanGestureBuilder,
   PinchGestureBuilder,
@@ -76,7 +100,10 @@ export {
 } from "./builder"
 export type { GestureDetectorProps } from "./detector"
 export type {
+  FlingGestureHookConfig,
+  HoverGestureHookConfig,
   LongPressGestureHookConfig,
+  ManualGestureHookConfig,
   NativeGestureHookConfig,
   PanGestureHookConfig,
   TapGestureHookConfig,
@@ -141,12 +168,14 @@ export const GestureHandlerRootView = ({
 
 const unsupported = createUnsupportedFactory(
   "react-native-gesture-handler",
-  "Implemented: GestureHandlerRootView, GestureDetector, `State`, the re-exported " +
-    "ScrollView/FlatList/TextInput/Switch and the three Touchables, and Pan, Tap, LongPress, " +
-    "Native, Pinch and Rotation in both spellings (`Gesture.Pan()` and `usePanGesture()`, and " +
-    "so on), plus the three cross-gesture relations and the three composers. Pinch and " +
-    "Rotation need a TOUCHPAD — they are driven by GtkGestureZoom/GtkGestureRotate, and a " +
-    "mouse cannot produce one. RN's own responder system and PanResponder also work " +
+  "Implemented: GestureHandlerRootView, GestureDetector, `State`, `Directions`, `HoverEffect`, " +
+    "the re-exported ScrollView/FlatList/TextInput/Switch and the three Touchables, and ALL TEN " +
+    "recognizers — Pan, Tap, LongPress, Native, Pinch, Rotation, Fling, Manual, Hover and " +
+    "ForceTouch — in both spellings where upstream has two (`Gesture.Pan()` and " +
+    "`usePanGesture()`, and so on), plus the three cross-gesture relations and the three " +
+    "composers. Three of them need input a mouse cannot produce: Pinch and Rotation need a " +
+    "TOUCHPAD (GtkGestureZoom/GtkGestureRotate) and ForceTouch needs a pressure-reporting " +
+    "STYLUS (GtkGestureStylus). RN's own responder system and PanResponder also work " +
     "(docs/api.md); drag-and-drop is react-native-gtkx/dnd.",
 )
 
@@ -164,6 +193,22 @@ const unsupported = createUnsupportedFactory(
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 // --- the legacy handler components ---
+//
+// ALL NINE STAY REFUSED, and now that every recognizer behind them is
+// implemented the reason is worth stating precisely rather than leaving as a
+// bare `unsupported()`: these are not gestures, they are the RNGH **1.x
+// component API** — `<PanGestureHandler onGestureEvent={...}><View/></PanGestureHandler>`
+// — which upstream deprecated years before it deprecated the builder, and
+// which every one of the four libraries this epic targets has already
+// migrated off. Reimplementing them would mean a second public surface over
+// the same recognizers, with its own `onGestureEvent`/`onHandlerStateChange`
+// event shape, its own `enabled`/`waitFor` prop plumbing and its own
+// `createHandler` HOC — for zero measured consumers and a spelling upstream is
+// removing. `Gesture.Pan()` and `usePanGesture()` are the two spellings that
+// exist here, which is one more than upstream is keeping.
+//
+// The message each throws names itself, so an app on the old API is told which
+// symbol to migrate rather than left with a missing export.
 export const FlingGestureHandler: any = unsupported("FlingGestureHandler")
 export const ForceTouchGestureHandler: any = unsupported(
   "ForceTouchGestureHandler",
@@ -175,54 +220,98 @@ export const NativeViewGestureHandler: any = unsupported(
   "NativeViewGestureHandler",
 )
 export const PanGestureHandler: any = unsupported("PanGestureHandler")
-// Refused even though `Gesture.Pinch()` works: these are the LEGACY component
-// spellings, which upstream deprecated years before it deprecated the builder.
 export const PinchGestureHandler: any = unsupported("PinchGestureHandler")
 export const RotationGestureHandler: any = unsupported("RotationGestureHandler")
 export const TapGestureHandler: any = unsupported("TapGestureHandler")
+// `createNativeWrapper(Component, config)` attaches a `NativeViewGestureHandler`
+// to an arbitrary RN component. On this platform the responder system IS the
+// arbitration that wrapper registers with, every component this package ships
+// already speaks it, and `Gesture.Native()` is how a gesture is declared over
+// one explicitly — so the wrapper has nothing to add and would be a no-op
+// dressed as a feature. The re-exported ScrollView/FlatList/Touchables below
+// are that reasoning applied to the components upstream wraps itself.
 export const legacy_createNativeWrapper: any = unsupported(
   "legacy_createNativeWrapper",
 )
 
 // --- the new (v3) gesture API ---
-// `Gesture`, `GestureDetector`, the six implemented gesture hooks and the
-// three composer hooks are re-exported at the top of this file. `Gesture` is a
-// real namespace whose four unimplemented statics throw individually, so
-// `Gesture.Fling()` still names itself.
+// `Gesture`, `GestureDetector`, the nine gesture hooks and the three composer
+// hooks are re-exported at the top of this file. `Gesture` is a real namespace
+// and none of its statics throws any more.
+//
+// The four below are refused for four different reasons, none of them "not got
+// round to it":
+//
+//   - `GestureDetectorType` is a TYPE upstream, not a value. It only ever
+//     appears in a type position, where this module is not in the path at all
+//     (the alias is a BUNDLER alias; `tsc` resolves the real package's types
+//     from node_modules — see the note at the top of this file). A runtime
+//     value under that name could only be reached by code that has already
+//     gone wrong;
+//   - `GestureStateManager` is upstream's standalone FACTORY, `create(tag)`,
+//     which looks a mounted handler up by tag in a global `NodeManager`. The
+//     manager an app actually uses is the one handed into `onTouchesDown` /
+//     `onTouchesMove` / `onTouchesUp` / `onTouchesCancel`, and that one IS
+//     implemented — it is what drives `Gesture.Manual()`. What is missing is
+//     the global tag→handler registry, and its absence is deliberate: identity
+//     here is the mounted detector, and ./relations resolves an app's gesture
+//     object to a tag lazily precisely so that nothing has to be looked up in
+//     a process-wide map. Upstream marks this export deprecated in favour of
+//     the hook API in the same breath;
+//   - `InterceptingGestureDetector` and `VirtualGestureDetector` are 3.1.0's
+//     new experimental detectors. The first intercepts events destined for
+//     views BELOW it, which on this platform would mean claiming a GTK
+//     sequence before deciding — and `CLAIMED` is irrevocable here, so the
+//     "intercept, look, maybe give back" shape is not expressible. The second
+//     drives a gesture with no view at all, which needs the tag registry the
+//     entry above says why this platform does not have.
 export const GestureDetectorType: any = unsupported("GestureDetectorType")
 export const GestureStateManager: any = unsupported("GestureStateManager")
 export const InterceptingGestureDetector: any = unsupported(
   "InterceptingGestureDetector",
 )
 export const VirtualGestureDetector: any = unsupported("VirtualGestureDetector")
-export const useFlingGesture: any = unsupported("useFlingGesture")
-export const useHoverGesture: any = unsupported("useHoverGesture")
-export const useManualGesture: any = unsupported("useManualGesture")
 
 // --- enums and constants ---
-// These are plain data upstream, so throwing on them looks harsh. It is not:
-// they are only meaningful when compared against an event from a handler that
-// cannot run here, so `event.nativeEvent.state === State.ACTIVE` is code that
-// has already gone wrong by the time it reads the enum. Failing at that line
-// beats silently comparing against `undefined`.
 //
-// `State` is the exception, and the reason it throws expired with slice 1:
-// every recognizer's payloads carry a faithful `state`, so comparing one
-// against `State.ACTIVE` is ordinary correct code rather than a symptom.
-// `react-native-drawer-layout` does exactly that — it re-exports it as
-// `GestureState`, seeds a shared value with `GestureState.UNDETERMINED` and
-// tests `=== GestureState.ACTIVE` — and it was the ONLY runtime symbol still
-// standing between that library and running here. Six numbers, and the
-// alternative was a refusal that no longer described anything true.
+// ALL FIVE ARE NOW DATA, and the last four changed here. The old rule was that
+// an enum is only meaningful next to a handler that can run, so reading one
+// was already a symptom — and that rule was right when six of the ten
+// recognizers threw. It stopped describing anything true when the last four
+// shipped, and the honest test is now the plain one: does an app comparing
+// against this constant get a correct answer? For every one of these, yes.
 //
-// All six are pinned by a test against 3.1.0's own `src/State.ts`, because
-// nothing about a wrong number is loud: `state === State.ACTIVE` would go on
-// compiling, running, and quietly answering false.
+// `State` went first, in slice 2, and the reasoning generalises to the rest:
+// every payload carries a faithful `state`, so `=== State.ACTIVE` is ordinary
+// correct code. `react-native-drawer-layout` does exactly that — it re-exports
+// it as `GestureState`, seeds a shared value with `GestureState.UNDETERMINED`
+// and tests `=== GestureState.ACTIVE`.
+//
+// `Directions` is REQUIRED rather than merely harmless: `Gesture.Fling()`
+// takes a direction and this is the enum it takes. A refusal here would make
+// the recognizer unusable in its documented spelling.
+//
+// `PointerType` became meaningful with `ForceTouch`, which is the first kind
+// whose events are honestly not a mouse — every payload carries `pointerType`,
+// and a stylus one says `STYLUS`.
+//
+// `HoverEffect` and `MouseButton` are INERT and exported anyway, which is the
+// one place this file's rule bends. Both name values for knobs that are
+// already accepted-and-inert here (`.effect()`, `.mouseButton()`) exactly as
+// they are inert off their platforms upstream, and a knob that accepts a
+// number while refusing the constant that number has a name for is incoherent.
+// The refusal that matters is for something that would silently NOT WORK;
+// these do exactly what they do upstream on this platform, which is nothing.
+//
+// Every number in all five is pinned by a test against 3.1.0's own sources,
+// because nothing about a wrong one is loud: `state === State.ACTIVE` and
+// `direction === Directions.LEFT` both go on compiling, go on running, and
+// quietly answer false.
 export const State = GESTURE_STATE
-export const Directions: any = unsupported("Directions")
-export const HoverEffect: any = unsupported("HoverEffect")
-export const MouseButton: any = unsupported("MouseButton")
-export const PointerType: any = unsupported("PointerType")
+export const Directions = DIRECTIONS
+export const HoverEffect = HOVER_EFFECT
+export const MouseButton = MOUSE_BUTTON
+export const PointerType = POINTER_TYPE
 
 // --- the wrapped RN components and buttons ---
 //
@@ -248,12 +337,34 @@ export const PointerType: any = unsupported("PointerType")
 //
 // WHAT IS NOT HERE, and the boundary is upstream's own: the BUTTON family
 // (`RawButton`, `BaseButton`, `RectButton`, `BorderlessButton`) is not RN
-// components with a handler attached — it is RNGH's own native button views,
-// with platform ripple, border radius handling and an `activeOpacity` that
-// belong to a widget this platform does not have. Nothing measured needs them.
-// `TouchableNativeFeedback` is Android's ripple and `Touchable` is RN's
-// deprecated mixin; both stay refused for the same reason RN itself would not
-// give them to you here.
+// components with a handler attached — it is RNGH's own NATIVE BUTTON VIEWS,
+// implemented in Java and Objective-C, with an Android ripple
+// (`TouchableNativeFeedback`'s), `borderless` drawable selection, `rippleColor`
+// / `rippleRadius`, `exclusive`, and an `activeOpacity` applied by the native
+// view rather than by style. There is no GTK widget with those semantics and
+// no way to fake the ripple, so any implementation would be a `Pressable`
+// wearing the name of something else — which is precisely the silent
+// substitution this whole surface refuses.
+//
+// RE-CHECKED WITH THE FOUR TARGET LIBRARIES rather than assumed, because that
+// is what settled the `Touchable` question in slice 4. Sweeping the shipped
+// sources of `@gorhom/bottom-sheet` 5.2.14, `react-native-draggable-flatlist`
+// 4.0.3, `react-native-drawer-layout` 4.2.9 and `react-native-reanimated-dnd`
+// 2.0.0 for every symbol still refused here finds exactly one hit —
+// `RefreshControl` in `@gorhom/bottom-sheet` — and it is not this package's:
+// it is imported from `react-native`, as a type in `bottomSheetRefreshControl/
+// index.ts` and as a value only in `BottomSheetRefreshControl.android.tsx`,
+// which Metro on this platform never resolves (`.linux.* -> .native.* -> .*`).
+// Nothing reaches for a button, a legacy handler component, `Directions`,
+// `MouseButton`, `PointerType`, `GestureStateManager` or any `Legacy*` alias.
+// The `Touchable` subset slice 4 shipped remains the only thing upstream's own
+// exports forced.
+//
+// `TouchableNativeFeedback` is Android's ripple by another name and `Touchable`
+// is RN's deprecated mixin; both stay refused for the reason RN itself would
+// not give them to you here. `RefreshControl` is pull-to-refresh, which needs
+// a scroll gesture this platform's `ScrollView` does not expose and a spinner
+// widget it does not have — and, per the sweep above, nothing asks for it.
 export const BaseButton: any = unsupported("BaseButton")
 export const BorderlessButton: any = unsupported("BorderlessButton")
 export { FlatList } from "../components/flat-list"
@@ -275,6 +386,23 @@ export const TouchableNativeFeedback: any = unsupported(
 )
 
 // --- the 2.x legacy aliases, still exported by 3.x ---
+//
+// ALL TWELVE STAY REFUSED, for one reason that covers them: each is 3.x's
+// escape hatch back to the 2.x implementation of a component whose 3.x
+// spelling is either implemented here already (`LegacyScrollView`,
+// `LegacyFlatList`, `LegacyTextInput`, `LegacySwitch`, `LegacyPressable`,
+// `LegacyText`) or refused above with its own reason (`LegacyRawButton`,
+// `LegacyBaseButton`, `LegacyRectButton`, `LegacyBorderlessButton`,
+// `LegacyRefreshControl`). Where the modern name works, the legacy alias would
+// be a second name for the same component with a promise attached — "this one
+// behaves like 2.x did" — that this platform cannot keep, because it never
+// implemented 2.x's behaviour to differ from. Where the modern name is
+// refused, the alias inherits the refusal.
+//
+// `LegacyDrawerLayoutAndroid` is the odd one and is refused twice over: it is
+// Android's `DrawerLayoutAndroid`, which React Native itself does not ship off
+// Android, and `@react-navigation/drawer` reaches for
+// `react-native-drawer-layout` instead — which runs here (probe 3).
 export const LegacyBaseButton: any = unsupported("LegacyBaseButton")
 export const LegacyBorderlessButton: any = unsupported("LegacyBorderlessButton")
 export const LegacyDrawerLayoutAndroid: any = unsupported(

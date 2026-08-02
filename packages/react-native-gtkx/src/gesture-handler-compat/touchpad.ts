@@ -15,9 +15,12 @@
 // WHAT IS SHARED, which is everything that matters: the state machine, the
 // callbacks, the payload, `tryActivate`, the relation maps, `makeActive`'s
 // broadcast cancel and `finished`. ./recognizer runs one machine with two
-// entry surfaces — the touch/responder props for the four pointer kinds, and
-// `Recognizer.touchpad` for these two — and only the entry surface differs.
-// There is no second arbitration path and no second registry.
+// entry surfaces — the touch/responder props for the pointer kinds, and
+// `Recognizer.controller` for the kinds a GTK controller feeds — and only the
+// entry surface differs. There is no second arbitration path and no second
+// registry. `Hover` and `ForceTouch` arrive on that same channel from
+// `GtkEventControllerMotion` and `GtkGestureStylus`, which is why it is named
+// for the controller rather than for the touchpad.
 //
 // THEY NEVER TAKE THE RESPONDER (`claimsResponder: false`), for a reason that
 // is structural rather than a policy: the responder lock is a lock over an
@@ -60,29 +63,6 @@ export const ROTATION_RECOGNITION_THRESHOLD = Math.PI / 36
  * the platform has already accepted.
  */
 export const PINCH_RECOGNITION_THRESHOLD = 0.05
-
-/**
- * One frame of GTK's touchpad gesture, in the terms the recognizer reads.
- *
- * `scale` and `rotation` are CUMULATIVE since GTK recognized the gesture,
- * which is what `gtk_gesture_zoom_get_scale_delta` ("the zooming difference
- * since the gesture was recognized, hence the starting point is considered
- * 1:1") and `gtk_gesture_rotate_get_angle_delta` ("the angle difference in
- * radians since the gesture was first recognized") both already are. That is
- * the same shape as upstream's own accumulators, so nothing is re-derived on
- * the way in.
- */
-export type TouchpadSample = {
-  /** 1 at the start of the gesture; above 1 is a spread. */
-  scale: number
-  /** 0 at the start; radians, positive clockwise. */
-  rotation: number
-  /** The gesture's bounding-box centre, in the gesture VIEW's coordinates. */
-  focalX: number
-  focalY: number
-  /** Fingers GTK reported. A touchpad pinch is always two. */
-  pointers: number
-}
 
 const magnitude = (view: RecognizerView): number => Math.abs(view.scale - 1)
 

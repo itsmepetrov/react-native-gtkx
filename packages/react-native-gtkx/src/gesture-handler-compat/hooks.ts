@@ -367,6 +367,80 @@ export const useRotationGesture = (
   },
 })
 
+/**
+ * The config object `useFlingGesture` accepts.
+ *
+ * No `onUpdate`, matching upstream: `FlingGestureInternalConfig` is a
+ * `BaseDiscreteGestureConfig`, which omits it by name. A fling activates and
+ * ends in one breath and has nothing to update with.
+ */
+export type FlingGestureHookConfig = CommonGestureHookConfig & {
+  direction?: number
+  numberOfPointers?: number
+}
+
+/** The config object `useManualGesture` accepts, which is only the common one. */
+export type ManualGestureHookConfig = CommonGestureHookConfig & {
+  onUpdate?: (event: GestureEventPayload) => void
+}
+
+/** The config object `useHoverGesture` accepts. */
+export type HoverGestureHookConfig = CommonGestureHookConfig & {
+  /**
+   * iOS's own pointer effect. Upstream's hook maps `effect` onto the native
+   * `hoverEffect` prop; both names arrive at the same inert field here.
+   */
+  effect?: number
+  onUpdate?: (event: GestureEventPayload) => void
+}
+
+const EMPTY_FLING: FlingGestureHookConfig = {}
+const EMPTY_MANUAL: ManualGestureHookConfig = {}
+const EMPTY_HOVER: HoverGestureHookConfig = {}
+
+/** `useFlingGesture`, the hook spelling of `Gesture.Fling()`. */
+export const useFlingGesture = (
+  config: FlingGestureHookConfig = EMPTY_FLING,
+): GestureSpec => ({
+  kind: "fling",
+  config: {
+    ...adaptCommon(config),
+    direction: config.direction,
+    numberOfPointers: config.numberOfPointers,
+  },
+})
+
+/** `useManualGesture`, the hook spelling of `Gesture.Manual()`. */
+export const useManualGesture = (
+  config: ManualGestureHookConfig = EMPTY_MANUAL,
+): GestureSpec => ({
+  kind: "manual",
+  config: {
+    ...adaptCommon(config),
+    onUpdate: config.onUpdate,
+  },
+})
+
+/** `useHoverGesture`, the hook spelling of `Gesture.Hover()`. */
+export const useHoverGesture = (
+  config: HoverGestureHookConfig = EMPTY_HOVER,
+): GestureSpec => ({
+  kind: "hover",
+  config: {
+    ...adaptCommon(config),
+    hoverEffect: config.effect,
+    onUpdate: config.onUpdate,
+  },
+})
+
+// There is deliberately NO `useForceTouchGesture`, and that is upstream's own
+// boundary rather than this platform's: `src/v3/hooks/gestures/` has nine
+// directories and no `forceTouch`, `SingleGesture` omits it from its union,
+// and no such hook is exported anywhere in 3.1.0. Inventing one would be the
+// only place in this module where the hook spelling is richer than the
+// spelling it was migrated from. `Gesture.ForceTouch()` is the whole API
+// upstream offers, so it is the whole API offered here.
+
 // --- the composers, in the hook spelling ---
 //
 // Not hooks in any real sense — upstream's are not either, past a `useMemo`

@@ -25,6 +25,7 @@ import { ButtonsSection } from "./sections/buttons"
 import { ClippingSection } from "./sections/clipping"
 import { DndSection } from "./sections/dnd"
 import { GestureDetectorSection } from "./sections/gesture-detector"
+import { GestureFlingSection } from "./sections/gesture-fling"
 import { GesturePinchSection } from "./sections/gesture-pinch"
 import { GestureRelationsSection } from "./sections/gesture-relations"
 import { GesturesSection } from "./sections/gestures"
@@ -156,6 +157,12 @@ const SECTION_DEFS: Record<SectionId, SectionDef> = {
     title: "Gesture relations",
     group: GROUP.modules,
     Component: GestureRelationsSection,
+    fillsCanvas: true,
+  },
+  "gesture-fling": {
+    title: "Fling, manual, hover, force touch",
+    group: GROUP.modules,
+    Component: GestureFlingSection,
     fillsCanvas: true,
   },
   dnd: {

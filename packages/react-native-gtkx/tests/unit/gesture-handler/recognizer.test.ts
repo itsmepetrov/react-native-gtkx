@@ -12,8 +12,12 @@
 // which drives the same code with an injected `zwlr_virtual_pointer_v1`.
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { Gesture } from "../../../src/gesture-handler-compat/builder"
+import { DECIDERS } from "../../../src/gesture-handler-compat/deciders"
 import {
+  useFlingGesture,
+  useHoverGesture,
   useLongPressGesture,
+  useManualGesture,
   usePanGesture,
   useTapGesture,
 } from "../../../src/gesture-handler-compat/hooks"
@@ -34,6 +38,7 @@ import {
 import { tapDecider } from "../../../src/gesture-handler-compat/tap"
 import { GESTURE_STATE } from "../../../src/gesture-handler-compat/types"
 import type {
+  GestureKind,
   GestureStateValue,
   RecognizerConfig,
 } from "../../../src/gesture-handler-compat/types"
@@ -672,23 +677,46 @@ describe("the two spellings are one implementation", () => {
 })
 
 describe("what is not implemented stays loud", () => {
-  it("still names the recognizers that do not exist", () => {
-    // A `GestureDetector` that accepted its props and did nothing is the
-    // failure this repo refuses. The three relations and the three composers
-    // stopped throwing when the orchestrator shipped, and `Pinch`/`Rotation`
-    // when the touchpad harness made them testable; these four did not, and
-    // there is no platform reason for them to — `Fling` and `Manual` are
-    // reachable and simply unwritten, `Hover` and `ForceTouch` have no input
-    // to run on.
-    expect(() => Gesture.Fling()).toThrow(/`Gesture.Fling` is not supported/)
-    expect(() => Gesture.Hover()).toThrow(/`Gesture.Hover` is not supported/)
-    expect(() => Gesture.Manual()).toThrow(/`Gesture.Manual` is not supported/)
-    expect(() => Gesture.ForceTouch()).toThrow(
-      /`Gesture.ForceTouch` is not supported/,
-    )
-    // And these two now build, in both spellings.
+  it("builds all ten recognizers, and the namespace has nothing left that throws", () => {
+    // This assertion has been inverted, which is the point of keeping it. It
+    // used to name the four `Gesture.*` statics that threw; there are none.
+    // The last four shipped for four different reasons — `Fling` and `Manual`
+    // were reachable and merely unwritten, `Hover` was refused on a judgement
+    // about the rig that was wrong (a mouse hovers, and the virtual pointer
+    // moves a mouse), and `ForceTouch` ships with upstream's documented
+    // semantics over `GtkGestureStylus`.
+    expect(Gesture.Pan().kind).toBe("pan")
+    expect(Gesture.Tap().kind).toBe("tap")
+    expect(Gesture.LongPress().kind).toBe("longPress")
+    expect(Gesture.Native().kind).toBe("native")
     expect(Gesture.Pinch().kind).toBe("pinch")
     expect(Gesture.Rotation().kind).toBe("rotation")
+    expect(Gesture.Fling().kind).toBe("fling")
+    expect(Gesture.Manual().kind).toBe("manual")
+    expect(Gesture.Hover().kind).toBe("hover")
+    expect(Gesture.ForceTouch().kind).toBe("forceTouch")
+
+    // Every kind in the union has a decider, and every decider is one of the
+    // kinds — the map is what makes "ten recognizers, one state machine" a
+    // fact rather than a claim, so a kind added without predicates would be
+    // caught here rather than at the first press.
+    for (const kind of Object.keys(DECIDERS) as GestureKind[]) {
+      expect(DECIDERS[kind].kind).toBe(kind)
+    }
+    expect(Object.keys(DECIDERS)).toHaveLength(10)
+  })
+
+  it("keeps the hook spelling exactly as wide as upstream's, and no wider", () => {
+    // Nine hooks, not ten. Upstream's `src/v3/hooks/gestures/` has nine
+    // directories and no `forceTouch`, its `SingleGesture` union omits
+    // ForceTouch, and `useForceTouchGesture` does not exist anywhere in 3.1.0
+    // — so `Gesture.ForceTouch()` is the whole API upstream offers for it and
+    // the whole API offered here. Inventing the missing hook would make this
+    // the one kind whose second spelling this platform made up. The entry
+    // surface asserts the absence; this asserts the three that do exist.
+    expect(useFlingGesture().kind).toBe("fling")
+    expect(useManualGesture().kind).toBe("manual")
+    expect(useHoverGesture().kind).toBe("hover")
   })
 
   it("accepts the knobs upstream itself ignores off-platform", () => {

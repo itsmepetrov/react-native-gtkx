@@ -65,6 +65,11 @@ export type TouchEventTypeValue =
  * fabricates one touch per pointer and this platform has no touch input to
  * distinguish it from (`docs/research/gestures.md` — wlroots offers no
  * virtual-touch protocol, so there is nothing to test a `TOUCH` path with).
+ *
+ * `STYLUS` is the one exception and `ForceTouch` is why: a pressure reading
+ * only ever comes from a tablet tool, so the recognizer fed by
+ * `GtkGestureStylus` reports the pointer type that is actually true rather
+ * than the platform default.
  */
 export const POINTER_TYPE = {
   TOUCH: 0,
@@ -72,6 +77,71 @@ export const POINTER_TYPE = {
   MOUSE: 2,
   KEY: 3,
   OTHER: 4,
+} as const
+
+/**
+ * RNGH's `Directions`, which `Gesture.Fling().direction()` takes.
+ *
+ * A BITMASK, and that is the whole of its API: `Directions.LEFT |
+ * Directions.RIGHT` is a fling that accepts either. The four numbers are
+ * `react-native-gesture-handler` 3.1.0's own (`src/Directions.ts`) and a test
+ * pins them, for the same reason `State`'s six are pinned — a silently
+ * different bit would go on compiling and quietly accept the wrong direction.
+ */
+export const DIRECTIONS = {
+  RIGHT: 1,
+  LEFT: 2,
+  UP: 4,
+  DOWN: 8,
+} as const
+
+/**
+ * The four diagonals, which upstream keeps INTERNAL — they are not on the
+ * public `Directions` object and an app never names one.
+ *
+ * They are reachable all the same, and that is the point: a config of
+ * `UP | RIGHT` sets both bits, so `(UP_RIGHT & direction) === UP_RIGHT` holds
+ * and the diagonal is tested too, with a wider cone. Naming them here is what
+ * makes ./fling's alignment loop read like upstream's.
+ */
+export const DIAGONAL_DIRECTIONS = {
+  UP_RIGHT: 5,
+  DOWN_RIGHT: 9,
+  UP_LEFT: 6,
+  DOWN_LEFT: 10,
+} as const
+
+/**
+ * RNGH's `HoverEffect` — iOS's own pointer effects, and inert everywhere else
+ * including in upstream's web implementation.
+ *
+ * Exported as data rather than refused because it is data: `hoverEffect` is
+ * referenced by upstream's TYPES and by nothing in its web handler, so an app
+ * that sets it is writing correct portable code that happens to do nothing
+ * here. That is the same call `State` got, and the opposite of the one
+ * `RectButton` gets — a refusal is for something that would silently not
+ * work, not for a value that is honestly inert.
+ */
+export const HOVER_EFFECT = {
+  NONE: 0,
+  LIFT: 1,
+  HIGHLIGHT: 2,
+} as const
+
+/**
+ * RNGH's `MouseButton`, a bitmask, exported as data for one narrow reason:
+ * `.mouseButton()` is already ACCEPTED here (and inert, as it is off Web
+ * upstream), so refusing the enum whose values it takes would make
+ * `.mouseButton(MouseButton.LEFT)` throw where `.mouseButton(1)` is fine.
+ * A knob and the constants it takes have to agree about whether they exist.
+ */
+export const MOUSE_BUTTON = {
+  LEFT: 1,
+  RIGHT: 2,
+  MIDDLE: 4,
+  BUTTON_4: 8,
+  BUTTON_5: 16,
+  ALL: 31,
 } as const
 
 /**
@@ -185,6 +255,16 @@ export type GestureEventPayload = {
    * path, follow the documentation and say so. Per second, in both.
    */
   velocity: number
+  /**
+   * `ForceTouch`: the pressure, normalised to upstream's documented `[0, 1]`.
+   *
+   * 0 for every other kind, which is what an input with no pressure axis
+   * reports and therefore the only honest filler. See ./force-touch for where
+   * the number comes from and what it costs to produce one.
+   */
+  force: number
+  /** `ForceTouch`: the difference since the previous update; the force itself on the first. */
+  forceChange: number
   /**
    * Milliseconds since the press that started this gesture.
    *
@@ -345,11 +425,40 @@ export type RecognizerConfig = RecognizerCallbacks & {
   /** Upstream's companion to `disallowInterruption`, same treatment. */
   yieldsToContinuousGestures?: boolean
 
-  // --- LongPress ---
+  // --- LongPress, and Fling, which spells it the same way ---
   /** How long the pointer must stay down. Upstream's default is 500ms. */
   minDuration?: number
-  /** Exactly this many pointers, which is upstream's spelling for LongPress. */
+  /**
+   * Exactly this many pointers. Upstream's spelling for LongPress and for
+   * Fling, and EXACT in both: `Fling` compares it against the most pointers
+   * the interaction ever had at once, and refuses a mismatch either way.
+   */
   numberOfPointers?: number
+
+  // --- Fling ---
+  /**
+   * A BITMASK of `Directions`, defaulting to `Directions.RIGHT`. Several
+   * directions are one value: `Directions.LEFT | Directions.RIGHT`.
+   */
+  direction?: number
+
+  // --- Hover ---
+  /**
+   * iOS's own pointer effect. Recorded and inert, exactly as it is inert in
+   * upstream's web implementation — nothing there branches on it either.
+   */
+  hoverEffect?: number
+
+  // --- ForceTouch ---
+  /** Pressure below which the gesture will not activate. Upstream documents 0.2. */
+  minForce?: number
+  /** Pressure above which the gesture FAILS. Unset means no ceiling. */
+  maxForce?: number
+  /**
+   * Haptic feedback on activation. Recorded and inert: there is no haptic
+   * device on this platform and upstream implements it in iOS code only.
+   */
+  feedbackOnActivation?: boolean
 
   // --- Tap and LongPress share this one, with different defaults ---
   /**
@@ -382,7 +491,16 @@ export type RecognizerConfig = RecognizerCallbacks & {
  * `SingleGestureName` reads, minus the `GestureHandler` suffix.
  */
 export type GestureKind =
-  "pan" | "tap" | "longPress" | "native" | "pinch" | "rotation"
+  | "pan"
+  | "tap"
+  | "longPress"
+  | "native"
+  | "pinch"
+  | "rotation"
+  | "fling"
+  | "manual"
+  | "hover"
+  | "forceTouch"
 
 const KINDS = new Set<string>([
   "pan",
@@ -391,6 +509,10 @@ const KINDS = new Set<string>([
   "native",
   "pinch",
   "rotation",
+  "fling",
+  "manual",
+  "hover",
+  "forceTouch",
 ])
 
 /**

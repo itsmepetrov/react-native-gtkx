@@ -67,10 +67,11 @@ export const GestureDetector = ({
   if (!isAnyGestureSpec(gesture)) {
     throw new Error(
       "react-native-gtkx: `GestureDetector` was given something that is not a gesture. " +
-        "Build one with `Gesture.Pan()`, `Gesture.Tap()`, `Gesture.LongPress()` or " +
-        "`Gesture.Native()` — or the hook spelling of any of the four — or compose several " +
-        "with `Gesture.Race()`, `Gesture.Simultaneous()` or `Gesture.Exclusive()`. The " +
-        "remaining recognizers are not implemented yet and throw by name. See docs/api.md.",
+        "Build one with `Gesture.Pan()`, `Gesture.Tap()`, `Gesture.LongPress()`, " +
+        "`Gesture.Native()`, `Gesture.Pinch()`, `Gesture.Rotation()`, `Gesture.Fling()`, " +
+        "`Gesture.Manual()`, `Gesture.Hover()` or `Gesture.ForceTouch()` — or the hook " +
+        "spelling of any of them — or compose several with `Gesture.Race()`, " +
+        "`Gesture.Simultaneous()` or `Gesture.Exclusive()`. See docs/api.md.",
     )
   }
   if (!isValidElement(children)) {
