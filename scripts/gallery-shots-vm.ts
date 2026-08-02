@@ -101,19 +101,36 @@ const shotSection = async (id: string, warmSeconds: number): Promise<void> => {
   console.error(`NO-SHOT ${id}`)
 }
 
+// Kept in step with examples/gallery/src/sections/index.ts by hand — this
+// script is run by a person, not by CI, so a missing id costs a rerun rather
+// than a red build.
 for (const id of [
   "views",
   "text",
   "layout",
+  "clipping",
   "inputs",
   "buttons",
-  "lists",
   "toggles",
-  "animated",
-  "gestures",
-  "dnd",
+  "lists",
   "modal",
+  "animated",
+  "interpolate",
+  "transforms",
+  "gestures",
   "apis",
+  "widget-hosting",
+  "adwaita-stack",
+  "reanimated",
+  "reanimated-motion",
+  "reanimated-layout",
+  "reanimated-limits",
+  "gesture-detector",
+  "gesture-pinch",
+  "gesture-relations",
+  "dnd",
+  "svg",
+  "upstream",
 ]) {
   await shotSection(id, 5)
 }

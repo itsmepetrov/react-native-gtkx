@@ -3,6 +3,11 @@
 // are compared against golden images. Components come from "react-native";
 // the chrome is the package's own sidebar navigator: a native Adwaita
 // NavigationSplitView with the sections in a real GtkListBox sidebar.
+//
+// `./warnings` comes first and is imported for its side effect: it wraps
+// `console.warn` before anything else is evaluated, so the "Reanimated limits"
+// section can show the refusal messages on screen instead of only on stderr.
+import "./warnings"
 import { NavigationContainer } from "@react-navigation/native"
 import {
   Appearance,
@@ -13,45 +18,158 @@ import {
   View,
 } from "react-native"
 import { createSidebarNavigator } from "react-native-gtkx/navigation"
+import { AdwaitaStackSection } from "./sections/adwaita-stack"
 import { AnimatedSection } from "./sections/animated"
 import { ApisSection } from "./sections/apis"
 import { ButtonsSection } from "./sections/buttons"
+import { ClippingSection } from "./sections/clipping"
 import { DndSection } from "./sections/dnd"
+import { GestureDetectorSection } from "./sections/gesture-detector"
+import { GesturePinchSection } from "./sections/gesture-pinch"
+import { GestureRelationsSection } from "./sections/gesture-relations"
 import { GesturesSection } from "./sections/gestures"
 import { SECTION_IDS, type SectionId } from "./sections/index"
 import { InputsSection } from "./sections/inputs"
+import { InterpolateSection } from "./sections/interpolate"
 import { LayoutSection } from "./sections/layout"
 import { ListsSection } from "./sections/lists"
 import { MediaSection } from "./sections/media"
 import { ModalSection } from "./sections/modal"
+import { ReanimatedSection } from "./sections/reanimated"
+import { ReanimatedLayoutSection } from "./sections/reanimated-layout"
+import { ReanimatedLimitsSection } from "./sections/reanimated-limits"
+import { ReanimatedMotionSection } from "./sections/reanimated-motion"
 import { SvgSection } from "./sections/svg"
 import { TextSection } from "./sections/text"
 import { TogglesSection } from "./sections/toggles"
+import { TransformsSection } from "./sections/transforms"
+import { UpstreamSection } from "./sections/upstream"
 import { ViewsSection } from "./sections/views"
+import { WidgetHostingSection } from "./sections/widget-hosting"
 import { palette } from "./ui"
+
+// The three groups, in the order a reader meets the platform: portable API
+// first, the part that only exists because this is GTK second, the ecosystem
+// third. They become Adwaita section headers in the sidebar — see
+// `SidebarNavigationOptions.group`.
+const GROUP = {
+  rn: "React Native",
+  gtkx: "gtkx",
+  modules: "Modules",
+} as const
 
 type SectionDef = {
   title: string
+  group: (typeof GROUP)[keyof typeof GROUP]
   Component: () => React.ReactElement
+  /**
+   * Sections that bring their own scrolling or gesture-arbitrating surface
+   * opt out of the screen ScrollView and take the canvas directly.
+   *
+   * This is not cosmetic. A `Gesture.Native()` over a real ScrollView, a
+   * drawer dragged in from an edge, an AdwBottomSheet's drag handle and
+   * Adwaita's back gesture all negotiate with whatever else wants the
+   * pointer — and an enclosing ScrollView is a competitor those demos were
+   * never meant to have. Each of the five below was a standalone app whose
+   * window it filled; the canvas is that window.
+   */
+  fillsCanvas?: true
 }
 
 // A Record over SectionId guarantees that every id from SECTION_IDS (the
 // visual regression contract, see sections/index.ts) has a section — and back.
 const SECTION_DEFS: Record<SectionId, SectionDef> = {
-  views: { title: "Views", Component: ViewsSection },
-  text: { title: "Text", Component: TextSection },
-  layout: { title: "Layout", Component: LayoutSection },
-  inputs: { title: "Inputs", Component: InputsSection },
-  buttons: { title: "Buttons", Component: ButtonsSection },
-  lists: { title: "Lists", Component: ListsSection },
-  toggles: { title: "Toggles", Component: TogglesSection },
-  media: { title: "Media", Component: MediaSection },
-  svg: { title: "Svg", Component: SvgSection },
-  animated: { title: "Animated", Component: AnimatedSection },
-  gestures: { title: "Gestures", Component: GesturesSection },
-  dnd: { title: "Drag and drop", Component: DndSection },
-  modal: { title: "Modal", Component: ModalSection },
-  apis: { title: "APIs", Component: ApisSection },
+  // 1 — the portable React Native API.
+  views: { title: "Views", group: GROUP.rn, Component: ViewsSection },
+  text: { title: "Text", group: GROUP.rn, Component: TextSection },
+  layout: { title: "Layout", group: GROUP.rn, Component: LayoutSection },
+  clipping: { title: "Clipping", group: GROUP.rn, Component: ClippingSection },
+  inputs: { title: "Inputs", group: GROUP.rn, Component: InputsSection },
+  buttons: { title: "Buttons", group: GROUP.rn, Component: ButtonsSection },
+  toggles: { title: "Toggles", group: GROUP.rn, Component: TogglesSection },
+  lists: { title: "Lists", group: GROUP.rn, Component: ListsSection },
+  media: { title: "Media", group: GROUP.rn, Component: MediaSection },
+  modal: { title: "Modal", group: GROUP.rn, Component: ModalSection },
+  animated: { title: "Animated", group: GROUP.rn, Component: AnimatedSection },
+  interpolate: {
+    title: "Interpolate",
+    group: GROUP.rn,
+    Component: InterpolateSection,
+  },
+  transforms: {
+    title: "Transforms",
+    group: GROUP.rn,
+    Component: TransformsSection,
+  },
+  gestures: { title: "Gestures", group: GROUP.rn, Component: GesturesSection },
+  apis: { title: "APIs", group: GROUP.rn, Component: ApisSection },
+
+  // 2 — what exists only because this is GTK.
+  "widget-hosting": {
+    title: "Widget hosting",
+    group: GROUP.gtkx,
+    Component: WidgetHostingSection,
+    fillsCanvas: true,
+  },
+  "adwaita-stack": {
+    title: "Adwaita stack",
+    group: GROUP.gtkx,
+    Component: AdwaitaStackSection,
+    fillsCanvas: true,
+  },
+
+  // 3 — the third-party ecosystem, reached through the presets' aliases —
+  // and, in the last one, deliberately not aliased at all.
+  reanimated: {
+    title: "Reanimated values",
+    group: GROUP.modules,
+    Component: ReanimatedSection,
+  },
+  "reanimated-motion": {
+    title: "Reanimated motion",
+    group: GROUP.modules,
+    Component: ReanimatedMotionSection,
+  },
+  "reanimated-layout": {
+    title: "Layout animations",
+    group: GROUP.modules,
+    Component: ReanimatedLayoutSection,
+  },
+  "reanimated-limits": {
+    title: "Reanimated limits",
+    group: GROUP.modules,
+    Component: ReanimatedLimitsSection,
+  },
+  "gesture-detector": {
+    title: "Gesture detector",
+    group: GROUP.modules,
+    Component: GestureDetectorSection,
+    fillsCanvas: true,
+  },
+  "gesture-pinch": {
+    title: "Pinch and rotation",
+    group: GROUP.modules,
+    Component: GesturePinchSection,
+    fillsCanvas: true,
+  },
+  "gesture-relations": {
+    title: "Gesture relations",
+    group: GROUP.modules,
+    Component: GestureRelationsSection,
+    fillsCanvas: true,
+  },
+  dnd: {
+    title: "Drag and drop",
+    group: GROUP.modules,
+    Component: DndSection,
+  },
+  svg: { title: "Svg", group: GROUP.modules, Component: SvgSection },
+  upstream: {
+    title: "Upstream libraries",
+    group: GROUP.modules,
+    Component: UpstreamSection,
+    fillsCanvas: true,
+  },
 }
 
 // The headless regression script opens the desired section without clicks:
@@ -79,18 +197,22 @@ const styles = StyleSheet.create({
   },
 })
 
-// Every section scrolls inside its screen — scrolling is always an explicit
-// ScrollView, never the window. A fresh screen per section switch means the
-// visual regression screenshots always start from the top.
-const sectionScreen = (Component: () => React.ReactElement) => {
+// Every scrolling section scrolls inside its screen — scrolling is always an
+// explicit ScrollView, never the window. A fresh screen per section switch
+// means the visual regression screenshots always start from the top.
+const sectionScreen = ({ Component, fillsCanvas }: SectionDef) => {
   const SectionScreen = () => (
     <View style={styles.canvas}>
-      <ScrollView
-        style={styles.content}
-        contentContainerStyle={styles.contentContainer}
-      >
+      {fillsCanvas ? (
         <Component />
-      </ScrollView>
+      ) : (
+        <ScrollView
+          style={styles.content}
+          contentContainerStyle={styles.contentContainer}
+        >
+          <Component />
+        </ScrollView>
+      )}
     </View>
   )
   return SectionScreen
@@ -124,8 +246,11 @@ const App = () => {
           <Sidebar.Screen
             key={id}
             name={id}
-            component={sectionScreen(SECTION_DEFS[id].Component)}
-            options={{ title: SECTION_DEFS[id].title }}
+            component={sectionScreen(SECTION_DEFS[id])}
+            options={{
+              title: SECTION_DEFS[id].title,
+              group: SECTION_DEFS[id].group,
+            }}
           />
         ))}
       </Sidebar.Navigator>
@@ -143,8 +268,10 @@ Appearance.setColorScheme(
 AppRegistry.registerComponent("gallery", () => App)
 AppRegistry.runApplication("gallery", {
   title: "Gallery — react-native-gtkx",
-  width: 1000,
-  height: 700,
+  // The gesture boards absorbed from the standalone examples are meant to be
+  // visible in one go rather than scrolled, and they set the floor here.
+  width: 1180,
+  height: 840,
   // The sidebar and section HeaderBars ARE the window chrome.
   chrome: "content",
 })

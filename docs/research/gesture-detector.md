@@ -416,7 +416,7 @@ module: `packages/react-native-gtkx/src/gesture-handler-compat/`, with its
 nine assertions rewritten as real tests against the real code —
 `tests/unit/gesture-handler/recognizer.test.ts` for the state machine and
 `tests/gtk/gesture-handler/gesture-detector.gtk.test.tsx` for the same claims
-under real pointer injection. `examples/gesture-detector` is the app to drag
+under real pointer injection. The gallery's "Gesture detector" section is the screen to drag
 by hand. The spike's own `flat-gesture.tsx` and `spike.tsx` are gone, because
 a second implementation of a shipped module next to the shipped one only
 rots; probes 1 and 4 stay, because nothing else reproduces what they measured.

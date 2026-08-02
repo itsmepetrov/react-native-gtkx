@@ -447,8 +447,7 @@ is where to start — not a repeat of this approach.
 ## Examples in the repository
 
 - `examples/profile` — a static layout; the same source also builds with react-native-web (`examples/profile-web`);
-- `examples/playground` — interactive: Pressable, TextInput, Switch, FlatList, Modal, Animated, responsive via flexWrap;
-- `examples/gallery` — a gallery of the entire v1 surface;
+- `examples/gallery` — the entire v1 surface, one capability per sidebar section: views, text and layout; inputs, buttons and toggles; lists, media and SVG; Animated, interpolate and transforms; the three Reanimated sections; the three gesture sections; drag-and-drop, real upstream libraries, widget hosting, the Adwaita stack, Modal and the imperative APIs;
 - `examples/rn-app` — a cli-init React Native app with ios + android + linux;
 - `examples/hn-app` — a Hacker News reader on the Metro path: live API data over Node fetch, state-based two-screen navigation, a lazily loaded comment tree.
 

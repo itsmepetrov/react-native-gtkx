@@ -322,6 +322,19 @@ const App = () => (
   place. A screen that flips between shapes must give every one of these
   four keys an explicit value (`undefined` counts as a real overwrite; an
   absent key does not) on every call, not just the ones currently in use.
+- Sidebar screen option `group`: `string` — the section this row belongs to.
+  Consecutive screens sharing a `group` get one Adwaita section header above
+  the first of them, attached with `GtkListBox.set_header_func` — the
+  mechanism GNOME's own sidebars use. A header attached this way is a
+  DECORATION owned by the row below it, not a row: it is outside the list's
+  selection model and outside its focus chain, so the arrow keys and Tab walk
+  straight past it and assistive technology never announces a row that cannot
+  be activated. A header faked as a non-selectable `GtkListBoxRow` gets none
+  of that. Grouping follows ROW ORDER, so screens in one group are declared
+  together and a group name reappearing after a gap starts a second header
+  rather than reordering anything; leave it unset on every screen (the
+  default) and the list is flat. `examples/gallery` groups its sections into
+  React Native / gtkx / Modules.
 - Sidebar screen option `sidebarRow`: `() => ReactNode` — draw the row
   yourself instead of letting `title`/`icon`/`color`/`count` compose one.
   Those four are a convenience, not the ceiling: they build an
@@ -1158,8 +1171,8 @@ now, which is what RN does for a `FlatList` too.
 when it does.** Both presets alias the package name onto
 [`react-native-gtkx/dnd`](#drag-and-drop-react-native-gtkxdnd), which mirrors
 its API on GTK's own drag-and-drop, so an app never resolves the real package
-unless it asks to. `examples/upstream-libraries` asks — `aliases: {
-"react-native-reanimated-dnd": false }` (see [Package
+unless it asks to. The gallery's "Upstream libraries" section asks — `aliases:
+{ "react-native-reanimated-dnd": false }` (see [Package
 aliases](#configuring-the-package-aliases)) — and installs it for real:
 `Draggable`, `Droppable`, `DropProvider` and `Sortable` all work on this
 surface, dragged by a real pointer. What that took, and the two things that

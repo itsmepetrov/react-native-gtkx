@@ -99,6 +99,7 @@ const SIDEBAR_OPTION_KEYS: ReadonlySet<string> = new Set([
   "headerButtons",
   "contentLayout",
   "sidebarRow",
+  "group",
 ])
 
 export type SidebarNavigationOptions = {
@@ -169,6 +170,22 @@ export type SidebarNavigationOptions = {
    *  specifically (replaces it entirely when set, same as the stack
    *  navigator's per-screen option override). */
   headerButtons?: HeaderButton[]
+  /** Section this row belongs to. Consecutive screens sharing a `group`
+   *  get one Adwaita section header above the first of them.
+   *
+   *  The header is attached with `GtkListBox.set_header_func`, which is
+   *  what GNOME's own sidebars use: a header is a DECORATION owned by the
+   *  row below it, not a row of its own. That distinction is the whole
+   *  reason to do it this way — a header faked as a non-selectable
+   *  `GtkListBoxRow` still sits in the list's focus chain, so Tab and the
+   *  arrow keys stop on it and assistive technology announces a row that
+   *  cannot be activated. A real header is skipped by both, for free.
+   *
+   *  Grouping follows ROW ORDER, so screens in one group are declared
+   *  together; a group name reappearing after a gap starts a second
+   *  header rather than reordering anything. Leave it unset on every
+   *  screen (the default) and the list is flat, exactly as before. */
+  group?: string
 }
 
 // A one-off CSS class for a colored dot prefix — the same mechanism
@@ -475,6 +492,73 @@ const SidebarNavigator = ({
     (descriptors[routeKey] as SidebarDescriptor | undefined)?.options ?? {}
   const titleOf = (routeKey: string, fallback: string): string =>
     optionsOf(routeKey).title ?? fallback
+
+  // Group headers, through GtkListBox's own `set_header_func` — the
+  // mechanism GNOME's sidebars use, and the reason this is not a row: a
+  // header attached to a row is a decoration, outside the list's selection
+  // model and outside its focus chain, so arrow keys and Tab walk straight
+  // past it and assistive technology never announces an unactivatable row.
+  //
+  // The effect re-runs only when the group LIST changes (joined below with a
+  // separator that cannot occur in a group name), not on every render: the
+  // callback closes over `groups`, so a stale one would label rows with the
+  // previous grouping.
+  const groups = state.routes.map((route) => optionsOf(route.key).group)
+  const groupsKey = groups.map((group) => group ?? "").join(" ")
+
+  useEffect(() => {
+    const list = listRef.current
+    if (!list) {
+      return
+    }
+    if (groups.every((group) => group === undefined)) {
+      // Ungrouped is the default and must stay byte-identical to what this
+      // navigator did before groups existed — including after a navigator
+      // that HAD groups re-rendered without them.
+      list.setHeaderFunc(null)
+      list.invalidateHeaders()
+      return
+    }
+    list.setHeaderFunc((row, before) => {
+      const group = groups[row.getIndex()]
+      // `before` is null for the first row, which is where a header is most
+      // wanted; a row whose predecessor carries the same group gets none.
+      if (
+        group === undefined ||
+        (before !== null && groups[before.getIndex()] === group)
+      ) {
+        row.setHeader(null)
+        return
+      }
+      // The structure Adwaita's own stylesheet styles, rather than margins
+      // picked by eye. From libadwaita's compiled CSS:
+      //
+      //   .navigation-sidebar > .header > .heading      { margin: 12px }
+      //   .navigation-sidebar > .header.first > .heading { margin-top: 0 }
+      //   .navigation-sidebar > row  { min-height: 36px; padding: 0 8px;
+      //                                margin: 0 6px 2px }
+      //
+      // so a `.header` box holding a `.heading` label lands its text 12px
+      // from the list edge against a row label's 6 + 8 = 14px, and gets
+      // 12px of air above and below — which is the alignment and the rhythm
+      // GNOME ships, arrived at by matching the selectors rather than the
+      // pixels. `.first` is libadwaita's own class for the header that needs
+      // no top margin; its CSS carries the comment "No top margin on the
+      // first header".
+      const header = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, 0)
+      header.addCssClass("header")
+      if (before === null) {
+        header.addCssClass("first")
+      }
+      const label = Gtk.Label.new(group)
+      label.setXalign(0)
+      label.addCssClass("heading")
+      header.append(label)
+      row.setHeader(header)
+    })
+    list.invalidateHeaders()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupsKey])
   // The content HeaderBar's own shape — the thing tasks-app's README named
   // as a structural-sounding complaint ("one content header shared by the
   // whole navigator") and the PRD allowed finding a real gap. It is not
@@ -683,13 +767,19 @@ const SidebarNavigator = ({
                             key={route.key}
                             activatable
                           >
+                            {/* No horizontal margin: Adwaita's own
+                                `.navigation-sidebar > row` already carries
+                                `padding: 0 8px` on top of the row's `margin:
+                                0 6px 2px`, which puts this label at the 14px
+                                inset the theme intends — and which a
+                                `.header > .heading`'s 12px margin is designed
+                                to sit against. An extra margin here misaligns
+                                the two by exactly itself. */}
                             <GtkLabel
                               label={titleOf(route.key, route.name)}
                               xalign={0}
                               marginTop={8}
                               marginBottom={8}
-                              marginStart={6}
-                              marginEnd={6}
                             />
                           </GtkListBoxRow>
                         )

@@ -38,7 +38,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   log: {
-    color: "#8ff0a4",
+    color: palette.success,
     fontSize: 12,
   },
   row: {

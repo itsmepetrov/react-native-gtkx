@@ -3,7 +3,7 @@
 Two experiments, 2026-08-02, both against the published npm tarballs rather
 than against a reading of them: `react-native-reanimated-dnd@2.0.0` and
 `react-native-drawer-layout@4.2.9`, installed into
-`examples/upstream-libraries` and built by the ordinary `gtkx build` /
+the gallery's "Upstream libraries" section and built by the ordinary `gtkx build` /
 `gtkx dev` toolchain.
 
 **Verdict on the first: `react-native-reanimated-dnd` runs.** Not "imports",
@@ -167,7 +167,7 @@ drawer renders, animates from the `open` prop, and cannot be dragged. Nothing
 throws, nothing warns.
 
 This is not a linux problem: `.ios` + `.android` with no `.native` is dead for
-win32 and macos too. `examples/upstream-libraries` carries a ten-line vite
+win32 and macos too. `examples/gallery` carries a ten-line vite
 plugin that points that one import at `GestureHandlerNative` (the module both
 platform files re-export), scoped to importers inside that package. The
 upstream fix is a one-line rename to `GestureHandler.native.js`, and is worth

@@ -24,7 +24,7 @@
 // that may never come.
 //
 // The asking is not a refinement. `react-native-drawer-layout`'s `Overlay`
-// (measured in examples/upstream-libraries) is a full-screen `Animated.View`
+// (measured in the gallery's upstream-libraries section) is a full-screen `Animated.View`
 // whose `pointerEvents` is `"none"` until the drawer starts opening and
 // `"auto"` after; nothing else in that component re-renders, so a value only
 // applied "on the next render" was applied on no render at all. The overlay

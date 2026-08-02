@@ -190,7 +190,8 @@ holder by design and simultaneity is a set), and the components it re-exports
 from `react-native` — `ScrollView`, `FlatList`, `TextInput`, `Switch`,
 `Pressable` and the three `Touchable`s. See
 [the API reference](api.md#react-native-gesture-handler-react-native-gtkxgesture-handler)
-for the tables, and `examples/gesture-detector` for the shapes running.
+for the tables, and the gallery's "Gesture detector" and "Gesture
+relations" sections for the shapes running.
 
 What is not implemented throws where it is used, naming itself, rather than
 silently doing nothing:

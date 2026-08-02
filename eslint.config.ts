@@ -172,13 +172,13 @@ export default typescriptEslint.config(
     },
   },
   {
-    // The playground's render counter exists to observe renders, which means
+    // The gallery's render counter exists to observe renders, which means
     // reading and writing a ref during render — the exact thing this rule
     // forbids, and the only way to put "React rendered this component N
     // times" on screen. Its PanResponder callbacks are also built inside a
     // useState initializer, where the rule cannot see that they are deferred.
     // Same escape hatch, same reasoning, as src/components and spike/ above.
-    files: ["examples/reanimated-playground/**"],
+    files: ["examples/gallery/**"],
     rules: {
       "react-hooks/refs": "off",
     },

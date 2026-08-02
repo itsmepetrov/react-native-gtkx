@@ -38,7 +38,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   errorText: {
-    color: "#f66151",
+    color: palette.error,
     fontSize: 12,
   },
 })
