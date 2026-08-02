@@ -330,7 +330,7 @@ silently doing nothing.
 
 The deferral's premise has since been checked rather than assumed: both
 surfaces of the REAL package reorder under a real pointer on this platform
-(the gallery's Upstream libraries section), so nothing the mirror would need
+(the gallery's Upstream sortables section), so nothing the mirror would need
 is missing
 from the runtime — see [dnd-differential.md](dnd-differential.md).
 

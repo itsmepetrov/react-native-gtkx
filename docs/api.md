@@ -98,7 +98,8 @@ transplanted onto the target: `react-native-svg/lib/x` becomes
 Five of the six substitute an implementation that cannot run here **at all**.
 `react-native-reanimated-dnd` stopped being one of those: the real 2.0.0 runs
 on top of this platform's Reanimated, worklets and gesture-handler surfaces,
-dragged by a real pointer (the gallery's Upstream libraries section). So
+dragged by a real pointer (the gallery's Upstream drop zones and Upstream
+sortables sections). So
 there is a genuine trade:
 
 - **`react-native-gtkx/dnd` (default)** — GDK carries a
@@ -1336,7 +1337,8 @@ now, which is what RN does for a `FlatList` too.
 when it does.** Both presets alias the package name onto
 [`react-native-gtkx/dnd`](#drag-and-drop-react-native-gtkxdnd), which mirrors
 its API on GTK's own drag-and-drop, so an app never resolves the real package
-unless it asks to. The gallery's "Upstream libraries" section asks — `aliases:
+unless it asks to. The gallery's "Upstream drop zones" and "Upstream
+sortables" sections ask — `aliases:
 { "react-native-reanimated-dnd": false }` (see [Package
 aliases](#configuring-the-package-aliases)) — and installs it for real:
 `Draggable`, `Droppable`, `DropProvider` and `Sortable` all work on this

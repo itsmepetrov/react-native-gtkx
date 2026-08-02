@@ -44,7 +44,9 @@ import { SvgSection } from "./sections/svg"
 import { TextSection } from "./sections/text"
 import { TogglesSection } from "./sections/toggles"
 import { TransformsSection } from "./sections/transforms"
-import { UpstreamSection } from "./sections/upstream"
+import { UpstreamDrawerSection } from "./sections/upstream-drawer"
+import { UpstreamDropZonesSection } from "./sections/upstream-drop-zones"
+import { UpstreamSortablesSection } from "./sections/upstream-sortables"
 import { ViewsSection } from "./sections/views"
 import { WidgetHostingSection } from "./sections/widget-hosting"
 import { palette } from "./ui"
@@ -71,8 +73,8 @@ type SectionDef = {
    * drawer dragged in from an edge, an AdwBottomSheet's drag handle and
    * Adwaita's back gesture all negotiate with whatever else wants the
    * pointer — and an enclosing ScrollView is a competitor those demos were
-   * never meant to have. Each of the five below was a standalone app whose
-   * window it filled; the canvas is that window.
+   * never meant to have. Every one of them arrived here as a standalone app
+   * whose window it filled; the canvas is that window.
    */
   fillsCanvas?: true
 }
@@ -120,7 +122,7 @@ const SECTION_DEFS: Record<SectionId, SectionDef> = {
   },
 
   // 3 — the third-party ecosystem, reached through the presets' aliases —
-  // and, in the last one, deliberately not aliased at all.
+  // and, in the last three, deliberately not aliased at all.
   reanimated: {
     title: "Reanimated values",
     group: GROUP.modules,
@@ -171,10 +173,25 @@ const SECTION_DEFS: Record<SectionId, SectionDef> = {
     Component: DndSection,
   },
   svg: { title: "Svg", group: GROUP.modules, Component: SvgSection },
-  upstream: {
-    title: "Upstream libraries",
+  // The last three are the ecosystem un-aliased: two published npm tarballs
+  // installed for real, one screen per library — and, for the drag-and-drop
+  // one, one screen per idea.
+  "upstream-drop-zones": {
+    title: "Upstream drop zones",
     group: GROUP.modules,
-    Component: UpstreamSection,
+    Component: UpstreamDropZonesSection,
+    fillsCanvas: true,
+  },
+  "upstream-sortables": {
+    title: "Upstream sortables",
+    group: GROUP.modules,
+    Component: UpstreamSortablesSection,
+    fillsCanvas: true,
+  },
+  "upstream-drawer": {
+    title: "Upstream drawer",
+    group: GROUP.modules,
+    Component: UpstreamDrawerSection,
     fillsCanvas: true,
   },
 }

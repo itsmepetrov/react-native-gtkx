@@ -3,7 +3,8 @@
 Two experiments, 2026-08-02, both against the published npm tarballs rather
 than against a reading of them: `react-native-reanimated-dnd@2.0.0` and
 `react-native-drawer-layout@4.2.9`, installed into
-the gallery's "Upstream libraries" section and built by the ordinary `gtkx build` /
+the gallery's three "Upstream …" sections and built by the ordinary
+`gtkx build` /
 `gtkx dev` toolchain.
 
 **Verdict on the first: `react-native-reanimated-dnd` runs.** Not "imports",
@@ -175,8 +176,8 @@ filing.
 
 ## What the running app does, and what it proves
 
-One window. `Drawer` from `react-native-drawer-layout` wraps a
-`react-native-reanimated-dnd` screen, and every screenshot below was taken by
+Three screens, one per library and, for the drag-and-drop one, one per idea:
+drop zones, sortables, and the drawer. Every screenshot below was taken by
 `scripts/shot-example-drag.ts` — a real virtual pointer in a private headless
 compositor, so nothing outside the path the pointer took can have been
 touched.
@@ -229,7 +230,7 @@ over, which in practice means sorting a list rather than dropping on a zone.
 
 **`SortableGrid` and the horizontal `Sortable` run**, which the earlier
 research had no way to ask. Both reorder under a real pointer in
-the gallery's Upstream libraries section, and both are surfaces the mirror
+the gallery's Upstream sortables section, and both are surfaces the mirror
 deliberately
 does not implement.
 

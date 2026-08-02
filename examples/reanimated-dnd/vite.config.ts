@@ -45,9 +45,8 @@ export default defineConfig({
       // Turning a name off also keeps it in `ssr.noExternal`, which matters
       // as much as the alias — `gtkx dev` runs vite with `ssr.external:
       // true`, and a bare specifier vite externalizes is handed to Node
-      // before any `resolveId` hook runs. The gallery's Upstream libraries
-      // section had
-      // to spell both of those out by hand; this is the one-line version.
+      // before any `resolveId` hook runs. The gallery's upstream sections
+      // had to spell both of those out by hand; this is the one-line version.
       aliases: useRealLibrary
         ? { "react-native-reanimated-dnd": false }
         : undefined,

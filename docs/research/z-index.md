@@ -125,7 +125,8 @@ siblings asserts document order over repeated snapshots — a single sample
 cannot tell a stable sort from a lucky one.
 
 The last row is the rule that decides what an app has to write, and it is the
-one most likely to be read as a bug. In the gallery's `upstream` section the
+one most likely to be read as a bug. In the gallery's `upstream-drop-zones`
+section the
 chips live in one row and the drop zones in another, so the thing that has to
 rise is the chip ROW, not the chip: exactly the one line the same app needs on
 iOS and Android, and exactly what `zIndex` doing nothing used to hide.
@@ -220,8 +221,9 @@ exactly the ones that should be:
 
 ## 6. Shown in the running app
 
-The gallery's `upstream` section — the real `react-native-reanimated-dnd@2.0.0`
-and `react-native-drawer-layout@4.2.9` from npm, unaliased — driven by a real
+The gallery's `upstream-*` sections — the real
+`react-native-reanimated-dnd@2.0.0` and `react-native-drawer-layout@4.2.9`
+from npm, unaliased — driven by a real
 pointer in a headless session (`scripts/shot-example-drag.ts`). This is the
 screen the bug was reported on, before #93 folded it in from
 `examples/upstream-libraries`.
