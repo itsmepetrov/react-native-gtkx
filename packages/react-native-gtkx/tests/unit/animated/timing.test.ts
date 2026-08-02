@@ -104,6 +104,34 @@ describe("Animated.timing", () => {
     expect(value.__getValue()).toBe(1)
   })
 
+  it("anchors t = 0 at start(), not at the frame that happens to arrive first", () => {
+    // The regression guard for a bug the whole surface had: the run used to
+    // establish t = 0 on its FIRST frame, so that frame evaluated step(0) —
+    // the start value by definition — and wrote it back unchanged. Nothing
+    // moved until the second frame, and a 100 ms animation occupied 100 ms
+    // PLUS however long the first frame took to arrive.
+    //
+    // No `advance(0)` here, deliberately: the point is that the first frame a
+    // run ever sees already carries that frame's worth of progress.
+    const { manual, api } = setup()
+    const value = new api.Value(0)
+    const end = vi.fn()
+    api
+      .timing(value, { toValue: 1, duration: 100, easing: Easing.linear })
+      .start(end)
+
+    manual.advance(25)
+    expect(value.__getValue()).toBeCloseTo(0.25, 12)
+    manual.advance(50)
+    expect(value.__getValue()).toBeCloseTo(0.75, 12)
+    expect(end).not.toHaveBeenCalled()
+
+    // …and it ends 100 ms after it STARTED, not 100 ms after its first frame.
+    manual.advance(25)
+    expect(value.__getValue()).toBe(1)
+    expect(end).toHaveBeenCalledWith({ finished: true })
+  })
+
   it("jumps to toValue on the first frame when duration is 0", () => {
     const { manual, api } = setup()
     const value = new api.Value(0)
