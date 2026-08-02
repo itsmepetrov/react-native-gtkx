@@ -96,8 +96,8 @@ transplanted onto the target: `react-native-svg/lib/x` becomes
 Five of the six substitute an implementation that cannot run here **at all**.
 `react-native-reanimated-dnd` stopped being one of those: the real 2.0.0 runs
 on top of this platform's Reanimated, worklets and gesture-handler surfaces,
-dragged by a real pointer (`examples/upstream-libraries`). So there is a
-genuine trade:
+dragged by a real pointer (the gallery's Upstream libraries section). So
+there is a genuine trade:
 
 - **`react-native-gtkx/dnd` (default)** — GDK carries a
   `Gtk.WidgetPaintable` of the dragged view above every window, with the

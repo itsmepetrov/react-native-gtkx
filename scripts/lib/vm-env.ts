@@ -66,6 +66,11 @@ const RSYNC_EXCLUDES = [
   "node_modules",
   "shots",
   "dist",
+  // Staged sibling builds (examples/reanimated-dnd stages its mirror and
+  // real-library bundles as dist-mirror/dist-real, because `gtkx build`
+  // always writes to dist/). Build artifacts like dist itself — and, without
+  // this, --delete would wipe them from the VM on every sync.
+  "dist-*",
   "out-tsc",
   "*.log",
 ]

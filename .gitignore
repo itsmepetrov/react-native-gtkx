@@ -1,5 +1,9 @@
 node_modules/
 dist/
+# examples/reanimated-dnd stages its two builds (the mirror and the real
+# library) side by side, because `gtkx build` always writes to dist/.
+dist-mirror/
+dist-real/
 out-tsc/
 *.log
 .DS_Store

@@ -24,6 +24,33 @@ npm run dev                            # gtkx dev — vite + Fast Refresh
 npm run build && npm start             # release bundle
 ```
 
+## Two builds, one source
+
+The same `src/` is built against BOTH drag-and-drop implementations, selected
+by `DND_IMPL` — there is no second copy of the app, because a second copy
+diverges and then proves nothing.
+
+```sh
+npm run dev                            # the MIRROR: react-native-gtkx/dnd
+DND_IMPL=real npm run dev              # the REAL react-native-reanimated-dnd@2.0.0
+```
+
+`vite.config.ts` turns the preset's alias off for that one package
+(`aliases: { "react-native-reanimated-dnd": false }`) and `gtkx.config.ts`
+gives the second build its own application id, so the two can run side by
+side as two windows. Everything the real library imports still goes through
+the preset onto this platform's compat surfaces.
+
+**Eighteen of the nineteen screens are pixel-identical at rest, and every drop
+lands the same way on both.** The screen-by-screen table, the five inert props
+photographed, and the one screen that fails (`Custom Draggable` — the port's
+own `useDraggable` adaptation, not the library's) are in
+[research/dnd-differential.md](../../docs/research/dnd-differential.md).
+
+```sh
+npm run build:mirror && npm run build:real     # dist-mirror/ and dist-real/
+```
+
 ![The ported home screen: "reanimated DND v2", a "Drag & drop toolkit for React Native" subtitle, and grouped rows — Music Queue, Horizontal Tags, Grid Sortable, Dynamic Heights under SORTABLE; Basic Drag & Drop and Drag Handles under GETTING STARTED.](../../docs/shots/reanimated-dnd-home.png)
 
 ## The drag, driven by a real pointer
