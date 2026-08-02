@@ -19,6 +19,7 @@ import { nativeDecider } from "./native"
 import { panDecider } from "./pan"
 import type { RecognizerDecider } from "./recognizer"
 import { tapDecider } from "./tap"
+import { pinchDecider, rotationDecider } from "./touchpad"
 import type { GestureKind } from "./types"
 
 export const DECIDERS: Record<GestureKind, RecognizerDecider> = {
@@ -26,4 +27,9 @@ export const DECIDERS: Record<GestureKind, RecognizerDecider> = {
   tap: tapDecider,
   longPress: longPressDecider,
   native: nativeDecider,
+  // Two predicates each and a `source`, which is the whole of what slice 5
+  // added to the machine: `Pinch` and `Rotation` are fed by GTK because a
+  // touchpad pinch is not in the pointer stream, and are otherwise ordinary.
+  pinch: pinchDecider,
+  rotation: rotationDecider,
 }

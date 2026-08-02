@@ -675,9 +675,20 @@ describe("what is not implemented stays loud", () => {
   it("still names the recognizers that do not exist", () => {
     // A `GestureDetector` that accepted its props and did nothing is the
     // failure this repo refuses. The three relations and the three composers
-    // stopped throwing when the orchestrator shipped; these did not.
-    expect(() => Gesture.Pinch()).toThrow(/`Gesture.Pinch` is not supported/)
+    // stopped throwing when the orchestrator shipped, and `Pinch`/`Rotation`
+    // when the touchpad harness made them testable; these four did not, and
+    // there is no platform reason for them to — `Fling` and `Manual` are
+    // reachable and simply unwritten, `Hover` and `ForceTouch` have no input
+    // to run on.
     expect(() => Gesture.Fling()).toThrow(/`Gesture.Fling` is not supported/)
+    expect(() => Gesture.Hover()).toThrow(/`Gesture.Hover` is not supported/)
+    expect(() => Gesture.Manual()).toThrow(/`Gesture.Manual` is not supported/)
+    expect(() => Gesture.ForceTouch()).toThrow(
+      /`Gesture.ForceTouch` is not supported/,
+    )
+    // And these two now build, in both spellings.
+    expect(Gesture.Pinch().kind).toBe("pinch")
+    expect(Gesture.Rotation().kind).toBe("rotation")
   })
 
   it("accepts the knobs upstream itself ignores off-platform", () => {

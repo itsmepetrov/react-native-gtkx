@@ -139,6 +139,53 @@ export type GestureEventPayload = {
   changeX: number
   changeY: number
   /**
+   * `Pinch`: the scale relative to the start of the gesture, so 1 at the
+   * start and above 1 for a spread. Upstream's `PinchGestureHandlerEventPayload`
+   * field, with upstream's cumulative-and-multiplicative meaning. 1 for every
+   * other kind, which is the identity a consumer would multiply by anyway.
+   */
+  scale: number
+  /**
+   * `Pinch`: the ratio between this update's `scale` and the previous one's —
+   * upstream's `scaleChange`, which is a RATIO where `changeX` is a
+   * difference, because scale composes by multiplication. On the first update
+   * it is the `scale` itself, exactly as upstream's `changeEventCalculator`
+   * returns `current.scale` when there is no previous event.
+   */
+  scaleChange: number
+  /** `Pinch`: the gesture's focal point, in the gesture VIEW's coordinates. */
+  focalX: number
+  focalY: number
+  /**
+   * `Rotation`: radians since the start of the gesture, positive CLOCKWISE.
+   * Upstream's `RotationGestureHandlerEventPayload` field, same units and
+   * same sign. 0 for every other kind.
+   */
+  rotation: number
+  /** `Rotation`: the difference in radians since the previous update. */
+  rotationChange: number
+  /** `Rotation`: the point rotated about, in the gesture VIEW's coordinates. */
+  anchorX: number
+  anchorY: number
+  /**
+   * `Pinch`: scale change per SECOND. `Rotation`: radians per second.
+   *
+   * Upstream calls both of these `velocity` and documents both as per-second,
+   * and neither of its web implementations is: `PinchGestureHandler` divides
+   * by a millisecond `timeDelta` and never by 1000, and
+   * `RotationGestureDetector.timeDelta` returns `currentTime + previousTime`
+   * — an ADDITION, which makes the denominator roughly twice a page-lifetime
+   * timestamp and the result meaningless rather than merely mis-scaled.
+   * Android's `PinchGestureHandler` uses `timeDeltaSeconds` and agrees with
+   * the documentation.
+   *
+   * So there is no single upstream number to reproduce, and this is the same
+   * call `hitSlopRect` already makes about a plain-number `hitSlop`: where the
+   * web path contradicts both the documentation and upstream's own native
+   * path, follow the documentation and say so. Per second, in both.
+   */
+  velocity: number
+  /**
    * Milliseconds since the press that started this gesture.
    *
    * Upstream carries it on `LongPress` alone, where it is the point of the
@@ -334,9 +381,17 @@ export type RecognizerConfig = RecognizerCallbacks & {
  * Which predicates the shared machine runs. Spelled as upstream's
  * `SingleGestureName` reads, minus the `GestureHandler` suffix.
  */
-export type GestureKind = "pan" | "tap" | "longPress" | "native"
+export type GestureKind =
+  "pan" | "tap" | "longPress" | "native" | "pinch" | "rotation"
 
-const KINDS = new Set<string>(["pan", "tap", "longPress", "native"])
+const KINDS = new Set<string>([
+  "pan",
+  "tap",
+  "longPress",
+  "native",
+  "pinch",
+  "rotation",
+])
 
 /**
  * What a `GestureDetector` consumes. Both spellings produce exactly this.

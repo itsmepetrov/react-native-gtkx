@@ -15,7 +15,11 @@
 // recognizers the group currently has, so composing differently on a later
 // render changes the list inside an effect and never during a render.
 import { widgetForHandle } from "../components/measure"
-import { computePointInWindow } from "../gtkx/bridge/index"
+import {
+  computePointInWindow,
+  Gtk,
+  type Gtk as GtkNs,
+} from "../gtkx/bridge/index"
 import type { GestureResponderEvent } from "../responder/types"
 import { requestResponder } from "../responder/use-responder"
 import type { PreparedGesture } from "./composition"
@@ -23,6 +27,7 @@ import { DECIDERS } from "./deciders"
 import { gestureOrchestrator } from "./orchestrator"
 import { createRecognizer, type Recognizer, type Rect } from "./recognizer"
 import { bindGestureTag, unbindGestureTag } from "./relations"
+import type { TouchpadSample } from "./touchpad"
 import { mintHandlerTag, type GestureKind, type GestureSpec } from "./types"
 
 /**
@@ -81,6 +86,13 @@ type Mounted = {
   readonly kind: GestureKind
   readonly tag: number
   readonly recognizer: Recognizer
+  /**
+   * The GTK controller feeding a `Pinch` or a `Rotation`, once the child has
+   * produced a widget to attach it to. Null for every other kind, and null
+   * until then — the child's ref lands before this parent's layout effect, but
+   * a child that carries no widget at all never gets one.
+   */
+  controller: GtkNs.Gesture | null
 }
 
 export type DetectorRuntime = {
@@ -127,12 +139,113 @@ export const createDetectorRuntime = (): DetectorRuntime => {
     }
   }
 
+  /**
+   * Attaches `GtkGestureZoom` or `GtkGestureRotate` to the child's widget and
+   * pumps it into the recognizer's touchpad channel.
+   *
+   * The scale and the angle are taken from the SIGNAL ARGUMENTS rather than
+   * read back off the controller, and that is not a style preference:
+   * `gtk_gesture_zoom_get_scale_delta` returns 1 the instant the gesture stops
+   * being active, so anything asked after the fact reports the gesture undoing
+   * itself. The signal carries the same number GTK would have returned, at the
+   * moment it is true.
+   *
+   * The focal point is `gtk_gesture_get_bounding_box_center`, whose
+   * coordinates are relative to the widget the controller is attached to —
+   * which is the gesture's own view, so it is already the view-local space
+   * upstream's `focalX`/`anchorX` are in (`absoluteToLocal` in its web
+   * delegate). When GTK has no bounding box to report, the view's centre
+   * stands in: a touchpad pinch's focal point is the pointer, and a pinch with
+   * an unknown focal point is still a pinch.
+   */
+  const attachController = (gesture: Mounted): void => {
+    const channel = gesture.recognizer.touchpad
+    if (channel === null || gesture.controller !== null) {
+      return
+    }
+    const widget = widgetForHandle(handle)
+    if (!widget) {
+      return
+    }
+
+    let scale = 1
+    let rotation = 0
+    const sample = (): TouchpadSample => {
+      const controller = gesture.controller
+      let focalX = widget.getWidth() / 2
+      let focalY = widget.getHeight() / 2
+      if (controller) {
+        const [known, x, y] = controller.getBoundingBoxCenter()
+        if (known) {
+          focalX = x
+          focalY = y
+        }
+      }
+      // `gtk_gesture_zoom_filter_event` only lets a touchpad pinch through at
+      // exactly two fingers, so this is a constant rather than a reading.
+      return { scale, rotation, focalX, focalY, pointers: 2 }
+    }
+
+    if (gesture.kind === "pinch") {
+      const zoom = new Gtk.GestureZoom()
+      zoom.on("begin", () => {
+        scale = 1
+        rotation = 0
+        channel.begin(sample())
+      })
+      zoom.on("scale-changed", (value: number) => {
+        scale = value
+        channel.update(sample())
+      })
+      zoom.on("end", () => {
+        channel.end()
+      })
+      zoom.on("cancel", () => {
+        channel.cancel()
+      })
+      gesture.controller = zoom
+    } else {
+      const rotate = new Gtk.GestureRotate()
+      rotate.on("begin", () => {
+        scale = 1
+        rotation = 0
+        channel.begin(sample())
+      })
+      // `angle-changed` carries the current absolute angle first and the delta
+      // SINCE RECOGNITION second, which is upstream's `rotation` exactly:
+      // radians, cumulative, positive clockwise.
+      rotate.on("angle-changed", (_angle: number, delta: number) => {
+        rotation = delta
+        channel.update(sample())
+      })
+      rotate.on("end", () => {
+        channel.end()
+      })
+      rotate.on("cancel", () => {
+        channel.cancel()
+      })
+      gesture.controller = rotate
+    }
+    widget.addController(gesture.controller)
+  }
+
+  const detachController = (gesture: Mounted): void => {
+    const controller = gesture.controller
+    if (controller === null) {
+      return
+    }
+    gesture.controller = null
+    const widget = widgetForHandle(handle)
+    widget?.removeController(controller)
+  }
+
   const create = (spec: GestureSpec): Mounted => {
     const tag = mintHandlerTag()
     const gesture: Mounted = {
       spec,
       kind: spec.kind,
       tag,
+      controller: null,
       // The config is read on every event rather than captured, so a re-render
       // that hands the detector a fresh gesture object takes effect without
       // swapping the handler set mid-drag.
@@ -210,9 +323,15 @@ export const createDetectorRuntime = (): DetectorRuntime => {
         // memoized gesture holding an earlier render's object still resolves.
         bindGestureTag(gesture.spec, existing.tag)
         gestureOrchestrator.relations.configure(existing.tag, gesture.relations)
+        // Idempotent, and attempted on every render rather than once: the
+        // child's ref lands before this effect, but a child that is not laid
+        // out yet has no widget to carry a controller. The first render that
+        // has one attaches it.
+        attachController(existing)
       }
       for (const dropped of reusable) {
         unbindGestureTag(dropped.spec)
+        detachController(dropped)
         dropped.recognizer.dispose()
       }
       mounted = next
@@ -239,6 +358,7 @@ export const createDetectorRuntime = (): DetectorRuntime => {
     dispose: () => {
       for (const gesture of mounted) {
         unbindGestureTag(gesture.spec)
+        detachController(gesture)
         gesture.recognizer.dispose()
       }
       mounted = []
