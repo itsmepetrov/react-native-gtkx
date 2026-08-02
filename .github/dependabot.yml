@@ -90,7 +90,7 @@ updates:
 
     ignore:
       # gtkx is pinned to an exact rc on purpose — upgrades are a deliberate,
-      # reviewed exercise against docs/gtkx-rc2-notes.md, not a version bump.
+      # reviewed exercise against docs/gtkx-rc4-notes.md, not a version bump.
       # This is the one blanket ignore here; see the header for what that costs.
       - dependency-name: "@gtkx/*"
 
