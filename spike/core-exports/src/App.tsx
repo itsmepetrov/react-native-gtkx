@@ -143,6 +143,13 @@ const SheetPane = (): React.ReactNode => (
       <BottomSheetFlatList
         data={SHEET_ROWS}
         keyExtractor={(item) => item}
+        // The sheet's list gets no style, so its height is whatever the
+        // sheet's content container gives it. Reporting the allocation is how
+        // "the list is not a viewport" is told apart from "the wheel never
+        // arrived" without guessing at gorhom's internals.
+        onLayout={(e: { nativeEvent: { layout: { height: number } } }) => {
+          report(`sheet list allocated height=${e.nativeEvent.layout.height}`)
+        }}
         onScroll={(e: { nativeEvent: { contentOffset: { y: number } } }) => {
           sheetScrolled()
           report(`sheet list y=${e.nativeEvent.contentOffset.y.toFixed(1)}`)

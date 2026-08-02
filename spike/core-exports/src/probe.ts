@@ -210,16 +210,21 @@ export const runPointerProbe = async (): Promise<void> => {
     await sleep(300)
   }
   const unstyledAfter = await measure("unstyled-row-one")
-  // NOT a check, because it records a gap rather than a guarantee: the same
-  // list, in the same bounded parent, WITHOUT a style of its own never
-  // becomes a viewport — it grows to its content and no scroll event is ever
-  // emitted. That is the shape `@gorhom/bottom-sheet` renders its scrollable
-  // in, and it is what stops the sheet's scroll lock below.
-  report(
-    `FINDING unstyled scrollable in a bounded parent: row-one y ` +
-      `${unstyledBefore ? Math.round(unstyledBefore.y) : "?"} -> ` +
-      `${unstyledAfter ? Math.round(unstyledAfter.y) : "?"} ` +
-      `(unchanged means it never scrolled)`,
+  // This one used to be a bare FINDING, because it recorded a gap rather than
+  // a guarantee: the same list, in the same bounded parent, WITHOUT a style of
+  // its own never became a viewport — it grew to its content and emitted no
+  // scroll event at all. That is the shape `@gorhom/bottom-sheet` renders its
+  // scrollable in, and it is what stopped the sheet's scroll lock below.
+  //
+  // It is a check now. RN's ScrollView composes `flexGrow: 1, flexShrink: 1`
+  // UNDER the app's style, and this platform did not — so the scroller kept
+  // its content size instead of shrinking into the parent.
+  check(
+    "an unstyled scrollable in a bounded parent is a viewport and scrolls",
+    unstyledBefore !== null &&
+      unstyledAfter !== null &&
+      unstyledBefore.y - unstyledAfter.y > 20,
+    `unstyled row-one y ${unstyledBefore ? Math.round(unstyledBefore.y) : "?"} -> ${unstyledAfter ? Math.round(unstyledAfter.y) : "?"}`,
   )
 
   const plainBefore = await measure("plain-row-one")
@@ -260,7 +265,28 @@ export const runPointerProbe = async (): Promise<void> => {
     sheetScrolls > 0,
     `sheet list onScroll calls = ${sheetScrolls}` +
       (sheetScrolls === 0
-        ? " — it never becomes a viewport, so there is nothing to lock (see the unstyled control above)"
+        ? " — its allocated height above equals its CONTENT height, so it is" +
+          " still not a viewport. The base style can only make a scroller" +
+          " fill a BOUNDED parent, and gorhom's is not bounded here: it" +
+          " bounds the list with an animated `height` from useAnimatedStyle" +
+          " on its content-mask container (BottomSheetContent), and that" +
+          " height is not reaching the Yoga node"
+        : ""),
+  )
+  // The lock itself, in both directions. Both are gated on events having
+  // ARRIVED, because a list that cannot move satisfies "held at the top" for
+  // free — passing vacuously here is precisely how "the list did not move"
+  // gets written down as a lock working, which this probe exists to prevent.
+  check(
+    "COLLAPSED: the sheet holds its list at the top under a real scroll",
+    sheetScrolls > 0 &&
+      lockedBefore !== null &&
+      lockedAfter !== null &&
+      Math.abs(lockedBefore.y - lockedAfter.y) <= 2,
+    `sheet row-one y ${lockedBefore ? Math.round(lockedBefore.y) : "?"} -> ${lockedAfter ? Math.round(lockedAfter.y) : "?"}` +
+      (sheetScrolls === 0
+        ? " — but zero scroll events arrived, so the lock is UNTESTED rather" +
+          " than working"
         : ""),
   )
 
@@ -298,6 +324,13 @@ export const runPointerProbe = async (): Promise<void> => {
       freeBefore ? Math.round(freeBefore.y) : "?"
     } -> ${freeAfter ? Math.round(freeAfter.y) : "?"}, ` +
       `sheet list onScroll calls = ${sheetScrolls}`,
+  )
+  check(
+    "EXTENDED: the lock releases and the same wheel scrolls the sheet's list",
+    freeBefore !== null &&
+      freeAfter !== null &&
+      freeBefore.y - freeAfter.y > 20,
+    `sheet row-one y ${freeBefore ? Math.round(freeBefore.y) : "?"} -> ${freeAfter ? Math.round(freeAfter.y) : "?"}`,
   )
 
   check(

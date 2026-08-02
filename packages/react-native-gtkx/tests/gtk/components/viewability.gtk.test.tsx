@@ -1,6 +1,13 @@
 // Viewability callbacks on the windowed list core: onViewableItemsChanged
 // driven purely by prefix-sum math (no widget queries), minimumViewTime
 // gating via JS timers, and the short-list onEndReached fast path.
+//
+// Every list here gets its viewport from a BOUNDED PARENT rather than from a
+// height on the list itself, which is how an RN app writes it. A scrollable
+// carries RN's `flexGrow: 1, flexShrink: 1` base style, so a height on the
+// list is only its flex BASIS: in a taller flex parent grow expands from that
+// basis and the "200px viewport" becomes the parent's 400. Wrapping is the
+// honest spelling — the parent owns the box, the list fills it.
 import { act, render, screen, waitFor } from "@gtkx/testing"
 import { createRef } from "react"
 import { expect, it, vi } from "vitest"
@@ -43,20 +50,21 @@ it("reports viewable rows at 50% threshold and updates after a scroll", async ()
         width={400}
         height={400}
       >
-        <FlatList
-          ref={listRef}
-          style={{ height: 200 }}
-          data={data}
-          keyExtractor={(item) => item}
-          getItemLayout={rowLayout}
-          viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
-          onViewableItemsChanged={(info) => infos.push(info)}
-          renderItem={({ item }) => (
-            <View style={{ height: 40 }}>
-              <Text>{item}</Text>
-            </View>
-          )}
-        />
+        <View style={{ height: 200 }}>
+          <FlatList
+            ref={listRef}
+            data={data}
+            keyExtractor={(item) => item}
+            getItemLayout={rowLayout}
+            viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
+            onViewableItemsChanged={(info) => infos.push(info)}
+            renderItem={({ item }) => (
+              <View style={{ height: 40 }}>
+                <Text>{item}</Text>
+              </View>
+            )}
+          />
+        </View>
       </Root>,
     )
   })
@@ -106,20 +114,21 @@ it("withholds viewability until minimumViewTime of continuous visibility", async
         width={400}
         height={400}
       >
-        <FlatList
-          ref={listRef}
-          style={{ height: 200 }}
-          data={data}
-          keyExtractor={(item) => item}
-          getItemLayout={rowLayout}
-          viewabilityConfig={{ minimumViewTime: 300 }}
-          onViewableItemsChanged={(info) => infos.push(info)}
-          renderItem={({ item }) => (
-            <View style={{ height: 40 }}>
-              <Text>{item}</Text>
-            </View>
-          )}
-        />
+        <View style={{ height: 200 }}>
+          <FlatList
+            ref={listRef}
+            data={data}
+            keyExtractor={(item) => item}
+            getItemLayout={rowLayout}
+            viewabilityConfig={{ minimumViewTime: 300 }}
+            onViewableItemsChanged={(info) => infos.push(info)}
+            renderItem={({ item }) => (
+              <View style={{ height: 40 }}>
+                <Text>{item}</Text>
+              </View>
+            )}
+          />
+        </View>
       </Root>,
     )
   })
@@ -171,18 +180,19 @@ it("fires onEndReached once for content shorter than the viewport", async () => 
       width={400}
       height={400}
     >
-      <FlatList
-        style={{ height: 300 }}
-        data={data}
-        keyExtractor={(item) => item}
-        getItemLayout={rowLayout}
-        onEndReached={onEndReached}
-        renderItem={({ item }) => (
-          <View style={{ height: 40 }}>
-            <Text>{item}</Text>
-          </View>
-        )}
-      />
+      <View style={{ height: 300 }}>
+        <FlatList
+          data={data}
+          keyExtractor={(item) => item}
+          getItemLayout={rowLayout}
+          onEndReached={onEndReached}
+          renderItem={({ item }) => (
+            <View style={{ height: 40 }}>
+              <Text>{item}</Text>
+            </View>
+          )}
+        />
+      </View>
     </Root>
   )
 
