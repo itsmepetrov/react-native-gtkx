@@ -222,6 +222,14 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       // hands its list down unstyled, so the sheet's scroll lock had nothing
       // to lock — the list never received a scroll event because it had never
       // become a viewport.
+      //
+      // Composing base-first does NOT protect an explicit `height`: grow and
+      // height are different properties, so nothing overrides anything — the
+      // height is the flex BASIS and grow expands from it, and a scroller with
+      // `height: 200` in a 400px column lays out at 400. RN does the same
+      // (same base, same order, same node, same Yoga resolution), so this is
+      // parity and not a bug; docs/api.md says so where people will look.
+      // Bound the PARENT to bound the viewport.
       style: [
         { flexGrow: 1, flexShrink: 1 },
         style,

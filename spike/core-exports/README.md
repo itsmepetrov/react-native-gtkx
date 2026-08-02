@@ -50,31 +50,47 @@ opens the window to drag by hand instead.
   position, not by focus, so without this the other three prove only that
   something happened somewhere.
 
-## The one check that fails, and why it is kept
+## The checks that fail, and why they are kept
 
 `the sheet's own scrollable receives scroll events at all` — **it receives
-none**, in either sheet state.
+none**, in either sheet state — and with it the two halves of the lock,
+`COLLAPSED` and `EXTENDED`.
 
-This was found while verifying `@gorhom/bottom-sheet`'s scroll LOCK, which is
-the thing the scroll-phase work was supposed to unblock: while the sheet is
-collapsed, `useScrollEventsHandlersDefault` holds its scrollable at the top by
-calling Reanimated's `scrollTo` from every scroll event. Both halves of that
-are implemented here. The lock still cannot run, because **no scroll event is
-ever produced** — and the reason is one layer below scrolling entirely:
+This is `@gorhom/bottom-sheet`'s scroll LOCK: while the sheet is collapsed,
+`useScrollEventsHandlersDefault` holds its scrollable at the top by calling
+Reanimated's `scrollTo` from every scroll event, and releases it once the
+sheet is extended. Both halves are implemented on this platform. The lock
+still cannot run, because **no scroll event is ever produced** — and the
+reason is one layer below scrolling entirely, in layout.
 
-> A scrollable with **no style of its own**, inside a parent with a bounded
-> height, does not become a viewport. It grows to its content and its scroll
-> range stays empty, so the adjustment never moves and `onScroll` never fires.
+**The first cause is fixed.** A scrollable with no style of its own did not
+become a viewport at all: it grew to its content, so its scroll range stayed
+empty and `onScroll` never fired. It now carries RN's own base style
+(`flexGrow: 1, flexShrink: 1`, composed under the app's style), and the probe
+proves the difference in isolation next to its controls — `<FlatList />` with
+no style in a bounded parent scrolls (`row-one y 406 -> 278`, where it used to
+report `170 -> 170`).
 
-The probe demonstrates exactly that, in isolation, next to its own controls:
-the same list, the same rows, the same bounded parent —
-`<FlatList style={{ flex: 1 }} />` scrolls, `<FlatList />` does not. That is
-the shape gorhom renders its scrollable in.
+**The second cause is not, and it is why these checks still fail.** That base
+style can only make a scroller fill a **bounded** parent, and gorhom's parent
+is not bounded here. gorhom bounds its list with an animated `height` —
+`contentMaskContainerAnimatedStyle` in `BottomSheetContent`, a `useAnimatedStyle`
+returning `height: animate({point: ...})` on the content-mask container — and
+that height is not reaching the Yoga node on this platform. The probe measures
+it directly: the sheet's list reports `allocated height=792`, which is exactly
+its own content height (18 rows x 44), so its parent is content-sized rather
+than sheet-sized. Everything else about the sheet works, which is what makes
+the diagnosis specific: it snaps between detents and the handle drag moves it
+(`handle y 531 -> 212`), so the container height and the detents are known and
+`translateY` is applied — it is the animated **height**, a layout property,
+that is not.
 
-So the failing check is not a scroll-event finding at all; it is a LAYOUT one,
-and it is left failing rather than removed because it names the next thing to
-fix and because the alternative — deleting it — is how "the sheet's list did
-not move" gets recorded as a lock working.
+So the failing checks are not scroll-event findings at all; they are LAYOUT
+ones, and they are left failing rather than removed because they name the next
+thing to fix. `COLLAPSED` is deliberately gated on scroll events having
+arrived: a list that cannot move satisfies "held at the top" for free, and
+letting that count as a pass is exactly how "the sheet's list did not move"
+gets recorded as a lock working.
 
 ## Deliberate choices
 
