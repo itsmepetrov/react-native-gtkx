@@ -813,7 +813,36 @@ it("LongPress activates on the timer with the pointer standing still", async () 
   await step(() => device.press())
   await settle(400)
   expect(trace).toEqual(["begin", "HELD"])
-  expect(heldFor).toBeGreaterThanOrEqual(250)
+  // A STATED tolerance, and the two ends of it guard different things.
+  //
+  // `duration` is `Date.now()` at the activation minus `Date.now()` at the
+  // press, but the 250 ms between them is waited out by a `setTimeout`, and
+  // libuv arms that against its own millisecond-TRUNCATED copy of the loop's
+  // monotonic clock — not against the `Date.now()` reading taken beside it.
+  // The two disagree by a sub-millisecond phase, so a timer that genuinely
+  // waited its full 250 ms can report 249. Measured rather than assumed: a
+  // bare `setTimeout(250)` timed with `Date.now()` in this same process
+  // returned 249 in 10 of 240 samples and never less, and this gesture's own
+  // `duration` over 40 runs spanned 250-260. That one millisecond is the
+  // whole of the flake this bound exists for — CI hit 249 exactly once.
+  //
+  // 248 is therefore a millisecond below the lowest reading the platform's
+  // timer produced in 640 samples, not a round number. It is deliberately
+  // still tight: it separates a 250 ms hold from a 150 ms one, which is the
+  // regression the floor is placed to catch, and a floor loose enough to
+  // miss that would guard nothing.
+  //
+  // The ceiling is the half a lower bound alone cannot cover: a timer armed
+  // from the wrong MOMENT rather than for the wrong length. `pressTime` is
+  // read on effectively the same line that arms the timer, and this catches
+  // them drifting apart. 350 clears the measured maximum of 260 — and
+  // contention does not move it, three runs of the whole gtk project
+  // alongside this one reading 252, 256, 260. Honest about its reach: it
+  // catches a hold armed a frame late only if that frame is a slow one;
+  // what it reliably catches is arming deferred to the first move, or
+  // `minDuration` ignored in favour of the 500 ms default.
+  expect(heldFor).toBeGreaterThanOrEqual(248)
+  expect(heldFor).toBeLessThan(350)
 
   await step(() => device.release())
   expect(trace).toEqual(["begin", "HELD", "finalize(true)"])
