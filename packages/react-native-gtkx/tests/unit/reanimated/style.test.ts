@@ -381,16 +381,25 @@ test("a percentage inset is not driven, and switching to one rebuilds", () => {
   expect(warn).not.toHaveBeenCalled()
 })
 
-test("zIndex is refused in words about GTK, not about React renders", () => {
+test("zIndex is a driven leaf, not a refusal", () => {
+  // It used to warn that GTK had no z-order. The container's snapshot and
+  // picking are sorted by it now (gtkx/bridge/view-box.ts), and the write is
+  // the same shape as opacity's — so the mapper drives it and says nothing.
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
   const animated = createAnimatedStyle({ position: "absolute", zIndex: 1 })
 
-  animated.apply({ position: "absolute", zIndex: 10 })
+  expect([...animated.nodes.keys()]).toEqual(["zIndex"])
+  expect(animated.apply({ position: "absolute", zIndex: 10 })).toBe(true)
+  expect(nodeValue(animated.style.zIndex)).toBe(10)
+  expect(warn).not.toHaveBeenCalled()
+})
 
-  expect(warn).toHaveBeenCalledTimes(1)
-  const message = String(warn.mock.calls[0]?.[0])
-  expect(message).toContain("sibling order")
-  expect(message).not.toContain("next React render")
+test("a negative zIndex drives too — RN allows it and it means below", () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+  const animated = createAnimatedStyle({ zIndex: 0 })
+  expect(animated.apply({ zIndex: -1 })).toBe(true)
+  expect(nodeValue(animated.style.zIndex)).toBe(-1)
+  expect(warn).not.toHaveBeenCalled()
 })
 
 test("the upstream useSortable style shape drives exactly one leaf", () => {
@@ -408,7 +417,7 @@ test("the upstream useSortable style shape drives exactly one leaf", () => {
   // `height` is a leaf as well now, and it costs nothing: it is a constant in
   // this shape, so no listener ever fires and nothing is ever driven. `top` is
   // the one the drag moves.
-  expect([...animated.nodes.keys()]).toEqual(["top", "height"])
+  expect([...animated.nodes.keys()]).toEqual(["zIndex", "top", "height"])
   // A frame of a real drag: only `top` moved.
   expect(
     animated.apply({
@@ -421,5 +430,20 @@ test("the upstream useSortable style shape drives exactly one leaf", () => {
     }),
   ).toBe(true)
   expect(nodeValue(animated.style.top)).toBe(180)
+  expect(warn).not.toHaveBeenCalled()
+
+  // …and the frame the drag STARTS on, which is the one this platform used to
+  // drop: the same leaf set, one more value pushed through it.
+  expect(
+    animated.apply({
+      position: "absolute",
+      left: 0,
+      right: 0,
+      top: 180,
+      zIndex: 1,
+      height: 60,
+    }),
+  ).toBe(true)
+  expect(nodeValue(animated.style.zIndex)).toBe(1)
   expect(warn).not.toHaveBeenCalled()
 })

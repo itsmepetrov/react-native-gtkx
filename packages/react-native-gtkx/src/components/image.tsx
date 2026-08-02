@@ -1,7 +1,13 @@
 import { existsSync } from "node:fs"
-import { useEffect, useImperativeHandle, useRef, type Ref } from "react"
+import {
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  type Ref,
+} from "react"
 import type { StyleProp } from "../contracts"
-import { Gdk, Gtk, GtkPicture } from "../gtkx/bridge/index"
+import { Gdk, Gtk, GtkPicture, setPaintOnlyLeaf } from "../gtkx/bridge/index"
 import { isRemoteUri, loadRemoteImage } from "./image-loader"
 import { createMeasureHandle, type MeasureHandle } from "./measure"
 import { useLayoutChild, type LayoutEvent } from "./use-layout-child"
@@ -56,6 +62,16 @@ export const Image = ({
   const { node } = useLayoutChild(widgetRef, { style, onLayout })
 
   useImperativeHandle(ref, () => createMeasureHandle(widgetRef, node), [node])
+
+  // Paint-only for picking, exactly as `Text`'s label is: `Image` has no press
+  // prop, so a targetable GtkPicture only ever shadowed its own container —
+  // see the zIndex block in gtkx/bridge/view-box.ts.
+  useLayoutEffect(() => {
+    const picture = widgetRef.current
+    if (picture) {
+      setPaintOnlyLeaf(picture)
+    }
+  }, [])
 
   const path = toPath(source)
 

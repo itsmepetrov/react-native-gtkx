@@ -65,6 +65,18 @@ undocumented as an embedding surface.
   `allocate()`; or expose a first-class "custom layout" entry point.
   We would contribute the docs/tests for it.
 
+- Ask, and it is a measured one: **a way to call the parent class's
+  implementation of an overridden vfunc** — GObject's `g_type_class_peek_parent`
+  chain-up, which `registerClass` has the pointer for at registration time and
+  keeps no handle on. We override `GtkWidget.snapshot()` to paint a container's
+  children in `zIndex` order, and because there is no chain-up, the case where
+  nothing is raised has to reproduce `gtk_widget_real_snapshot` from JS rather
+  than delegate to it: **0.9 µs per child against GTK's 0.19 µs**, paid by
+  every container whether or not anything is raised
+  ([research/z-index.md §4](research/z-index.md)). A chain-up removes that
+  entirely. The same shape would help anyone overriding `measure` or
+  `size_allocate` to adjust rather than replace.
+
 ### 3. Config registration for embedders — **now urgent, it broke us twice**
 
 Our runner hosts execute a plain Node bundle, so they synthesize the

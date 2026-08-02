@@ -67,11 +67,13 @@ Styles (which keys go where and what is unsupported) — [style system table](..
 2. **Node.js runtime**: all of npm/Node is available (fs, sqlite, napi) — "native modules" are written as regular Node modules; RN libraries with iOS/Android code do not work;
 3. **Layout is exactly RN's**: every container runs a custom GtkLayoutManager that obeys only the Yoga engine — GTK widget minimums never leak into the layout, windows shrink freely, and `Dimensions.get("window")` reports the app viewport (the window's content area under the headerbar, like RN's app window);
 4. **Text**: the ellipsis is opt-in via `numberOfLines`, exactly like RN; plain text wraps naturally and an unbreakable word wider than its box clips to it (a text leaf always clips; a container paint-overflows until its style says otherwise — see `overflow` below);
-5. **transform** is paint-only, like RN: `translateX/Y`, `scale`, `scaleX`, `scaleY` and `rotate`/`rotateZ` apply to any component's style (not just `Animated.View`), the array composes left to right as in RN and CSS, and the origin is the view's centre. A transformed child honestly draws past its container over siblings (later siblings stay on top, RN's default z-order) without moving any ancestor, and GTK routes input through the transform, so a rotated view is clickable in its rotated shape — unless the container asks to clip, and `overflow: "hidden"` on it cuts the transformed child off at the edge exactly as it cuts off an untransformed one. Rotation and scale reach the widget as the `GskTransform` of its allocation (`docs/research/transforms.md`); 3D (`rotateX`/`rotateY`/`perspective`), `skewX`/`skewY`, `matrix` and `transformOrigin` are not supported;
+5. **transform** is paint-only, like RN: `translateX/Y`, `scale`, `scaleX`, `scaleY` and `rotate`/`rotateZ` apply to any component's style (not just `Animated.View`), the array composes left to right as in RN and CSS, and the origin is the view's centre. A transformed child honestly draws past its container over siblings (later siblings stay on top unless a `zIndex` says otherwise — see 10 below) without moving any ancestor, and GTK routes input through the transform, so a rotated view is clickable in its rotated shape — unless the container asks to clip, and `overflow: "hidden"` on it cuts the transformed child off at the edge exactly as it cuts off an untransformed one. Rotation and scale reach the widget as the `GskTransform` of its allocation (`docs/research/transforms.md`); 3D (`rotateX`/`rotateY`/`perspective`), `skewX`/`skewY`, `matrix` and `transformOrigin` are not supported;
 6. **Animations never auto-stop**: the desktop "reduce animations" hint is not applied automatically (GTK-side animations are kept on to match `Animated`, which runs on its own timers) — honoring reduced motion stays an app-level opt-in, as in RN;
 7. **Lists are windowed like RN's**: FlatList/SectionList mount only the rows around the viewport (prefix-sum offsets, `estimatedItemSize` refined by real measurements or exact `getItemLayout`); sticky headers translate the REAL widget (no duplicate) and `inverted` follows the RN chat contract — `contentOffset` counts from the end where `data[0]` renders. The one RefreshControl compromise: desktop has no pull gesture, so `refreshing`/`onRefresh` are API-compatible but the trigger is app chrome (a button/shortcut);
 8. The package ships compiled (`dist/`: ESM + `.d.ts` alongside, sources embedded in the maps); consumers — Metro (`react-native-gtkx/metro` preset) and vite (preset) — both consume the built output. Requires Node ≥ 24 (the gtkx runtime floor; the run-linux host also relies on `module.registerHooks`).
-9. **Pre-commit hooks regenerate derived data**: editing this file (or the other generator inputs) and forgetting to run `scripts/generate-mcp-data.mjs` no longer fails CI — the pre-commit hook regenerates `packages/react-native-gtkx/src/mcp/data/generated.ts` and stages it for you.
+9. **`zIndex` orders paint AND picking, per sibling group.** GTK4 has no z-order property, so the container widget does it: it allocates its children in Yoga's order and _snapshots_ them in `zIndex` order, and a widget covered by a higher-painting sibling declines `gtk_widget_pick()` so input lands where the pixels are. Layout is untouched — only the paint pass sorts. RN's rules, checked rather than assumed and each pinned by a test: it applies whatever `position` is (CSS needs a non-`static` `position`; RN does not, and neither does this); equal values keep document order (the sort is stable); `undefined` is `0` and negatives are legal and paint below silent siblings; and it is **per sibling group only** — it creates no stacking context that escapes the parent, so a child cannot paint above its parent's sibling. That last rule is the one that decides what you write: to lift a dragged chip over a drop-zone row, put the `zIndex` on the chip's ROW, exactly as on iOS and Android. Animated (`Animated.View`, `useAnimatedStyle`) on the same terms as `opacity` — one widget write, no Yoga pass. **One divergence**: `contains()` is GTK's only per-point hook and it is consulted after a widget's children, so an _interactive native leaf_ inside a covered sibling — a `TextInput`, a `Switch`, a `ScrollView` viewport, a raw GTK widget in a slot — still takes the press even where a raised view covers it. `Text` and `Image` do not (they have no press prop here, so while something is raised they are excluded from picking and the press reaches their nearest `View`), which is also why a `pointerEvents: "box-none"` View whose only child is a `Text` falls through to what is behind it while a sibling in that container is raised. Measurements, the probe, the mutation check and the real-pointer proof: [research/z-index.md](research/z-index.md).
+
+10. **Pre-commit hooks regenerate derived data**: editing this file (or the other generator inputs) and forgetting to run `scripts/generate-mcp-data.mjs` no longer fails CI — the pre-commit hook regenerates `packages/react-native-gtkx/src/mcp/data/generated.ts` and stages it for you.
 
 ## Package aliases
 
@@ -1441,14 +1443,13 @@ actually drawn. `measureInWindow` and `measureLayout` follow `pageX`/`pageY`.
 This is a real difference from reading the geometry back on mobile, and it is
 the same split an explicit `translateY` has always had here.
 
-**`zIndex` does nothing, animated or not.** GTK4 has no z-order property: a
-container paints its children in sibling order, so the last sibling is on top,
-and restacking would mean reordering the widgets themselves — which is the
-order this platform keeps its shadow tree in sync with, so it would silently
-reorder the layout. A `zIndex` in a style is named in a one-per-session
-warning. For a sortable list the consequence is that a row dragged over the
-row below it is painted under it; order the elements the way you want them
-painted.
+**`zIndex` is driven, animated or not** — see item 10 of
+[the differences summary](#key-differences-from-react-native-summary) for what
+it means here and where it diverges. It is one widget
+write, no Yoga pass and no CSS, so it costs what `opacity` costs; the shape
+`useSortable` produces every frame (`{ position: "absolute", left: 0, right: 0,
+top: top.value, zIndex: moving ? 1 : 0 }`) drives both `top` and `zIndex` and
+warns about neither.
 
 Everything else — borders, radii, shadows — still reaches GTK as a CSS class
 computed during render. It is not dropped silently either: the property is

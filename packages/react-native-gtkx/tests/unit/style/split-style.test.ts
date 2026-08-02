@@ -94,6 +94,7 @@ const fullVisual: Required<VisualStyle> = {
 // by the component rather than by either half of the style pipeline.
 const fullBehavioral: Required<BehavioralStyle> = {
   pointerEvents: "box-none",
+  zIndex: 3,
 }
 
 beforeEach(() => {

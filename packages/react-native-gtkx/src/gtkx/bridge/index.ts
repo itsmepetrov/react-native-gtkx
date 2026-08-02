@@ -105,11 +105,15 @@ export { computePointIn, computePointInWindow, type Point } from "./geometry"
 // for why gtkx's own createPortal is not enough on its own.
 export { createSlotPortal } from "./slot-portal"
 export {
+  cacheChildOrder,
   getViewBoxComponent,
+  invalidateZOrder,
   setBoxOnly,
   setBoxPassthrough,
   setHitSlop,
+  setPaintOnlyLeaf,
   setPointerTarget,
+  setZIndex,
   type HitSlop,
 } from "./view-box"
 export {

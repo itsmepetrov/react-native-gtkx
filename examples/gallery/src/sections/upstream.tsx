@@ -375,7 +375,13 @@ const styles = StyleSheet.create({
     color: palette.textDim,
     marginTop: 6,
   },
-  chipRow: { flexDirection: "row", gap: 12 },
+  // `zIndex` on the ROW, not on the chip: a dragged chip is moved by a
+  // transform and stays inside this row, and RN's zIndex orders SIBLINGS —
+  // it does not create a stacking context that escapes the parent. So the
+  // thing that has to rise above the zone row is this row. Exactly what the
+  // same app needs on iOS and Android, and it is what `zIndex` doing nothing
+  // used to hide (docs/research/z-index.md).
+  chipRow: { flexDirection: "row", gap: 12, zIndex: 1 },
   chip: {
     paddingVertical: 10,
     paddingHorizontal: 18,

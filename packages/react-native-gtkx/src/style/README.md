@@ -70,6 +70,8 @@ what RN itself does on both of its platforms (only a `ScrollView` scrolls);
 
 ## Ignored (outside the frozen contract)
 
-Any key not present in `LayoutStyle`/`VisualStyle` (`elevation`, `zIndex`, `filter`,
-`mixBlendMode`, `textTransform`, `tintColor`, …) — `console.warn` once per key,
-the value is dropped. Extending the set is done only by changing `contracts.ts` via the orchestrator.
+Any key not present in `LayoutStyle`/`VisualStyle`/`BehavioralStyle`
+(`elevation`, `filter`, `mixBlendMode`, `textTransform`, `tintColor`, …) —
+`console.warn` once per key, the value is dropped. (`pointerEvents` and
+`zIndex` are `BehavioralStyle`: consumed by the component that owns the
+behaviour, routed by neither half of this pipeline.) Extending the set is done only by changing `contracts.ts` via the orchestrator.

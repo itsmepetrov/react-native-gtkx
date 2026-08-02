@@ -244,17 +244,6 @@ const warnUndriveable = (property: string, source: StyleObject): void => {
   if (isProduction) {
     return
   }
-  if (property === Z_INDEX) {
-    console.warn(
-      "react-native-reanimated: useAnimatedStyle changed `zIndex`, which react-native-gtkx does not " +
-        "implement at all — animated or not. GTK4 has no z-order property: a container paints its children " +
-        "in sibling order, so the LAST sibling is on top, and the only way to restack is to reorder the " +
-        "widgets themselves — which is the same order this platform's shadow tree is kept in sync with " +
-        "(components/use-layout-child.ts), so restacking for paint would silently reorder the layout. " +
-        "Order the elements as you want them painted. See docs/api.md.",
-    )
-    return
-  }
   const insetReason = isInsetProperty(property)
     ? insetRefusalReason(source, property)
     : null
@@ -323,6 +312,14 @@ const leavesOf = (
   const leaves: { key: string; value: StyleValue }[] = []
   if (typeof source[OPACITY] === "number") {
     leaves.push({ key: OPACITY, value: source[OPACITY] })
+  }
+  // Driven for real, and by the same kind of write opacity uses: the paint
+  // and pick order of the container (gtkx/bridge/view-box.ts). It has to be
+  // driveable rather than merely accepted — `useSortable` puts it in the
+  // style object on every frame, so a refusal here is a refusal of the whole
+  // sortable-list shape.
+  if (typeof source[Z_INDEX] === "number") {
+    leaves.push({ key: Z_INDEX, value: source[Z_INDEX] })
   }
   for (const property of DRIVEABLE_COLOR_PROPERTIES) {
     const value = source[property]
@@ -413,6 +410,10 @@ export const createAnimatedStyle = (
   const opacityNode = nodes.get(OPACITY)
   if (opacityNode) {
     style[OPACITY] = opacityNode
+  }
+  const zIndexNode = nodes.get(Z_INDEX)
+  if (zIndexNode) {
+    style[Z_INDEX] = zIndexNode
   }
   for (const property of DRIVEABLE_COLOR_PROPERTIES) {
     const colorNode = nodes.get(property)

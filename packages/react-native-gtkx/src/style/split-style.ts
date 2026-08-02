@@ -116,6 +116,11 @@ const BEHAVIORAL_KEYS: Record<
   true
 > = {
   pointerEvents: true,
+  // `zIndex` joined it for the same reason: it is neither a Yoga input nor a
+  // CSS declaration, it is the container widget's paint and pick order
+  // (gtkx/bridge/view-box.ts), and useLayoutChild pushes it there from the
+  // flattened style.
+  zIndex: true,
 }
 
 /**
