@@ -1,6 +1,6 @@
 # API v1
 
-The surface mirrors `react-native`; everything in the tables below is imported from `"react-native"` (aliased by the Metro preset — `react-native-gtkx/metro` — or the vite preset) or directly from `"react-native-gtkx"`. Completeness is enforced by `npm run docs:check` (every public export must be mentioned in this file). Toolchain subpaths: `react-native-gtkx/metro` (`withLinuxPlatform`), `react-native-gtkx/vite` (the vite preset), `react-native-gtkx/runner` (the `run-linux` command implementation), `react-native-gtkx/vitest` (`reactNativeGtkxTest`, a ready Vitest project config for component tests under headless Wayland), `react-native-gtkx/testing` (`@gtkx/testing`'s render/screen/userEvent surface plus `renderHookWithWindow`), `react-native-gtkx/mcp` (the `react-native-gtkx-mcp` bin's programmatic surface, for embedding and testing — the bin itself is how an agent uses it) and `react-native-gtkx/types` (augments the stock RN types with the `linux` platform — reference it from an `env.d.ts`) — see [getting-started](getting-started.md#tests) for the testing subpaths.
+The surface mirrors `react-native`; everything in the tables below is imported from `"react-native"` (aliased by the Metro preset — `react-native-gtkx/metro` — or the vite preset; see [Package aliases](#package-aliases) for the six names both rewrite and how to change them) or directly from `"react-native-gtkx"`. Completeness is enforced by `npm run docs:check` (every public export must be mentioned in this file). Toolchain subpaths: `react-native-gtkx/metro` (`withLinuxPlatform`), `react-native-gtkx/vite` (the vite preset), `react-native-gtkx/runner` (the `run-linux` command implementation), `react-native-gtkx/vitest` (`reactNativeGtkxTest`, a ready Vitest project config for component tests under headless Wayland), `react-native-gtkx/testing` (`@gtkx/testing`'s render/screen/userEvent surface plus `renderHookWithWindow`), `react-native-gtkx/mcp` (the `react-native-gtkx-mcp` bin's programmatic surface, for embedding and testing — the bin itself is how an agent uses it) and `react-native-gtkx/types` (augments the stock RN types with the `linux` platform — reference it from an `env.d.ts`) — see [getting-started](getting-started.md#tests) for the testing subpaths.
 
 **Past the portable surface:** [`react-native-gtkx/gtk` and `react-native-gtkx/adw`](platform-layer.md) exposes the GTK layer itself — Adwaita and GTK widgets as React components, taking `style` so React Native drives their position and appearance, plus an `Adw.NavigationView` primitive that needs no router. That is where to look when this page does not have what you need; it is Linux-only by design and the import says so.
 
@@ -72,6 +72,111 @@ Styles (which keys go where and what is unsupported) — [style system table](..
 7. **Lists are windowed like RN's**: FlatList/SectionList mount only the rows around the viewport (prefix-sum offsets, `estimatedItemSize` refined by real measurements or exact `getItemLayout`); sticky headers translate the REAL widget (no duplicate) and `inverted` follows the RN chat contract — `contentOffset` counts from the end where `data[0]` renders. The one RefreshControl compromise: desktop has no pull gesture, so `refreshing`/`onRefresh` are API-compatible but the trigger is app chrome (a button/shortcut);
 8. The package ships compiled (`dist/`: ESM + `.d.ts` alongside, sources embedded in the maps); consumers — Metro (`react-native-gtkx/metro` preset) and vite (preset) — both consume the built output. Requires Node ≥ 24 (the gtkx runtime floor; the run-linux host also relies on `module.registerHooks`).
 9. **Pre-commit hooks regenerate derived data**: editing this file (or the other generator inputs) and forgetting to run `scripts/generate-mcp-data.mjs` no longer fails CI — the pre-commit hook regenerates `packages/react-native-gtkx/src/mcp/data/generated.ts` and stages it for you.
+
+## Package aliases
+
+Both presets — `withLinuxPlatform` (Metro) and `reactNativeGtkx` (vite) —
+rewrite six package names during resolution, from one table
+(`packages/react-native-gtkx/src/aliases/index.ts`) that both of them read. A
+name is matched **exactly or with a `/` after it**, and the tail is
+transplanted onto the target: `react-native-svg/lib/x` becomes
+`react-native-gtkx/svg/lib/x`, while `react-native-svg-icons` is left alone.
+
+| Package                                                                                          | Resolves to                         | Why                                                                                                                                                  |
+| ------------------------------------------------------------------------------------------------ | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `react-native`                                                                                   | `react-native-gtkx`                 | **The platform.** Not a substitution and not configurable — the out-of-tree `npmPackageName` declaration alone does not alias imports for a bundle.  |
+| [`react-native-svg`](#react-native-svg-compatibility-react-native-gtkxsvg)                       | `react-native-gtkx/svg`             | The real package is a native module.                                                                                                                 |
+| [`react-native-reanimated`](#react-native-reanimated-react-native-gtkxreanimated)                | `react-native-gtkx/reanimated`      | The real package needs a worklet runtime and a Babel plugin.                                                                                         |
+| [`react-native-worklets`](#react-native-worklets-react-native-gtkxworklets)                      | `react-native-gtkx/worklets`        | Where Reanimated 4 moved that runtime. Libraries pull `scheduleOnRN`/`scheduleOnUI` out of it at module scope, so an unaliased name fails at import. |
+| [`react-native-gesture-handler`](#react-native-gesture-handler-react-native-gtkxgesture-handler) | `react-native-gtkx/gesture-handler` | A shim, not a port: it implements `GestureHandlerRootView` and makes every other export throw where it is used.                                      |
+| [`react-native-reanimated-dnd`](#drag-and-drop-react-native-gtkxdnd)                             | `react-native-gtkx/dnd`             | A mirror of its API on GTK drag-and-drop. **The one that is a real choice** — see below.                                                             |
+
+### The one that is a real choice
+
+Five of the six substitute an implementation that cannot run here **at all**.
+`react-native-reanimated-dnd` stopped being one of those: the real 2.0.0 runs
+on top of this platform's Reanimated, worklets and gesture-handler surfaces,
+dragged by a real pointer (`examples/upstream-libraries`). So there is a
+genuine trade:
+
+- **`react-native-gtkx/dnd` (default)** — GDK carries a
+  `Gtk.WidgetPaintable` of the dragged view above every window, with the
+  theme's own drag cursors, hit testing against the real widget tree and
+  drops into _other applications_. The dragged view itself never moves.
+- **the real `react-native-reanimated-dnd`** — `dragAxis`, `dragBoundsRef`,
+  `dropAlignment`, `collisionAlgorithm` and the rest of upstream's prop
+  surface, and the view moves under the pointer. No drag icon, no
+  cross-application drop, and the drag is confined to the app window.
+
+Everything else in [Differences from
+`react-native-reanimated-dnd`](#differences-from-react-native-reanimated-dnd)
+applies to the mirror; the real package has upstream's behaviour by
+definition.
+
+### Configuring the package aliases
+
+Both presets take an `aliases` option: **deltas keyed by package name**, not a
+replacement list. Anything you do not mention keeps its default, which is the
+point — a list you have to re-state in full is a list that can silently lose
+an entry, and `ssr.noExternal` losing three of these six names is what put the
+real `react-native-gesture-handler` into a Linux app.
+
+```ts
+// vite.config.ts
+import { reactNativeGtkx } from "react-native-gtkx/vite"
+
+export default defineConfig({
+  plugins: [
+    reactNativeGtkx({
+      aliases: {
+        // false — drop one of ours, so the real package loads
+        "react-native-reanimated-dnd": false,
+        // string — exact name or subpath, tail transplanted
+        "my-pkg": "my-pkg/linux",
+        // { pattern, replace } — for the rare case where the subpath
+        // layouts differ
+        "weird-pkg": { pattern: /^weird-pkg\/lib\/(.+)$/, replace: "impl/$1" },
+      },
+    }),
+  ],
+})
+```
+
+```ts
+// metro.config.ts — the same object, the same semantics
+export default withLinuxPlatform(getDefaultConfig(__dirname), {
+  aliases: { "react-native-reanimated-dnd": false },
+})
+```
+
+Prefer the string form. It is anchored to the package name by construction,
+which is not a nicety: `react-native-reanimated-dnd` is a lookalike of
+`react-native-reanimated`, and `react-native-worklets-core` is a real,
+unrelated package (VisionCamera's) that looks like `react-native-worklets` —
+a loose prefix rewrite sends either onto a subpath that does not exist. Reach
+for `{ pattern, replace }` only when a package's subpath layout does not match
+its target's.
+
+Because the rules are data rather than functions, the preset validates them
+when your config loads, and says what is wrong:
+
+- **an unknown key with `false`** — the aliases that exist are named, so a
+  typo cannot silently do nothing;
+- **an overlapping pattern** — "your pattern also matches
+  `react-native-reanimated-dnd`, which is declared separately". Two rules
+  claiming one specifier would make resolution order-dependent;
+- **an unanchored pattern, or one with the `g`/`y` flag** — the first matches
+  inside longer specifiers, the second carries a `lastIndex` between calls;
+- **a target that is not a module specifier** — a relative or absolute path,
+  or one ending in `/`;
+- **`react-native`** — it cannot be dropped or retargeted, and the message
+  says why: it is the platform, not one of the substituted packages.
+
+On the vite path the option also drives `ssr.noExternal`, which is derived
+from the table rather than written out beside it. Every name in the table
+stays inside vite's pipeline — including the ones you turn off, deliberately:
+an un-aliased package still imports `react-native` at module scope, and that
+import only reaches the platform alias if Node never gets the package first.
 
 ## Navigation (`react-native-gtkx/navigation`)
 
@@ -545,12 +650,18 @@ source:
 import { Draggable, Droppable, DropProvider } from "react-native-reanimated-dnd"
 ```
 
-**Why a mirror and not the library.** It cannot run here. Reanimated 4,
-`react-native-worklets` and `react-native-gesture-handler` are imported at
-module scope in twelve of its files, its sort algorithm lives inside a
-`useAnimatedReaction` worklet and its row layout inside a `useAnimatedStyle`,
-and its public types are written in `SharedValue<T>`. Full evidence in
+**Why a mirror and not the library.** Reanimated 4, `react-native-worklets`
+and `react-native-gesture-handler` are imported at module scope in twelve of
+its files, its sort algorithm lives inside a `useAnimatedReaction` worklet and
+its row layout inside a `useAnimatedStyle`, and its public types are written
+in `SharedValue<T>`. Full evidence in
 [research/drag-and-drop.md](research/drag-and-drop.md).
+
+**And it is the one alias that is a real choice.** Once those three surfaces
+existed the real library ran on top of them, so an app can take upstream's own
+implementation instead with
+`aliases: { "react-native-reanimated-dnd": false }` — what that trades away
+and what it buys is in [Package aliases](#the-one-that-is-a-real-choice).
 
 **A ported app changes nothing in its source.** `<GestureHandlerRootView>` —
 the one non-drag-and-drop import such an app has, because upstream's quick
@@ -1046,8 +1157,10 @@ now, which is what RN does for a `FlatList` too.
 **`react-native-reanimated-dnd` 2.0.0 — never loads, by design; and it RUNS
 when it does.** Both presets alias the package name onto
 [`react-native-gtkx/dnd`](#drag-and-drop-react-native-gtkxdnd), which mirrors
-its API on GTK's own drag-and-drop, so an app never resolves the real package.
-`examples/upstream-libraries` un-aliases it and installs it for real:
+its API on GTK's own drag-and-drop, so an app never resolves the real package
+unless it asks to. `examples/upstream-libraries` asks — `aliases: {
+"react-native-reanimated-dnd": false }` (see [Package
+aliases](#configuring-the-package-aliases)) — and installs it for real:
 `Draggable`, `Droppable`, `DropProvider` and `Sortable` all work on this
 surface, dragged by a real pointer. What that took, and the two things that
 still differ, are in

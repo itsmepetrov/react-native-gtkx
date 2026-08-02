@@ -5,10 +5,11 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
 import { isBuiltin } from "node:module"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { afterAll, expect, test } from "vitest"
+import { afterAll, describe, expect, test } from "vitest"
 import {
   HOST_MODULE_EXTERNALS,
   withLinuxPlatform,
+  type LinuxPlatformOptions,
   type MetroResolutionContext,
   type MetroResolver,
 } from "../../src/metro/index"
@@ -139,6 +140,84 @@ test("redirects react-native-gesture-handler to the shim on linux", () => {
     // lookalike: left untouched.
     ["react-native-gesture-handler-extras", "linux"],
   ])
+})
+
+describe("the aliases option", () => {
+  const resolveWith = (
+    aliases: LinuxPlatformOptions["aliases"],
+    moduleName: string,
+  ): string => {
+    const { context, calls } = makeContext()
+    withLinuxPlatform({}, { proxyDir, aliases }).resolver.resolveRequest(
+      context,
+      moduleName,
+      "linux",
+    )
+    return calls[0]![0]
+  }
+
+  // The one alias that is a genuine choice rather than the only implementation
+  // that exists: PR #90 ran the real 2.0.0 unaliased on this platform's
+  // Reanimated, worklets and gesture-handler surfaces, and it works. Before
+  // this option the only way to say so was a bare resolve.alias reaching
+  // around the preset.
+  test("false drops an alias, so Metro resolves the real package", () => {
+    expect(
+      resolveWith(
+        { "react-native-reanimated-dnd": false },
+        "react-native-reanimated-dnd",
+      ),
+    ).toBe("react-native-reanimated-dnd")
+    expect(
+      resolveWith(
+        { "react-native-reanimated-dnd": false },
+        "react-native-reanimated-dnd/lib/index",
+      ),
+    ).toBe("react-native-reanimated-dnd/lib/index")
+  })
+
+  // Deltas, not a replacement list: an app that drops one name cannot lose
+  // another by omission — the bug shape behind #90.
+  test("dropping one alias leaves the other five installed", () => {
+    const aliases = { "react-native-reanimated-dnd": false } as const
+    expect(resolveWith(aliases, "react-native")).toBe("react-native-gtkx")
+    expect(resolveWith(aliases, "react-native-reanimated")).toBe(
+      "react-native-gtkx/reanimated",
+    )
+    expect(resolveWith(aliases, "react-native-gesture-handler")).toBe(
+      "react-native-gtkx/gesture-handler",
+    )
+  })
+
+  test("a string adds an alias, tail transplanted", () => {
+    const aliases = { "my-pkg": "my-pkg/linux" }
+    expect(resolveWith(aliases, "my-pkg")).toBe("my-pkg/linux")
+    expect(resolveWith(aliases, "my-pkg/deep")).toBe("my-pkg/linux/deep")
+    // Same exact-or-slash-prefix guard our own entries get, for free.
+    expect(resolveWith(aliases, "my-pkg-other")).toBe("my-pkg-other")
+  })
+
+  test("a pattern rule covers a differing subpath layout", () => {
+    const aliases = {
+      "weird-pkg": { pattern: /^weird-pkg\/lib\/(.+)$/, replace: "impl/$1" },
+    }
+    expect(resolveWith(aliases, "weird-pkg/lib/thing")).toBe("impl/thing")
+  })
+
+  test("rejects a typo'd drop by naming the aliases that exist", () => {
+    expect(() =>
+      withLinuxPlatform(
+        {},
+        { proxyDir, aliases: { "react-native-reanimated-dndd": false } },
+      ),
+    ).toThrow(/react-native-reanimated-dnd/)
+  })
+
+  test("refuses to remove the platform alias", () => {
+    expect(() =>
+      withLinuxPlatform({}, { proxyDir, aliases: { "react-native": false } }),
+    ).toThrow(/it is the platform/)
+  })
 })
 
 test("externals resolve to __hostModules proxies", () => {
