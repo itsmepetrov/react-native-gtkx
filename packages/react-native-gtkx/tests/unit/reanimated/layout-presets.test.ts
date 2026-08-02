@@ -7,11 +7,17 @@
 // entries nobody rendered. The spot-checks below quote upstream's own numbers
 // (react-native-reanimated 4.5.3, src/layoutReanimation/defaultAnimations/).
 import { describe, expect, it } from "vitest"
-import type {
-  BuiltLayoutAnimation,
-  LayoutAnimationValues,
+import {
+  FadeIn,
+  FadeOut,
+  type BuiltLayoutAnimation,
+  type LayoutAnimationValues,
 } from "../../../src/reanimated-compat/layout-animation"
 import * as presets from "../../../src/reanimated-compat/layout-animation-presets"
+import {
+  EntryExitTransition,
+  SequencedTransition,
+} from "../../../src/reanimated-compat/layout-transitions"
 
 // A 120x40 row at (0, 40) in an 800x600 window — the shape every geometric
 // parameter in the catalogue is expressed against.
@@ -203,5 +209,61 @@ describe("the layout-animation preset catalogue", () => {
       transform: [{ scale: 0.5 }],
     }).build()(VALUES)
     expect(initialTransform(config, "scale")).toBe(0.5)
+  })
+})
+
+describe("EntryExitTransition", () => {
+  // The one transition that is a COMPOSITION rather than a curve: it plays a
+  // whole exit and then a whole entry on the same view. Its merge logic has
+  // no geometry of its own to assert on, so the guard is the built config —
+  // the shape upstream produces, keyed by property.
+  const built = (): BuiltLayoutAnimation =>
+    new EntryExitTransition().entering(FadeIn).exiting(FadeOut).build()(VALUES)
+
+  it("defaults to fading out and back in, over the moved rect", () => {
+    const config = built()
+    // Both halves on one property means one sequence, not two animations
+    // fighting over the same slot.
+    expect(config.animations.opacity).toBeTruthy()
+    expect(config.initialValues.opacity).toBe(1)
+    // …and the rect still lands, held back by the length of the exit.
+    for (const property of ["originX", "originY", "width", "height"]) {
+      expect(config.animations[property], property).toBeTruthy()
+    }
+    expect(config.initialValues.originY).toBe(VALUES.currentOriginY)
+  })
+
+  it("adds the two lengths, so a retention outlives both", () => {
+    // FadeOut declares 300 ms; the transition's own 300 runs after it.
+    expect(new EntryExitTransition().getMaxDuration()).toBe(600)
+    expect(
+      new EntryExitTransition().exiting(FadeOut.duration(500)).getMaxDuration(),
+    ).toBe(800)
+  })
+
+  it("takes a preset from the catalogue on either side", () => {
+    const config = new EntryExitTransition()
+      .entering(presets.ZoomIn)
+      .exiting(presets.ZoomOut)
+      .build()(VALUES)
+    // Both sides animate `scale`, so the merged array carries a slot for each
+    // rather than one overwriting the other.
+    const transform = config.animations.transform as Record<string, unknown>[]
+    expect(transform.filter((slot) => "scale" in slot)).toHaveLength(2)
+  })
+})
+
+describe("SequencedTransition", () => {
+  it("reverses which axis moves first, and nothing else", () => {
+    const forward = new SequencedTransition().build()(VALUES)
+    const reversed = SequencedTransition.reverse().build()(VALUES)
+    for (const property of ["originX", "originY", "width", "height"]) {
+      expect(forward.initialValues[property], property).toBe(
+        reversed.initialValues[property],
+      )
+    }
+    // Upstream's default for this transition is 500 ms, not the usual 300.
+    expect(new SequencedTransition().getDuration()).toBe(500)
+    expect(new SequencedTransition().duration(200).getDuration()).toBe(200)
   })
 })

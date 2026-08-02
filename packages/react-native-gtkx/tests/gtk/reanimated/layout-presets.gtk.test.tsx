@@ -15,6 +15,7 @@
 import { act, render, screen, waitFor } from "@gtkx/testing"
 import { useEffect, useState } from "react"
 import { expect, it } from "vitest"
+import { retainedWidgetCount } from "../../../src/components/widget-retention"
 import { Graphene, Gtk } from "../../../src/gtkx/bridge/index"
 import { Dimensions, Root, View } from "../../../src/index"
 import Animated, {
@@ -60,6 +61,7 @@ const boundsOf = (testID: string): Graphene.Rect => {
 
 type Handles = { setItems: (items: string[]) => void }
 let handles: Handles
+let configHandles: { hide: () => void }
 
 type StageProps = {
   initial: string[]
@@ -258,7 +260,12 @@ it("ZoomOut shrinks a widget React has already removed, then drops it", async ()
   // The exit path, at wall speed: the retention that keeps the widget on
   // screen is released by a real timer, so a virtual clock would have the two
   // disagreeing about how long the animation has been running.
-  await mount({ initial: ["a", "b"], exiting: ZoomOut.duration(300) })
+  //
+  // 900 ms rather than the 300 the other cases use, and that is the only
+  // reason: the mid-animation sample below is a real sleep, so the window it
+  // has to land in must be wide enough that a loaded machine cannot step over
+  // it. Nothing about what is asserted changes with the length.
+  await mount({ initial: ["a", "b"], exiting: ZoomOut.duration(900) })
   await allocate()
   const rowB = widget("row-b")
   expect(boundsOf("row-b").getWidth()).toBeCloseTo(ROW_WIDTH, 1)
@@ -266,21 +273,22 @@ it("ZoomOut shrinks a widget React has already removed, then drops it", async ()
   await act(async () => {
     handles.setItems(["a"])
   })
-  await settle(150)
+  await settle(200)
 
   expect(rowB.getParent()).not.toBeNull()
   const shrunk = boundsOf("row-b").getWidth()
   expect(shrunk).toBeGreaterThan(0)
   expect(shrunk).toBeLessThan(ROW_WIDTH)
 
-  await settle(700)
+  // Past the animation and past the retention's fallback margin.
+  await settle(1600)
   expect(rowB.getParent()).toBeNull()
 })
 
 it("CurvedTransition walks a reordered row to where the engine put it", async () => {
   await mount({
     initial: ["a", "b", "c"],
-    layout: CurvedTransition.duration(200),
+    layout: CurvedTransition.duration(600),
   })
   await allocate()
   expect(Math.round(boundsOf("row-c").getY())).toBe(ROW_HEIGHT * 2)
@@ -288,12 +296,15 @@ it("CurvedTransition walks a reordered row to where the engine put it", async ()
   await act(async () => {
     handles.setItems(["c", "a", "b"])
   })
-  await settle(40)
+  // Sampled mid-flight: the row is on its way, neither where it was nor
+  // where it is going. 600 ms so a loaded machine's sleep cannot step past
+  // the end of the transition and read the destination as "mid-flight".
+  await settle(100)
   const early = boundsOf("row-c").getY()
   expect(early).toBeGreaterThan(0)
-  expect(early).toBeLessThanOrEqual(ROW_HEIGHT * 2)
+  expect(early).toBeLessThan(ROW_HEIGHT * 2)
 
-  await settle(400)
+  await settle(900)
   expect(Math.round(boundsOf("row-c").getY())).toBe(0)
   expect(Math.round(boundsOf("row-a").getY())).toBe(ROW_HEIGHT)
 })
@@ -301,7 +312,7 @@ it("CurvedTransition walks a reordered row to where the engine put it", async ()
 it("JumpingTransition arcs clear of both rows on its way", async () => {
   await mount({
     initial: ["a", "b"],
-    layout: JumpingTransition.duration(300),
+    layout: JumpingTransition.duration(900),
   })
   await allocate()
   expect(Math.round(boundsOf("row-b").getY())).toBe(ROW_HEIGHT)
@@ -309,12 +320,15 @@ it("JumpingTransition arcs clear of both rows on its way", async () => {
   await act(async () => {
     handles.setItems(["b", "a"])
   })
-  // Halfway through, the leaping half has taken the row ABOVE its
-  // destination — a straight walk would never produce a negative y here.
-  await settle(150)
+  // Mid-flight the leaping half has taken the row ABOVE its destination — a
+  // straight walk would never produce a negative y here. Long enough that the
+  // sample cannot fall off either end of the arc on a loaded machine: the
+  // leap owns the first 450 ms, and the bounce it lands on is still above the
+  // target for most of the second half.
+  await settle(300)
   expect(boundsOf("row-b").getY()).toBeLessThan(0)
 
-  await settle(400)
+  await settle(900)
   expect(Math.round(boundsOf("row-b").getY())).toBe(0)
   expect(Math.round(boundsOf("row-a").getY())).toBe(ROW_HEIGHT)
 })
@@ -357,6 +371,71 @@ it("advanceAnimationByTime moves the clock and nothing else does", async () => {
     await allocate()
     expect(boundsOf("row-a").getWidth()).toBeCloseTo(ROW_WIDTH, 1)
   })
+})
+
+it("LayoutAnimationConfig skips the exiting of the subtree it takes with it", async () => {
+  // The other half of the component, and the one that needs the cleanup
+  // ORDER to be right: React tears a deleted subtree down outside in, so the
+  // wrapper's own cleanup has already run by the time a row below it asks
+  // whether it should animate. If it had not, the row would be retained and
+  // the count below would be 1.
+  const Stage = ({ skipExiting }: { skipExiting: boolean }) => {
+    const [shown, setShown] = useState(true)
+    useEffect(() => {
+      configHandles = { hide: () => setShown(false) }
+    }, [])
+    return (
+      <View
+        style={{ width: STAGE_WIDTH, height: STAGE_HEIGHT }}
+        testID="stage"
+      >
+        {shown ? (
+          <LayoutAnimationConfig skipExiting={skipExiting}>
+            <Animated.View
+              testID="row-a"
+              // Long, for the reason the other wall-clock cases are: the
+              // count below is read after a real sleep, and it has to land
+              // while the animation would still be holding the widget.
+              exiting={ZoomOut.duration(900)}
+              style={{
+                width: ROW_WIDTH,
+                height: ROW_HEIGHT,
+                backgroundColor: "#62a0ea",
+              }}
+            />
+          </LayoutAnimationConfig>
+        ) : null}
+      </View>
+    )
+  }
+
+  const run = async (skipExiting: boolean): Promise<number> => {
+    await render(
+      <Root
+        width={STAGE_WIDTH}
+        height={STAGE_HEIGHT}
+      >
+        <Stage skipExiting={skipExiting} />
+      </Root>,
+    )
+    await waitFor(() => {
+      expect(widget("row-a")).toBeTruthy()
+    })
+    await act(async () => {
+      configHandles.hide()
+    })
+    await settle(60)
+    const held = retainedWidgetCount()
+    // Past the animation and past the retention's fallback margin.
+    await settle(1600)
+    return held
+  }
+
+  expect(await run(true)).toBe(0)
+  // …and the same tree WITHOUT the flag does retain, so the assertion above
+  // is measuring the flag rather than a subtree that could not animate.
+  expect(await run(false)).toBe(1)
+  expect(retainedWidgetCount()).toBe(0)
 })
 
 it("advanceAnimationByTime refuses outside the timer, by name", () => {

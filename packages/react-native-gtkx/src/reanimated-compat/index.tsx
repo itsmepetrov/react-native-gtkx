@@ -495,7 +495,7 @@ export const defineAnimation: any = unsupported("defineAnimation")
 export const processColor: any = unsupported("processColor")
 export const DynamicColorIOS: any = unsupported("DynamicColorIOS")
 
-// --- layout animations: the four that are implemented ---
+// --- layout animations: the four written by hand ---
 //
 // `BaseAnimationBuilder` and `ComplexAnimationBuilder` are upstream's two
 // halves of one hierarchy — the plain chain and the chain plus the spring
@@ -509,7 +509,7 @@ export const Layout = LinearTransition
 
 // --- layout animations: the catalogue ---
 //
-// Sixty presets over the four builders above, generated from upstream's own
+// Sixty presets over the same base class, minted from upstream's own
 // parameters — see layout-animation-presets.ts, which is the table, and
 // layout-transitions.ts for the four `*Transition` builders beside
 // `LinearTransition`. What is NOT here is directly below.
