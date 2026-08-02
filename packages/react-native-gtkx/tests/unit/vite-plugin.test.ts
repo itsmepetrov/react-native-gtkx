@@ -32,16 +32,42 @@ const resolveIdHook = (plugin: Plugin): ResolveIdHook => {
 describe("plugin shape", () => {
   const plugin = reactNativeGtkx()
 
+  // vite calls `config(userConfig, env)`; the preset only reads `env.mode`.
+  const configFor = (
+    mode: string,
+  ): {
+    define?: Record<string, string>
+    ssr?: { noExternal?: (string | RegExp)[] }
+  } => {
+    const config = plugin.config as (
+      userConfig: Record<string, unknown>,
+      env: { mode: string; command: string },
+    ) => {
+      define?: Record<string, string>
+      ssr?: { noExternal?: (string | RegExp)[] }
+    }
+    return config({}, { mode, command: "build" })
+  }
+
   test("runs in the pre phase so it beats vite core and the gtkx plugins", () => {
     expect(plugin.name).toBe("react-native-gtkx:preset")
     expect(plugin.enforce).toBe("pre")
   })
 
   test("keeps react-native-gtkx out of ssr externals (gtkx dev sets external: true)", () => {
-    const config = plugin.config as () => {
-      ssr?: { noExternal?: string[] }
-    }
-    expect(config().ssr?.noExternal).toContain("react-native-gtkx")
+    expect(configFor("production").ssr?.noExternal).toContain(
+      "react-native-gtkx",
+    )
+  })
+
+  // `__DEV__` is part of the react-native runtime contract, not a Metro
+  // detail: RN's own modules branch on it, and so does every library written
+  // against them. Nothing supplied it on the vite path until
+  // spike/core-exports was built, where `@gorhom/bottom-sheet` crashed the
+  // bundle at startup with "ReferenceError: __DEV__ is not defined".
+  test("defines __DEV__ from vite's mode, as RN's own dev flag", () => {
+    expect(configFor("development").define?.__DEV__).toBe("true")
+    expect(configFor("production").define?.__DEV__).toBe("false")
   })
 })
 

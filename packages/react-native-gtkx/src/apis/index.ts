@@ -23,6 +23,12 @@ export const I18nManager = createI18nManager(gtkxHost)
 export const BackHandler = createBackHandler(gtkxHost)
 export { DevSettings } from "./dev-settings"
 export {
+  Keyboard,
+  type KeyboardEvent,
+  type KeyboardEventName,
+} from "./keyboard"
+export { LogBox, type LogBoxIgnorePattern } from "./log-box"
+export {
   InteractionManager,
   type InteractionPromise,
 } from "./interaction-manager"

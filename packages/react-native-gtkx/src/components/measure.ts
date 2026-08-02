@@ -42,12 +42,21 @@ export type MeasureLayoutOnSuccessCallback = (
   height: number,
 ) => void
 
+/**
+ * RN's opaque reference to a mounted host view — what `findNodeHandle`
+ * returns and what `measureLayout` accepts as its first argument. A number,
+ * as it is on every RN platform: the value crosses no boundary here, but the
+ * libraries that ask for one compare it, store it in a map and hand it back,
+ * and an object would only be a different type wearing the same name.
+ */
+export type NodeHandle = number
+
 /** The measurement half of a component ref, matching RN's method set. */
 export type MeasureHandle = {
   measure(callback: MeasureOnSuccessCallback): void
   measureInWindow(callback: MeasureInWindowOnSuccessCallback): void
   measureLayout(
-    relativeTo: MeasureHandle,
+    relativeTo: MeasureHandle | NodeHandle,
     onSuccess: MeasureLayoutOnSuccessCallback,
     onFail?: () => void,
   ): void
@@ -94,6 +103,85 @@ export const widgetForHandle = (handle: unknown): Gtk.Widget | null => {
   return widgetOf.get(handle)?.() ?? null
 }
 
+// --- node handles --------------------------------------------------------
+//
+// RN's `findNodeHandle` hands out an integer that stands for a mounted host
+// VIEW. On a bridge platform the integer is the native view tag and the
+// number is the only thing that can cross; here nothing has to cross, so the
+// number is minted on demand and means exactly one thing — "the widget it
+// was minted for".
+//
+// Keyed by the WIDGET rather than by the handle object, which is what makes
+// it behave like RN's: two refs onto the same view report the same tag, and
+// the tag survives a re-render that rebuilt the handle object. It is also why
+// this is not a second registry — `widgetOf` above is still the only thing
+// that knows what a handle stands for, and a tag is minted from its answer.
+//
+// A widget that is gone leaves a tag that resolves to null, which is what a
+// stale RN tag does too.
+const tagOfWidget = new WeakMap<Gtk.Widget, NodeHandle>()
+const widgetOfTag = new Map<NodeHandle, WeakRef<Gtk.Widget>>()
+let nextTag = 1
+
+/**
+ * @internal Registers `handle` as standing for whatever widget `other`
+ * stands for.
+ *
+ * For a COMPOSITE that renders a host component and wants to be reachable as
+ * that host: a windowed list owns no widget of its own, but the ScrollView it
+ * renders is the thing another view measures against and the thing
+ * `findNodeHandle` should answer with. RN resolves a `FlatList`'s node handle
+ * through to its inner scroll view for the same reason.
+ *
+ * It deliberately does NOT give the composite `measure()`/`measureInWindow()`
+ * — see the note on `VirtualizedListHandle`. Being measurable AGAINST is a
+ * weaker claim than reporting your own geometry.
+ */
+export const registerHandleAlias = (
+  handle: object,
+  other: () => unknown,
+): void => {
+  widgetOf.set(handle, () => widgetForHandle(other()))
+}
+
+/**
+ * @internal The tag standing for the widget behind `handle`, minted on first
+ * ask. Null when the value is not a component handle, or when its widget is
+ * not mounted — RN returns null in both cases too.
+ */
+export const nodeHandleFor = (handle: unknown): NodeHandle | null => {
+  const widget = widgetForHandle(handle)
+  if (widget === null) {
+    return null
+  }
+  const existing = tagOfWidget.get(widget)
+  if (existing !== undefined) {
+    return existing
+  }
+  const tag = nextTag
+  nextTag += 1
+  tagOfWidget.set(widget, tag)
+  widgetOfTag.set(tag, new WeakRef(widget))
+  return tag
+}
+
+/** @internal The widget a tag was minted for, or null once it is gone. */
+export const widgetForNodeHandle = (tag: NodeHandle): Gtk.Widget | null => {
+  const widget = widgetOfTag.get(tag)?.deref() ?? null
+  if (widget === null) {
+    widgetOfTag.delete(tag)
+  }
+  return widget
+}
+
+/** The widget behind either spelling of "that other view" that RN accepts. */
+const widgetForTarget = (
+  target: MeasureHandle | NodeHandle,
+): Gtk.Widget | null =>
+  typeof target === "number"
+    ? widgetForNodeHandle(target)
+    : widgetForHandle(target)
+
 export const createMeasureHandle = (
   widgetRef: RefObject<Gtk.Widget | null>,
   node: LayoutNodeApi,
@@ -127,7 +215,7 @@ export const createMeasureHandle = (
 
     measureLayout(relativeTo, onSuccess, onFail) {
       const widget = widgetRef.current
-      const other = widgetOf.get(relativeTo)?.() ?? null
+      const other = widgetForTarget(relativeTo)
       const rect = node.getRect()
       if (!widget || !other || !rect) {
         onFail?.()

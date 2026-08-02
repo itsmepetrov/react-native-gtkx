@@ -218,7 +218,21 @@ export const reactNativeGtkx = (
   // over node resolution and platform files must win over the base file.
   enforce: "pre",
 
-  config: () => ({
+  config: (_config, env) => ({
+    // `__DEV__` is part of the react-native runtime contract, not a Metro
+    // detail: RN's own modules branch on it and so does every library
+    // written against them (`@gorhom/bottom-sheet`'s logger and four of its
+    // components read it at module scope). The Metro path gets it from the
+    // app's stock RN preset; nothing supplied it on the vite path, so a
+    // library that reads it crashed the bundle at startup with
+    // "ReferenceError: __DEV__ is not defined" — found by building
+    // spike/core-exports rather than by reading anything.
+    //
+    // vite's mode is the honest source: `gtkx dev` builds in development,
+    // `gtkx build` in production, which is exactly the distinction RN draws.
+    define: {
+      __DEV__: JSON.stringify(env.mode !== "production"),
+    },
     ssr: {
       // `gtkx dev` runs vite with ssr.external: true, which would hand
       // react-native-gtkx straight to node. Keep the package inside the

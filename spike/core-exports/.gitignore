@@ -1,0 +1,4 @@
+# The two versions that matter are pinned exactly in package.json; a 400 KB
+# lock of their transitive tree is noise in a probe (the other vite spikes
+# commit none either).
+package-lock.json

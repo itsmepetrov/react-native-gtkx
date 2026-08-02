@@ -127,6 +127,36 @@ export const isAnimationSpec = (value: unknown): value is AnimationSpec =>
   value !== null &&
   (value as Record<string, unknown>)[MARKER] === true
 
+// --- the initial run ----------------------------------------------------
+//
+// Upstream's `IN_STYLE_UPDATER`, and it is not a detail: the FIRST evaluation
+// of a `useDerivedValue`/`useAnimatedStyle`/`useAnimatedProps` updater has no
+// value to animate FROM, so every `with*` builder returns its target instead
+// of an animation. `defineAnimation` does it in one line —
+// `if (IN_STYLE_UPDATER.current) return starting` — and that line is what
+// makes the documented pattern
+//
+//   const v = useDerivedValue(() => withSpring(active.value ? 1 : 0))
+//
+// work at all. Without it the shared value is SEEDED with the animation
+// object itself and every later write finds a value that is not a number.
+// Found by building `react-native-draggable-flatlist`, whose `ScaleDecorator`
+// is exactly that pattern (`hooks/useOnCellActiveAnimation.ts`).
+let inInitialRun = false
+
+/**
+ * Runs an updater in "seed the value" mode, where every animation collapses
+ * to the value it would have finished at.
+ */
+export const initialUpdaterRun = <T>(updater: () => T): T => {
+  inInitialRun = true
+  try {
+    return updater()
+  } finally {
+    inInitialRun = false
+  }
+}
+
 // Upstream's own defaults, quoted in the table at the top of this file.
 const DEFAULT_TIMING_DURATION = 300
 const defaultTimingEasing = Easing.inOut(Easing.quad)
@@ -159,12 +189,14 @@ export const withTiming = (
   config?: WithTimingConfig,
   callback?: AnimationCallback,
 ): number =>
-  mark({
-    kind: "timing",
-    toValue: assertAnimatable(toValue, "withTiming"),
-    config: config ?? {},
-    callback,
-  }) as unknown as number
+  inInitialRun
+    ? assertAnimatable(toValue, "withTiming")
+    : (mark({
+        kind: "timing",
+        toValue: assertAnimatable(toValue, "withTiming"),
+        config: config ?? {},
+        callback,
+      }) as unknown as number)
 
 /** Lets you animate a value with spring physics. */
 export const withSpring = (
@@ -172,15 +204,22 @@ export const withSpring = (
   config?: WithSpringConfig,
   callback?: AnimationCallback,
 ): number =>
-  mark({
-    kind: "spring",
-    toValue: assertAnimatable(toValue, "withSpring"),
-    config: config ?? {},
-    callback,
-  }) as unknown as number
+  inInitialRun
+    ? assertAnimatable(toValue, "withSpring")
+    : (mark({
+        kind: "spring",
+        toValue: assertAnimatable(toValue, "withSpring"),
+        config: config ?? {},
+        callback,
+      }) as unknown as number)
 
 /** Delays another animation by `delayMs`. */
 export const withDelay = (delayMs: number, animation: number): number => {
+  // Upstream's `starting` for every composite is the animation it wraps,
+  // which the initial run has already collapsed to a plain value.
+  if (inInitialRun) {
+    return animation
+  }
   if (!isAnimationSpec(animation)) {
     throw new Error(
       "react-native-reanimated: withDelay() takes an animation, e.g. withDelay(500, withTiming(1))",
@@ -195,6 +234,9 @@ export const withDelay = (delayMs: number, animation: number): number => {
 
 /** Runs animations one after another on the same shared value. */
 export const withSequence = (...animations: number[]): number => {
+  if (inInitialRun) {
+    return animations[0] ?? 0
+  }
   const specs: AnimationSpec[] = []
   for (const animation of animations) {
     if (!isAnimationSpec(animation)) {
@@ -217,6 +259,9 @@ export const withRepeat = (
   reverse = false,
   callback?: AnimationCallback,
 ): number => {
+  if (inInitialRun) {
+    return animation
+  }
   if (!isAnimationSpec(animation)) {
     throw new Error(
       "react-native-reanimated: withRepeat() takes an animation, e.g. withRepeat(withTiming(1), 3)",
@@ -250,11 +295,14 @@ export const withDecay = (
   config?: WithDecayConfig,
   callback?: AnimationCallback,
 ): number =>
-  mark({
-    kind: "decay",
-    config: resolveDecayConfig(config),
-    callback,
-  }) as unknown as number
+  inInitialRun
+    ? // Upstream seeds a decay with 0: it has no target to collapse to.
+      0
+    : (mark({
+        kind: "decay",
+        config: resolveDecayConfig(config),
+        callback,
+      }) as unknown as number)
 
 /**
  * Confines another animation to a range: the inner animation runs its own
@@ -267,6 +315,9 @@ export const withClamp = (
   config: { min?: number; max?: number },
   animation: number,
 ): number => {
+  if (inInitialRun) {
+    return animation
+  }
   if (!isAnimationSpec(animation)) {
     throw new Error(
       "react-native-reanimated: withClamp() takes an animation, e.g. withClamp({ min: 0 }, withSpring(1))",

@@ -8,6 +8,7 @@ import {
   type ViewabilityConfig,
   type ViewToken,
   type VirtualizedListHandle,
+  type VirtualizedListProps,
 } from "./virtualized-list"
 
 export type {
@@ -23,6 +24,9 @@ export type FlatListProps<T> = Omit<ScrollViewProps, "children"> & {
   data: readonly T[]
   renderItem: (info: ListRenderItemInfo<T>) => ReactElement | null
   keyExtractor?: (item: T, index: number) => string
+  // RN's per-cell wrapper — see virtualized-list.tsx for what the list hands
+  // it and what it must apply.
+  CellRendererComponent?: VirtualizedListProps<T>["CellRendererComponent"]
   ItemSeparatorComponent?: ComponentType | null
   ListHeaderComponent?: ComponentType | ReactElement | null
   ListFooterComponent?: ComponentType | ReactElement | null
@@ -67,9 +71,12 @@ export type SectionListData<T> = { title: string; data: readonly T[] }
 
 // Viewability props are excluded: SectionList flattens sections into private
 // row records, so ViewTokens would leak that internal row type instead of T —
-// section-aware tokens are not implemented yet.
+// section-aware tokens are not implemented yet. `CellRendererComponent` is
+// excluded for exactly the same reason: its `item` would be one of those
+// records, not a T.
 export type SectionListProps<T> = Omit<
   FlatListProps<T>,
+  | "CellRendererComponent"
   | "data"
   | "renderItem"
   | "getItemLayout"

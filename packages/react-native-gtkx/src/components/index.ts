@@ -14,6 +14,7 @@ export {
   type AnimatedViewStyle,
 } from "./animated"
 export { AppRegistry, type RunApplicationParams } from "./app-registry"
+export { findNodeHandle } from "./find-node-handle"
 export {
   FlatList,
   SectionList,
@@ -73,7 +74,14 @@ export type {
   MeasureInWindowOnSuccessCallback,
   MeasureLayoutOnSuccessCallback,
   MeasureOnSuccessCallback,
+  NodeHandle,
 } from "./measure"
+export {
+  VirtualizedList,
+  type ItemLayout,
+  type VirtualizedListHandle,
+  type VirtualizedListProps,
+} from "./virtualized-list"
 export { type LayoutEvent } from "./use-layout-child"
 export { default as PanResponder } from "../vendor/react-native/pan-responder"
 export type {

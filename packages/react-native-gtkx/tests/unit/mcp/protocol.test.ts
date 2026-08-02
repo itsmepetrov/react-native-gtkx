@@ -59,8 +59,8 @@ describe("rn_gtkx_list_surface", () => {
       arguments: {},
     })
     const text = textOf(result)
-    expect(text).toContain("portable-components (20)")
-    expect(text).toContain("portable-apis (19)")
+    expect(text).toContain("portable-components (21)")
+    expect(text).toContain("portable-apis (22)")
     expect(text).toContain("gtk-widgets (86 wrapped + 16 raw)")
     expect(text).toContain("adw-widgets (46 wrapped + 16 raw)")
     expect(text).toContain("common (4)")
