@@ -13,7 +13,7 @@ import type {
 // one genuinely repeated workaround (see below).
 export * from "@gtkx/testing"
 
-// RC3-WORKAROUND(renderhook-no-window): see docs/gtkx-rc3-notes.md
+// RC4-WORKAROUND(renderhook-no-window): see docs/gtkx-rc4-notes.md
 // @gtkx/testing's renderHook() always mounts its test component into a bare
 // Gtk.Box, so a hook that reads the active toplevel (useWindowDimensions,
 // anything through Gtk.Window.getToplevels()) has nothing to read. render()

@@ -18,7 +18,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
-    "@gtkx/cli": "1.0.0-rc.3",
-    "@gtkx/config": "1.0.0-rc.3"
+    "@gtkx/cli": "1.0.0-rc.4",
+    "@gtkx/config": "1.0.0-rc.4"
   }
 }

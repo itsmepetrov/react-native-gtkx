@@ -122,7 +122,7 @@ notes behind the mechanism (with measurements) live in
 
 ## Upstream divergence
 
-gtkx is pinned to an exact RC (`1.0.0-rc.3`). Everything we do because of a gap in that release is marked in the code with the `RC3-WORKAROUND(<name>)` tag and catalogued in [docs/gtkx-rc3-notes.md](docs/gtkx-rc3-notes.md), together with what rc.3 already fixed and the quirks that are here to stay. If you add a workaround, add the tag and a row to the table; what we want from upstream in return is collected in [docs/upstream-gtkx.md](docs/upstream-gtkx.md).
+gtkx is pinned to an exact RC (`1.0.0-rc.4`). Everything we do because of a gap in that release is marked in the code with the `RC4-WORKAROUND(<name>)` tag and catalogued in [docs/gtkx-rc4-notes.md](docs/gtkx-rc4-notes.md), together with what rc.4 already fixed and the quirks that are here to stay. If you add a workaround, add the tag and a row to the table; what we want from upstream in return is collected in [docs/upstream-gtkx.md](docs/upstream-gtkx.md).
 
 ## Code rules
 

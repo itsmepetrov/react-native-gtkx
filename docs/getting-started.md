@@ -522,7 +522,7 @@ own `package.json` wires this as a `pretest` script.
 the same `@gtkx/testing` surface directly (it tests source, not the
 published package) — a good place to see more query and `userEvent`
 patterns in context. Query roles with `Gtk.AccessibleRole` enums (see
-docs/gtkx-rc3-notes.md for the live workarounds still baked into that
+docs/gtkx-rc4-notes.md for the live workarounds still baked into that
 recipe).
 
 ## MCP server for agents
@@ -567,4 +567,4 @@ Mac, with no GTK toolchain around at all.
 
 - [docs/api.md](api.md) — the entire v1 surface and differences from RN;
 - [CONTRIBUTING.md](../CONTRIBUTING.md) — developing the library itself (from macOS — via the UTM VM);
-- [docs/gtkx-rc3-notes.md](gtkx-rc3-notes.md) — the gtkx rc.3 baseline: workarounds, what it fixed, quirks that stay.
+- [docs/gtkx-rc4-notes.md](gtkx-rc4-notes.md) — the gtkx rc.4 baseline: workarounds, what it fixed, quirks that stay.

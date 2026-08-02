@@ -28,11 +28,11 @@
 //      small, stable, and the only place NavigationStack/SlotContent/
 //      IntrinsicContent are documented at all.
 //   4. Full sections (by ## / ### heading) of docs/getting-started.md,
-//      docs/gestures.md, docs/gtkx-rc3-notes.md,
+//      docs/gestures.md, docs/gtkx-rc4-notes.md,
 //      docs/research/navigation-extensibility.md and
 //      docs/api.md/docs/platform-layer.md themselves, plus a few
 //      individually-chunked table rows (component rows, API module rows,
-//      the gtkx-rc3-notes live-workaround rows) — a full-text search corpus
+//      the gtkx-rc4-notes live-workaround rows) — a full-text search corpus
 //      for rn_gtkx_search_docs, the fallback tool for anything the
 //      structured records above do not cover (e.g. "what's known-broken",
 //      which has no stable per-component key — RC2-WORKAROUND rows are
@@ -55,7 +55,7 @@ const ROOT = join(__dirname, "..")
 const API_MD = join(ROOT, "docs/api.md")
 const PLATFORM_MD = join(ROOT, "docs/platform-layer.md")
 const GETTING_STARTED_MD = join(ROOT, "docs/getting-started.md")
-const RC3_NOTES_MD = join(ROOT, "docs/gtkx-rc3-notes.md")
+const RC4_NOTES_MD = join(ROOT, "docs/gtkx-rc4-notes.md")
 const NAV_EXT_MD = join(ROOT, "docs/research/navigation-extensibility.md")
 const GESTURES_MD = join(ROOT, "docs/gestures.md")
 const CLASSIFICATION_JSON = join(
@@ -268,27 +268,27 @@ const adwWidgets = widgetRecords(classification.adw, "react-native-gtkx/adw")
 //    ranks even when it is a single row inside a large table.
 // ---------------------------------------------------------------------------
 
-const rc3NotesText = readFileSync(RC3_NOTES_MD, "utf8")
+const rc4NotesText = readFileSync(RC4_NOTES_MD, "utf8")
 const gettingStartedText = readFileSync(GETTING_STARTED_MD, "utf8")
 const navExtText = readFileSync(NAV_EXT_MD, "utf8")
 const gesturesText = readFileSync(GESTURES_MD, "utf8")
 
 const workaroundsTable = parseTableAfterHeading(
-  rc3NotesText,
+  rc4NotesText,
   "## Live workarounds",
-  "docs/gtkx-rc3-notes.md",
+  "docs/gtkx-rc4-notes.md",
 )
 assertColumnCount(
   workaroundsTable,
   4,
-  "docs/gtkx-rc3-notes.md",
+  "docs/gtkx-rc4-notes.md",
   "## Live workarounds",
 )
 
 const workaroundChunks = workaroundsTable.rows.map(
   ([name, whatGtkxDoes, ourWorkaround, removalCondition]) => ({
-    doc: "docs/gtkx-rc3-notes.md",
-    heading: `RC3-WORKAROUND(${stripBacktickSpan(name)})`,
+    doc: "docs/gtkx-rc4-notes.md",
+    heading: `RC4-WORKAROUND(${stripBacktickSpan(name)})`,
     text: `${whatGtkxDoes} — our workaround: ${ourWorkaround} — removed when: ${removalCondition}`,
   }),
 )
@@ -309,7 +309,7 @@ const docChunks = [
   ...parseSections(apiMdText, "docs/api.md"),
   ...parseSections(platformMdText, "docs/platform-layer.md"),
   ...parseSections(gettingStartedText, "docs/getting-started.md"),
-  ...parseSections(rc3NotesText, "docs/gtkx-rc3-notes.md"),
+  ...parseSections(rc4NotesText, "docs/gtkx-rc4-notes.md"),
   ...parseSections(navExtText, "docs/research/navigation-extensibility.md"),
   ...parseSections(gesturesText, "docs/gestures.md"),
   ...workaroundChunks,
@@ -323,7 +323,7 @@ const docChunks = [
 
 const HEADER = `// GENERATED FILE — do not edit by hand.
 // Produced by scripts/generate-mcp-data.mjs from docs/api.md,
-// docs/platform-layer.md, docs/gtkx-rc3-notes.md, docs/getting-started.md,
+// docs/platform-layer.md, docs/gtkx-rc4-notes.md, docs/getting-started.md,
 // docs/gestures.md, docs/research/navigation-extensibility.md and
 // scripts/widget-surface/classification.json.
 //

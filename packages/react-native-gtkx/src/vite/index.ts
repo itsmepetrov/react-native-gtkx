@@ -254,7 +254,7 @@ export const reactNativeGtkx = (
         ],
       },
       resolve: {
-        // RC3-WORKAROUND(runtime-dedupe): see docs/gtkx-rc3-notes.md
+        // RC4-WORKAROUND(runtime-dedupe): see docs/gtkx-rc4-notes.md
         // The gtkx runtime and react are single-instance hosts: when the app
         // and react-native-gtkx resolve them from different node_modules
         // (file:-installed package, nested installs), two bundled copies
