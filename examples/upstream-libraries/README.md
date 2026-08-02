@@ -3,10 +3,13 @@
 Two real npm packages, installed for real, running on this platform.
 
 - **`react-native-reanimated-dnd@2.0.0`** — the published tarball, not
-  `react-native-gtkx/dnd`. The preset's alias is undone for this project only,
-  so the library resolves for real and everything it imports
-  (`react-native`, `react-native-reanimated`, `react-native-worklets`,
-  `react-native-gesture-handler`) is answered by react-native-gtkx.
+  `react-native-gtkx/dnd`. The preset's alias is dropped for this project only
+  with `aliases: { "react-native-reanimated-dnd": false }`, so the library
+  resolves for real and everything it imports (`react-native`,
+  `react-native-reanimated`, `react-native-worklets`,
+  `react-native-gesture-handler`) is still answered by react-native-gtkx.
+  That option is the supported way to make this choice — see
+  [docs/api.md](../../docs/api.md#configuring-the-package-aliases).
 - **`react-native-drawer-layout@4.2.9`** — the drawer around the whole window.
   Drag from the left edge to open it.
 

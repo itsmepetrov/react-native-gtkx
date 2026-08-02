@@ -8,7 +8,9 @@
 //    Platform.OS come along with it).
 // 2. Redirects `react-native` (and subpaths) to `react-native-gtkx` — the
 //    out-of-tree npmPackageName declaration alone does not alias imports
-//    for `bundle`, the resolver has to.
+//    for `bundle`, the resolver has to — plus five package substitutions
+//    for libraries whose real implementation cannot run here. The rules
+//    are data, shared with the vite preset: see ../aliases/index.ts.
 // 3. EXTERNALIZES host-side singletons. Unlike react-native-windows, whose
 //    native side lives outside the JS bundle by construction, our "native"
 //    is Node modules with NAPI bindings (@gtkx/*) plus yoga-layout's WASM —
@@ -24,6 +26,27 @@
 import { mkdirSync, writeFileSync } from "node:fs"
 import { builtinModules, isBuiltin } from "node:module"
 import { join } from "node:path"
+// Explicit .js: bare Node loads metro.config.ts and does not guess extensions.
+import {
+  applyAliases,
+  compileAliases,
+  type AliasOverrides,
+} from "../aliases/index.js"
+
+// Re-exported so an app configuring `aliases` never has to reach past the
+// preset subpath it already imports.
+export {
+  CONFIGURABLE_ALIASES,
+  DEFAULT_ALIASES,
+  PLATFORM_ALIAS,
+} from "../aliases/index.js"
+export type {
+  AliasOverride,
+  AliasOverrides,
+  AliasPattern,
+  AliasTable,
+  CompiledAlias,
+} from "../aliases/index.js"
 
 /** Modules the run-linux host provides to the bundle at runtime. */
 export const HOST_MODULE_EXTERNALS = [
@@ -79,6 +102,13 @@ export type LinuxPlatformOptions = {
   externals?: readonly string[]
   /** Proxy directory override (default: node_modules/.react-native-gtkx). */
   proxyDir?: string
+  /**
+   * Deltas over the preset's package aliases, keyed by package name — a
+   * string target, a `{ pattern, replace }` rule, or `false` to drop one of
+   * ours so the real package loads. See ../aliases/index.ts and docs/api.md.
+   * Invalid entries throw here, while the config is being read.
+   */
+  aliases?: AliasOverrides
 }
 
 const sanitize = (name: string): string => name.replace(/[@/:]/g, "_") + ".js"
@@ -140,6 +170,9 @@ export const withLinuxPlatform = <T extends MetroLikeConfig>(
       "metro-externals",
     )
   generateProxies(proxyDir, externals)
+  // Throws on an unknown key, an overlapping pattern or an attempt to remove
+  // the platform alias — at config load, naming what is valid.
+  const aliases = compileAliases(options.aliases)
   const previousResolve = config.resolver?.resolveRequest ?? null
 
   const fallback: MetroResolver = (context, moduleName, platform) =>
@@ -157,109 +190,16 @@ export const withLinuxPlatform = <T extends MetroLikeConfig>(
         filePath: join(proxyDir, sanitize(moduleName)),
       }
     }
-    if (
-      moduleName === "react-native" ||
-      moduleName.startsWith("react-native/")
-    ) {
-      return fallback(
-        context,
-        moduleName.replace(/^react-native/, "react-native-gtkx"),
-        platform,
-      )
-    }
-    // Same alias, same guard shape, for the SVG compat subpath (see
-    // src/svg-compat/index.ts and the vite preset's rewriteReactNativeImport
-    // — kept in sync deliberately rather than sharing code, Metro and vite
-    // resolvers have never shared an implementation in this package).
-    if (
-      moduleName === "react-native-svg" ||
-      moduleName.startsWith("react-native-svg/")
-    ) {
-      return fallback(
-        context,
-        moduleName.replace(/^react-native-svg/, "react-native-gtkx/svg"),
-        platform,
-      )
-    }
-    // And the drag-and-drop compat subpath. This one is the whole migration
-    // story rather than a convenience: `react-native-reanimated-dnd` cannot
-    // run here at all (Reanimated 4 + worklets + RNGH at module scope), so
-    // without the alias every app with drag-and-drop rewrites its imports.
-    // With it, the source is untouched. See src/dnd/index.ts.
-    if (
-      moduleName === "react-native-reanimated-dnd" ||
-      moduleName.startsWith("react-native-reanimated-dnd/")
-    ) {
-      return fallback(
-        context,
-        moduleName.replace(
-          /^react-native-reanimated-dnd/,
-          "react-native-gtkx/dnd",
-        ),
-        platform,
-      )
-    }
-    // And Reanimated itself. Ordered AFTER the -dnd block above, and note
-    // that the guard is exact-match-or-slash-prefix rather than a bare
-    // startsWith: `react-native-reanimated-dnd` is a lookalike of this
-    // specifier, and an anchored replace on a loose prefix would rewrite it
-    // to `react-native-gtkx/reanimated-dnd`, which does not exist. The two
-    // aliases have to stay distinguishable in both directions.
-    // See src/reanimated-compat/index.tsx.
-    if (
-      moduleName === "react-native-reanimated" ||
-      moduleName.startsWith("react-native-reanimated/")
-    ) {
-      return fallback(
-        context,
-        moduleName.replace(
-          /^react-native-reanimated/,
-          "react-native-gtkx/reanimated",
-        ),
-        platform,
-      )
-    }
-    // And the package Reanimated 4 moved the worklet surface INTO. Libraries
-    // import it under this name rather than through Reanimated:
-    // `react-native-reanimated-dnd` pulls `scheduleOnRN`/`scheduleOnUI` out of
-    // it at module scope in five of its hooks with no try/require guard, so an
-    // unaliased name fails at IMPORT rather than at use. The exact-match-or-
-    // slash-prefix guard matters most here of all the aliases:
-    // `react-native-worklets-core` is a REAL and unrelated package (the
-    // VisionCamera one), and a loose prefix match would send it to
-    // `react-native-gtkx/worklets-core`, which does not exist.
-    // See src/worklets-compat/index.ts.
-    if (
-      moduleName === "react-native-worklets" ||
-      moduleName.startsWith("react-native-worklets/")
-    ) {
-      return fallback(
-        context,
-        moduleName.replace(
-          /^react-native-worklets/,
-          "react-native-gtkx/worklets",
-        ),
-        platform,
-      )
-    }
-    // And the gesture-handler shim. Not a port of RNGH — that stays out of
-    // scope (docs/research/gestures.md). It supplies `GestureHandlerRootView`,
-    // the one RNGH symbol that appears in apps which otherwise use none of it
-    // (every react-native-reanimated-dnd app has it at the root), and makes
-    // every other export throw where it is used rather than arrive as
-    // undefined. See src/gesture-handler-compat/index.tsx.
-    if (
-      moduleName === "react-native-gesture-handler" ||
-      moduleName.startsWith("react-native-gesture-handler/")
-    ) {
-      return fallback(
-        context,
-        moduleName.replace(
-          /^react-native-gesture-handler/,
-          "react-native-gtkx/gesture-handler",
-        ),
-        platform,
-      )
+    // The five package substitutions plus the platform alias, from the table
+    // both presets share (../aliases/index.ts). Each rule is anchored to its
+    // package name and matches the exact name or a slash-prefixed subpath,
+    // with the tail transplanted onto the target — the guard, not just the
+    // order, is what keeps `react-native-reanimated-dnd` out of the
+    // `react-native-reanimated` rule and the real, unrelated
+    // `react-native-worklets-core` out of the `react-native-worklets` one.
+    const aliased = applyAliases(aliases, moduleName)
+    if (aliased !== null) {
+      return fallback(context, aliased, platform)
     }
     return fallback(context, moduleName, platform)
   }

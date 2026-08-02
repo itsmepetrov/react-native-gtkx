@@ -4,7 +4,12 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { createServer, type Plugin, type ViteDevServer } from "vite"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
-import { reactNativeGtkx, rewriteReactNativeImport } from "../../src/vite/index"
+import { DEFAULT_ALIAS_TABLE } from "../../src/aliases/index"
+import {
+  reactNativeGtkx,
+  rewriteReactNativeImport,
+  type ReactNativeGtkxOptions,
+} from "../../src/vite/index"
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), "fixtures")
 const importer = join(fixtures, "importer.ts")
@@ -90,6 +95,104 @@ describe("plugin shape", () => {
       expect(rewriteReactNativeImport(name)).not.toBeNull()
       expect(noExternal).toContain(name)
     }
+  })
+
+  // The list is derived from the alias table rather than written out, so the
+  // two can no longer disagree — which is exactly how three of six names went
+  // missing from it and the real react-native-gesture-handler reached Node.
+  test("the externals list IS the table's names, not a copy of them", () => {
+    const noExternal = configFor("development").ssr?.noExternal ?? []
+    expect(noExternal).toEqual([
+      "react-native-gtkx",
+      ...DEFAULT_ALIAS_TABLE.names,
+      /^@react-navigation\//,
+    ])
+  })
+})
+
+describe("the aliases option", () => {
+  const noExternalFor = (options: ReactNativeGtkxOptions) => {
+    const config = reactNativeGtkx(options).config as (
+      userConfig: Record<string, unknown>,
+      env: { mode: string; command: string },
+    ) => { ssr?: { noExternal?: (string | RegExp)[] } }
+    return config({}, { mode: "development", command: "serve" }).ssr?.noExternal
+  }
+
+  const rewrite = async (
+    source: string,
+    options: ReactNativeGtkxOptions,
+  ): Promise<string | null> => {
+    const seen: string[] = []
+    const resolve: ResolveFn = (candidate) => {
+      seen.push(candidate)
+      return Promise.resolve(null)
+    }
+    const result = await resolveIdHook(reactNativeGtkx(options)).call(
+      { resolve },
+      source,
+      importer,
+    )
+    return typeof result === "string" ? result : (seen[0] ?? null)
+  }
+
+  // The acceptance test for the whole option: the real 2.0.0 package runs on
+  // this platform (#90), so an app must be able to say so without reaching
+  // around the preset with a bare resolve.alias.
+  test("false lets vite resolve the real package", async () => {
+    const options: ReactNativeGtkxOptions = {
+      aliases: { "react-native-reanimated-dnd": false },
+    }
+    await expect(
+      rewrite("react-native-reanimated-dnd", options),
+    ).resolves.toBeNull()
+    // …and the other five still alias.
+    await expect(rewrite("react-native-reanimated", options)).resolves.toBe(
+      "react-native-gtkx/reanimated",
+    )
+  })
+
+  // A dropped alias is still a name Node must not get first: the real package
+  // imports react-native at module scope, and that import only reaches the
+  // platform alias from inside the pipeline. Un-aliasing is a reason to keep
+  // the package inlined, not to let it out.
+  test("a dropped alias stays in ssr.noExternal", () => {
+    expect(
+      noExternalFor({ aliases: { "react-native-reanimated-dnd": false } }),
+    ).toContain("react-native-reanimated-dnd")
+  })
+
+  test("an added package joins ssr.noExternal too", () => {
+    expect(noExternalFor({ aliases: { "my-pkg": "my-pkg/linux" } })).toContain(
+      "my-pkg",
+    )
+  })
+
+  test("an added alias rewrites with the tail transplanted", async () => {
+    const options = { aliases: { "my-pkg": "my-pkg/linux" } }
+    await expect(rewrite("my-pkg/deep", options)).resolves.toBe(
+      "my-pkg/linux/deep",
+    )
+    await expect(rewrite("my-pkg-other", options)).resolves.toBeNull()
+  })
+
+  test("an overlapping pattern is reported when the plugin is created", () => {
+    expect(() =>
+      reactNativeGtkx({
+        aliases: {
+          "react-native-reanimated": {
+            pattern: /^react-native-reanimated(.*)$/,
+            replace: "react-native-gtkx/reanimated$1",
+          },
+        },
+      }),
+    ).toThrow(/react-native-reanimated-dnd/)
+  })
+
+  test("the platform alias cannot be removed", () => {
+    expect(() =>
+      reactNativeGtkx({ aliases: { "react-native": false } }),
+    ).toThrow(/it is the platform/)
   })
 })
 
