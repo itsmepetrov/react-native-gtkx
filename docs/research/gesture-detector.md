@@ -465,6 +465,44 @@ have reached from sources: **the remaining blockers are four `react-native`
 core exports and one Reanimated hook**, not gesture code. That is a different
 slice's work, and naming it is more useful than guessing at it.
 
+### What building those five changed, and the two libraries running
+
+The follow-up slice built them and then ran the probe app. Both libraries now
+work end to end under a real `zwlr_virtual_pointer_v1`
+(`spike/core-exports`, committed): a row of `react-native-draggable-flatlist`
+is dragged and the order changes, `@gorhom/bottom-sheet`'s handle is dragged
+and the sheet snaps up, and the zone the pointer never visits stays silent.
+`docs/api.md` has the numbers and what the probe does NOT prove.
+
+The list above was right about the BUILD and could not have been right about
+what came after it, which is the same lesson one turn further on: **a build
+tells you what does not resolve, and only a running app tells you what does
+not work.** Three walls appeared past the last missing export, none of them
+predictable from any import:
+
+- **`__DEV__` was not defined on the vite path at all.** It is part of RN's
+  runtime contract, not a Metro detail; the Metro path gets it from the app's
+  own preset and nothing supplied it here, so `@gorhom/bottom-sheet`'s logger
+  crashed the bundle at startup. The vite preset defines it from vite's mode
+  now.
+- **`FlatList` did not accept `CellRendererComponent`.** That prop is
+  `react-native-draggable-flatlist`'s entire design — the cell is what
+  translates and what provides the "am I the active row" context — so
+  `ScaleDecorator` threw `useIsActive must be called from within
+CellProvider!` on the first render, well past every import.
+- **`useDerivedValue(() => withSpring(…))` seeded the value with the
+  animation.** Upstream collapses every builder to its target during the
+  first evaluation of an updater (`IN_STYLE_UPDATER`), because that run has
+  nothing to animate from; this platform did not, so the second evaluation
+  found a shared value holding an object.
+
+One more thing the running app settled that the build could not:
+`findNodeHandle` has to answer for a COMPOSITE. `@gorhom/bottom-sheet`
+identifies its scrollable by node handle, and a windowed list that resolved to
+nothing left it warning `Couldn't find the scrollable node handle id!` with no
+scrollable bound to the sheet. A list resolves to the `ScrollView` it renders
+now, which is what RN does for a `FlatList` too.
+
 Two smaller things this slice settled:
 
 - **`Gesture.Native()` is the first recognizer that never takes the

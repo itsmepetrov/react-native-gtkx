@@ -10,6 +10,7 @@
 // stale), never what it listens to. An app that passes the array and an app
 // that does not both work.
 import { useEffect, useReducer, useRef, useState } from "react"
+import { initialUpdaterRun } from "./animation"
 import type { SharedValue } from "./mutable"
 import { cancelAnimation } from "./mutable"
 import {
@@ -72,7 +73,9 @@ export const createHooks = (makeMutable: MakeMutable) => {
   ): SharedValue<T> => {
     const updaterRef = useRef(updater)
     updaterRef.current = updater
-    const [derived] = useState(() => makeMutable(untracked(updater)))
+    const [derived] = useState(() =>
+      makeMutable(initialUpdaterRun(() => untracked(updater))),
+    )
 
     useEffect(() => {
       const mapper = createMapper(() => {
@@ -138,7 +141,9 @@ export const createHooks = (makeMutable: MakeMutable) => {
     const pendingRef = useRef<StyleObject | null>(null)
 
     if (animatedRef.current === null) {
-      animatedRef.current = createAnimatedStyle(untracked(updater))
+      animatedRef.current = createAnimatedStyle(
+        initialUpdaterRun(() => untracked(updater)),
+      )
     } else if (pendingRef.current !== null) {
       // Reusing the nodes keeps the identity of every leaf that survived the
       // shape change, so the view layer rebinds only what actually moved.
@@ -191,7 +196,9 @@ export const createHooks = (makeMutable: MakeMutable) => {
     const pendingRef = useRef<PropsObject | null>(null)
 
     if (animatedRef.current === null) {
-      animatedRef.current = createAnimatedProps(untracked(updater))
+      animatedRef.current = createAnimatedProps(
+        initialUpdaterRun(() => untracked(updater)),
+      )
     } else if (pendingRef.current !== null) {
       animatedRef.current = createAnimatedProps(
         pendingRef.current,

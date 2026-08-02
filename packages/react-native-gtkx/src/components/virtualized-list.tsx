@@ -26,6 +26,7 @@ import {
   perfNow,
 } from "../perf"
 import { ActivityIndicator } from "./activity-indicator"
+import { registerHandleAlias } from "./measure"
 import {
   ScrollView,
   StickySlot,
@@ -85,11 +86,31 @@ export type VirtualizedListHandle = ScrollHandle & {
 }
 
 export type VirtualizedListProps<T> = Omit<ScrollViewProps, "children"> & {
-  data: readonly T[]
+  // The data source. `FlatList`'s shape — a plain array — is the default and
+  // needs nothing else. RN's `VirtualizedList` shape passes an OPAQUE value
+  // plus the two accessors below, and then this prop is never indexed at all;
+  // that is why it is typed `unknown` rather than `readonly T[]`.
+  data: readonly T[] | unknown
+  /**
+   * RN's `VirtualizedList` accessor pair. Supplying them makes `data` opaque:
+   * the list asks `getItemCount(data)` for the length and `getItem(data, i)`
+   * for a row, and reads nothing else out of it. Left out (FlatList,
+   * SectionList) `data` is indexed directly.
+   *
+   * They are honoured LAZILY — `getItem` is called for the rows the window
+   * actually mounts, never for the whole range — because the point of the
+   * pair upstream is that the source need not be materialised.
+   *
+   * `never` for the `data` parameter is what makes an accessor written
+   * against a CONCRETE source (`(rows: Row[], i) => rows[i]`) assignable
+   * here: parameters are contravariant, and RN's own types say `any`.
+   */
+  getItem?: (data: never, index: number) => T
+  getItemCount?: (data: never) => number
   renderItem: (info: ListRenderItemInfo<T>) => ReactElement | null
   keyExtractor?: (item: T, index: number) => string
   estimatedItemSize?: number
-  getItemLayout?: (data: readonly T[], index: number) => ItemLayout
+  getItemLayout?: (data: never, index: number) => ItemLayout
   // Overscan in viewport multiples (RN semantics: `windowSize` viewports are
   // mounted, one of them visible). RN's mobile default is 5; the desktop
   // default is 11 — see the note on DEFAULT_WINDOW_SIZE.
@@ -112,6 +133,29 @@ export type VirtualizedListProps<T> = Omit<ScrollViewProps, "children"> & {
   // it itself (e.g. from a toolbar button or a keyboard shortcut).
   refreshing?: boolean
   onRefresh?: () => void
+  /**
+   * RN's per-cell wrapper. The list still decides where a cell goes — the
+   * absolute `style` and the `onLayout` that measures it are handed in and
+   * must be applied — and this component owns everything else about the
+   * container, which is how a library adds a transform or a context to every
+   * row without touching `renderItem`.
+   *
+   * `react-native-draggable-flatlist` is the reason it exists here: its whole
+   * design is a cell renderer that translates the row being dragged and puts
+   * the "am I the active cell" context around it.
+   *
+   * NOT applied to a STICKY cell (`stickyHeaderIndices`): pinning works by
+   * reordering the cell's real GTK widget, so the sticky container has to be
+   * the cell. See docs/api.md.
+   */
+  CellRendererComponent?: ComponentType<{
+    cellKey: string
+    index: number
+    item: T
+    style?: StyleProp
+    onLayout?: (event: LayoutEvent) => void
+    children?: ReactNode
+  }>
   ItemSeparatorComponent?: ComponentType | null
   ListHeaderComponent?: ComponentType | ReactElement | null
   ListFooterComponent?: ComponentType | ReactElement | null
@@ -180,6 +224,8 @@ const VirtualizedListInner = forwardRef(
   <T,>(
     {
       data,
+      getItem,
+      getItemCount,
       renderItem,
       keyExtractor,
       estimatedItemSize = 44,
@@ -192,6 +238,7 @@ const VirtualizedListInner = forwardRef(
       inverted = false,
       refreshing = false,
       onRefresh,
+      CellRendererComponent,
       ItemSeparatorComponent,
       ListHeaderComponent,
       ListFooterComponent,
@@ -209,7 +256,28 @@ const VirtualizedListInner = forwardRef(
     }: VirtualizedListProps<T>,
     ref: React.Ref<VirtualizedListHandle>,
   ) => {
-    const count = data.length
+    // The three reads the list makes of its data source, in the one place
+    // that knows which shape it was given. Everything below goes through
+    // them, so the windowing, the prefix sums, the viewability pass and the
+    // scroll handle are identical whether the source is an array or RN's
+    // opaque value plus accessors.
+    const source = data as readonly T[]
+    const count = getItemCount ? getItemCount(data as never) : source.length
+    const itemAt = (index: number): T =>
+      getItem ? getItem(data as never, index) : source[index]!
+    const indexOfItem = (item: unknown): number => {
+      if (!getItem) {
+        return source.indexOf(item as T)
+      }
+      // RN's own VirtualizedList scans for `scrollToItem` too — an opaque
+      // source has no index to ask.
+      for (let index = 0; index < count; index += 1) {
+        if (itemAt(index) === item) {
+          return index
+        }
+      }
+      return -1
+    }
     const scrollRef = useRef<ScrollViewHandle>(null)
 
     const measured = useRef<(number | undefined)[]>([])
@@ -258,7 +326,7 @@ const VirtualizedListInner = forwardRef(
       out[0] = 0
       for (let index = 0; index < count; index += 1) {
         const size = getItemLayout
-          ? getItemLayout(data, index).length
+          ? getItemLayout(data as never, index).length
           : (measured.current[index] ?? estimatedItemSize)
         out[index + 1] = out[index]! + size
       }
@@ -456,43 +524,53 @@ const VirtualizedListInner = forwardRef(
       scrollToAxis(offsetForIndex(index, viewPosition), params.animated)
     }
 
-    useImperativeHandle(ref, () => ({
-      // Any direct scroll cancels a pending scrollToIndex correction. The
-      // caller always speaks RN-space offsets; inverted translates the main
-      // axis into raw adjustment space.
-      scrollTo: (options) => {
-        pendingScrollIndex.current = null
-        const main = horizontal ? options.x : options.y
-        if (!inverted || main === undefined) {
-          scrollRef.current?.scrollTo(options)
-          return
-        }
-        scrollRef.current?.scrollTo({
-          ...options,
-          ...(horizontal ? { x: toRaw(main) } : { y: toRaw(main) }),
-        })
-      },
-      scrollToEnd: (options) => {
-        pendingScrollIndex.current = null
-        // Inverted: the END of the data sits at raw offset 0 (visual top).
-        if (inverted) {
-          scrollToAxis(0, options?.animated)
-          return
-        }
-        scrollRef.current?.scrollToEnd(options)
-      },
-      scrollToOffset: ({ offset, animated }) => {
-        pendingScrollIndex.current = null
-        scrollToAxis(inverted ? toRaw(offset) : offset, animated)
-      },
-      scrollToIndex,
-      scrollToItem: ({ item, viewPosition, animated }) => {
-        const index = data.indexOf(item as T)
-        if (index >= 0) {
-          scrollToIndex({ index, viewPosition, animated })
-        }
-      },
-    }))
+    // The handle stands for the ScrollView this list renders: `findNodeHandle`
+    // on a list resolves to it (RN resolves a FlatList's the same way), and so
+    // does `measureLayout(listRef, …)` from another view. It gains no
+    // `measure()` of its own — see the note on VirtualizedListHandle.
+    const registerAlias = (handle: VirtualizedListHandle) => {
+      registerHandleAlias(handle, () => scrollRef.current)
+      return handle
+    }
+    useImperativeHandle(ref, () =>
+      registerAlias({
+        // Any direct scroll cancels a pending scrollToIndex correction. The
+        // caller always speaks RN-space offsets; inverted translates the main
+        // axis into raw adjustment space.
+        scrollTo: (options) => {
+          pendingScrollIndex.current = null
+          const main = horizontal ? options.x : options.y
+          if (!inverted || main === undefined) {
+            scrollRef.current?.scrollTo(options)
+            return
+          }
+          scrollRef.current?.scrollTo({
+            ...options,
+            ...(horizontal ? { x: toRaw(main) } : { y: toRaw(main) }),
+          })
+        },
+        scrollToEnd: (options) => {
+          pendingScrollIndex.current = null
+          // Inverted: the END of the data sits at raw offset 0 (visual top).
+          if (inverted) {
+            scrollToAxis(0, options?.animated)
+            return
+          }
+          scrollRef.current?.scrollToEnd(options)
+        },
+        scrollToOffset: ({ offset, animated }) => {
+          pendingScrollIndex.current = null
+          scrollToAxis(inverted ? toRaw(offset) : offset, animated)
+        },
+        scrollToIndex,
+        scrollToItem: ({ item, viewPosition, animated }) => {
+          const index = indexOfItem(item)
+          if (index >= 0) {
+            scrollToIndex({ index, viewPosition, animated })
+          }
+        },
+      }),
+    )
 
     // Data changes move the window in BOTH directions: growth from an empty
     // list must extend the initial range, shrinking must clamp it.
@@ -598,7 +676,7 @@ const VirtualizedListInner = forwardRef(
             viewable = true
           }
           if (viewable) {
-            const item = data[index]!
+            const item = itemAt(index)
             eligible.set(keyOf(item, index), { item, index })
           }
         }
@@ -794,7 +872,7 @@ const VirtualizedListInner = forwardRef(
     }
 
     const renderCell = (index: number): ReactNode => {
-      const item = data[index]!
+      const item = itemAt(index)
       const key = keyOf(item, index)
       // Vertical cells stretch across the width and sit at their offset;
       // horizontal cells stretch across the height and take their own
@@ -831,6 +909,20 @@ const VirtualizedListInner = forwardRef(
           >
             {body}
           </StickySlot>
+        )
+      }
+      if (CellRendererComponent) {
+        return (
+          <CellRendererComponent
+            key={key}
+            cellKey={key}
+            index={index}
+            item={item}
+            style={cellStyle}
+            onLayout={measure}
+          >
+            {body}
+          </CellRendererComponent>
         )
       }
       return (

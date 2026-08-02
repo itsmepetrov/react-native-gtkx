@@ -202,12 +202,15 @@ silently doing nothing:
   components and the button family (`RectButton` and friends — RNGH's own
   native button views, not RN components with a handler attached).
 
-Two libraries measured by BUILDING them rather than by reading them are
-blocked on `react-native` core rather than on any of the above:
-`react-native-draggable-flatlist` needs `findNodeHandle`, `LogBox` and
-`useAnimatedScrollHandler`; `@gorhom/bottom-sheet` needs those two plus
-`Keyboard` and `VirtualizedList`. Neither is blocked on gesture code any
-more — the relations they need shipped. The API reference has the file names.
+**`react-native-draggable-flatlist` 4.0.3 and `@gorhom/bottom-sheet` 5.2.14
+both run**, and neither was stopped by this surface in the end: what they
+needed was four `react-native` core exports (`findNodeHandle`, `LogBox`,
+`Keyboard`, `VirtualizedList`) and Reanimated's `useAnimatedScrollHandler`,
+all of which ship now. That was established by BUILDING them and then driving
+them with a real pointer rather than by reading their imports — twice a list
+of blockers derived from sources turned out to be wrong. The probe app is
+`spike/core-exports`; the API reference has the per-library detail and what
+the probe does not prove.
 
 What to do instead, where something is still missing:
 
@@ -217,10 +220,12 @@ What to do instead, where something is still missing:
   [`react-native-gtkx/dnd`](api.md#drag-and-drop-react-native-gtkxdnd)
   mirrors `react-native-reanimated-dnd`'s API on GTK's own drag-and-drop,
   and both presets alias that package name onto it;
-- **swipeable rows / bottom sheets** — by hand today: `PanResponder` for the
-  gesture, plus either `Animated` or
+- **swipeable rows** — by hand today: `PanResponder` for the gesture, plus
+  either `Animated` or
   [`react-native-gtkx/reanimated`](api.md#react-native-reanimated-react-native-gtkxreanimated)
-  for the motion.
+  for the motion. A **bottom sheet** no longer needs the hand-rolled version:
+  `@gorhom/bottom-sheet` runs (see above), and `AdwBottomSheet` is the native
+  one a Linux-first app would reach for instead.
 
 `examples/gallery`'s Gestures section is a working reference written entirely
 in portable `react-native`, with no platform-layer import in it at all.

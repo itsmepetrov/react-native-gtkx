@@ -94,6 +94,12 @@ import {
   type LayoutAnimationProps,
 } from "./layout-animation-view"
 import { cancelAnimation, createMakeMutable, isSharedValue } from "./mutable"
+import {
+  useAnimatedScrollHandler,
+  type AnimatedScrollEvent,
+  type ScrollHandlerCallback,
+  type ScrollHandlers,
+} from "./scroll-handler"
 import type { StyleObject } from "./style"
 import { isWorkletFunction } from "./threads"
 import { createMapper, type Mapper } from "./tracking"
@@ -141,6 +147,7 @@ export {
   useAnimatedProps,
   useAnimatedReaction,
   useAnimatedRef,
+  useAnimatedScrollHandler,
   useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
@@ -175,6 +182,7 @@ export type {
 } from "./color"
 export type { EasingFunction, EasingFunctionFactory } from "./easing"
 export type { AnimatedRef, MeasuredDimensions } from "./animated-ref"
+export type { AnimatedScrollEvent, ScrollHandlerCallback, ScrollHandlers }
 export type { DependencyList } from "./hooks"
 export type { ExtrapolationConfig, ExtrapolationType } from "./interpolation"
 export type { DerivedValue, SharedValue } from "./mutable"
@@ -522,9 +530,6 @@ export const steps: any = unsupported("steps")
 
 // --- hooks built on the event system, sensors and the keyboard ---
 export const useAnimatedKeyboard: any = unsupported("useAnimatedKeyboard")
-export const useAnimatedScrollHandler: any = unsupported(
-  "useAnimatedScrollHandler",
-)
 export const useAnimatedSensor: any = unsupported("useAnimatedSensor")
 export const useComposedEventHandler: any = unsupported(
   "useComposedEventHandler",

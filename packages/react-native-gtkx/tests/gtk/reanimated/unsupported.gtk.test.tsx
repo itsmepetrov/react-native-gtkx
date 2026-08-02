@@ -19,8 +19,8 @@ import Animated, {
   runOnJS,
   runOnUI,
   SequencedTransition,
-  useAnimatedScrollHandler,
   useReducedMotion,
+  useScrollOffset,
 } from "../../../src/reanimated-compat/index"
 
 const settle = (ms = 60): Promise<void> =>
@@ -34,8 +34,12 @@ it("throws with the symbol's name when an unsupported export is called", () => {
   expect(() => (processColor as () => void)()).toThrow(
     /`processColor` is not supported/,
   )
-  expect(() => (useAnimatedScrollHandler as () => void)()).toThrow(
-    /`useAnimatedScrollHandler` is not supported/,
+  // `useAnimatedScrollHandler` used to be here and is not any more — it is
+  // implemented over the ScrollView's own scroll events
+  // (src/reanimated-compat/scroll-handler.ts). `useScrollOffset` is the
+  // neighbour that still refuses.
+  expect(() => (useScrollOffset as () => void)()).toThrow(
+    /`useScrollOffset` is not supported/,
   )
 })
 
