@@ -4,17 +4,17 @@ import { defineConfig, type Plugin } from "vite"
 // The gallery dogfoods the preset: sources import "react-native" and the
 // alias + platform extensions resolve it to react-native-gtkx.
 //
-// The two things below exist for ONE section, `src/sections/upstream.tsx`,
-// and removing either silently changes what that section proves rather than
-// breaking it loudly. Every other section resolves through the preset alone.
+// The two things below exist for the three `src/sections/upstream-*.tsx`
+// screens, and removing either silently changes what they prove rather than
+// breaking them loudly. Every other section resolves through the preset alone.
 //
-// That section is the opposite of `examples/reanimated-dnd` and of the `dnd`
+// Those three are the opposite of `examples/reanimated-dnd` and of the `dnd`
 // section here, both of which run against `react-native-gtkx/dnd` through the
-// preset's rewrite, so the real package never loads. `upstream` proves what
-// happens when it DOES — both `react-native-reanimated-dnd@2.0.0` and
-// `react-native-drawer-layout@4.2.9` are installed here for real, and both run
-// on top of this platform's Reanimated, worklets and gesture-handler compat
-// surfaces.
+// preset's rewrite, so the real package never loads. They prove what happens
+// when it DOES — both `react-native-reanimated-dnd@2.0.0` (Upstream drop
+// zones, Upstream sortables) and `react-native-drawer-layout@4.2.9` (Upstream
+// drawer) are installed here for real, and both run on top of this platform's
+// Reanimated, worklets and gesture-handler compat surfaces.
 //
 // See docs/research/upstream-libraries.md for what that measured.
 
@@ -56,9 +56,10 @@ export default defineConfig({
     drawerLayoutUsesRealGestures(),
     reactNativeGtkx({
       // Drop ONE of the preset's six package aliases, for this project only.
-      // `react-native-reanimated-dnd` 2.0.0 really runs here, so the
-      // "Upstream libraries" section asks for it instead of the
-      // `react-native-gtkx/dnd` mirror every other section gets.
+      // `react-native-reanimated-dnd` 2.0.0 really runs here, so the two
+      // "Upstream drop zones" / "Upstream sortables" sections ask for it
+      // instead of the `react-native-gtkx/dnd` mirror every other section
+      // gets.
       //
       // A delta, not a replacement list: everything the library imports at
       // module scope (`react-native-reanimated`, `react-native-worklets`,

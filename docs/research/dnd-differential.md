@@ -158,7 +158,7 @@ currentOffset <= scaledOffsetStart)`). That asymmetry is what makes offset 0
 The fix is RN's rule, three lines, in `indexAt`. It was verified by removing
 it again and rebuilding: without the guard the Music Queue screen is empty,
 with it every row renders, with upstream's **default** `useFlatList` and no
-prop set anywhere in the app. the gallery's Upstream libraries section
+prop set anywhere in the app. The gallery's Upstream sortables section
 has dropped its `useFlatList={false}` accordingly, and
 `tests/gtk/components/virtualized-list.gtk.test.tsx` covers the shape.
 
@@ -173,7 +173,7 @@ ecosystem is a `FlatList`.
 in the mirror, and the port replaced both screens with a notice — so the two
 builds of this app agree on them for a reason that has nothing to do with the
 real library. The question they leave open is answered in
-the gallery's Upstream libraries section, where the real package runs and
+the gallery's Upstream sortables section, where the real package runs and
 the calls can be made:
 
 - **`SortableGrid` reorders.** Six tiles in a 3×2 grid; dragging the first

@@ -17,7 +17,7 @@
 //   2. gtkx — what exists only because this is GTK: Adwaita widgets, the
 //      escape hatches, the layout-root boundary between the two worlds.
 //   3. Modules — the third-party ecosystem, reached through the presets'
-//      aliases (and, in the last one, not aliased at all).
+//      aliases (and, in the last three, not aliased at all).
 //
 // Groups are contiguous runs, because `SidebarNavigationOptions.group`
 // headers follow row order — see packages/react-native-gtkx/src/navigation.
@@ -52,7 +52,9 @@ export const SECTION_IDS = [
   "gesture-fling",
   "dnd",
   "svg",
-  "upstream",
+  "upstream-drop-zones",
+  "upstream-sortables",
+  "upstream-drawer",
 ] as const
 
 export type SectionId = (typeof SECTION_IDS)[number]

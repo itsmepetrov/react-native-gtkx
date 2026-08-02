@@ -23,7 +23,7 @@ the order a reader meets it:
 2. **gtkx** — what exists only because this is GTK: Adwaita widgets, the
    escape hatches, the layout-root boundary between the two worlds.
 3. **Modules** — the third-party ecosystem, reached through the presets'
-   aliases and, in the last section, not aliased at all.
+   aliases and, in the last three sections, not aliased at all.
 
 | Light                                                                                                                                                                                                                                  | Dark                                                                                                                       |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
@@ -68,28 +68,32 @@ HeaderBar button toggles either way live.
 
 ### Modules
 
-| Section            | What it proves                                                        |
-| ------------------ | --------------------------------------------------------------------- |
-| Reanimated values  | shared values, `useAnimatedStyle`, and the zero-render counter        |
-| Reanimated motion  | `withTiming`/`Spring`/`Sequence`/`Repeat`/`Delay`, `Easing`, colours  |
-| Layout animations  | `FadeIn`/`FadeOut`/`LinearTransition`/`Keyframe`                      |
-| Reanimated limits  | which sizes are driven, which are refused, and the measurement why    |
-| Gesture detector   | `Gesture.Pan`/`Tap`/`LongPress` and their configuration knobs         |
-| Pinch and rotation | `Gesture.Pinch`/`Rotation` off GTK's own touchpad gestures            |
-| Gesture relations  | `Gesture.Native`, `simultaneousWith…`, `requireExternalGestureToFail` |
-| Drag and drop      | `react-native-gtkx/dnd` — the platform's own DnD surface              |
-| Svg                | `react-native-svg`; an RN `Animated.Value` driving `r` directly       |
-| Upstream libraries | two REAL npm packages, unaliased, on this platform's compat surfaces  |
+| Section             | What it proves                                                        |
+| ------------------- | --------------------------------------------------------------------- |
+| Reanimated values   | shared values, `useAnimatedStyle`, and the zero-render counter        |
+| Reanimated motion   | `withTiming`/`Spring`/`Sequence`/`Repeat`/`Delay`, `Easing`, colours  |
+| Layout animations   | `FadeIn`/`FadeOut`/`LinearTransition`/`Keyframe`                      |
+| Reanimated limits   | which sizes are driven, which are refused, and the measurement why    |
+| Gesture detector    | `Gesture.Pan`/`Tap`/`LongPress` and their configuration knobs         |
+| Pinch and rotation  | `Gesture.Pinch`/`Rotation` off GTK's own touchpad gestures            |
+| Gesture relations   | `Gesture.Native`, `simultaneousWith…`, `requireExternalGestureToFail` |
+| Drag and drop       | `react-native-gtkx/dnd` — the platform's own DnD surface              |
+| Svg                 | `react-native-svg`; an RN `Animated.Value` driving `r` directly       |
+| Upstream drop zones | the REAL `react-native-reanimated-dnd`: `Draggable` → `Droppable`     |
+| Upstream sortables  | the same package's `Sortable`, `SortableGrid` and the horizontal one  |
+| Upstream drawer     | the REAL `react-native-drawer-layout`, dragged in from the left edge  |
 
 ## Sections that fill the canvas instead of scrolling
 
-Most sections scroll inside an explicit `ScrollView`. Five do not — see
+Most sections scroll inside an explicit `ScrollView`. Nine do not — see
 `fillsCanvas` in `src/index.tsx`. This is not cosmetic: a `Gesture.Native()`
 over a real `ScrollView`, a drawer dragged in from an edge, an
 `AdwBottomSheet`'s drag handle and Adwaita's back gesture all negotiate with
 whatever else wants the pointer, and an enclosing `ScrollView` is a competitor
-those demos were never meant to have. Each of the five was a standalone app
-whose window it filled; the canvas is that window.
+those demos were never meant to have. Every one of them arrived here as a
+standalone app whose window it filled; the canvas is that window. What replaces
+scrolling is the `CardGrid`: the cases visible in one go, wrapping with the
+window.
 
 ## Colour, and the rule that produced it
 
@@ -285,15 +289,22 @@ measured Yoga leaf around the widget, which is what gives it an allocation.
 That is why the Adwaita stack section wraps and the widget hosting one does
 not — and it is the single thing that broke when these two moved in here.
 
-## Upstream libraries: the real packages
+## The three upstream sections: the real packages
 
-Two published npm tarballs, installed for real, running unaliased:
+Two published npm tarballs, installed for real, running unaliased — and three
+sections, because one screen per library, or per idea, is what the sidebar is
+for:
 
-- **`react-native-reanimated-dnd@2.0.0`** — the preset's alias is undone for
-  this project only, so the library resolves for real and everything it imports
-  (`react-native`, `react-native-reanimated`, `react-native-worklets`,
-  `react-native-gesture-handler`) is answered by react-native-gtkx.
-- **`react-native-drawer-layout@4.2.9`** — drag from the left edge to open it.
+| Section             | Package                             | The idea                                                                                      |
+| ------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------- |
+| Upstream drop zones | `react-native-reanimated-dnd@2.0.0` | `Draggable` → `Droppable`: pick a thing up, drop it on a target                               |
+| Upstream sortables  | the same                            | `Sortable`, `SortableGrid` and `SortableDirection.Horizontal`: reordering, three shapes of it |
+| Upstream drawer     | `react-native-drawer-layout@4.2.9`  | a panel dragged in from the left edge                                                         |
+
+The preset's alias for the -dnd package is undone for this project only, so the
+library resolves for real and everything it imports (`react-native`,
+`react-native-reanimated`, `react-native-worklets`,
+`react-native-gesture-handler`) is answered by react-native-gtkx.
 
 This is the opposite of `examples/reanimated-dnd` and of the `dnd` section,
 which prove the MIRROR: unedited upstream source with
@@ -302,17 +313,23 @@ package never loads. Both are worth having, and the difference between them is
 the whole [research note](../../docs/research/upstream-libraries.md).
 
 Two things in `vite.config.ts` are deliberate, and deleting either changes what
-the section proves rather than breaking it loudly:
+those sections prove rather than breaking them loudly:
 
 - a ten-line plugin, because `react-native-drawer-layout` ships
   `GestureHandler.ios.js` and `GestureHandler.android.js` with no `.native.js`,
   so every out-of-tree platform silently resolves the no-op web fallback and
   the drawer becomes undraggable without a single warning;
-- a `resolve.alias` entry that un-aliases the -dnd package, which works because
-  vite runs `resolve.alias` before every `enforce: "pre"` plugin.
+- `aliases: { "react-native-reanimated-dnd": false }` passed to the preset,
+  which drops one entry from the alias table while leaving the other five —
+  and the un-aliased package's own imports — going through it.
 
-`Sortable` is given `useFlatList={false}`, because its rows are absolutely
-positioned and this platform's windowed list drops one of them.
+Two upstream behaviours are visible on the sortables screen and are captioned
+there rather than papered over. A grid tile reorders only after travelling a
+whole cell (82 px here), because `getGridCellFromCoordinates` floors the
+dragged tile's top-left corner instead of its centre; and every sortable arms
+`Gesture.Pan().activateAfterLongPress(200)`, so a drag needs a dwell before it
+starts. Both are upstream's, on every platform, and both are measured in
+[dnd-hover-flicker.md](../../docs/research/dnd-hover-flicker.md).
 
 ## What is not here
 

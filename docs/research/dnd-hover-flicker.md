@@ -1,6 +1,6 @@
 # A drop zone that strobed, and the frame nobody asked to wait for
 
-Reported from the gallery's **Upstream libraries** section: hold a chip over
+Reported from the gallery's **Upstream drop zones** section: hold a chip over
 "To do" and the zone's highlight does not stay on. It flashes on and off for
 as long as the pointer keeps moving, as if the zone were told "something is
 over me" and "nothing is over me" alternately.
@@ -144,7 +144,8 @@ Three runs, no churn, and the drop still lands.
 ## 5. The grid that would not reorder, which is a different animal
 
 Reported at the same time, and worth recording here because the first guess was
-that it was the same bug: in the same section's `SortableGrid`, dragging tile 2
+that it was the same bug: in the gallery's `SortableGrid` next door, dragging
+tile 2
 down onto tile 5 never reorders. It is not the same bug, it is not `zIndex`,
 and it is not this platform.
 
