@@ -996,8 +996,8 @@ and its parent", so `Animated.Text` and anything through
 than a gap.** `flex`, `flexBasis`, every `margin*`/`padding*`, `gap` and the
 `min*`/`max*` family need a Yoga pass plus the commit walk that follows it,
 and that cost is proportional to the CONTAINER rather than to the animated
-value: 71 µs for a five-child container, 129 µs at sixty, 509 µs at three
-hundred, per frame. A transform is 0.6 µs at all three, and a colour 11.2 µs.
+value: 52 µs for a five-child container, 133 µs at sixty, 496 µs at three
+hundred, per frame. A transform is 1.5 µs at all three, and a colour 11.2 µs.
 A `useAnimatedStyle` that changes one of them warns once for that property,
 says it is a layout property and why, and names the transform to use instead.
 The value is still applied on the next React render rather than dropped.

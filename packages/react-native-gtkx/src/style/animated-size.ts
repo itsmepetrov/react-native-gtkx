@@ -2,8 +2,8 @@
 // to the node that owns it.
 //
 // The refusal itself is a cost argument and stays one — a naive `width` write
-// is a Yoga pass over the container plus its commit walk, 71 / 129 / 509 µs at
-// 5 / 60 / 300 children against a transform's 0.6 µs, and it grows with the
+// is a Yoga pass over the container plus its commit walk, 52 / 133 / 496 µs at
+// 5 / 60 / 300 children against a transform's 1.5 µs, and it grows with the
 // CONTAINER rather than with the animated value
 // (docs/research/animated-size.md §3). What that measurement also found is
 // that the growth is entirely in work the change does not need: re-running
@@ -282,7 +282,7 @@ export const drivenSizeRefusal = (
   if (axis === mainAxisOf(container)) {
     return (
       `\`${property}\` is the container's MAIN axis, so growing the node pushes every following sibling ` +
-      "along — that is a layout pass over the container, which is what costs 71–509 µs"
+      "along — that is a layout pass over the container, which is what costs 52–496 µs"
     )
   }
   if ((container.flexWrap ?? "nowrap") !== "nowrap") {

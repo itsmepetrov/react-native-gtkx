@@ -2,7 +2,7 @@
 // tree's root.
 //
 // A layout write normally costs what the CONTAINER costs, and the shape of
-// that cost is why animated layout is refused here at all: 71 / 129 / 509 µs
+// that cost is why animated layout is refused here at all: 52 / 133 / 496 µs
 // at 5 / 60 / 300 children, of which the biggest single line is not Yoga
 // (137 µs) but the engine's incremental COMMIT WALK (320 µs), which visits
 // every child the container re-solved even when 299 of 300 rects came back

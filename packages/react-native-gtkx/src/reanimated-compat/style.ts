@@ -14,9 +14,9 @@
 // the `min*`/`max*` family are refused, and that is a refusal on measured
 // grounds rather than a gap waiting to be filled: a layout write has to go
 // through Yoga, and a pass plus its commit walk costs what the CONTAINER
-// costs, not what the animated value costs — 71 µs for a five-child
-// container, 129 µs at sixty, 509 µs at three hundred, per frame. The same
-// frame's transform write is 0.6 µs and does not grow at all.
+// costs, not what the animated value costs — 52 µs for a five-child
+// container, 133 µs at sixty, 496 µs at three hundred, per frame. The same
+// frame's transform write is 1.5 µs and does not grow at all.
 //
 // It is a cost argument and ONLY a cost argument, which is narrower than this
 // comment used to claim. docs/research/animated-size.md re-measured the two
@@ -276,8 +276,8 @@ const warnUndriveable = (property: string, source: StyleObject): void => {
       `react-native-reanimated: useAnimatedStyle changed \`${property}\`, a LAYOUT property. ` +
         "react-native-gtkx does not drive layout at frame rate on purpose: a layout write costs a Yoga " +
         "pass over the container plus the commit walk that follows it, and that cost grows with the " +
-        "CONTAINER rather than with the number of animated values — measured at 71 µs for a five-child " +
-        "container and 509 µs at three hundred, against a transform's 0.6 µs. " +
+        "CONTAINER rather than with the number of animated values — measured at 52 µs for a five-child " +
+        "container and 496 µs at three hundred, against a transform's 1.5 µs. " +
         (exact
           ? `Animate \`transform: [{ ${exact}: … }]\` instead — it reproduces the move exactly, it is ` +
             "paint-only, it costs the same at any tree size, and it is what RN's own native driver " +
