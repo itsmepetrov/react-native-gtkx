@@ -13,7 +13,7 @@
 // relative import below carries an explicit ".js" extension, which a real
 // sibling file on disk resolves under plain Node without any bundler.
 import { fileURLToPath, URL } from "node:url"
-import type { GtkxPluginOptions } from "@gtkx/vitest"
+import type { PluginOptions as GtkxPluginOptions } from "@gtkx/vitest"
 import type { Plugin } from "vite"
 import type { UserWorkspaceConfig } from "vitest/config"
 import { reactNativeGtkx, type ReactNativeGtkxOptions } from "../vite/index.js"
@@ -43,7 +43,7 @@ export type ReactNativeGtkxTestOptions = {
   /**
    * Run this project's test files serially. Default: false — window-resize
    * signal delivery races when several per-worker headless compositors run
-   * at once (see docs/gtkx-rc3-notes.md); the suite this recipe is proven
+   * at once (see docs/gtkx-rc4-notes.md); the suite this recipe is proven
    * on takes seconds, so serial execution is the cheap fix. Override once a
    * suite is large enough for parallelism to matter more than that race.
    */

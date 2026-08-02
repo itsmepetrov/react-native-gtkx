@@ -18,10 +18,12 @@ import type * as Gtk from "@gtkx/gi/gtk"
 
 export type Point = { x: number; y: number }
 
-// Graphene.Point's constructor takes plain scalars, so it does not hit the
-// nested-boxed-struct crash that Graphene.Rect's does (RC2-WORKAROUND
-// graphene-rect-nested-boxed-props, docs/gtkx-rc2-notes.md) — but alloc+init
-// is the shape already proven in svg-node.ts, so use it here too.
+// Graphene.Point's constructor takes plain scalars, so it never hit the
+// nested-boxed-struct crash Graphene.Rect's did (the retired
+// graphene-rect-nested-boxed-props workaround, fixed upstream in rc.3 by our
+// gtkx-org/gtkx#473 — see "Fixed in rc.3" in docs/gtkx-rc4-notes.md).
+// alloc+init stays because it is the cheaper of the two here, not because
+// the constructor is unsafe.
 const point = (x: number, y: number): Graphene.Point =>
   Graphene.Point.alloc().init(x, y)
 

@@ -1,7 +1,7 @@
 // The ONLY module allowed to import @gtkx/* (enforced by eslint no-restricted-imports).
 // gtkx is an RC dependency: when its API moves, this bridge absorbs the change.
 //
-// Caveats baked into this surface (catalogued in docs/gtkx-rc3-notes.md):
+// Caveats baked into this surface (catalogued in docs/gtkx-rc4-notes.md):
 // - 64-bit FFI values arrive as BigInt → normalize with toNumber() at this boundary
 
 // import-then-export (not `export * as`): the latter is the one syntax the
@@ -83,10 +83,19 @@ export {
   useSetting,
   type Root,
   type RootElement,
-  type SettingsSchema,
-  type SettingsSchemaKeys,
-  type SettingValue,
 } from "@gtkx/react"
+
+// rc.4 moved the settings-schema types off the public entry point into
+// /internal, with no replacement on `@gtkx/react` — `useSetting`/
+// `useBindSetting` are still public and still typed by them, so a consumer
+// that wants to name the type of a setting has no supported import for it.
+// We re-export them from here, which is the whole point of the bridge; the
+// ask to put them back is filed in docs/upstream-gtkx.md.
+export type {
+  SettingsSchema,
+  SettingsSchemaKeys,
+  SettingValue,
+} from "@gtkx/react/internal"
 
 // useSignal comes from ./use-signal, not @gtkx/react — see the workaround note
 // there (rc.3 delivers a stale handler).

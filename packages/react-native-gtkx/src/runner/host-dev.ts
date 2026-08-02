@@ -88,7 +88,7 @@ if (gtkxConfig.elements !== null) {
 const configModuleUrl = new URL("./__virtual-gtkx-config.mjs", import.meta.url)
   .href
 const lazyElements = Object.fromEntries(
-  gtkxConfig.lazyElements.map((type: string) => [type, { lazy: true }]),
+  gtkxConfig.lazyElements.map((type: string) => [type, { isLazy: true }]),
 )
 const configModuleSource = [
   `export * from "@gtkx/jsx/metadata";`,

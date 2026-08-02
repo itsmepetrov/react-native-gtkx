@@ -31,7 +31,7 @@ And the portability proof — `examples/profile` renders ONE source file with bo
 
 - [x] Yoga + GtkFixed spike — **GO** (0 px accuracy, 500-node reflow in 0.17 ms, 60 fps — `docs/research/yoga-gtk-spike.md`)
 - [x] Dev environment (UTM VM with a native GNOME session, headless sway for tests) and dev workflow
-- [x] gtkx bridge (isolation from the RC API; [workaround catalog](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/gtkx-rc3-notes.md))
+- [x] gtkx bridge (isolation from the RC API; [workaround catalog](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/gtkx-rc4-notes.md))
 - [x] Layout engine (Yoga shadow tree, measure via Pango, batching, diffing, onLayout)
 - [x] StyleSheet: layout/visual split, CSS Color 4 colors, PlatformColor → Adwaita
 - [x] View / Text / Image / AppRegistry — first RN render in GTK

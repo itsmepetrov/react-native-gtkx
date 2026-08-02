@@ -47,7 +47,7 @@ export const buildGtkxConfigModule = async (
     )
   }
   const lazyElements = Object.fromEntries(
-    config.lazyElements.map((type) => [type, { lazy: true }]),
+    config.lazyElements.map((type) => [type, { isLazy: true }]),
   )
   return [
     `export * from "@gtkx/jsx/metadata";`,
