@@ -59,11 +59,23 @@ if (command === "sync") {
     "&& echo 'APP RUNNING (check the VM window)'"
   runInherit("ssh", [VM_HOST, remote])
 } else if (command === "app-stop") {
-  // `|| true` in the original: always succeeds, whether or not a process
-  // was actually running to kill.
-  spawnSync("ssh", [VM_HOST, "pkill -f 'node .*dist/bundle.js'"], {
-    stdio: "inherit",
-  })
+  // Stops the unit `app` started, and nothing else. This used to be
+  // `pkill -f 'node .*dist/bundle.js'`, which matches EVERY example app on
+  // the VM — so stopping one demo took down every other agent's window and
+  // whatever the user was looking at. The pattern cannot tell them apart;
+  // the unit name can.
+  //
+  // `|| true` on the stop, as before: succeeds whether or not it was running.
+  spawnSync(
+    "ssh",
+    [
+      VM_HOST,
+      "export XDG_RUNTIME_DIR=/run/user/$(id -u); " +
+        "systemctl --user stop rn-gtkx-app 2>/dev/null; " +
+        "systemctl --user reset-failed rn-gtkx-app 2>/dev/null; true",
+    ],
+    { stdio: "inherit" },
+  )
   process.exit(0)
 } else if (command === "shell") {
   runInherit("ssh", ["-t", VM_HOST])
