@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# animated-size recon (epic reanimated, task 007): drives a `width` at frame
-# rate through the rect store and asserts the result against real GTK geometry.
+# animated-size probe: drives a `width` at frame rate through the platform's
+# own `useAnimatedStyle` path, asserts the result against real GTK geometry,
+# and times the whole write against the naive one it replaces.
 #
 # A PRIVATE headless compositor per invocation, not `dev-loop shot`: the probe
 # fullscreens its own window, reads the toplevel's size request back, and
@@ -40,7 +41,7 @@ SOCKET=$(grep -o "wayland display '[^']*'" /tmp/sway-as.log | cut -d"'" -f2 | he
 ) &
 APP=$!
 WAITED=0
-while kill -0 $APP 2>/dev/null && [ $WAITED -lt 90 ]; do
+while kill -0 $APP 2>/dev/null && [ $WAITED -lt 240 ]; do
   sleep 1
   WAITED=$((WAITED + 1))
   if [ $WAITED -eq 4 ]; then
