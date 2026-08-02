@@ -11,6 +11,13 @@ import type { FrameScheduler } from "../animated/index"
 import { GLib } from "../gtkx/bridge/index"
 
 export const glibScheduler: FrameScheduler = {
+  // The same clock the frame callbacks below are stamped with, readable
+  // off-frame: an animation anchors t = 0 to the moment it started rather
+  // than to the frame that happens to arrive first (see
+  // src/animated/value-animation.ts).
+  now() {
+    return Number(GLib.getMonotonicTime()) / 1000
+  },
   schedule(callback) {
     let cancelled = false
     const id = GLib.timeoutAdd(GLib.PRIORITY_DEFAULT, 16, () => {
