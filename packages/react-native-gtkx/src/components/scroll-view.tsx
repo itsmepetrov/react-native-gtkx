@@ -210,7 +210,20 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       // Yoga unconstrains a scroll node's MAIN axis — align it with the
       // scroll direction or a horizontal list's content clamps to the
       // viewport width (hadjustment upper == page).
+      //
+      // `flexGrow: 1, flexShrink: 1` is RN's own base style for the scroller
+      // (`styles.baseVertical` / `baseHorizontal` in ScrollView.js, applied as
+      // `StyleSheet.compose(baseStyle, this.props.style)` — hence base first,
+      // the app's style wins). The shrink half is what turns a scrollable with
+      // NO style of its own into a viewport: a flex item defaults to
+      // flexShrink 0 on RN's Yoga config, so without this the scroller sizes
+      // to its content, outgrows a bounded parent and its scroll range stays
+      // empty. It cost a whole investigation once: `@gorhom/bottom-sheet`
+      // hands its list down unstyled, so the sheet's scroll lock had nothing
+      // to lock — the list never received a scroll event because it had never
+      // become a viewport.
       style: [
+        { flexGrow: 1, flexShrink: 1 },
         style,
         { overflow: "scroll", flexDirection: horizontal ? "row" : "column" },
       ],
