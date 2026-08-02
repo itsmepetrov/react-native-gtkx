@@ -1285,15 +1285,23 @@ rebuilds it, drives it and prints:
 [core-exports] draggable onDragBegin
 [core-exports] draggable order=b,c,a,d,e
 [core-exports] PASS the dragged row changed place — row-a y 40 -> 160
-[core-exports] sheet index=2
+[core-exports] PASS CONTROL: a plain ScrollView scrolls under the same injected wheel — sv row-one y 40 -> -215
+[core-exports] PASS an unstyled scrollable in a bounded parent is a viewport and scrolls — unstyled row-one y 406 -> 278
+[core-exports] PASS the sheet's own scrollable receives scroll events at all — sheet list onScroll calls = 162
+[core-exports] PASS COLLAPSED: the sheet holds its list at the top under a real scroll — sheet row-one y 559 -> 559
 [core-exports] PASS the sheet moved up under the drag — handle y 531 -> 212
+[core-exports] PASS EXTENDED: the lock releases and the same wheel scrolls the sheet's list — sheet row-one y 240 -> -84
 [core-exports] PASS NEGATIVE CONTROL: the zone the pointer never visited saw nothing — control touch events = 0
+[core-exports] DONE all checks passed
 ```
 
-That method is the point, and it corrected this section three times running.
+That method is the point, and it corrected this section four times running.
 Twice the blockers were predicted from sources and both lists were wrong; the
 third time the list was right about the BUILD and could not have known what
-the first render would hit. Nothing below was reasoned about — each entry is
+the first render would hit; the fourth time the probe overturned a diagnosis
+this file had already written down as settled — the sheet's list was blamed on
+the driven-size carve-out, and the animated height it names was never a number
+at all. Nothing below was reasoned about — each entry is
 an error the toolchain produced, in the order it produced it.
 
 **`react-native-draggable-flatlist` 4.0.3.** Stopped at BUILD on
@@ -1828,28 +1836,33 @@ on property access (`BounceIn.duration(300)`, `css.create`), while still
 answering the introspection React and `console.log` do first. A symbol not
 listed at all fails earlier still, at bundle time.
 
-**`@gorhom/bottom-sheet`'s scroll lock is implemented and still cannot run.**
-Both halves of it are here — the `onScroll`/`onBeginDrag`/`onEndDrag`/
-`onMomentumEnd` handlers it registers, and the `scrollTo` they call to pin the
-list — and driving the sheet with a real pointer showed the lock never
-executes, because the sheet's scrollable **emits no scroll event at all**. The
-cause is a layer below this surface, and it is no longer the scrollable's own
-style: with the base style above, `<FlatList />` carrying no style of its own
-inside a BOUNDED parent scrolls — `spike/core-exports` measures it beside its
-controls, row one moving 406 → 278 where it used to report 170 → 170.
-**gorhom's parent is not bounded.** It bounds the list with an animated
-`height` (`contentMaskContainerAnimatedStyle` in `BottomSheetContent`), and a
-driven size on this platform lives as an override in the rect store that is
-deliberately never written into Yoga — which is exactly what buys 7.1 µs a
-frame instead of 496 at 300 children
-([research/animated-size.md](research/animated-size.md)). So the container
-allocates and clips at the right size while its child, for layout, sees no
-bound at all and grows to its content. Everything else about the sheet works:
-it snaps between its detents under a real pointer drag, which is what the
-gallery's "Upstream bottom sheet" section shows — and says, next to the list
-that does not move. That is what makes the diagnosis specific: it is the
-animated **height**, a layout property, that does not arrive.
-`spike/core-exports` keeps the failing check rather than deleting it.
+**`@gorhom/bottom-sheet`'s scroll lock runs**, and it took two fixes a layer
+below this surface to get there. Both halves of the lock were always here —
+the `onScroll`/`onBeginDrag`/`onEndDrag`/`onMomentumEnd` handlers it registers,
+and the `scrollTo` they call to pin the list — and driving the sheet with a
+real pointer showed it never executing, because the sheet's scrollable emitted
+no scroll event at all.
+
+The first cause was the scrollable's own style, and the base style above is it:
+`<FlatList />` carrying no style of its own inside a BOUNDED parent now scrolls
+— `spike/core-exports` measures it beside its controls, row one moving 406 →
+278 where it used to report 170 → 170.
+
+The second was that gorhom's parent was not bounded, and the diagnosis on file
+for that one was **wrong**, which is worth keeping because it was wrong in an
+instructive way. gorhom bounds the list with an animated `height`
+(`contentMaskContainerAnimatedStyle` in `BottomSheetContent`), and the blame
+went to the driven-size carve-out: a size that lives as a rect-store override
+Yoga never sees cannot bound a child. The probe said otherwise — the height
+never became a **number**. `useAnimatedStyle` did not run animations returned
+from its updater, so the property arrived as a spring descriptor and the
+driven-size path was never even asked. It runs them now, and a `height` this
+platform refuses to drive at frame rate lands in Yoga through one React render
+when its animation settles, which is 4 renders against 176 animation frames in
+a measured run ([research/animated-size.md §9](research/animated-size.md)).
+`spike/core-exports` reaches 0 FAILED: the list receives scroll events, the
+lock holds it at the top while the sheet is collapsed and releases when it is
+extended.
 
 **`@gorhom/bottom-sheet` and `react-native-draggable-flatlist` both run now**,
 and this surface is one of the three they needed: the other two are

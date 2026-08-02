@@ -17,16 +17,21 @@
 // except iOS — upstream's export rather than an app's choice. See
 // docs/research/gesture-detector.md.
 //
-// THE HONEST HALF. The sheet drags and snaps; its own scrollable receives
-// zero scroll events, and both the second card and the sheet's own header
-// say so on screen, with a live count rather than a claim. gorhom bounds
-// the list with an animated `height` — `contentMaskContainerAnimatedStyle` in
-// `BottomSheetContent` — and a driven size on this platform is an override in
-// the rect store that is deliberately never written back into Yoga, which is
-// what buys 7.1 µs a frame instead of 496. The container therefore allocates
-// and clips correctly while the list, for layout, sees no bound at all and
-// grows to its content. A screen that showed a sheet and left that unsaid
-// would be demonstrating a broken list as if it worked.
+// THE LIST SCROLLS NOW, and the count on screen is what says so — this screen
+// shipped with it at zero, and the sentence next to it was the bug that got
+// fixed rather than a caption that needed rewording. gorhom bounds the list
+// with an animated `height` from `useAnimatedStyle`
+// (`contentMaskContainerAnimatedStyle` in `BottomSheetContent`), and the wall
+// was one layer earlier than layout: `useAnimatedStyle` did not run animations
+// returned from its updater at all, so the height arrived as a spring
+// DESCRIPTOR and never became a number. It does now, and a `height` this
+// platform will not drive at frame rate lands in Yoga through one React render
+// when its animation settles. docs/research/animated-size.md §9, and
+// spike/core-exports, which drives this same construction with a real pointer.
+//
+// The count is still a count rather than a claim, for the reason it was one
+// before: the sentence beside it has to stop being true the moment the number
+// moves.
 //
 // This section does NOT scroll (see src/index.tsx): the sheet is dragged by
 // its handle and by its content, and an enclosing ScrollView would be
@@ -92,7 +97,7 @@ export const UpstreamBottomSheetSection = () => {
   const [detent, setDetent] = useState(0)
   // Scroll events the sheet's OWN scrollable received, counted rather than
   // asserted: the screen stops claiming anything the moment the number moves,
-  // which is what the fix behind it will do. The handler goes through
+  // and it moves now. The handler goes through
   // gorhom's own composition — `useScrollHandler` wraps it in the same
   // `useAnimatedScrollHandler` its scroll lock lives in and calls it with
   // `runOnJS` — so a zero here is a zero on the library's path, not on a
@@ -131,25 +136,25 @@ export const UpstreamBottomSheetSection = () => {
           </DemoCard>
 
           <DemoCard
-            title="The list inside the sheet does not scroll yet"
-            hint="Put the pointer over the rows and turn the wheel: the counter in the sheet stays at zero, at either detent."
+            title="Scroll the list, and watch gorhom's own lock"
+            hint="Put the pointer over the rows and turn the wheel. At the first detent the library holds the list at the top; drag the sheet up to the second and the same wheel scrolls it."
           >
             <Caption>
-              gorhom bounds that list with an animated height on its
-              content-mask container, and a driven size here lives as an
-              override in the rect store that is never written back into Yoga —
-              so the sheet allocates and clips at the right size while its list,
-              for layout, has no bound at all, grows to its content, and never
-              becomes a viewport with a scroll range to move through. That is
-              the cost of the cheap animated-size path (7.1 µs a frame instead
-              of 496 at 300 children), and it is being worked, not hidden: see
-              docs/research/animated-size.md. Everything above it is already
-              here — gorhom&apos;s scroll lock registers its handlers and calls
-              Reanimated&apos;s scrollTo to pin the list, and both halves run
-              the moment an event arrives. The control is what keeps that zero
-              honest: the same unstyled FlatList in a parent that IS bounded
-              scrolls perfectly well — the Lists section next door, and
-              spike/core-exports, which measures the two side by side.
+              That lock is gorhom&apos;s, not this platform&apos;s:
+              useScrollEventsHandlersDefault calls Reanimated&apos;s scrollTo
+              from every scroll event to pin the list while the sheet is down,
+              and releases it once the sheet is extended. It could not run at
+              all until recently, and the reason was one layer below scrolling —
+              gorhom bounds the list with an animated height on its content-mask
+              container, and `useAnimatedStyle` did not run animations returned
+              from its updater, so that height arrived as a spring descriptor
+              and never became a number for Yoga to bound anything with. A
+              height this platform will not drive at frame rate is still not
+              driven at frame rate; it lands through one React render when its
+              animation settles, which is 4 renders against 176 animation frames
+              in a measured run. See docs/research/animated-size.md §9, and
+              spike/core-exports, which drives this construction with an
+              injected pointer and a negative control.
             </Caption>
           </DemoCard>
         </Section>
@@ -175,11 +180,9 @@ export const UpstreamBottomSheetSection = () => {
           </Status>
           <Caption>
             18 rows and no style of its own — the shape a library hands its list
-            down in — clipped rather than scrollable, because gorhom bounds it
-            with an animated height and a driven size here is an override in the
-            rect store that Yoga never sees, so the sheet clips at the right
-            size while the list, for layout, has no bound and grows to its
-            content.
+            down in. It is a viewport because its parent is bounded: RN&apos;s
+            own flexGrow/flexShrink base style shrinks it into the content-mask
+            container, and that container&apos;s animated height reaches Yoga.
           </Caption>
         </View>
         <BottomSheetFlatList
