@@ -5,13 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "gtkx dev",
+    "dev:real": "DND_IMPL=real gtkx dev",
     "build": "gtkx build",
-    "start": "node dist/bundle.js"
+    "start": "node dist/bundle.js",
+    "build:mirror": "gtkx build && rm -rf dist-mirror && cp -r dist dist-mirror",
+    "build:real": "DND_IMPL=real gtkx build && rm -rf dist-real && cp -r dist dist-real",
+    "start:mirror": "node dist-mirror/bundle.js",
+    "start:real": "node dist-real/bundle.js"
   },
   "dependencies": {
     "@react-navigation/native": "8.0.0-alpha.40",
     "react": "^19.2.0",
-    "react-native-gtkx": "0.2.0-alpha.2"
+    "react-native-gtkx": "0.2.0-alpha.2",
+    "react-native-reanimated-dnd": "2.0.0"
   },
   "devDependencies": {
     "@gtkx/cli": "1.0.0-rc.3",

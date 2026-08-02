@@ -303,20 +303,20 @@ achieves what it asks for, or cannot express it), **unsupported**.
 
 ### `Sortable` / `SortableItem` / `useSortable` / `useSortableList`
 
-| Member                                                          | Verdict                              | Note                                                                                                                                                                         |
-| --------------------------------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `data`, `renderItem`, `itemKeyExtractor`                        | honoured                             |                                                                                                                                                                              |
-| `onMove(id, from, to)`                                          | honoured                             |                                                                                                                                                                              |
-| `onDragStart(id, position)`                                     | honoured                             |                                                                                                                                                                              |
-| `onDrop(id, position, allPositions)`                            | honoured                             |                                                                                                                                                                              |
-| `onDragging(id, overItemId, y)`                                 | honoured                             | from each item's own drop target                                                                                                                                             |
-| internal order ownership                                        | honoured                             | the component owns the order, exactly as upstream's "do NOT update external state in `onMove`" contract requires                                                             |
-| `SortableItem.Handle`                                           | honoured                             |                                                                                                                                                                              |
-| `positions`, `lowerBound`, `autoScrollDirection`, `itemHeights` | **shape-compatible, different type** | opaque values the app forwards; `SharedValue` cannot exist here                                                                                                              |
-| `itemHeight`, `estimatedItemHeight`, `enableDynamicHeights`     | accepted and ignored                 | rows are laid out by Yoga at their natural height, so a height hint has nothing to correct                                                                                   |
-| `useFlatList`                                                   | accepted and ignored                 |                                                                                                                                                                              |
-| autoscroll during a drag                                        | unsupported for now                  | GTK's own kinetic autoscroll does not run for a DND motion; a `GtkDropControllerMotion` near the edge could drive `ScrollView`, and that is a follow-up, not a shipped claim |
-| `direction: "horizontal"`, `SortableGrid`                       | **not implemented**                  | deferred, see below                                                                                                                                                          |
+| Member                                                          | Verdict                              | Note                                                                                                                                                                          |
+| --------------------------------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data`, `renderItem`, `itemKeyExtractor`                        | honoured                             |                                                                                                                                                                               |
+| `onMove(id, from, to)`                                          | honoured                             |                                                                                                                                                                               |
+| `onDragStart(id, position)`                                     | honoured                             |                                                                                                                                                                               |
+| `onDrop(id, position, allPositions)`                            | honoured                             |                                                                                                                                                                               |
+| `onDragging(id, overItemId, y)`                                 | honoured                             | from each item's own drop target                                                                                                                                              |
+| internal order ownership                                        | honoured                             | the component owns the order, exactly as upstream's "do NOT update external state in `onMove`" contract requires                                                              |
+| `SortableItem.Handle`                                           | honoured                             |                                                                                                                                                                               |
+| `positions`, `lowerBound`, `autoScrollDirection`, `itemHeights` | **shape-compatible, different type** | opaque values the app forwards; `SharedValue` cannot exist here                                                                                                               |
+| `itemHeight`, `estimatedItemHeight`, `enableDynamicHeights`     | accepted and ignored                 | rows are laid out by Yoga at their natural height, so a height hint has nothing to correct                                                                                    |
+| `useFlatList`                                                   | accepted and ignored                 | the mirror has no windowing to switch off. The prop is load-bearing against the REAL library, and works there on its default now — [dnd-differential.md](dnd-differential.md) |
+| autoscroll during a drag                                        | unsupported for now                  | GTK's own kinetic autoscroll does not run for a DND motion; a `GtkDropControllerMotion` near the edge could drive `ScrollView`, and that is a follow-up, not a shipped claim  |
+| `direction: "horizontal"`, `SortableGrid`                       | **not implemented**                  | deferred, see below                                                                                                                                                           |
 
 ### Deliberately not implemented
 
@@ -327,6 +327,12 @@ and none of the mechanism they need is different from the vertical list —
 so they are a later increment, not a research question. Importing them
 fails at build time with a clear "not implemented on Linux" rather than
 silently doing nothing.
+
+The deferral's premise has since been checked rather than assumed: both
+surfaces of the REAL package reorder under a real pointer on this platform
+(the gallery's Upstream libraries section), so nothing the mirror would need
+is missing
+from the runtime — see [dnd-differential.md](dnd-differential.md).
 
 ## `onDragging` is recoverable, and that was not obvious
 
@@ -436,4 +442,6 @@ already know.
   for all three platforms — removing them would turn a Linux limitation
   into an iOS and Android compile error.
 - Sortable autoscroll near a container edge is not implemented.
-- The grid and horizontal sortable surfaces are not implemented.
+- The grid and horizontal sortable surfaces are not implemented **in the
+  mirror**. The real package supplies both here, measured under a real
+  pointer — [dnd-differential.md](dnd-differential.md).

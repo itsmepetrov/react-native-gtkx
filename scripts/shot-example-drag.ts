@@ -27,6 +27,7 @@
 //
 // `--steps` is a semicolon-separated program:
 //   click:X,Y             press and release at (X, Y)
+//   scroll:X,Y,DETENTS    wheel over (X, Y); positive scrolls down
 //   drag:X1,Y1>X2,Y2      press at the first point, move in 8 steps, release
 //   drag:X1,Y1>X2,Y2@NAME the same, with a shot taken MID-DRAG (before the
 //                         release) — which is the only way to photograph the
@@ -150,6 +151,22 @@ try {
       await sleep(120)
       pointer.release()
       await sleep(600)
+    } else if (kind === "scroll") {
+      // A wheel over (X, Y). Needed to reach anything below the fold: a
+      // Wayland pointer is addressed by position, so the wheel goes to
+      // whatever scrollable is under that point, exactly as a user's would.
+      // One step at a time, because GTK's kinetic scrolling turns a burst of
+      // detents into an overshoot that then settles somewhere else.
+      const [x, y, detents] = argument.split(",").map(Number)
+      pointer.moveTo(x!, y!)
+      await sleep(150)
+      const count = Math.abs(detents!)
+      const direction = Math.sign(detents!)
+      for (let index = 0; index < count; index += 1) {
+        pointer.scrollBy(direction)
+        await sleep(60)
+      }
+      await sleep(700)
     } else if (kind === "drag") {
       const [path, midShot] = argument.split("@")
       const [fromText, toText] = path!.split(">")

@@ -201,31 +201,38 @@ touched.
 
 ### The two things that still differ
 
-**`Sortable` needs `useFlatList={false}`.** With upstream's default
-(`useFlatList` is `true`) the list renders one row short and leaves a gap
-where the first row should be. The rows are `position: absolute` with a
-per-frame `top`, so each cell's height in flow is zero, and this platform's
-windowing measures cells to decide what to mount. Switching `Sortable` to its
-`ScrollView` path renders all four rows correctly and reorders exactly the
-same. The library is doing nothing wrong; a windowed list over zero-height
-absolutely positioned cells is a case `FlatList` here has never had to
-handle. Follow-up rather than a wall — the prop is upstream's own and one
-character to set.
+~~**`Sortable` needs `useFlatList={false}`.**~~ **Closed, and it was ours.**
+With upstream's default the list rendered short and this note read it as a
+`FlatList` limitation — "a windowed list over zero-height absolutely
+positioned cells is a case `FlatList` here has never had to handle". That was
+wrong twice over: RN renders exactly that shape correctly (its window search
+treats the first cell's start as inclusive, which is what resolves offset 0 to
+index 0 when every frame is zero-length), and upstream documents `useFlatList`
+purely as a performance switch with no caveat attached. The bug was
+`indexAt` in `src/components/virtualized-list.tsx`, the symptom in a real app
+was a BLANK list rather than a short one, and the prop is gone from the
+example. See [dnd-differential.md](dnd-differential.md).
 
 **The dragged view is painted behind the drop zone.** GTK4 has no z-order
 property: a container paints its children in sibling order. Upstream's
 `useSortable` and `useDraggable` both set `zIndex` in their animated style to
-lift the dragged item, and `zIndex` is inert here (it warns, by name). So a
-chip dragged over a drop zone slides under it instead of over it. The drop
-still lands, the `activeStyle` still lights, and the drag reads worse than it
-should. This is the known `zIndex` gap
+lift the dragged item, and `zIndex` is inert here (it warns, by name). This is
+the known `zIndex` gap
 ([api.md](../api.md#react-native-reanimated-react-native-gtkxreanimated)), met
-by a real library for the first time.
+by a real library for the first time — and
+[dnd-differential.md](dnd-differential.md) narrows it: across eighteen screens
+it only shows when the dragged view is an EARLIER sibling than what it passes
+over, which in practice means sorting a list rather than dropping on a zone.
+
+**`SortableGrid` and the horizontal `Sortable` run**, which the earlier
+research had no way to ask. Both reorder under a real pointer in
+the gallery's Upstream libraries section, and both are surfaces the mirror
+deliberately
+does not implement.
 
 Everything else in the earlier research's "honest gaps" list still holds:
-`positions.value` and friends are real `{ value }` boxes and can be read,
-autoscroll near a container edge is not implemented, and the grid and
-horizontal sortable surfaces were never the question here.
+`positions.value` and friends are real `{ value }` boxes and can be read, and
+autoscroll near a container edge is not implemented.
 
 ## So should the alias go?
 

@@ -34,7 +34,11 @@ import {
   Droppable,
   DropProvider,
   Sortable,
+  SortableDirection,
+  SortableGrid,
+  SortableGridItem,
   SortableItem,
+  type SortableGridRenderItemProps,
   type SortableRenderItemProps,
 } from "react-native-reanimated-dnd"
 import { palette } from "../ui"
@@ -58,6 +62,37 @@ const TASKS: Task[] = [
 
 const ROW_HEIGHT = 56
 
+// The grid and the horizontal list are the two surfaces
+// `react-native-gtkx/dnd` deliberately does NOT mirror
+// (docs/research/drag-and-drop.md, "Deliberately not implemented"). Whether
+// the REAL package could supply them on this platform was an open question no
+// reading could settle, so it is asked here, where the real package runs —
+// see docs/research/dnd-differential.md. Both reorder.
+type Tile = { id: string; label: string }
+
+const TILES: Tile[] = [
+  { id: "tile-1", label: "One" },
+  { id: "tile-2", label: "Two" },
+  { id: "tile-3", label: "Three" },
+  { id: "tile-4", label: "Four" },
+  { id: "tile-5", label: "Five" },
+  { id: "tile-6", label: "Six" },
+]
+
+const TILE = 74
+const GRID_COLUMNS = 3
+
+type Tag = { id: string; label: string }
+
+const TAGS: Tag[] = [
+  { id: "tag-1", label: "React" },
+  { id: "tag-2", label: "GTK" },
+  { id: "tag-3", label: "Yoga" },
+  { id: "tag-4", label: "Wayland" },
+]
+
+const TAG_WIDTH = 110
+
 /**
  * The `react-native-reanimated-dnd` half, written against the REAL package
  * (2.0.0 from npm, not `react-native-gtkx/dnd`).
@@ -70,6 +105,8 @@ const ROW_HEIGHT = 56
 const DragAndDrop = () => {
   const [log, setLog] = useState("nothing dropped yet")
   const [moved, setMoved] = useState("no rows reordered yet")
+  const [gridMoved, setGridMoved] = useState("no tiles reordered yet")
+  const [tagMoved, setTagMoved] = useState("no tags reordered yet")
 
   // Upstream's contract is that `Sortable` owns the order and the app must
   // NOT write it back from `onMove`; the callback is a notification. So this
@@ -100,6 +137,45 @@ const DragAndDrop = () => {
     },
     [onMove],
   )
+
+  const renderTile = useCallback((props: SortableGridRenderItemProps<Tile>) => {
+    const { item, id, ...rest } = props
+    return (
+      <SortableGridItem<Tile>
+        key={id}
+        id={id}
+        data={item}
+        onMove={(movedId, from, to) =>
+          setGridMoved(`${movedId}: ${from} → ${to}`)
+        }
+        {...rest}
+      >
+        <View style={styles.tile}>
+          <Text style={styles.tileText}>{item.label}</Text>
+        </View>
+      </SortableGridItem>
+    )
+  }, [])
+
+  const renderTag = useCallback((props: SortableRenderItemProps<Tag>) => {
+    const { item, id, positions, ...rest } = props
+    return (
+      <SortableItem<Tag>
+        key={id}
+        id={id}
+        data={item}
+        positions={positions}
+        onMove={(movedId, from, to) =>
+          setTagMoved(`${movedId}: ${from} → ${to}`)
+        }
+        {...rest}
+      >
+        <View style={styles.tag}>
+          <Text style={styles.tagText}>{item.label}</Text>
+        </View>
+      </SortableItem>
+    )
+  }, [])
 
   return (
     <DropProvider>
@@ -151,11 +227,42 @@ const DragAndDrop = () => {
             renderItem={renderTask}
             itemHeight={ROW_HEIGHT}
             itemKeyExtractor={(task) => task.id}
-            useFlatList={false}
             style={styles.sortable}
           />
         </View>
         <Text style={styles.log}>{moved}</Text>
+
+        <Text style={styles.sectionLabel}>SortableGrid</Text>
+        <View style={styles.gridBox}>
+          <SortableGrid
+            data={TILES}
+            renderItem={renderTile}
+            dimensions={{
+              columns: GRID_COLUMNS,
+              itemWidth: TILE,
+              itemHeight: TILE,
+              rowGap: 8,
+              columnGap: 8,
+            }}
+            itemKeyExtractor={(tile) => tile.id}
+            style={styles.grid}
+          />
+        </View>
+        <Text style={styles.log}>{gridMoved}</Text>
+
+        <Text style={styles.sectionLabel}>Sortable — horizontal</Text>
+        <View style={styles.tagBox}>
+          <Sortable
+            data={TAGS}
+            renderItem={renderTag}
+            direction={SortableDirection.Horizontal}
+            itemWidth={TAG_WIDTH}
+            gap={8}
+            itemKeyExtractor={(tag) => tag.id}
+            style={styles.sortable}
+          />
+        </View>
+        <Text style={styles.log}>{tagMoved}</Text>
       </View>
     </DropProvider>
   )
@@ -312,6 +419,41 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: palette.cardAlt,
   },
+  gridBox: {
+    height: TILE * 2 + 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: palette.cardAlt,
+    backgroundColor: palette.card,
+    overflow: "hidden",
+  },
+  grid: { flex: 1 },
+  tile: {
+    width: TILE,
+    height: TILE,
+    borderRadius: 10,
+    backgroundColor: palette.cardAlt,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tileText: { color: palette.text, fontWeight: "600" },
+  tagBox: {
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: palette.cardAlt,
+    backgroundColor: palette.card,
+    overflow: "hidden",
+  },
+  tag: {
+    width: TAG_WIDTH,
+    height: 36,
+    borderRadius: 999,
+    backgroundColor: palette.cardAlt,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tagText: { color: palette.text, fontWeight: "600" },
   taskHandle: { color: palette.textDim, fontSize: 16 },
   taskTitle: { color: palette.text, fontSize: 14, flex: 1 },
 })

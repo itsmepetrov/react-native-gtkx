@@ -8,6 +8,7 @@
 // be materialised), and `CellRendererComponent` really wraps each cell while
 // the list keeps deciding where the cell goes.
 import { act, render, screen, waitFor } from "@gtkx/testing"
+import type { ReactNode } from "react"
 import { expect, it } from "vitest"
 import type { Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
 import { Root, Text, View, VirtualizedList } from "../../../src/index"
@@ -110,4 +111,61 @@ it("wraps every cell in CellRendererComponent, which still places it", async () 
   // The cell renderer wraps rather than replaces: renderItem still ran.
   expect(screen.getByText("a")).toBeTruthy()
   expect(screen.getByText("c")).toBeTruthy()
+})
+
+// REGRESSION. A list whose every cell has ZERO flow height, because each cell
+// positions its own row absolutely. That is not a contrived shape: it is how
+// `react-native-reanimated-dnd`'s `Sortable` renders — rows are `position:
+// absolute` with a per-frame animated `top`, so the FlatList cell around each
+// one measures 0 — and how any list that owns its row positions renders. RN
+// renders such a list in full; we rendered NOTHING (the whole Music Queue
+// screen of examples/reanimated-dnd came up blank against the real library).
+//
+// Every measured size collapses to 0, so the prefix sums collapse to a single
+// point and the window search has nothing to separate the rows by. RN's
+// `elementsThatOverlapOffsets` resolves that by treating the FIRST cell's
+// start as inclusive, which lands offset 0 on index 0; ours walked past every
+// cell whose end was `<= target` — which a zero-length cell at the target
+// always is — and landed on the end of the run.
+//
+// The window is only recomputed on a trigger, so the row count changes after
+// the cells have measured: that is the ordering the real screen hits (its
+// rows measure, then a scroll or a data change recomputes), and without it
+// the stale initial range hides the bug.
+it("mounts every row of a list whose cells all have zero flow height", async () => {
+  const rows = (items: string[]) => (
+    <Root
+      width={200}
+      height={200}
+    >
+      <VirtualizedList
+        style={{ width: 200, height: 200 }}
+        data={items}
+        keyExtractor={(item: string) => item}
+        estimatedItemSize={44}
+        renderItem={({ item }) => (
+          <View style={{ position: "absolute", left: 0, top: 0 }}>
+            <Text>{item}</Text>
+          </View>
+        )}
+      />
+    </Root>
+  )
+
+  let rerender!: (node: ReactNode) => Promise<void>
+  await act(async () => {
+    ;({ rerender } = await render(rows(["alpha", "beta", "gamma"])))
+  })
+  await waitForAllocation("alpha")
+
+  await act(async () => {
+    await rerender(rows(["alpha", "beta", "gamma", "delta"]))
+  })
+  await waitForAllocation("alpha")
+
+  // The first rows are the ones the collapsed search dropped; the last is
+  // here to catch the mirror-image failure (only the first surviving).
+  for (const row of ["alpha", "beta", "gamma", "delta"]) {
+    expect(screen.getByText(row)).toBeTruthy()
+  }
 })

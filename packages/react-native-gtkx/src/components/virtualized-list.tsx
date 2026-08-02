@@ -185,7 +185,26 @@ const renderAux = (
 
 // First index whose offset-end is past `target` (binary search over prefix
 // sums; offsets has count+1 entries).
+//
+// The `target <= offsets[0]` guard is RN's, not an optimisation:
+// `elementsThatOverlapOffsets` treats the FIRST cell's start as INCLUSIVE and
+// every later cell's as exclusive (`mid === 0 && currentOffset <
+// scaledOffsetStart`), and that asymmetry is the whole reason a list of
+// ZERO-LENGTH cells resolves offset 0 to index 0 there. Without it the search
+// walks past every cell whose end is `<= target` — and a zero-length cell at
+// `target` always is — so it lands on the END of the run and the list mounts
+// only its last row.
+//
+// That is not a hypothetical shape. A `FlatList` whose cells each contain one
+// `position: absolute` child has zero flow height in EVERY cell, which is
+// exactly how `react-native-reanimated-dnd`'s `Sortable` renders (rows are
+// absolutely positioned and driven by a per-frame animated `top`), and how
+// any list that positions its own rows does. RN renders all of them; we
+// rendered one. See docs/research/dnd-differential.md.
 const indexAt = (offsets: number[], target: number): number => {
+  if (target <= offsets[0]!) {
+    return 0
+  }
   let low = 0
   let high = offsets.length - 2
   while (low < high) {
