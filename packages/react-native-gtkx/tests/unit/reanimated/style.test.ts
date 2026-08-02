@@ -21,7 +21,7 @@ const nodeValue = (node: unknown): unknown => (node as StyleNode).__getValue()
 
 test("replaces opacity and every transform leaf with a node", () => {
   const animated = createAnimatedStyle({
-    width: 40,
+    marginTop: 4,
     opacity: 0.5,
     transform: [{ translateX: 10 }, { rotate: "45deg" }],
   })
@@ -31,7 +31,22 @@ test("replaces opacity and every transform leaf with a node", () => {
   expect(nodeValue(parts[0]!.translateX)).toBe(10)
   expect(nodeValue(parts[1]!.rotate)).toBe("45deg")
   // Untouched: this one reaches GTK through React, not through a node.
-  expect(animated.style.width).toBe(40)
+  expect(animated.style.marginTop).toBe(4)
+})
+
+test("a numeric width and height become leaves, and a percentage does not", () => {
+  // The mapper cannot decide whether a size change is confined to the node —
+  // that depends on the CONTAINER, which is not in this object — so it makes
+  // the leaf and the view layer answers (src/style/animated-size.ts). What it
+  // CAN decide is that a percentage has no point base to re-lay a subtree out
+  // at, which keeps it on the refusal path.
+  const animated = createAnimatedStyle({ width: 40, height: 20 })
+  expect(nodeValue(animated.style.width)).toBe(40)
+  expect(nodeValue(animated.style.height)).toBe(20)
+
+  const percent = createAnimatedStyle({ width: "50%" })
+  expect(percent.nodes.has("width")).toBe(false)
+  expect(percent.style.width).toBe("50%")
 })
 
 test("the nodes are structurally animated nodes for the view layer", () => {
@@ -149,9 +164,13 @@ test("a property this platform cannot drive warns once, by name", () => {
 
 test("a layout property is refused in its own words, naming the transform to use", () => {
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
-  const animated = createAnimatedStyle({ width: 40, height: 20, flex: 1 })
+  const animated = createAnimatedStyle({
+    width: "40%",
+    height: "20%",
+    flex: 1,
+  })
 
-  animated.apply({ width: 60, height: 30, flex: 2 })
+  animated.apply({ width: "60%", height: "30%", flex: 2 })
 
   expect(warn).toHaveBeenCalledTimes(3)
   const messages = warn.mock.calls.map((call) => String(call[0]))
@@ -175,10 +194,14 @@ test("a size is told what a scale differs in; an inset is not, because nothing d
   // grows about the view's CENTRE and stretches the CONTENT rather than
   // re-laying it out (docs/research/animated-size.md §6). An inset really does
   // have an exact transform, so its message must NOT carry the caveat.
+  //
+  // A numeric width no longer reaches this path at all — it is driven — so
+  // the percentage is what still asks for the advice, and the advice still has
+  // to be honest about what a scale is.
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
-  const animated = createAnimatedStyle({ width: 40, marginTop: 4 })
+  const animated = createAnimatedStyle({ width: "40%", marginTop: 4 })
 
-  animated.apply({ width: 60, marginTop: 9 })
+  animated.apply({ width: "60%", marginTop: 9 })
 
   const messages = warn.mock.calls.map((call) => String(call[0]))
   const width = messages.find((message) => message.includes("`width`"))!
@@ -382,7 +405,10 @@ test("the upstream useSortable style shape drives exactly one leaf", () => {
     height: 60,
   })
 
-  expect([...animated.nodes.keys()]).toEqual(["top"])
+  // `height` is a leaf as well now, and it costs nothing: it is a constant in
+  // this shape, so no listener ever fires and nothing is ever driven. `top` is
+  // the one the drag moves.
+  expect([...animated.nodes.keys()]).toEqual(["top", "height"])
   // A frame of a real drag: only `top` moved.
   expect(
     animated.apply({

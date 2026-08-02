@@ -150,7 +150,11 @@ export type IntrinsicRootProps = {
 export const IntrinsicRoot = ({ children }: IntrinsicRootProps) => {
   const widgetRef = useRef<Gtk.Box | null>(null)
   const [engine] = useState<LayoutEngine>(
-    () => new LayoutEngine({ width: 0, height: 0 }),
+    // `contentSized`: this root's own size REQUEST is its Yoga content size,
+    // so unlike every other root a size change under it does reach the
+    // toplevel. The animated-size carve-out reads the flag and keeps the
+    // refusal here (docs/research/animated-size.md §4).
+    () => new LayoutEngine({ width: 0, height: 0 }, { contentSized: true }),
   )
   useEffect(
     () => () => {

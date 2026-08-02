@@ -8,6 +8,10 @@ machine and harness as [transforms.md](transforms.md),
 files' without conversion. Upstream numbers are read from
 `react-native-reanimated@4.5.3`'s shipped source.
 
+**Status: shipped.** §1–§7 are the recon this file was written as. §8 is what
+was built from it and what the built thing costs, which is not the same table
+— the recon timed the mechanism, §8 times the whole write an app produces.
+
 ## Verdict
 
 **Three of the four things the refusal in
@@ -315,6 +319,10 @@ is a rule the engine can evaluate:
 > screen — 6.6 µs for a leaf, 23 µs with wrapped text, flat in the size of the
 > tree.
 
+(That rule needed one more clause than this recon knew about — the node's
+OTHER axis, which for a content-sized box changes when the driven one does.
+§8.)
+
 Where that rule does not hold — a content-sized container, a main-axis change
 whose siblings shift, an `aspectRatio` or a `max*` constraint on the node, an
 `alignItems` that is not `flex-start`/`stretch` — the general refusal is
@@ -323,25 +331,122 @@ the node's x moves; for a main-axis `height` in a column every following
 sibling shifts; for `maxWidth: 120` the driven value is clamped; for
 `aspectRatio: 2` the other axis follows.
 
+## 8. What shipped, and what it costs
+
+`width`/`height` in `useAnimatedStyle` now run the mechanism of §2 through the
+platform's own path. `src/style/animated-size.ts` decides whether the change
+is confined to the node; `src/layout/driven-size.ts` is the pinned pass;
+`src/components/driven-size.ts` writes the result into the rect store and
+queues one allocation. `spike/animated-size/` was re-pointed at that path, so
+its ten checks are now about what ships rather than about a hypothesis, and
+they all still pass — including the two that matter most, that the label
+inside the box **re-wrapped** (0,0,100,45) → (0,0,260,15) and that the
+window's size request did not move (min 0, nat 200, unchanged).
+
+### The cost of the whole write
+
+Per frame, as an app produces it: a shared-value assignment, the mapper, the
+style node, the pinned subtree pass, the rect-store override and one
+`queueAllocate`. No paint, so this sits next to
+[animated-colors.md §3](animated-colors.md#3-the-implemented-path-per-frame)
+and [absolute-insets.md §4](absolute-insets.md#4-cost) without conversion.
+20 000 iterations, median of three runs, measured by `spike/animated-size/`.
+
+| children in the container | driven `width`, leaf | driven `width`, wrapped text | naive `width` | transform |
+| ------------------------- | -------------------- | ---------------------------- | ------------- | --------- |
+| 5                         | 7.1 µs               | 22.1 µs                      | 52.1 µs       | 1.6 µs    |
+| 60                        | 6.9 µs               | 21.8 µs                      | 133.1 µs      | 1.5 µs    |
+| 300                       | **7.1 µs**           | **21.7 µs**                  | **496.4 µs**  | 1.5 µs    |
+
+Flat, as §3 predicted, and within noise of the recon's 6.6 / 23.3 µs — the
+whole-write overhead over the bare mechanism is under a microsecond. At 300
+children it is **70× cheaper** than the naive write and about twice a colour.
+
+### Two things the recon got wrong, found by building it
+
+- **A driven value written straight through is not always the size Yoga
+  gives.** Yoga floors a box at its own padding and border, so a node with
+  `padding: "10%"` driven to 60 is 80 px wide in a real pass — and the spike,
+  which wrote the value straight into the rect, would have allocated 60. The
+  shipped path asks Yoga what the size became instead of re-deriving it, which
+  reproduces its arithmetic rather than approximating it. Found by the engine
+  probe (`tests/unit/style/animated-size.test.ts`), not by reading.
+- **The precondition needed a sixth clause: the node's OTHER axis.** §7's rule
+  named the driven axis and the container. It did not say that a box whose
+  `height` comes from its content gets TALLER as it gets narrower — the text
+  re-wraps — so every following sibling moves and the change is not confined
+  to the node at all. The spike never hit it because its bar had an explicit
+  height. The rule refuses it now and the probe shows the divergence.
+
+### The rule, and how it is tested
+
+`tests/unit/style/animated-size.test.ts` builds each of 32 configurations
+twice, drives one with `setStyle` plus a full engine flush and the other with
+the shipped subtree pass, and compares **every rect in the tree**. Wherever the
+rule says yes the two must agree exactly; wherever it refuses, the refusal has
+to be earned by something the test can see — different geometry, a box that
+stops following the animated value, or (for an `IntrinsicRoot`) a root size
+request that would not follow. A rule that drifted from the engine is the bug
+this design was most likely to ship, so it is checked against the engine rather
+than against a table.
+
+The refusals, and what each is earned by:
+
+| configuration                                   | what goes wrong                                      |
+| ----------------------------------------------- | ---------------------------------------------------- |
+| `height` in a column, `width` in a row          | every following sibling shifts                       |
+| `alignItems`/`alignSelf` `center` or `flex-end` | the node's own origin moves as it grows              |
+| a wrapping container                            | the node's LINE re-sizes and the lines after it move |
+| a container sized by its children               | the container grows with the node                    |
+| the node's other axis sized by its content      | the box gets taller as it gets narrower              |
+| `min*`/`max*` on the driven axis                | the geometry is right and stops moving               |
+| `aspectRatio`                                   | the other axis follows                               |
+| out of flow with no `left`/`top`                | it grows leftward, or from its static position       |
+| under an `IntrinsicRoot`                        | the root's own size request would not follow         |
+
+The last one is the only one whose damage is invisible in a rect table:
+measured directly, a real style write moved the root's reported content width
+and the driven path left it exactly where it was.
+
+### The override, and the mutation that shows it is doing something
+
+The driven geometry is a `DrivenBox` next to `StoredOffset` in the rect store,
+composed by the allocate hook, not a write over the committed rect. Breaking
+that — putting the spike's `setStoredRect` back — fails exactly one test,
+"keeps the driven size through an unrelated engine flush", and fails it on the
+label inside the box: (0,0,260,15) → **(0,0,100,45)** after a window resize
+mid-animation. The mechanism is `layout/node.ts`'s `hasMeasure`: a
+measure-backed leaf is re-committed by every walk that reaches it whether its
+rect changed or not, and a `walkAll` flush (a viewport change) reaches all of
+them. The node's own box survives a rect overwrite; its content does not.
+
+The override is partial on purpose — the animated node overrides only the axis
+being driven, its descendants override the whole rect. So the node's origin and
+its other axis keep following the engine, and a window resize mid-animation
+moves it exactly as it moves everything else.
+
 ## Not implemented, and why
 
-- **The carve-out itself.** This is a recon. What it hands over is a rule, a
-  measured boundary, a cost table and a spike that drives it end to end;
-  building it into `useAnimatedStyle` is its own slice, and it needs one design
-  decision this file deliberately does not take — see the next point.
-- **A size OVERRIDE in the rect store, rather than overwriting the rect.** The
-  spike writes the driven size straight into the committed rect, which an
-  unrelated engine flush mid-animation would overwrite (for at most one frame,
-  since the next frame writes it again). A transform does not have that
-  exposure because it lives in a separate `StoredOffset` the allocate hook
-  composes on top. The shipping version should do the same for size, which is
-  one field on that record and the reason it is worth naming here.
 - **The main-axis case.** A `height` in a column shifts every following
   sibling, which is arithmetic rather than layout: measured at 1.4 / 7.0 / 28.9
   µs at 5 / 60 / 300 rows by hand, against the naive write's 58.8 / 183.3 /
   750.3. Cheaper, but O(the siblings) rather than flat, and it has to get
   `justifyContent`, `gap` and wrapping right to be worth anything. Left out of
   the carve-out on purpose: the flat column is the one that earns the mechanism.
+- **`min*`/`max*` on the driven axis.** Reading the size back out of Yoga means
+  a clamp is now reproduced exactly rather than diverging — the geometry is
+  right. It is still refused, because "right" here means the box stops
+  following the animation, and a silent no-op is the thing this platform warns
+  about rather than ships.
+- **A percentage `width`.** No point base to lay a subtree out at, and a mapper
+  that switches from a number to a percentage changes the leaf signature, which
+  rebuilds the style and puts the property back on the refusal path.
+  Deliberate, and the same call [absolute-insets.md](absolute-insets.md) made
+  for percentage insets.
+- **`Animated.Text` with an animated width.** It works when the `Text` has a
+  definite height, and is refused otherwise for the sixth clause above: a
+  label's height is its content. Nothing special about `Text` — the generic
+  wrapper reaches the widget's layout node the same way `Animated.View` does.
 - **Making the naive path cheaper.** Two obvious wins fell out of §3 and belong
   to whoever needs them: the commit walk visits every child the container
   re-solved even when 299 of 300 rects are identical, and `setStyle` re-applies

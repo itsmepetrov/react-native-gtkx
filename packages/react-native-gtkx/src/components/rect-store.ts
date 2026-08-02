@@ -23,9 +23,35 @@ export type StoredOffset = {
   dx: number
   dy: number
   matrix: Transform2D | null
+  /**
+   * The box an animated SIZE is currently driving this child to, or null when
+   * nothing is. Composed here rather than written over the committed rect for
+   * the reason the `dx`/`dy` above are: the committed rect belongs to the
+   * engine and is rewritten by any flush, and an animation must not lose a
+   * frame to one that had nothing to do with it.
+   */
+  driven: DrivenBox | null
 }
 
-const ZERO_OFFSET: StoredOffset = { dx: 0, dy: 0, matrix: null }
+/**
+ * A partial rect: every field the animation is NOT driving stays null and the
+ * engine's committed value is used instead.
+ *
+ * Partial rather than whole so that nothing can go stale. The animated node
+ * overrides only the axis being driven — its origin and its other axis keep
+ * following the engine, so a window resize mid-animation moves it exactly as
+ * it moves everything else. Its descendants override the whole rect, which is
+ * safe for the same reason: those are relative to the node, and re-laying its
+ * subtree out is precisely what decides them.
+ */
+export type DrivenBox = {
+  x: number | null
+  y: number | null
+  width: number | null
+  height: number | null
+}
+
+const ZERO_OFFSET: StoredOffset = { dx: 0, dy: 0, matrix: null, driven: null }
 
 const rects = new WeakMap<object, StoredRect>()
 const offsets = new WeakMap<object, StoredOffset>()
@@ -83,8 +109,49 @@ export const setStoredOffset = (
   dy: number,
   matrix: Transform2D | null = null,
 ): void => {
-  offsets.set(widget, { dx, dy, matrix })
+  offsets.set(widget, { dx, dy, matrix, driven: null })
 }
+
+// The THIRD layer, and the one that is not a translation at all.
+//
+// An animated `width`/`height` in the subset where the change is confined to
+// the node that owns it (../style/animated-size.ts) is driven by re-laying out
+// that node's own subtree and putting the result HERE — one record for the
+// node, one for each of its descendants, because a wider box re-wraps the text
+// inside it and those rects move too.
+//
+// Deliberately not a write over the committed rect, which is what the recon
+// spike did (docs/research/animated-size.md, "Not implemented"). The committed
+// rect is the engine's: any flush may rewrite it, and a measure-backed leaf —
+// every `Text` — is re-committed by every walk that reaches it whether its
+// rect changed or not (layout/node.ts, `hasMeasure`). An animation that lost a
+// frame to an unrelated `setState` somewhere else in the tree would be exactly
+// the kind of bug nobody can reproduce. Kept apart, the engine writes what it
+// computed, this layer writes what the animation is showing, and the allocate
+// hook is the only place the two meet.
+const drivenBoxes = new WeakMap<object, DrivenBox>()
+let drivenBoxCount = 0
+
+export const setStoredDrivenBox = (widget: object, box: DrivenBox): void => {
+  if (!drivenBoxes.has(widget)) {
+    drivenBoxCount += 1
+  }
+  drivenBoxes.set(widget, box)
+}
+
+export const clearStoredDrivenBox = (widget: object): void => {
+  if (drivenBoxes.delete(widget)) {
+    drivenBoxCount -= 1
+  }
+}
+
+/**
+ * The box an animation is currently driving this widget to, if any. Read by
+ * the container's own `measure` as well as by its parent's `allocate`, so the
+ * widget's size request agrees with the size it is being given.
+ */
+export const getStoredDrivenBox = (widget: object): DrivenBox | undefined =>
+  drivenBoxCount === 0 ? undefined : drivenBoxes.get(widget)
 
 // The SECOND translation layer, and the reason there are two.
 //
@@ -134,15 +201,18 @@ export const getStoredLayoutOffset = (
 
 export const getStoredOffset = (widget: object): StoredOffset => {
   const base = offsets.get(widget) ?? ZERO_OFFSET
-  if (layoutOffsetCount === 0) {
-    return base
-  }
-  const extra = layoutOffsets.get(widget)
+  const driven = drivenBoxCount === 0 ? undefined : drivenBoxes.get(widget)
+  const extra = layoutOffsetCount === 0 ? undefined : layoutOffsets.get(widget)
   if (extra === undefined) {
-    return base
+    return driven === undefined ? base : { ...base, driven }
   }
   if (base.matrix === null) {
-    return { dx: base.dx + extra.dx, dy: base.dy + extra.dy, matrix: null }
+    return {
+      dx: base.dx + extra.dx,
+      dy: base.dy + extra.dy,
+      matrix: null,
+      driven: driven ?? null,
+    }
   }
   // Added to the composed matrix's translation, which allocateChild applies
   // last and in the PARENT's coordinate space — so a rotated child still
@@ -156,6 +226,7 @@ export const getStoredOffset = (widget: object): StoredOffset => {
       dx: base.matrix.dx + extra.dx,
       dy: base.matrix.dy + extra.dy,
     },
+    driven: driven ?? null,
   }
 }
 

@@ -1,57 +1,56 @@
-// Recon spike for the "animated size" question (epic reanimated, task 007).
+// The animated-size probe, now pointed at the SHIPPED path.
 //
-// The claim under test: a child's SIZE fits through the same door its position
-// already goes through — the rect store plus `queueAllocate` — with no
-// `queueResize`, no measure cascade, and a Yoga pass whose cost is the size of
-// the ANIMATED NODE rather than the size of the tree. If that holds, a `width`
-// animation is as cheap as a `translateX` one in the subset where it moves
-// nothing else, and the blanket refusal in docs/research/animated-colors.md §4
-// is wider than the measurement supports.
+// It began as the recon for task 007 (docs/research/animated-size.md), where
+// it drove a width through a local copy of the mechanism to find out whether
+// the blanket refusal in animated-colors.md §4 was wider than the measurement
+// supported. It was. What runs here now is the platform's own code —
+// `useAnimatedStyle(() => ({ width: w.value }))` on an `Animated.View` — so the
+// checks below are about what ships rather than about a hypothesis, and the
+// cost table is the cost of the real write.
 //
-// Everything asserted here is read back out of GTK — `computeBounds()` against
-// the stage, `gtk_widget_pick()`, and the toplevel's own size request through
-// `gtk_widget_measure()`. Nothing is asserted from the rect store this spike
-// writes to: reading our own bookkeeping back would pass even if nothing ever
+// Everything asserted is read back out of GTK: `computeBounds()` against the
+// stage, `gtk_widget_pick()`, and the toplevel's own size request through
+// `gtk_widget_measure()`. Nothing is asserted from the rect store the path
+// writes to — reading our own bookkeeping back would pass even if nothing ever
 // reached a widget, which is the failure the whole exercise exists to rule out.
 //
-// The four probes:
+// The probes:
 //
 //   A. a driven width reaches real geometry, moves nothing else, and re-lays
-//      out the node's OWN content (which the rect write alone does not)
-//   B. it is picked where it is drawn — a size that draws right and hit-tests
-//      wrong is worse than the honest refusal already shipped
-//   C. the toplevel's size request does not move, so nothing resizes the
-//      window: the correctness half of the original refusal
-//   D. `scaleX`, which the warning currently recommends instead, is measurably
-//      NOT the same thing
+//      out the node's OWN content (which a rect write alone does not)
+//   B. it is picked where it is drawn
+//   C. the toplevel's size request does not move
+//   D. `scaleX`, which the warning offers as the nearest transform, is
+//      measurably NOT the same thing
+//   E. the cost of the whole write at 5 / 60 / 300 siblings, against the naive
+//      write it replaces and against a transform
 //
 // Run: bash spike/animated-size/run-headless.sh
 // See docs/research/animated-size.md.
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Edge, Unit, type Node as YogaNode } from "yoga-layout"
 // Imported straight from the package SOURCE rather than through the
 // `react-native-gtkx` specifier, which the exports map sends to `dist/`. Two
-// reasons, and the first is not convenience: this spike writes into the rect
-// store that `RnGtkxLayout`'s allocate hook reads, and a second copy of that
-// module would be a second WeakMap — the write would land nowhere and every
-// check below would fail for the wrong reason. The second is that a source
-// change is then visible without `npm run build:dist`.
+// reasons, and the first is not convenience: the driven path writes into the
+// rect store that `RnGtkxLayout`'s allocate hook reads, and a second copy of
+// that module would be a second WeakMap — the write would land nowhere and
+// every check below would fail for the wrong reason. The second is that a
+// source change is then visible without `npm run build:dist`.
 import { AppRegistry } from "../../../packages/react-native-gtkx/src/components/app-registry"
 import { useHostNode } from "../../../packages/react-native-gtkx/src/components/host-node"
 import { widgetForHandle } from "../../../packages/react-native-gtkx/src/components/measure"
-import {
-  getStoredRect,
-  setStoredRect,
-} from "../../../packages/react-native-gtkx/src/components/rect-store"
 import { Text } from "../../../packages/react-native-gtkx/src/components/text"
 import { View } from "../../../packages/react-native-gtkx/src/components/view"
+import type { LayoutEngine } from "../../../packages/react-native-gtkx/src/layout/engine"
 import type { LayoutNode } from "../../../packages/react-native-gtkx/src/layout/node"
-import { Direction } from "../../../packages/react-native-gtkx/src/layout/yoga"
 import {
   Gtk,
   measureWidget,
-  queueAllocate,
 } from "../../../packages/react-native-gtkx/src/gtkx/bridge/index"
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  type SharedValue,
+} from "../../../packages/react-native-gtkx/src/reanimated-compat/index"
 
 const M = "as"
 
@@ -96,101 +95,44 @@ const same = (a: Rect, b: Rect): boolean =>
 
 const asText = (r: Rect): string => `(${r.x}, ${r.y}, ${r.width}, ${r.height})`
 
-// --- the mechanism ---------------------------------------------------------
-
-// The owner's content box: what Yoga resolves a child's percentages against.
-const ownerInner = (node: LayoutNode): { w: number; h: number } => {
-  const parent = node.parent
-  if (!parent) {
-    return { w: node.yoga.getComputedWidth(), h: node.yoga.getComputedHeight() }
+/** Microseconds per call, median of three runs after a warm-up. */
+const microseconds = (
+  iterations: number,
+  write: (i: number) => void,
+): number => {
+  for (let i = 0; i < 2000; i += 1) {
+    write(i)
   }
-  const p: YogaNode = parent.yoga
-  return {
-    w:
-      p.getComputedWidth() -
-      p.getComputedPadding(Edge.Left) -
-      p.getComputedPadding(Edge.Right),
-    h:
-      p.getComputedHeight() -
-      p.getComputedPadding(Edge.Top) -
-      p.getComputedPadding(Edge.Bottom),
-  }
-}
-
-/**
- * Lays the node's OWN subtree out at the driven width and writes the result
- * into the rect store, without touching the engine.
- *
- * The width is pinned onto the Yoga node for the duration of the pass and then
- * put back, so the shadow tree is exactly as React left it — the driven value
- * lives in the rect store, which is where the transform path's values live too.
- * Yoga is asked to lay out THIS node, so the work is the size of the node's own
- * subtree; its container, its siblings and its ancestors are never visited.
- */
-const driveWidth = (
-  node: LayoutNode,
-  widget: Gtk.Widget,
-  parentWidget: Gtk.Widget,
-  width: number,
-): void => {
-  const y: YogaNode = node.yoga
-  const styleWidth = y.getWidth()
-  const owner = ownerInner(node)
-  y.setWidth(width)
-  y.calculateLayout(owner.w, owner.h, Direction.LTR)
-  if (styleWidth.unit === Unit.Percent) {
-    y.setWidthPercent(styleWidth.value)
-  } else if (styleWidth.unit === Unit.Auto) {
-    y.setWidthAuto()
-  } else if (styleWidth.unit === Unit.Point) {
-    y.setWidth(styleWidth.value)
-  } else {
-    y.setWidth(undefined)
-  }
-
-  const rect = getStoredRect(widget)
-  if (rect) {
-    setStoredRect(widget, { ...rect, width, height: y.getComputedHeight() })
-  }
-  // The node's descendants, in the order the platform keeps its widgets and
-  // its shadow tree in (components/use-layout-child.ts, syncChildOrder).
-  const writeChildren = (parent: LayoutNode, host: Gtk.Widget): void => {
-    let child = host.getFirstChild()
-    let index = 0
-    while (child !== null && index < parent.children.length) {
-      const childNode = parent.children[index]!
-      if (getStoredRect(child)) {
-        setStoredRect(child, {
-          x: childNode.yoga.getComputedLeft(),
-          y: childNode.yoga.getComputedTop(),
-          width: childNode.yoga.getComputedWidth(),
-          height: childNode.yoga.getComputedHeight(),
-        })
-        writeChildren(childNode, child)
-        index += 1
-      }
-      child = child.getNextSibling()
+  const runs: number[] = []
+  for (let run = 0; run < 3; run += 1) {
+    const started = performance.now()
+    for (let i = 0; i < iterations; i += 1) {
+      write(i)
     }
+    runs.push(((performance.now() - started) * 1000) / iterations)
   }
-  writeChildren(node, widget)
-  queueAllocate(parentWidget)
+  runs.sort((a, b) => a - b)
+  return round(runs[1] ?? 0)
 }
 
 // --- the scene -------------------------------------------------------------
 
-const ROWS = 60
 const BASE_WIDTH = 100
 const TARGET_WIDTH = 260
+const SIZES = [5, 60, 300]
 
-// The animated node's own `LayoutNode`, which is what the pinned pass is run
-// on. Reached through the host-node context rather than through a new API:
-// a `View` publishes itself as the host of its children, so a child of the bar
-// sees the bar's node.
-const CaptureBarNode = ({ onNode }: { onNode: (node: LayoutNode) => void }) => {
-  const node = useHostNode().node
+// The naive write's own node and engine, reached through the host-node context
+// rather than through a new API — a `View` publishes itself as the host of its
+// children, so a child of the box sees the box's node.
+const CaptureNode = ({
+  onNode,
+}: {
+  onNode: (node: LayoutNode, engine: LayoutEngine) => void
+}) => {
+  const host = useHostNode()
   useEffect(() => {
-    onNode(node)
-  }, [node, onNode])
+    onNode(host.node, host.engine)
+  }, [host, onNode])
   return null
 }
 
@@ -202,11 +144,33 @@ const Stage = () => {
   const labelRef = useRef<unknown>(null)
   const scaleBoxRef = useRef<unknown>(null)
   const scaleLabelRef = useRef<unknown>(null)
-  const barNodeRef = useRef<LayoutNode | null>(null)
-  const captureBarNode = useCallback((node: LayoutNode) => {
-    barNodeRef.current = node
+  const naiveRef = useRef<{ node: LayoutNode; engine: LayoutEngine } | null>(
+    null,
+  )
+  const captureNaive = useCallback((node: LayoutNode, engine: LayoutEngine) => {
+    naiveRef.current = { node, engine }
   }, [])
   const [control, setControl] = useState<"base" | "scale" | "width">("base")
+  const [rows, setRows] = useState(60)
+
+  // The shipped surface, exactly as an app writes it.
+  const barWidth = useSharedValue(BASE_WIDTH)
+  const textWidth = useSharedValue(BASE_WIDTH)
+  const slide = useSharedValue(0)
+  const barStyle = useAnimatedStyle(() => ({ width: barWidth.value }))
+  const textStyle = useAnimatedStyle(() => ({ width: textWidth.value }))
+  const slideStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: slide.value }],
+  }))
+
+  const handles = useRef<{
+    barWidth: SharedValue<number>
+    textWidth: SharedValue<number>
+    slide: SharedValue<number>
+    setRows: (value: number) => void
+    setControl: (value: "base" | "scale" | "width") => void
+  }>(null as never)
+  handles.current = { barWidth, textWidth, slide, setRows, setControl }
 
   useEffect(() => {
     const run = async (): Promise<void> => {
@@ -218,8 +182,7 @@ const Stage = () => {
       const bar = widgetForHandle(barRef.current)
       const sibling = widgetForHandle(siblingRef.current)
       const label = widgetForHandle(labelRef.current)
-      const barNode = barNodeRef.current
-      if (!stage || !column || !bar || !sibling || !label || !barNode) {
+      if (!stage || !column || !bar || !sibling || !label) {
         log("FAIL harness — a widget ref is null")
         failures += 1
         return
@@ -273,12 +236,8 @@ const Stage = () => {
 
       // --- A. the driven width ------------------------------------------
       const driven = await drive(120, (t) => {
-        driveWidth(
-          barNode,
-          bar,
-          column,
-          BASE_WIDTH + (TARGET_WIDTH - BASE_WIDTH) * t,
-        )
+        handles.current.textWidth.value =
+          BASE_WIDTH + (TARGET_WIDTH - BASE_WIDTH) * t
       })
       await sleep(250)
 
@@ -370,11 +329,11 @@ const Stage = () => {
       if (scaleBox && scaleLabel) {
         const boxBefore = boundsIn(scaleBox, stage)
         const controlLabelBefore = boundsIn(scaleLabel, stage)
-        setControl("scale")
+        handles.current.setControl("scale")
         await sleep(500)
         const boxScaled = boundsIn(scaleBox, stage)
         const labelScaled = boundsIn(scaleLabel, stage)
-        setControl("width")
+        handles.current.setControl("width")
         await sleep(500)
         const boxWidened = boundsIn(scaleBox, stage)
         const labelWidened = boundsIn(scaleLabel, stage)
@@ -395,6 +354,41 @@ const Stage = () => {
             labelWidened.height < controlLabelBefore.height,
           `label height base ${controlLabelBefore.height} -> scaleX ${labelScaled.height} (unchanged: the glyphs ` +
             `were stretched) -> width ${labelWidened.height} (re-wrapped)`,
+        )
+      }
+
+      // --- E. cost ----------------------------------------------------------
+      //
+      // The WHOLE per-frame write, as an app produces it: a shared-value
+      // assignment, the mapper, the style node, the pinned subtree pass, the
+      // rect-store override and one `queueAllocate`. No paint, so these sit
+      // next to animated-colors.md §3 and absolute-insets.md §4 without
+      // conversion.
+      log(
+        "cost: children | driven leaf | driven text | naive width | transform",
+      )
+      for (const size of SIZES) {
+        handles.current.setRows(size)
+        await sleep(600)
+        const naive = naiveRef.current
+        const leaf = microseconds(20000, (i) => {
+          handles.current.barWidth.value = BASE_WIDTH + (i % 120)
+        })
+        const withText = microseconds(20000, (i) => {
+          handles.current.textWidth.value = BASE_WIDTH + (i % 120)
+        })
+        const transform = microseconds(20000, (i) => {
+          handles.current.slide.value = i % 120
+        })
+        let naiveCost = 0
+        if (naive) {
+          naiveCost = microseconds(2000, (i) => {
+            naive.node.setStyle({ width: BASE_WIDTH + (i % 120), height: 60 })
+            naive.engine.flushSync()
+          })
+        }
+        log(
+          `cost: ${size} | ${leaf} µs | ${withText} µs | ${naiveCost} µs | ${transform} µs`,
         )
       }
 
@@ -428,12 +422,13 @@ const Stage = () => {
         testID="column"
         style={{ width: 400, height: 700, backgroundColor: "#3d3846" }}
       >
-        <View
+        {/* The measured shape: a box with wrapped text, whose width is driven
+            by an ordinary useAnimatedStyle. */}
+        <Animated.View
           ref={barRef}
           testID="bar"
-          style={{ width: BASE_WIDTH, height: 60, backgroundColor: "#3584e4" }}
+          style={[{ height: 60, backgroundColor: "#3584e4" }, textStyle]}
         >
-          <CaptureBarNode onNode={captureBarNode} />
           <Text
             ref={labelRef}
             testID="label"
@@ -441,8 +436,29 @@ const Stage = () => {
           >
             the quick brown fox jumps over the lazy dog
           </Text>
+        </Animated.View>
+        {/* The leaf, for the cost column that has no measure function in it. */}
+        <Animated.View
+          testID="leafbar"
+          style={[{ height: 6, backgroundColor: "#26a269" }, barStyle]}
+        />
+        {/* A transform on the same tree, for scale. */}
+        <Animated.View
+          testID="slider"
+          style={[
+            { width: 100, height: 6, backgroundColor: "#e5a50a" },
+            slideStyle,
+          ]}
+        />
+        {/* The naive write's target: a plain View whose Yoga style is set
+            directly, so the cost is `setStyle` plus a whole engine flush. */}
+        <View
+          testID="naive"
+          style={{ width: 100, height: 6, backgroundColor: "#a51d2d" }}
+        >
+          <CaptureNode onNode={captureNaive} />
         </View>
-        {Array.from({ length: ROWS }, (_, i) => (
+        {Array.from({ length: rows }, (_, i) => (
           <View
             key={i}
             ref={i === 0 ? siblingRef : undefined}
@@ -455,8 +471,8 @@ const Stage = () => {
           />
         ))}
       </View>
-      {/* The negative control: the transform the warning currently recommends
-          instead of a width, and the same box given the width for real. */}
+      {/* The negative control: the transform the warning offers as the nearest
+          thing to a width, and the same box given the width for real. */}
       <View
         ref={scaleBoxRef}
         testID="scalebox"

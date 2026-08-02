@@ -9,6 +9,7 @@ import Yoga, {
   MeasureMode,
   Overflow,
   PositionType,
+  Unit,
   Wrap,
   type Node as YogaNode,
 } from "yoga-layout"
@@ -18,7 +19,25 @@ import type {
   MeasureConstraintMode,
 } from "../contracts"
 
-export { Direction, Edge, Gutter, MeasureMode, Yoga }
+// The enums are re-exported rather than imported from `yoga-layout` directly
+// elsewhere: this module is the one door onto the layout library, the same way
+// `gtkx/bridge` is the one door onto @gtkx.
+export {
+  Align,
+  Direction,
+  Edge,
+  FlexDirection,
+  Gutter,
+  MeasureMode,
+  PositionType,
+  Unit,
+  Wrap,
+  Yoga,
+}
+// `yoga-layout` does not export the record its dimension getters return, so
+// it is named here rather than re-derived at every call site.
+export type YogaValue = ReturnType<YogaNode["getWidth"]>
+
 export type { YogaNode }
 
 export const FLEX_DIRECTION: Record<
