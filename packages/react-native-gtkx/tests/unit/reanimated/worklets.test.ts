@@ -33,13 +33,17 @@ import {
   UIRuntimeId,
   WorkletsModule,
 } from "../../../src/worklets-compat/surface"
-import { createManualScheduler } from "../animated/manual-scheduler"
 
 const flushMicrotasks = (): Promise<void> => Promise.resolve()
 
+/** One turn of the macrotask queue — where a UI hop lands. */
+const flushTasks = (): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, 0)
+  })
+
 test("scheduleOnRN defers to a microtask rather than running inline", async () => {
-  const { scheduler } = createManualScheduler()
-  const { scheduleOnRN } = createWorkletsSurface(scheduler)
+  const { scheduleOnRN } = createWorkletsSurface()
   const seen: number[] = []
 
   scheduleOnRN((a: number, b: number) => seen.push(a + b), 1, 2)
@@ -50,8 +54,7 @@ test("scheduleOnRN defers to a microtask rather than running inline", async () =
 })
 
 test("runOnJS returns a void-returning caller, as upstream", async () => {
-  const { scheduler } = createManualScheduler()
-  const { runOnJS } = createWorkletsSurface(scheduler)
+  const { runOnJS } = createWorkletsSurface()
   const target = vi.fn(() => "a return value nobody gets")
 
   expect(runOnJS(target)()).toBeUndefined()
@@ -61,23 +64,56 @@ test("runOnJS returns a void-returning caller, as upstream", async () => {
   expect(target).toHaveBeenCalledTimes(1)
 })
 
-test("scheduleOnUI batches a tick's worth of jobs into one frame, in order", async () => {
-  const manual = createManualScheduler()
-  const { scheduleOnUI } = createWorkletsSurface(manual.scheduler)
+test("scheduleOnUI batches a tick's worth of jobs into one task, in order", async () => {
+  const { scheduleOnUI } = createWorkletsSurface()
   const seen: string[] = []
 
   scheduleOnUI(() => seen.push("first"))
   scheduleOnUI(() => seen.push("second"))
-  await flushMicrotasks()
   expect(seen).toEqual([])
 
-  manual.advance(16)
+  await flushTasks()
   expect(seen).toEqual(["first", "second"])
 })
 
-test("runOnUIAsync resolves with the worklet's return value on its frame", async () => {
-  const manual = createManualScheduler()
-  const { runOnUIAsync } = createWorkletsSurface(manual.scheduler)
+test("a UI hop is a task, and lands AFTER an RN hop queued in the same tick", async () => {
+  // The ordering upstream has and this platform keeps: `scheduleOnRN` is a
+  // microtask and a UI hop is later than one. What it no longer waits for is a
+  // FRAME — the round trip `scheduleOnUI(measure)` then `scheduleOnRN(use it)`
+  // has to finish before the next pointer event, which on GTK arrives per
+  // GdkEvent rather than per frame (docs/research/dnd-hover-flicker.md).
+  const { scheduleOnUI, scheduleOnRN } = createWorkletsSurface()
+  const seen: string[] = []
+
+  scheduleOnUI(() => seen.push("ui"))
+  scheduleOnRN(() => seen.push("rn"))
+
+  await flushMicrotasks()
+  expect(seen).toEqual(["rn"])
+
+  await flushTasks()
+  expect(seen).toEqual(["rn", "ui"])
+})
+
+test("a round trip through both hops completes without waiting for a frame", async () => {
+  // The exact shape `react-native-reanimated-dnd` measures a drop zone with,
+  // and the one the frame gate used to lose: nothing here advances a clock.
+  const { scheduleOnUI, scheduleOnRN } = createWorkletsSurface()
+  let registered = false
+
+  scheduleOnUI(() => {
+    scheduleOnRN(() => {
+      registered = true
+    })
+  })
+
+  await flushTasks()
+  await flushMicrotasks()
+  expect(registered).toBe(true)
+})
+
+test("runOnUIAsync resolves with the worklet's return value on its hop", async () => {
+  const { runOnUIAsync } = createWorkletsSurface()
 
   const settled = vi.fn()
   const promise = runOnUIAsync((n: number) => n * 2, 21).then(settled)
@@ -85,7 +121,6 @@ test("runOnUIAsync resolves with the worklet's return value on its frame", async
   await flushMicrotasks()
   expect(settled).not.toHaveBeenCalled()
 
-  manual.advance(16)
   await promise
   expect(settled).toHaveBeenCalledWith(42)
 })
@@ -93,17 +128,15 @@ test("runOnUIAsync resolves with the worklet's return value on its frame", async
 test("`react-native-worklets` and `react-native-reanimated` share one queue", async () => {
   // The property that matters and would be invisible if broken: index.ts hands
   // both module surfaces the SAME createThreads instance, so two jobs queued
-  // through the two package names land in one batch in one frame, in order.
-  // Two instances would still work — just in two frames, which is where a
-  // gesture library's ordering assumptions quietly stop holding.
-  const manual = createManualScheduler()
-  const surface = createWorkletsSurface(manual.scheduler)
+  // through the two package names land in one batch, in order. Two instances
+  // would still work — just in two hops, which is where a gesture library's
+  // ordering assumptions quietly stop holding.
+  const surface = createWorkletsSurface()
   const seen: string[] = []
 
   surface.scheduleOnUI(() => seen.push("worklets"))
   surface.scheduleOnUI(() => seen.push("reanimated"))
-  await flushMicrotasks()
-  manual.advance(16)
+  await flushTasks()
 
   expect(seen).toEqual(["worklets", "reanimated"])
 })

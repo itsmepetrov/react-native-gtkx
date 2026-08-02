@@ -369,6 +369,21 @@ describe("activateAfterLongPress and the out-of-event grant", () => {
     expect(trace).toEqual(["begin", "finalize(false)"])
     expect(gd.holder()).toBeNull()
   })
+
+  it("treats an explicit 0 as NO hold, which is what upstream's `> 0` means", () => {
+    // Upstream's default for the option is the number 0 and both of its
+    // implementations guard on `activateAfterLongPress > 0`, so `0` is "drag
+    // straight away" rather than "hold for zero milliseconds". Read as the
+    // latter, the failure test above kills the gesture on the first real move
+    // — which is exactly what `activationDelay={0}` on upstream's own
+    // `SortableGrid` asks for (docs/research/dnd-hover-flicker.md §6).
+    const { trace, config } = tracer()
+    const gd = mount({ ...config, activateAfterLongPress: 0 })
+    gd.press(CX, CY)
+    gd.moveTo(CX, CY + 30)
+    expect(trace).toEqual(["begin", "activate"])
+    expect(gd.holder()).toBe(gd.view)
+  })
 })
 
 describe("the callbacks", () => {

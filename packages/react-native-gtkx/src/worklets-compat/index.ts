@@ -21,11 +21,10 @@
 // non-native build rather than by us — see surface.ts, which is also where
 // everything that needs no clock lives so unit tests can reach it without
 // GTK. docs/api.md records the boundary.
-import { glibScheduler } from "../components/frame-scheduler"
 import { createWorkletsSurface } from "./surface"
 
 const { runOnUI, scheduleOnUI, runOnJS, scheduleOnRN, runOnUIAsync } =
-  createWorkletsSurface(glibScheduler)
+  createWorkletsSurface()
 
 export { runOnJS, runOnUI, runOnUIAsync, scheduleOnRN, scheduleOnUI }
 

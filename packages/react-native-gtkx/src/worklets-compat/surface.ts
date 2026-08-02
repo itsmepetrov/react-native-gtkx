@@ -1,11 +1,9 @@
-// The pure half of the `react-native-worklets` mirror: everything that needs
-// no clock, plus the factory that wires the one this platform has.
+// The pure half of the `react-native-worklets` mirror: the whole surface, and
+// the factory behind the thread functions.
 //
-// Split from index.ts for the same reason `reanimated-compat/threads.ts` is
-// split from its index: the wiring module reaches GTK through
-// `components/frame-scheduler`, and a module that reaches GTK cannot be
-// imported by a unit test on a machine without it. Everything here is testable
-// with a manual scheduler.
+// Split from index.ts because index.ts is the module both presets alias the
+// PACKAGE NAME onto, and a unit test wants the surface without the name. Every
+// export here is reachable from a machine with no GTK on it.
 //
 // THE RULE THIS FILE FOLLOWS, and it is the whole design: mirror upstream's
 // own NON-NATIVE implementation — the `.ts` files next to its `.native.ts`
@@ -14,7 +12,12 @@
 // one refuses by name. That is not a shortcut, it is the only boundary with a
 // source of truth: a worklet runtime is structural, and upstream agrees.
 // Measured against react-native-worklets 0.11.3.
-import type { FrameScheduler } from "../animated/index"
+//
+// The one place that rule is deliberately NOT followed is HOW LATE a UI hop
+// lands: upstream's non-native build waits for a `requestAnimationFrame` and
+// this one does not. See reanimated-compat/threads.ts — the web's rAF stands
+// in for a UI runtime it has not got, React Native's real one does not wait
+// for a frame, and waiting here broke a measurement round trip.
 import { createThreads } from "../reanimated-compat/threads"
 import { createUnsupportedFactory } from "../unsupported-export"
 
@@ -34,19 +37,19 @@ export type SerializableRef<T = unknown> = T
 export type ShareableRef<T = unknown> = SerializableRef<T>
 
 /**
- * The thread surface, built on the one frame scheduler this platform has.
- * `runOnUI`/`runOnJS`/`scheduleOnUI`/`scheduleOnRN` come from the same
- * `createThreads` the Reanimated surface uses — index.ts hands both modules
- * the SAME instance, so a job queued through either name lands in the same
- * batch, as it does upstream where one package re-exports the other.
+ * The thread surface. `runOnUI`/`runOnJS`/`scheduleOnUI`/`scheduleOnRN` come
+ * from the same `createThreads` the Reanimated surface uses — index.ts hands
+ * both modules the SAME instance, so a job queued through either name lands
+ * in the same batch, as it does upstream where one package re-exports the
+ * other.
  */
-export const createWorkletsSurface = (scheduler: FrameScheduler) => {
-  const threads = createThreads(scheduler)
+export const createWorkletsSurface = () => {
+  const threads = createThreads()
 
   /**
-   * Upstream's non-native `runOnUIAsync` resolves with the worklet's return
-   * value on the frame it runs — the one thread API that hands anything back,
-   * because a promise crosses the deferral the others impose.
+   * Upstream's `runOnUIAsync` resolves with the worklet's return value when
+   * the UI hop runs it — the one thread API that hands anything back, because
+   * a promise crosses the deferral the others impose.
    */
   const runOnUIAsync = <A extends unknown[], R>(
     worklet: (...args: A) => R,

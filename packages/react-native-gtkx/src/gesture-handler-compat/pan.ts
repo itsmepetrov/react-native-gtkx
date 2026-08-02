@@ -77,17 +77,36 @@ export const effectiveMinDistance = (config: RecognizerConfig): number => {
 const exceeds = (value: number, floor: number | undefined): boolean =>
   floor !== undefined && Math.abs(value) >= floor
 
+/**
+ * Whether this pan has to be HELD before it may activate.
+ *
+ * `> 0`, not "was set": upstream's default for the option is the number `0`,
+ * and both of its own implementations guard on `activateAfterLongPress > 0`
+ * (`src/web/handlers/PanGestureHandler.ts`, `PanGestureHandler.kt`). So
+ * passing `0` explicitly means "no hold at all" there, and reading it as
+ * "a hold of zero" is not the same thing: it arms a zero-delay timer and,
+ * until that timer has fired, the failure test below turns any movement past
+ * the default minimum into a DEAD gesture. `react-native-reanimated-dnd`'s
+ * `SortableGrid` takes an `activationDelay` prop and hands it straight
+ * through, so `activationDelay={0}` — the natural thing for a desktop app
+ * whose users drag with a mouse rather than long-pressing — used to produce a
+ * grid that could not be dragged at all.
+ */
+const holdsBeforeActivating = (config: RecognizerConfig): boolean =>
+  config.activateAfterLongPress !== undefined &&
+  config.activateAfterLongPress > 0
+
 export const panDecider: RecognizerDecider = {
   kind: "pan",
 
   /** Only `activateAfterLongPress` arms one; an ordinary pan has no clock. */
   timer: (config: RecognizerConfig): RecognizerTimer | null =>
-    config.activateAfterLongPress === undefined
-      ? null
-      : { delay: config.activateAfterLongPress, elapsed: "activate" },
+    holdsBeforeActivating(config)
+      ? { delay: config.activateAfterLongPress!, elapsed: "activate" }
+      : null,
 
   shouldFail: (view: RecognizerView, config: RecognizerConfig): boolean => {
-    if (config.activateAfterLongPress !== undefined && !view.timerElapsed) {
+    if (holdsBeforeActivating(config) && !view.timerElapsed) {
       // Before the timer, travelling further than the default minimum says
       // this was a drag rather than a hold, and the gesture is done. Past the
       // timer the press has matured and the ordinary bounds take over.
