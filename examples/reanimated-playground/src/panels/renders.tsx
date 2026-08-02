@@ -126,22 +126,16 @@ export const RenderCounterPanel = () => (
     <LoopBox />
     <Readout />
     <Caption>
-      The green counters are React renders of the animated components — the
-      looping box above and the dragged box in panel 1. They reach 1 at mount
-      and stay there while the frame counters next to them climb at ~60 a
-      second. A shared value is not React state: writing it runs the mapper,
-      which writes the widget, and React is never told.
+      The green counters are React renders of the animated components — this box
+      and the dragged one in panel 1. They reach 1 at mount and stay there while
+      the frame counters climb at ~60 a second: a shared value is not React
+      state, so writing it runs the mapper, writes the widget, and never tells
+      React.
     </Caption>
     <Caption>
-      The last number is the only thing here on a timer. This readout cannot
-      show a count without re-rendering itself, so it polls the counters four
-      times a second — which is why it climbs by four while the others do not
-      move. The counts live in a plain module object, not in state, precisely so
-      that reading them does not cause the renders they are counting.
-    </Caption>
-    <Caption>
-      Drag the box in panel 1 and come back: its frame counter will have jumped
-      by several hundred and its render counter will still say 1.
+      The last number is the only thing here on a timer — this readout polls
+      four times a second, which is why it alone climbs. Drag the box in panel 1
+      and come back: several hundred more frames, still one render.
     </Caption>
   </Panel>
 )

@@ -14,7 +14,7 @@ npm run dev                            # gtkx dev — vite + Fast Refresh
 npm run build && npm start             # release bundle
 ```
 
-![The playground mid-drag: the "drag me" box carried down to the bottom-right of its arena by the pointer and CUT OFF at the arena's edge — its lower half and the bottom of its label gone, the caption below it untouched — and further down a row of counters reading "React renders — looping box: 1", "React renders — dragged box: 1", "Frames driven — looping box: 350", "Frames driven — dragged box: 58", "Frames per second, now: 59".](../../docs/shots/reanimated-playground.png)
+![The playground mid-drag: the "drag me" box carried down to the bottom-right of its arena by the pointer and CUT OFF at the arena's edge — its lower half and the bottom of its label gone, the caption below it untouched — and further down a row of counters reading "React renders — looping box: 1", "React renders — dragged box: 1", "Frames driven — looping box: 359", "Frames driven — dragged box: 51", "Frames per second, now: 48".](../../docs/shots/reanimated-playground.png)
 
 Every import in `src/` is a **bare package name** — `react-native` and
 `react-native-reanimated`. Neither package is installed in this workspace and
@@ -55,16 +55,32 @@ and its counter behaves the same way: several hundred frames, one render.
 you drag and by five preset stops — plus an auto pair on `withRepeat` showing
 `'RGB'` and `'HSV'` on the same value at the same instant, which is the
 clearest way to see that the two colour spaces are both really implemented.
+`'LAB'` throws by name: upstream's is a vendored slice of culori fed the wrong
+channel scale.
+
+An animated colour reaches GTK through a `GtkCssProvider` private to that one
+widget, reloaded in place — 11.2 µs a frame, flat in the size of the tree —
+and deliberately **not** through the memoised class registry the static styles
+use. That one would mint a class per frame into a process-wide stylesheet:
+0.8 ms on the first frame, 6.8 ms by the six-hundredth, still climbing.
 
 **04 The five animation functions.** `withTiming`, `withSpring`,
 `withSequence`, `withRepeat`, `withDelay` and `cancelAnimation` on one box, so
-they can be fired back to back and compared.
+they can be fired back to back and compared. Defaults are upstream's: timing
+is 300 ms on `inOut(quad)`, spring is `GentleSpringConfig` (damping 120,
+mass 4, stiffness 900). The spring solver differs from upstream in its rest
+condition only — upstream stops on remaining energy, this one on displacement
+and speed thresholds derived from the same energy budget, and the stopping
+point differs by well under a pixel.
 
 **05 Easing.** Seven curves over the same 1400 ms and the same 260 px, all
 started from one press — one shared value the rows react to, rather than seven
-buttons.
+buttons. `Easing.bezier` returns a factory object exactly as upstream does, so
+`Easing.bezier(0.25, 0.8, 0.25, 1)` is passed to `withTiming` rather than
+called; the pure maths behind all seven is ported from upstream's own web
+path, not reimplemented.
 
-![Seven lanes mid-flight, each box at a different distance along its track: linear ahead of ease, out(bounce) furthest behind, out(cubic) and bezier(.25,.8,.25,1) furthest ahead.](../../docs/shots/reanimated-playground-easing.png)
+![Seven lanes mid-flight, each box at a different distance along its track: out(bounce) and ease furthest behind, linear and inOut(quad) together in the middle, out(cubic) and bezier(.25,.8,.25,1) ahead of them, elastic(1.4) furthest along.](../../docs/shots/reanimated-playground-easing.png)
 
 **06 One value, three consumers.** Two `useDerivedValue`s and one
 `useAnimatedReaction` off a single shared value, driving three widgets and a
@@ -76,7 +92,7 @@ performs.
 counter does — and it is a boundary now rather than a wall, which is the whole
 reason it was rewritten.
 
-![Panel 07 after pressing "Animate width", "Animate height" and "Force a React render": the green box in the first lane 280 px wide with a "1" in it, the red box in the centred lane the same 280 px but only because the render was forced, the red box in the third lane grown to 76 px tall with the purple strip pushed down below it, two yellow warnings quoting in full the cross-axis-alignment refusal and the MAIN-axis one, and a table reading 7.1 µs for a driven size and 21.7 µs with wrapped text against 71 / 129 / 509 µs for a refused one at 5, 60 and 300 children.](../../docs/shots/reanimated-playground-refused.png)
+![Panel 07 after pressing "Animate width", "Animate height" and "Force a React render": the green box in the first lane 280 px wide with a "1" in it, the red box in the centred lane the same 280 px but only because the render was forced, the red box in the third lane grown to 76 px tall with the purple strip pushed down below it, and an amber-tinted box headed CONSOLE.WARN holding both refusal messages in full — the cross-axis-alignment one and the MAIN-axis one — set in the window foreground colour rather than in amber, then a table reading 7.1 µs for a driven size, 21.7 µs with wrapped text, 52 → 496 µs for the naive write over 5 → 300 children, 1.5 µs for a transform and 11.2 µs for a colour.](../../docs/shots/reanimated-playground-refused.png)
 
 The first two lanes animate **the same shared value**, with the same box, and
 differ by one style on the lane that contains them. The first lane is an
@@ -91,10 +107,18 @@ printed in the app (`src/warnings.ts` wraps `console.warn`; the panel renders
 the buffer), naming the style that stopped it. "Animate height" adds the other
 kind: `height` is the column's main axis, so growing the box would push the
 strip below it down, and the warning says so and quotes what that costs — a
-Yoga pass plus its commit walk is 71 µs on a five-child container, 129 µs at
-sixty and 509 µs at three hundred, against 7.1 µs for the driven path at all
+Yoga pass plus its commit walk is 52 µs on a five-child container, 133 µs at
+sixty and 496 µs at three hundred, against 7.1 µs for the driven path at all
 three. A refused layout write is O(the container); the driven one is O(the
 node).
+
+> The warning string the app prints still quotes the earlier recon figures
+> (71 / 509 µs, and 0.6 µs for a transform) rather than the shipped path's own
+> re-measurement in
+> [docs/api.md](../../docs/api.md#the-second-exception-a-size-that-is-confined-to-the-node-that-owns-it)
+> (52 / 496 µs, 1.5 µs). The panel's table follows `docs/api.md`; the string in
+> `packages/react-native-gtkx/src/components/animated.tsx` has not caught up
+> yet.
 
 Then press "Force a React render" and both refused boxes jump to where their
 animations ended — the documented behaviour, that a refused value is applied
@@ -104,6 +128,36 @@ render. `scaleX`, the transform the refusals name, runs at frame rate next to
 them — and is an approximation rather than a replacement, which the driven
 lane above it demonstrates by re-laying-out what is inside the box instead of
 stretching it.
+
+### The six things that put a size on the refused side
+
+The panel demonstrates two of these and names the rest here rather than on
+screen — six lanes that all do nothing would teach less than two that
+disagree.
+
+1. The axis is the container's **main** axis (panel 07's third lane).
+2. The resolved **cross-axis alignment** is `center` or `flex-end` (the second
+   lane) — the node's position would move with its size.
+3. The container's own size **comes from its children**.
+4. The node's **other axis comes from its content**, so re-wrapping would
+   change that too.
+5. An `aspectRatio`, or a `min`/`max` that would clamp the driven value.
+6. A **wrapping** container.
+
+`flex`, `flexBasis`, every `margin*`/`padding*` and `gap` are refused outright
+— no carve-out applies to them at all. `Animated.FlatList` does not warn: it
+throws, naming itself, because a list that mounted without animating is worse
+than one that failed.
+
+Two things this panel used to say were re-measured and are **not** true.
+Making GTK re-measure every ancestor after a resize adds nothing at any tree
+size — the RN root reports a constant size request, so there is nothing above
+to recompute — and for the same reason an animated `width` cannot resize the
+window: the request stayed at min 88 with a child driven to 3000 px wide. (An
+RN island mounted straight into GTK chrome does report its content size, and
+a size below one of those really would move the window request, which is why
+that configuration is refused too.) The boundary rests on cost, and only on
+cost.
 
 ## Three things this example found
 
@@ -151,12 +205,9 @@ Nothing in the app is faked, and a few things a reader might expect are absent
   implemented, and not yet demonstrated here. Worth a panel.
 - **`Animated.FlatList`** — throws rather than warns, so there is no running
   demo to show. Panel 07 names it; `docs/api.md` has the reasoning.
-- **The other four ways a size lands on the refused side** — a container sized
-  by its children, a node whose other axis comes from its content, an
-  `aspectRatio` or a `min`/`max` clamp, and a wrapping container. Panel 07
-  demonstrates two of the six (a centred container and a main-axis size) and
-  names the rest in its captions; six lanes that all do nothing would teach
-  less than two that disagree.
+- **The other four ways a size lands on the refused side** — listed under
+  ["The six things that put a size on the refused side"](#the-six-things-that-put-a-size-on-the-refused-side)
+  above. Panel 07 demonstrates two of the six on screen.
 
 An animated `width` **is** demonstrated as working, in panel 07's first lane.
 It used to be in this list, and this README used to say that pressing "Animate

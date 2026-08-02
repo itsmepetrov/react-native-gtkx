@@ -131,29 +131,18 @@ export const DragPanel = () => (
   >
     <DragBox />
     <Caption>
-      Grab the box with the mouse and throw it around. Let go and `withSpring`
-      returns it — an underdamped spring, so it overshoots home and settles.
+      Grab the box and throw it around. Let go and `withSpring` returns it — an
+      underdamped spring, so it overshoots home and settles.
     </Caption>
     <Caption>
       Drag it past an edge and it is CUT OFF at the arena, rounded corners and
       all, instead of sliding over this caption: the platform honouring the
-      arena&apos;s `overflow: &quot;hidden&quot;` — the RN style it used to
-      accept and ignore — with paint and hit-testing stopping at the same clip.
-      Clamping the shared value in the gesture (`clamp()` ships here) would keep
-      the box in too, but that is an app choosing where a drag ENDS rather than
-      the platform obeying a style, and it would leave nothing here for the clip
-      to show.
+      arena&apos;s `overflow: &quot;hidden&quot;`, with paint and hit-testing
+      stopping at the same clip.
     </Caption>
     <Caption>
-      Honest note: this is NOT `GestureDetector`, on purpose. The drag is React
-      Native&apos;s own `PanResponder`, spread onto the `Animated.View` as
-      `panHandlers` — the same code an RN app wrote before the Gesture API
-      existed, running here unchanged. `Gesture.Pan()`, `Tap`, `LongPress` and
-      `GestureDetector` are implemented too; they are demonstrated in
-      `examples/gesture-detector`, so these two apps cover the two gesture
-      layers rather than showing the same drag twice. The Reanimated half — the
-      shared values, the `useAnimatedStyle`, the `withSpring` — is exactly what
-      you would write on iOS.
+      The drag is `PanResponder`, not `GestureDetector`, on purpose — the
+      Gesture API has an example of its own. See the README.
     </Caption>
   </Panel>
 )

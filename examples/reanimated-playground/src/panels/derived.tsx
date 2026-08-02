@@ -51,7 +51,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   legend: {
-    color: palette.textFaint,
+    color: palette.textDim,
     fontSize: 12,
   },
 })
@@ -145,18 +145,14 @@ export const DerivedPanel = () => {
       </Row>
       <Caption>
         The blue square&apos;s position and the orange circle&apos;s size are
-        two separate derived values off `source`; the square next to the circle
-        is driven by a reaction to `source.get() &gt; 0.5`, not by its magnitude
-        — which is why it flips rather than fades with the rest. Send the source
-        to 0.5 exactly and it stays red: the predicate is strictly greater than.
+        two derived values off `source`; the third box follows a reaction to
+        `source.get() &gt; 0.5`, not its magnitude, which is why it flips rather
+        than fades. Send the source to 0.5 exactly and it stays red.
       </Caption>
       <Caption>
-        No hook here is given a dependency array, and everything still updates:
-        dependencies are recorded from the reads a mapper performs, which is
-        more precise than a static scan (a conditional read is tracked
-        correctly) and needs no build step. `dependencies` is still accepted —
-        panel 3 passes one, because that updater closes over React state rather
-        than over a shared value.
+        No hook here has a dependency array and everything still updates:
+        dependencies are recorded from the reads a mapper performs, not from a
+        build-time scan. `dependencies` is still accepted — panel 3 passes one.
       </Caption>
     </Panel>
   )

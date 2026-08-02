@@ -74,22 +74,35 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   laneLabel: {
-    color: palette.textFaint,
-    fontSize: 12,
+    color: palette.text,
+    fontSize: 13,
+    lineHeight: 19,
   },
+  // The warning is the longest thing on the screen and the thing a reader is
+  // most likely to have come here for, so it is set as PROSE: foreground
+  // colour, 13 px, a line height. The amber survives as the tint behind it and
+  // as the label above it — signalling is what a hue is good for, and body
+  // text is what it is bad at.
   warningBox: {
-    backgroundColor: palette.cardAlt,
+    backgroundColor: palette.warningTint,
     borderRadius: 10,
     padding: 12,
-    gap: 8,
+    gap: 6,
+  },
+  warningLabel: {
+    color: palette.warning,
+    fontSize: 11,
+    fontWeight: "700",
   },
   warningText: {
-    color: palette.yellow,
-    fontSize: 12,
+    color: palette.text,
+    fontSize: 13,
+    lineHeight: 19,
   },
   warningEmpty: {
-    color: palette.textFaint,
-    fontSize: 12,
+    color: palette.textDim,
+    fontSize: 13,
+    lineHeight: 19,
   },
   factTable: {
     backgroundColor: palette.cardAlt,
@@ -124,22 +137,26 @@ const Fact = ({ label, value }: { label: string; value: string }) => (
 
 const Warnings = () => {
   const lines = useWarnings("react-native-", 400)
-  return (
-    <View style={styles.warningBox}>
-      {lines.length === 0 ? (
+  if (lines.length === 0) {
+    return (
+      <View style={styles.warningBox}>
         <Text style={styles.warningEmpty}>
           No warning yet — press one of the buttons above.
         </Text>
-      ) : (
-        lines.map((line, index) => (
-          <Text
-            key={index}
-            style={styles.warningText}
-          >
-            {line}
-          </Text>
-        ))
-      )}
+      </View>
+    )
+  }
+  return (
+    <View style={styles.warningBox}>
+      <Text style={styles.warningLabel}>CONSOLE.WARN</Text>
+      {lines.map((line, index) => (
+        <Text
+          key={index}
+          style={styles.warningText}
+        >
+          {line}
+        </Text>
+      ))}
     </View>
   )
 }
@@ -186,12 +203,10 @@ export const RefusalsPanel = () => {
         </Animated.View>
       </View>
       <Text style={styles.laneLabel}>
-        useAnimatedStyle(() =&gt; ({"{"} width: w.get() {"}"})) — DRIVEN, at 7.1
-        µs a frame and the same at five siblings or three hundred. This lane is
-        an ordinary column, so `width` is its cross axis: the box grows from its
-        leading edge and no sibling moves, which is what &quot;the change stops
-        at the node&quot; means. The number in the box is how many React renders
-        have been forced — watch it not move while the box does.
+        `width: w.get()` — DRIVEN, at 7.1 µs a frame whether the container holds
+        five children or three hundred. An ordinary column, so `width` is the
+        cross axis: the box grows from its leading edge and no sibling moves.
+        The number in the box counts forced React renders — watch it not move.
       </Text>
       <View style={[styles.lane, styles.laneCentred]}>
         <Animated.View style={[styles.box, styles.refused, refusedWidth]}>
@@ -199,21 +214,19 @@ export const RefusalsPanel = () => {
         </Animated.View>
       </View>
       <Text style={styles.laneLabel}>
-        The same shared value, the same box — and one style different, on the
-        LANE: alignItems: &quot;center&quot;. A centred child grows about its
-        own centre, so its x moves with its width and the change no longer stops
-        at the node. Refused, by name, with that reason.
+        The same shared value, the same box, one style different — on the LANE:
+        alignItems: &quot;center&quot;. A centred child grows about its own
+        centre, so its x moves with its width. Refused, by name, for that
+        reason.
       </Text>
       <View style={[styles.lane, styles.laneTall]}>
         <Animated.View style={[styles.box, styles.refused, refusedHeight]} />
         <View style={styles.neighbour} />
       </View>
       <Text style={styles.laneLabel}>
-        useAnimatedStyle(() =&gt; ({"{"} height: h.get() {"}"})) — refused for
-        the other reason: `height` is this column&apos;s MAIN axis, so growing
-        the box would push the purple strip below it down, and moving a sibling
-        is a layout pass over the container. That is the cost in the table
-        below.
+        `height: h.get()` — refused for the other reason: `height` is this
+        column&apos;s MAIN axis, so growing the box would push the purple strip
+        down, and moving a sibling is a layout pass over the container.
       </Text>
       <Row>
         <Button
@@ -267,11 +280,10 @@ export const RefusalsPanel = () => {
       </View>
       <Text style={styles.laneLabel}>
         transform: [{"{"} scaleX {"}"}] — the transform the refusals name, and
-        an APPROXIMATION rather than a replacement: a scale grows about the
-        view&apos;s centre, so the box moves as it grows, and it scales the
-        content with the box instead of re-laying it out — text stretches rather
-        than re-wrapping. A driven `width`, in the first lane, really does
-        re-lay-out what is inside the box
+        an APPROXIMATION rather than a replacement: it grows about the
+        view&apos;s centre and stretches the content instead of re-laying it
+        out. A driven `width`, in the first lane, really does re-wrap what is
+        inside the box.
       </Text>
       <Row>
         <Button
@@ -288,16 +300,14 @@ export const RefusalsPanel = () => {
       <Warnings />
       <Caption>
         Press &quot;Animate width&quot; and the two boxes disagree: the green
-        one moves at frame rate, the red one does not move at all and prints a
-        line saying which style stopped it. Then press &quot;Force a React
-        render&quot; and the red box jumps to wherever the animation ended — the
-        documented behaviour, that a refused value is applied on the next React
-        render rather than dropped. Each warning is once per property per
-        session, so a second press adds no line.
+        one moves at frame rate, the red one does not move at all and prints the
+        line above saying which style stopped it. Then press &quot;Force a React
+        render&quot; and the red box jumps to where the animation ended — a
+        refused value is applied on the next render rather than dropped.
       </Caption>
       <View style={styles.factTable}>
         <Fact
-          label="A DRIVEN size — the animated node's own subtree, at every container size"
+          label="A DRIVEN size — flat at 5, 60 and 300 children"
           value="7.1 µs"
         />
         <Fact
@@ -305,20 +315,12 @@ export const RefusalsPanel = () => {
           value="21.7 µs"
         />
         <Fact
-          label="A refused size, if it were written naively — 5-child container"
-          value="71 µs"
-        />
-        <Fact
-          label="…the same value, 60-child container"
-          value="129 µs"
-        />
-        <Fact
-          label="…the same value, 300-child container"
-          value="509 µs"
+          label="The naive write, over that same 5 → 300 children"
+          value="52 → 496 µs"
         />
         <Fact
           label="A transform write, at every one of those sizes"
-          value="0.6 µs"
+          value="1.5 µs"
         />
         <Fact
           label="A colour write, at every one of those sizes"
@@ -326,47 +328,17 @@ export const RefusalsPanel = () => {
         />
       </View>
       <Caption>
-        Those two groups are the whole decision. A naive layout write is O(the
-        container): the same single animated value costs 71, 129 and 509 µs per
-        frame as the container grows, because changing one child re-lays-out its
-        following siblings and re-commits every rect the pass touched.
-        Re-running Yoga rooted at the ANIMATED NODE instead costs the same 7.1
-        µs at all three sizes — which is why the first lane is allowed and the
-        other two are not. The boundary is drawn at exactly the configurations
-        where the two produce the same geometry, checked configuration by
-        configuration against the real layout engine rather than reasoned about.
+        Flat in the container versus proportional to it: that is the whole
+        decision, and it is why the first lane is allowed and the other two are
+        not. The boundary sits at exactly the configurations where re-running
+        Yoga at the animated node gives the same geometry as a full pass —
+        checked configuration by configuration against the real layout engine.
+        The README lists the six that fall outside it.
       </Caption>
       <Caption>
-        Six things put a size on the refused side: the axis is the
-        container&apos;s main axis (the third lane); the resolved cross-axis
-        alignment is `center` or `flex-end` (the second lane); the
-        container&apos;s own size comes from its children; the node&apos;s OTHER
-        axis comes from its content, so re-wrapping would change it too; an
-        `aspectRatio`, or a `min`/`max` that would clamp the driven value; and a
-        wrapping container. `flex`, `flexBasis`, every `margin*`/`padding*` and
-        `gap` are refused outright — no carve-out applies to them at all.
-      </Caption>
-      <Caption>
-        Two things that used to be said here were re-measured and are not true.
-        Making GTK re-measure every ancestor after the resize adds nothing at
-        any tree size — this platform&apos;s root reports a constant size
-        request, so there is nothing up there to recompute — and for the same
-        reason an animated `width` cannot resize the window: the request stayed
-        at min 88 with a child driven to 3000 px wide. (An RN island mounted
-        straight into GTK chrome does report its content size, and there a size
-        below it really would move the window request — which is why a driven
-        size is refused under one of those too.) The boundary rests on cost, and
-        only on cost.
-      </Caption>
-      <Caption>
-        Not everything refused is a layout property. `borderRadius` gets the
-        other message: it can be written, but only as a CSS class computed
-        during render, so it too lands on the next render. `Animated.FlatList`
-        does not warn at all — it throws, naming itself, because a list that
-        mounted without animating is worse than one that failed. Layout
-        animations are no longer on this list: `FadeIn`, `FadeOut`,
-        `LinearTransition` and `Keyframe` are implemented, and the ~90 preset
-        builders around them are still refusals.
+        The table follows the shipped path&apos;s own re-measurement, in
+        docs/api.md. The warning above still quotes the earlier recon run (71
+        and 509 µs, 0.6 µs for a transform) — same shape, older numbers.
       </Caption>
     </Panel>
   )

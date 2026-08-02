@@ -132,14 +132,8 @@ export const EasingPanel = () => {
       <Caption>
         Press it again and they come back. Each lane runs its own `withTiming`,
         but none of them owns the button: the panel writes one shared value and
-        each row&apos;s `useAnimatedReaction` fires from it, which is why they
-        leave together rather than in render order.
-      </Caption>
-      <Caption>
-        `Easing.bezier` returns a factory object here exactly as upstream does,
-        so `Easing.bezier(0.25, 0.8, 0.25, 1)` is passed to `withTiming` rather
-        than called. The pure maths behind all seven is ported from
-        upstream&apos;s own web path, not reimplemented.
+        every row&apos;s `useAnimatedReaction` fires from it, which is why they
+        leave on the same frame rather than in render order.
       </Caption>
     </Panel>
   )
