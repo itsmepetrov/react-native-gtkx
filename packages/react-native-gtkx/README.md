@@ -44,7 +44,7 @@ And the portability proof — `examples/profile` renders ONE source file with bo
 - [x] **Fast Refresh on both toolchains**: `run-linux --dev` (Metro dev server + HMR in the GTK host, state preserved) and `gtkx dev` (vite)
 - [x] **Navigation on real Adwaita widgets**: react-navigation navigators backed by `Adw.NavigationView` and `Adw.NavigationSplitView` — see below
 
-Verified live: `examples/hn-app` (a Hacker News reader on the Metro path), `examples/gallery` (the whole surface, 24 sections), and `examples/tasks-app` (a full GNOME task manager — a port of the [gtkx tutorial](https://gtkx.dev/tutorial/)'s Tasks app, and the platform's most demanding app so far) — 921 tests (unit + component tests under headless Wayland).
+Verified live: `examples/hn-app` (a Hacker News reader on the Metro path), `examples/gallery` (the whole surface, 27 sections), and `examples/tasks-app` (a full GNOME task manager — a port of the [gtkx tutorial](https://gtkx.dev/tutorial/)'s Tasks app, and the platform's most demanding app so far) — 921 tests (unit + component tests under headless Wayland).
 
 ## Navigation is native, not redrawn
 
