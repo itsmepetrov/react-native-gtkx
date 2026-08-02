@@ -8,14 +8,19 @@ import {
   type ElementType,
   type ReactNode,
   type Ref,
-  type RefObject,
 } from "react"
+import type { DrivenSize } from "../layout/driven-size"
 import {
   INSET_PROPERTIES,
   insetRefusalReason,
   insetTranslation,
   type InsetProperty,
 } from "../style/absolute-insets"
+import {
+  drivenSizeRefusal,
+  SIZE_PROPERTIES,
+  type SizeProperty,
+} from "../style/animated-size"
 import {
   DRIVEABLE_COLOR_PROPERTIES,
   driveableColorsToCss,
@@ -37,8 +42,9 @@ import {
 } from "../gtkx/bridge/index"
 import type { ResponderProps } from "../responder/types"
 import { useResponder } from "../responder/use-responder"
+import { applyDrivenSize, releaseDrivenSize } from "./driven-size"
 import { glibScheduler } from "./frame-scheduler"
-import { HostNodeContext, useHostNode } from "./host-node"
+import { HostNodeContext, useHostNode, type HostNode } from "./host-node"
 import { Image } from "./image"
 import {
   createMeasureHandle,
@@ -49,6 +55,7 @@ import { setStoredTransform } from "./rect-store"
 import { ScrollView } from "./scroll-view"
 import { Text } from "./text"
 import {
+  nodeForWidget,
   useLayoutChild,
   useRnContainer,
   type LayoutEvent,
@@ -131,12 +138,17 @@ const nodeId = (value: object): number => {
 // with FlatStyle's numeric one, rejecting Animated.Value entries.
 export type AnimatedViewStyle = Omit<
   FlatStyle,
-  "opacity" | "transform" | DriveableColorProperty | InsetProperty
+  | "opacity"
+  | "transform"
+  | DriveableColorProperty
+  | InsetProperty
+  | SizeProperty
 > & {
   opacity?: number | AnimatedNode
   transform?: (TransformPart | AnimatedTransformPart)[]
 } & Partial<Record<DriveableColorProperty, string | AnimatedNode>> &
-  Partial<Record<InsetProperty, DimensionValue | AnimatedNode>>
+  Partial<Record<InsetProperty, DimensionValue | AnimatedNode>> &
+  Partial<Record<SizeProperty, DimensionValue | AnimatedNode>>
 
 /** What every animated component accepts as `style`, arrays and falsy included. */
 export type AnimatedStyleProp =
@@ -162,6 +174,15 @@ export type AnimatedViewProps = ResponderProps & {
 type ColorSlot = {
   property: DriveableColorProperty
   node: AnimatedNode
+}
+
+// One driven size. `base` is the value Yoga was given at the last React
+// commit, which is what the rebase moves and what the committed rect the
+// override sits on top of was laid out at.
+type SizeSlot = {
+  property: SizeProperty
+  node: AnimatedNode
+  base: number
 }
 
 // One warning per inset property per session, like every other channel here.
@@ -202,6 +223,41 @@ export const resetAnimatedInsetWarnings = (): void => {
   warnedInsets.clear()
 }
 
+// Same policy for sizes: once per property per session, and the reason is the
+// actionable part — the rule refuses for one of eight named reasons and each
+// of them has a different fix.
+const warnedSizes = new Set<string>()
+
+const warnSizeNotDriveable = (property: SizeProperty, reason: string): void => {
+  if (warnedSizes.has(property)) {
+    return
+  }
+  warnedSizes.add(property)
+  const isProduction =
+    typeof process !== "undefined" && process.env.NODE_ENV === "production"
+  if (isProduction) {
+    return
+  }
+  const scale = property === "width" ? "scaleX" : "scaleY"
+  console.warn(
+    `react-native-gtkx: an animated \`${property}\` cannot be driven here, because ${reason}. ` +
+      `\`width\`/\`height\` run at frame rate only where the change stops at the node that owns it — the ` +
+      "node's own subtree is then re-laid-out pinned to the driven value (6.6 µs for a leaf, 23 µs with " +
+      "wrapped text, the same at five children and at three hundred) and one allocation puts it on screen. " +
+      "Anything else needs a Yoga pass over the container plus its commit walk, which costs what the " +
+      "CONTAINER costs: 71 µs at five children, 509 µs at three hundred, against a transform's 0.6 µs. " +
+      `The closest transform is \`transform: [{ ${scale}: … }]\`, but it is NOT the same thing — a scale ` +
+      "grows about the view's centre, so the box moves as it grows, and it scales the content with the box " +
+      "instead of re-laying it out, so text stretches rather than re-wrapping. " +
+      "The new value is applied on the next React render either way. See docs/api.md.",
+  )
+}
+
+/** @internal Test seam: the warning is once per property per session by design. */
+export const resetAnimatedSizeWarnings = (): void => {
+  warnedSizes.clear()
+}
+
 const splitAnimated = (
   style: AnimatedStyleProp | false | null | undefined,
 ): {
@@ -209,6 +265,7 @@ const splitAnimated = (
   opacity: AnimatedNode | null
   slots: TransformSlot[]
   colors: ColorSlot[]
+  sizes: SizeSlot[]
 } => {
   const flat: Record<string, unknown> = {}
   const collect = (
@@ -228,6 +285,7 @@ const splitAnimated = (
   let opacity: AnimatedNode | null = null
   const slots: TransformSlot[] = []
   const colors: ColorSlot[] = []
+  const sizes: SizeSlot[] = []
 
   if (isAnimatedNode(flat.opacity)) {
     opacity = flat.opacity
@@ -312,11 +370,48 @@ const splitAnimated = (
     })
   }
 
+  // Slice 3: an animated `width`/`height` where the change is confined to the
+  // node that owns it. Unlike an inset this is NOT re-expressed as a
+  // transform — there is no transform that reproduces a size change, which
+  // docs/research/animated-size.md §6 measured rather than assumed — so the
+  // slot carries the property itself and the view layer drives it through a
+  // pinned pass over the node's own subtree.
+  //
+  // THE REBASE, exactly as above and for the same reason: the driven value is
+  // written back into the static style as a plain number, so Yoga is given the
+  // size the animation is currently showing and the committed rect the
+  // override sits on catches up in the SAME commit. Both writes are layout
+  // effects and the engine's flush is a microtask, so GTK never gets a frame
+  // in between.
+  //
+  // WHETHER it can be driven is not decided here. The answer depends on the
+  // CONTAINER's `flexDirection`, its `alignItems` and where its own size comes
+  // from, none of which are in this style object or in this component's props
+  // — it is asked of the layout tree in useAnimatedBinding, which is the only
+  // place the tree exists.
+  for (const property of SIZE_PROPERTIES) {
+    const value = flat[property]
+    if (!isAnimatedNode(value)) {
+      continue
+    }
+    const base = toNumber(value.__getValue())
+    if (!Number.isFinite(base)) {
+      // A percentage produced mid-animation has no point base to lay out at.
+      // Dropped rather than driven, and the leaf never becomes driveable in
+      // the first place unless it starts numeric — reanimated-compat/style.ts.
+      flat[property] = undefined
+      continue
+    }
+    flat[property] = base
+    sizes.push({ property, node: value, base })
+  }
+
   return {
     staticStyle: flat as StyleProp,
     opacity,
     slots: insetSlots.length > 0 ? [...insetSlots, ...slots] : slots,
     colors,
+    sizes,
   }
 }
 
@@ -339,10 +434,11 @@ const splitAnimated = (
  */
 const useAnimatedBinding = (
   getWidget: () => Gtk.Widget | null,
-  parentWidgetRef: RefObject<Gtk.Widget | null>,
+  host: HostNode,
   opacity: AnimatedNode | null,
   slots: TransformSlot[],
   colors: ColorSlot[],
+  sizes: SizeSlot[],
   // Anything else that must force a rebind. `AnimatedView` passes its layout
   // node; the generic wrapper has nothing to add.
   rebindKey?: unknown,
@@ -353,8 +449,13 @@ const useAnimatedBinding = (
   slotsRef.current = slots
   const colorsRef = useRef<ColorSlot[]>(colors)
   colorsRef.current = colors
+  const sizesRef = useRef<SizeSlot[]>(sizes)
+  sizesRef.current = sizes
   const getWidgetRef = useRef(getWidget)
   getWidgetRef.current = getWidget
+  const hostRef = useRef(host)
+  hostRef.current = host
+  const parentWidgetRef = host.widgetRef
 
   // Rebind on a change of shape (which transforms, in which order), of the
   // node behind an animated entry, or of a static entry's value — not on
@@ -373,13 +474,24 @@ const useAnimatedBinding = (
           : `|${slot.key}=${String(slot.value)}`
       })
       .join("") +
-    colors.map((slot) => `|${slot.property}#${nodeId(slot.node)}`).join("")
+    colors.map((slot) => `|${slot.property}#${nodeId(slot.node)}`).join("") +
+    // The base is in the key for the same reason a derived inset's is: React
+    // committing a new size moves it, and re-arming here is what hands the
+    // override back to the engine in the same commit that gives Yoga the new
+    // value.
+    sizes
+      .map((slot) => `|${slot.property}#${nodeId(slot.node)}~${slot.base}`)
+      .join("")
 
   useLayoutEffect(() => {
     const widget = getWidgetRef.current()
     if (!widget) {
       return
     }
+    // Captured for the CLEANUP only: by then the ref may already have been
+    // detached, and the container to re-allocate is the one this binding was
+    // made against. Every live write below re-reads the ref instead.
+    const boundParentWidget = parentWidgetRef.current
 
     // The live transform array, mutated in place: an Animated write must
     // stay one numeric store plus one queued allocation — no React render,
@@ -468,6 +580,73 @@ const useAnimatedBinding = (
       writeColors()
     }
 
+    // Sizes take the third door, and it is the only one that runs Yoga.
+    //
+    // Nothing is written at BIND time on purpose: the render that armed this
+    // effect put the current value into the static style, so the engine is
+    // already committing exactly this size and an override would be a copy of
+    // it. The first write happens when a frame asks for something else.
+    const sizeSlots = sizesRef.current
+    const drivenWidgets: Gtk.Widget[] = []
+    if (sizeSlots.length > 0) {
+      const layoutNode = nodeForWidget(widget)
+      const driven: DrivenSize = {}
+      const driveable = new Set<SizeProperty>()
+      let decided = false
+      // Deferred to the first frame that actually asks for a new size, and
+      // that is not laziness: the rule is asked of the CONTAINER's Yoga node,
+      // and on a first mount a container's own layout effects run AFTER its
+      // children's — so at bind time the container may still be carrying the
+      // defaults rather than its style. By the first frame the tree has been
+      // laid out at least once and the answer is the real one.
+      const decide = (): void => {
+        decided = true
+        if (!layoutNode) {
+          return
+        }
+        const context = {
+          node: layoutNode,
+          rootIsContentSized: hostRef.current.engine.contentSized,
+        }
+        for (const slot of sizeSlots) {
+          const reason = drivenSizeRefusal(context, slot.property)
+          if (reason === null) {
+            driveable.add(slot.property)
+          } else {
+            warnSizeNotDriveable(slot.property, reason)
+          }
+        }
+      }
+      for (const slot of sizeSlots) {
+        subscriptions.push({
+          node: slot.node,
+          id: slot.node.addListener(({ value }) => {
+            const numeric = toNumber(value)
+            if (!Number.isFinite(numeric)) {
+              return
+            }
+            if (!decided) {
+              decide()
+            }
+            if (!driveable.has(slot.property) || !layoutNode) {
+              return
+            }
+            driven[slot.property] = numeric
+            const target = getWidgetRef.current()
+            if (target) {
+              applyDrivenSize(
+                layoutNode,
+                target,
+                parentWidgetRef.current,
+                driven,
+                drivenWidgets,
+              )
+            }
+          }),
+        })
+      }
+    }
+
     flush()
 
     return () => {
@@ -475,6 +654,17 @@ const useAnimatedBinding = (
         animated.removeListener(id)
       }
       widgetCss?.dispose()
+      // Every widget this binding was driving goes back to the rect the
+      // engine committed. On a REBASE that is the whole point: the render
+      // that re-armed this effect handed Yoga the size the animation is
+      // showing, so the committed rect is about to become the driven one and
+      // holding an override on top of it would be holding a stale copy.
+      if (drivenWidgets.length > 0) {
+        releaseDrivenSize(drivenWidgets)
+        if (boundParentWidget) {
+          queueAllocate(boundParentWidget)
+        }
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bindingKey, rebindKey])
@@ -489,7 +679,7 @@ const AnimatedView = ({
   ...responderProps
 }: AnimatedViewProps) => {
   const widgetRef = useRef<Gtk.Box | null>(null)
-  const { staticStyle, opacity, slots, colors } = splitAnimated(style)
+  const { staticStyle, opacity, slots, colors, sizes } = splitAnimated(style)
 
   const { host, node, cssClass } = useLayoutChild(widgetRef, {
     style: staticStyle,
@@ -502,10 +692,11 @@ const AnimatedView = ({
 
   useAnimatedBinding(
     () => widgetRef.current,
-    host.widgetRef,
+    host,
     opacity,
     slots,
     colors,
+    sizes,
     node,
   )
 
@@ -566,7 +757,7 @@ const warnNoWidget = (name: string): void => {
   if (!isProduction) {
     console.warn(
       `react-native-gtkx: createAnimatedComponent(${name}) was given an animated \`opacity\`, ` +
-        "`transform` or colour, but the component exposed no ref carrying a widget, so there is nothing to write " +
+        "`transform`, colour or size, but the component exposed no ref carrying a widget, so there is nothing to write " +
         "to. Give it a `ref?: Ref<MeasureHandle>` built with the platform's own measure handle, or wrap " +
         "it in an `Animated.View`. See docs/api.md.",
     )
@@ -617,8 +808,12 @@ export const createAnimatedComponent = <C extends ElementType>(
     // by, exactly as it would be without the wrapper.
     const host = useHostNode()
     const handleRef = useRef<unknown>(null)
-    const { staticStyle, opacity, slots, colors } = splitAnimated(style)
-    const driven = opacity !== null || slots.length > 0 || colors.length > 0
+    const { staticStyle, opacity, slots, colors, sizes } = splitAnimated(style)
+    const driven =
+      opacity !== null ||
+      slots.length > 0 ||
+      colors.length > 0 ||
+      sizes.length > 0
 
     // Stable identity: a fresh callback ref every render would detach and
     // reattach the wrapped component's handle on every render.
@@ -637,10 +832,11 @@ export const createAnimatedComponent = <C extends ElementType>(
 
     useAnimatedBinding(
       () => widgetForHandle(handleRef.current),
-      host.widgetRef,
+      host,
       opacity,
       slots,
       colors,
+      sizes,
     )
 
     // A silent no-op is the failure this repo refuses. Checked after the

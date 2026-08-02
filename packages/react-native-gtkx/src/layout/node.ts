@@ -20,6 +20,20 @@ export class LayoutNode implements LayoutNodeApi {
   parent: LayoutNode | null = null
   readonly children: LayoutNode[] = []
 
+  /**
+   * The layout style last applied to this node — null on the engine root,
+   * which is laid out against the viewport rather than a style.
+   *
+   * Kept because Yoga's JS binding is not fully readable: there is no
+   * `getFlex()`, and `setFlex(1)` leaves `getFlexGrow()` at its default, so
+   * "does this node's size come from its container" cannot be answered from
+   * the Yoga node alone. The animated-size rule
+   * (../style/animated-size.ts) has to answer it about a node's CONTAINER,
+   * whose style is nowhere near the animated component. One reference to an
+   * object that already exists.
+   */
+  style: Readonly<LayoutStyle> | null = null
+
   private onDirty: DirtyListener
   private onLayoutCallback: ((rect: Rect) => void) | null = null
   private commitCallback: ((rect: Rect) => void) | null = null
@@ -41,6 +55,7 @@ export class LayoutNode implements LayoutNodeApi {
       return
     }
     applyLayoutStyle(this.yoga, style)
+    this.style = style
     this.onDirty(this)
   }
 

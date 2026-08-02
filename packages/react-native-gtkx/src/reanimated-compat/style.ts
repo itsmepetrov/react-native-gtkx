@@ -9,14 +9,14 @@
 // `widget.setOpacity` for opacity, the rect store plus `queueAllocate` for
 // transforms, and a CSS provider private to the widget for colours.
 //
-// WHERE THE BOUNDARY IS NOW. Opacity, transforms and colours are driven.
-// What is left out is layout — `width`, `height`, `flex`, every
-// `margin*`/`padding*` — and that is a refusal on measured grounds rather
-// than a gap waiting to be filled. A layout write has to go through Yoga, and
-// a pass plus its commit walk costs what the CONTAINER costs, not what the
-// animated value costs: 71 µs for a five-child container, 129 µs at sixty,
-// 509 µs at three hundred, per frame. The same frame's transform write is
-// 0.6 µs and does not grow at all.
+// WHERE THE BOUNDARY IS NOW. Opacity, transforms and colours are driven
+// unconditionally. `flex`, every `margin*`/`padding*`, `gap`, `flexBasis` and
+// the `min*`/`max*` family are refused, and that is a refusal on measured
+// grounds rather than a gap waiting to be filled: a layout write has to go
+// through Yoga, and a pass plus its commit walk costs what the CONTAINER
+// costs, not what the animated value costs — 71 µs for a five-child
+// container, 129 µs at sixty, 509 µs at three hundred, per frame. The same
+// frame's transform write is 0.6 µs and does not grow at all.
 //
 // It is a cost argument and ONLY a cost argument, which is narrower than this
 // comment used to claim. docs/research/animated-size.md re-measured the two
@@ -24,19 +24,25 @@
 // resize adds nothing at any tree size, and a size write cannot move the
 // window — the RN root reports a zero size request, so the toplevel never
 // re-negotiates. (An `IntrinsicRoot` mounted directly in GTK chrome is the one
-// exception, and it does change the window's request.) That file also
-// measures the carve-out this refusal is waiting on: re-laying out the
-// ANIMATED NODE's own subtree, pinned to the driven size, is 6.6–23 µs and
-// flat in the size of the tree.
+// exception, and it does change the window's request.)
 //
-// THE ONE CARVE-OUT, and it is not a softening of that. `top`/`left`/
-// `right`/`bottom` on a node whose OWN `position` is `"absolute"` are driven,
-// because an out-of-flow node's inset has an exact transform equivalent:
-// moving it changes nothing but where it is drawn, which is what the
-// transform path already does, so no Yoga pass is needed at all. That
-// equivalence is measured, it is not universal across the four insets, and
-// the configurations where it fails are refused as loudly as `width` is —
-// src/style/absolute-insets.ts and docs/research/absolute-insets.md.
+// TWO CARVE-OUTS, and neither is a softening of that.
+//
+//  - `top`/`left`/`right`/`bottom` on a node whose OWN `position` is
+//    `"absolute"`, because an out-of-flow node's inset has an exact transform
+//    equivalent: moving it changes nothing but where it is drawn, which is
+//    what the transform path already does, so no Yoga pass is needed at all —
+//    src/style/absolute-insets.ts, docs/research/absolute-insets.md.
+//  - `width`/`height` where the change is CONFINED to the node that owns it.
+//    There is no transform that reproduces a size change (a scale grows about
+//    the centre and stretches the content instead of re-laying it out —
+//    measured), so this one really does run Yoga; it just runs it rooted at
+//    the animated node rather than at the tree's root, which is 6.6 µs for a
+//    leaf and 23 µs with wrapped text, IDENTICAL at 5, 60 and 300 siblings —
+//    src/style/animated-size.ts, docs/research/animated-size.md.
+//
+// Both rules are measured, neither is universal, and the configurations where
+// they fail are refused as loudly as `flex` is.
 //
 // The rule for everything undriveable stays what it was: it must be VISIBLE.
 // A property that changes between mapper runs but cannot be driven says so
@@ -48,6 +54,7 @@ import {
   insetRefusalReason,
   insetTranslation,
 } from "../style/absolute-insets"
+import { SIZE_PROPERTIES } from "../style/animated-size"
 import { DRIVEABLE_COLOR_PROPERTIES } from "../style/imperative-css"
 
 export type StyleValue = number | string
@@ -109,6 +116,9 @@ type InsetProperty = (typeof INSET_PROPERTIES)[number]
 
 const isInsetProperty = (property: string): property is InsetProperty =>
   (INSET_PROPERTIES as readonly string[]).includes(property)
+
+const isSizeProperty = (property: string): boolean =>
+  (SIZE_PROPERTIES as readonly string[]).includes(property)
 
 /**
  * Whether this style's `property` is one of the insets that becomes a
@@ -202,7 +212,9 @@ const LAYOUT_PROPERTIES = new Set([
 //
 // So an inset really does have a transform that reproduces it, and a size does
 // not. Offering `scaleX` as if it did sends people to a different behaviour
-// with the same name on it.
+// with the same name on it — which is also why a numeric `width`/`height` is
+// driven for real now and only reaches this table as a PERCENTAGE, where
+// there is no point base to lay out at.
 const EXACT_ALTERNATIVE: Record<string, string> = {
   bottom: "translateY",
   end: "translateX",
@@ -280,7 +292,11 @@ const warnUndriveable = (property: string, source: StyleObject): void => {
         (isInsetProperty(property)
           ? `(\`${property}\` IS driven at frame rate on a node whose own \`position\` is "absolute", ` +
             "where moving it is exactly a translation and touches no sibling.) "
-          : "") +
+          : isSizeProperty(property)
+            ? `(A NUMERIC \`${property}\` IS driven at frame rate where the change is confined to the node ` +
+              "that owns it. This one is a percentage, which has no point base to re-lay the subtree out " +
+              "at.) "
+            : "") +
         "The new value is applied on the next React render. See docs/api.md.",
     )
     return
@@ -320,6 +336,20 @@ const leavesOf = (
   for (const property of INSET_PROPERTIES) {
     if (isDriveableInset(source, property)) {
       leaves.push({ key: property, value: source[property] as number })
+    }
+  }
+  // Sizes: a number is the whole of what can be decided HERE. Whether the
+  // change is confined to the node depends on the container's
+  // `flexDirection`, its `alignItems` and where its own size comes from —
+  // none of which is in the updater's object, and none of which is even in
+  // the animated component's props. So the leaf is made optimistically and
+  // the view layer, which has the layout tree, answers and warns
+  // (src/style/animated-size.ts, components/animated.tsx). A percentage stays
+  // on the refusal path: it has no point base to lay out at, and switching to
+  // one mid-animation changes the leaf signature, which rebuilds the style.
+  for (const property of SIZE_PROPERTIES) {
+    if (typeof source[property] === "number") {
+      leaves.push({ key: property, value: source[property] })
     }
   }
   if (Array.isArray(source.transform)) {
@@ -397,6 +427,12 @@ export const createAnimatedStyle = (
     const insetNode = nodes.get(property)
     if (insetNode) {
       style[property] = insetNode
+    }
+  }
+  for (const property of SIZE_PROPERTIES) {
+    const sizeNode = nodes.get(property)
+    if (sizeNode) {
+      style[property] = sizeNode
     }
   }
   if (Array.isArray(source.transform)) {

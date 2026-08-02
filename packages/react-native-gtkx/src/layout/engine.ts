@@ -31,8 +31,26 @@ export type ViewportSize = { width: number; height: number }
 //     covers commits Yoga's flag does not imply: a re-measured leaf whose rect
 //     is identical still has to recommit, because measuring reset its widget
 //     size request.
+export type LayoutEngineOptions = {
+  /**
+   * Whether this root REPORTS its Yoga content size to GTK rather than
+   * adopting a rectangle it is given — `IntrinsicRoot`, i.e. React Native
+   * content mounted directly in a GTK chrome slot.
+   *
+   * The one thing that reads it is the animated-size rule
+   * (../style/animated-size.ts): under a content-sized root every ancestor's
+   * size is derived from its children all the way up to the toplevel's own
+   * size request, which is the single configuration where a size write really
+   * does resize the window (docs/research/animated-size.md §4). Under an
+   * ordinary `Root` the climb ends at a viewport instead, and it cannot.
+   */
+  contentSized?: boolean
+}
+
 export class LayoutEngine {
   readonly root: LayoutNode
+
+  readonly contentSized: boolean
 
   private viewport: ViewportSize
   private dirty = false
@@ -46,8 +64,9 @@ export class LayoutEngine {
   // move anything — and for the first flush, where nothing has a rect yet.
   private walkAll = true
 
-  constructor(viewport: ViewportSize) {
+  constructor(viewport: ViewportSize, options?: LayoutEngineOptions) {
     this.viewport = viewport
+    this.contentSized = options?.contentSized ?? false
     this.root = new LayoutNode(this.requestFlush)
   }
 

@@ -29,6 +29,7 @@ import {
 import { useHostNode, type HostNode } from "./host-node"
 import {
   deferDuringAllocate,
+  getStoredDrivenBox,
   getStoredOffset,
   getStoredRect,
   setStoredRect,
@@ -97,6 +98,19 @@ export type LayoutChild = {
 // the shadow tree talks in nodes, and syncChildOrder below is the one place
 // that has to translate between them.
 const nodesByWidget = new WeakMap<Gtk.Widget, LayoutNode>()
+
+/**
+ * The shadow-tree node laying out this widget, or undefined for a widget that
+ * is not a layout child of any container (a nested layout root, a raw GTK
+ * widget in a slot).
+ *
+ * The reverse of what `syncChildOrder` uses it for, and the same map: an
+ * animated size has to walk the driven node's DESCENDANTS, which it can only
+ * reach through the widget tree, and pairing each widget back to its node is
+ * what keeps that walk honest about which children belong to which container.
+ */
+export const nodeForWidget = (widget: Gtk.Widget): LayoutNode | undefined =>
+  nodesByWidget.get(widget)
 
 /**
  * Puts a container's shadow tree back into its widgets' order.
@@ -423,10 +437,17 @@ export const useRnContainer = (
         if (custom) {
           return custom(orientation, forSize)
         }
+        // A driven size wins over the committed one here as well as in the
+        // parent's allocate, so the container asks GTK for the box it is
+        // actually being given. Otherwise a size animated DOWNWARD would
+        // under-allocate a widget against its own stated minimum every frame.
         const rect = node.getRect()
-        return Math.round(
-          (orientation === "horizontal" ? rect?.width : rect?.height) ?? 0,
-        )
+        const driven = getStoredDrivenBox(widget)
+        const size =
+          orientation === "horizontal"
+            ? (driven?.width ?? rect?.width)
+            : (driven?.height ?? rect?.height)
+        return Math.round(size ?? 0)
       },
       allocate: (width, height) => {
         const start = perfEnabled ? perfNow() : 0
@@ -438,12 +459,18 @@ export const useRnContainer = (
           const rect = getStoredRect(child)
           if (rect) {
             const offset = getStoredOffset(child)
+            // The engine's rect, with whatever an animation is currently
+            // driving laid over it field by field: the animated node
+            // overrides only the axis being driven, its descendants override
+            // the whole rect because re-laying the subtree out is what
+            // decides them. The transform composes on top either way.
+            const driven = offset.driven
             allocateChild(
               child,
-              rect.x + offset.dx,
-              rect.y + offset.dy,
-              rect.width,
-              rect.height,
+              (driven?.x ?? rect.x) + offset.dx,
+              (driven?.y ?? rect.y) + offset.dy,
+              driven?.width ?? rect.width,
+              driven?.height ?? rect.height,
               offset.matrix,
             )
             children += 1
