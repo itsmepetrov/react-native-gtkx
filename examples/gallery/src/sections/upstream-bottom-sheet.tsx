@@ -137,7 +137,7 @@ export const UpstreamBottomSheetSection = () => {
 
           <DemoCard
             title="Scroll the list, and watch gorhom's own lock"
-            hint="Put the pointer over the rows and turn the wheel. At the first detent the library holds the list at the top; drag the sheet up to the second and the same wheel scrolls it."
+            hint="At the first detent the library locks the list; at the second it scrolls. To test the retained offset: scroll midway, collapse by the handle, then turn the wheel — the list must stay midway rather than jump to the top."
           >
             <Caption>
               That lock is gorhom&apos;s, not this platform&apos;s:

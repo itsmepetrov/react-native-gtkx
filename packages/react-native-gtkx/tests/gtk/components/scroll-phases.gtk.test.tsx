@@ -7,9 +7,9 @@
 // `zwlr_virtual_pointer_v1`, because the difference between them is a
 // property of the input device and nothing short of the device shows it:
 //
-//   - a WHEEL scrolls and reports no phase. GTK emits `::scroll` per detent
-//     and neither `::scroll-begin` nor `::scroll-end`; the adjustment lands
-//     its whole step in one frame with nothing coasting after it.
+//   - a WHEEL gives GTK no sequence, so this platform groups its detents into
+//     one desktop scroll session: begin before the first detent changes the
+//     adjustment, end after the burst goes idle, and no momentum.
 //   - a touchpad GLIDE reports all four. `::scroll-begin` on the first
 //     motion, `::scroll-end` on the lift, and the scrolled window's own
 //     kinetic animation carries the content on afterwards — which is the
@@ -21,10 +21,12 @@ import { createRef, useRef, useState, type ReactNode } from "react"
 import { afterAll, expect, it } from "vitest"
 import { Gtk, type Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
 import {
+  FlatList,
   Root,
   ScrollView,
   Text,
   View,
+  type MeasureHandle,
   type ScrollEvent,
   type ScrollViewHandle,
 } from "../../../src/index"
@@ -158,13 +160,14 @@ const scrolledWindowAbove = (widget: GtkNs.Widget): GtkNs.ScrolledWindow => {
 const controllerCount = (widget: GtkNs.Widget): number =>
   widget.observeControllers().getNItems()
 
-it("a wheel scrolls and reports no phase; a glide reports all four", async () => {
+it("a wheel reports one begin/end session; a glide reports all four", async () => {
   const injector = await openPointer()
   if (!injector) {
     return
   }
 
   const phases: string[] = []
+  const timeline: string[] = []
   const scrolls = { count: 0 }
   const handleRef = createRef<ScrollViewHandle>()
 
@@ -176,9 +179,16 @@ it("a wheel scrolls and reports no phase; a glide reports all four", async () =>
         style={{ width: 400, height: 240 }}
         onScroll={() => {
           seen.current.count += 1
+          timeline.push("scroll")
         }}
-        onScrollBeginDrag={() => phases.push("beginDrag")}
-        onScrollEndDrag={() => phases.push("endDrag")}
+        onScrollBeginDrag={() => {
+          phases.push("beginDrag")
+          timeline.push("beginDrag")
+        }}
+        onScrollEndDrag={() => {
+          phases.push("endDrag")
+          timeline.push("endDrag")
+        }}
         onMomentumScrollBegin={() => phases.push("momentumBegin")}
         onMomentumScrollEnd={() => phases.push("momentumEnd")}
       >
@@ -210,6 +220,7 @@ it("a wheel scrolls and reports no phase; a glide reports all four", async () =>
   await settle(120)
   await warmUpKinetics(injector)
   phases.length = 0
+  timeline.length = 0
   scrolls.count = 0
 
   // --- the wheel half -------------------------------------------------
@@ -217,13 +228,20 @@ it("a wheel scrolls and reports no phase; a glide reports all four", async () =>
     injector.scrollBy(1)
     await settle(60)
   }
-  // Long enough that a momentum phase would have begun AND ended.
+  // Past the wheel-burst idle boundary, and long enough that an invented
+  // momentum phase would also have appeared if the implementation confused
+  // "a session ended" with "the content coasted".
   await settle(600)
 
   expect(scrolls.count).toBeGreaterThan(0)
-  // The claim, unchanged from PR #88 and now scoped to the device that
-  // actually has it: a wheel has no drag and no momentum.
-  expect(phases).toEqual([])
+  expect(phases).toEqual(["beginDrag", "endDrag"])
+  expect(timeline[0]).toBe("beginDrag")
+  expect(timeline.at(-1)).toBe("endDrag")
+  expect(timeline.filter((event) => event === "scroll")).toHaveLength(4)
+  // One session for the whole burst, not one pair per detent.
+  expect(phases.filter((phase) => phase === "beginDrag")).toHaveLength(1)
+  phases.length = 0
+  timeline.length = 0
 
   // --- the glide half -------------------------------------------------
   const scrolled = scrolledWindowAbove(label)
@@ -386,6 +404,79 @@ it("delivers the phases into a useAnimatedScrollHandler, sharing its context", a
   // built on.
   expect(lockedTo.length).toBeGreaterThan(0)
   expect(lockedTo[0]).toBe(startedAt)
+})
+
+it("carries a phase-aware handler through FlatList's onScroll wrapper", async () => {
+  const injector = await openPointer()
+  if (!injector) {
+    return
+  }
+
+  const phases: string[] = []
+  const wrapperRef = createRef<MeasureHandle>()
+
+  const Probe = (): ReactNode => {
+    const onScroll = useAnimatedScrollHandler({
+      onScroll: () => phases.push("scroll"),
+      onBeginDrag: () => phases.push("beginDrag"),
+      onEndDrag: () => phases.push("endDrag"),
+    })
+    return (
+      <View
+        ref={wrapperRef}
+        style={{ width: 400, height: 240 }}
+      >
+        <FlatList
+          data={Array.from({ length: 100 }, (_, index) => index)}
+          getItemLayout={(_data, index) => ({
+            index,
+            length: 40,
+            offset: index * 40,
+          })}
+          onScroll={onScroll}
+          renderItem={({ item }) => (
+            <View style={{ height: 40 }}>
+              <Text>{`list-phase-${item}`}</Text>
+            </View>
+          )}
+        />
+      </View>
+    )
+  }
+
+  await act(async () => {
+    await render(
+      <Root
+        width={800}
+        height={500}
+      >
+        <Probe />
+      </Root>,
+    )
+  })
+  const label = screen.getByText("list-phase-0") as unknown as GtkNs.Widget
+  await waitFor(() => {
+    expect(label.getAllocatedWidth()).toBeGreaterThan(0)
+  })
+  await showFullscreen(label)
+
+  let aim: { x: number; y: number } | null = null
+  wrapperRef.current!.measureInWindow((x, y, width, height) => {
+    aim = { x: x + width / 2, y: y + height / 2 }
+  })
+  expect(aim).not.toBeNull()
+  injector.moveTo(aim!.x, aim!.y)
+  await settle(120)
+
+  for (let step = 0; step < 3; step += 1) {
+    injector.scrollBy(1)
+    await settle(60)
+  }
+  await settle(240)
+
+  expect(phases[0]).toBe("beginDrag")
+  expect(phases.at(-1)).toBe("endDrag")
+  expect(phases.filter((phase) => phase === "scroll")).toHaveLength(3)
 })
 
 it("useScrollOffset tracks a real wheel without a render", async () => {

@@ -38,7 +38,15 @@ export type ScrollPhase =
  * no GTK controller at all.
  */
 export type ScrollPhaseSink = {
-  wants(): boolean
+  /**
+   * Whether the handler wants any phase, or one phase in particular.
+   *
+   * The per-phase form lets ScrollView avoid handling every wheel detent for
+   * a consumer that asks only for momentum: a wheel has no momentum, while
+   * its begin/end pair is the desktop scroll-session extension documented in
+   * docs/research/scroll-phases.md.
+   */
+  wants(phase?: ScrollPhase): boolean
   deliver(phase: ScrollPhase, event: ScrollEvent): void
 }
 

@@ -14,19 +14,19 @@ level `@gtkx/testing`'s `userEvent` can reach.
 **RN's four scroll phases exist here, and which ones you get is a property
 of the INPUT DEVICE rather than of the platform.**
 
-- A **mouse wheel** produces none of them. GTK reports a detent and nothing
-  around it: one `::scroll`, no `::scroll-begin`, no `::scroll-end`, no
-  `::decelerate`, and the adjustment lands its whole step in a single frame
-  with nothing coasting after. There is no drag to begin and no momentum to
-  report, and none is invented.
-- A **touchpad glide** produces all four. The sequence has a real beginning
-  and a real end, and `GtkScrolledWindow`'s own kinetic animation carries the
+- A **mouse wheel** gives GTK no phases: one `::scroll` per detent, no
+  `::scroll-begin`, no `::scroll-end`, no `::decelerate`. The platform groups
+  a burst into a **desktop scroll session** — begin before the first detent
+  mutates the adjustment, end after 120 ms idle, no momentum. RN has no wheel,
+  so this is an explicit desktop extension rather than a parity claim.
+- A **touchpad glide** produces all four natively. The sequence has a real
+  beginning and end, and `GtkScrolledWindow`'s kinetic animation carries the
   content on for seconds afterwards.
 
-This narrows rather than overturns the claim PR #88 shipped and documented
-("a wheel-driven desktop scroller has no drag or momentum phase"). That was
-true, and it was true _about the wheel_. It was recorded as a fact about the
-platform because the only scroll anyone had driven was a wheel.
+This narrows and then deliberately extends the claim PR #88 shipped ("a
+wheel-driven desktop scroller has no drag or momentum phase"). GTK still
+provides no wheel sequence or momentum. The platform now supplies only the
+session boundary consumers need, and names that addition as desktop policy.
 
 **Asking for the phases costs nothing until you ask.** While no phase handler
 is attached, no controller is created, no signal is connected and no timer
@@ -117,12 +117,12 @@ own — nothing in this platform animates it.
 
 ## 2. How RN's four phases are mapped
 
-| RN                      | Source here                                      | Exact?                                                                                                                                                                                                             |
-| ----------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `onScrollBeginDrag`     | `GtkEventControllerScroll::scroll-begin`         | **Approximate.** RN's drag is a finger on the CONTENT. A touchpad never touches the content, so this is "the user started driving this scroller" — the closest true statement, and the one every consumer acts on. |
-| `onScrollEndDrag`       | `::scroll-end`                                   | Same approximation, same reason. The sequence really did end.                                                                                                                                                      |
-| `onMomentumScrollBegin` | the adjustment moving again after `::scroll-end` | Exact.                                                                                                                                                                                                             |
-| `onMomentumScrollEnd`   | that movement coming to rest                     | Exact, with a 60 ms rest window (§3).                                                                                                                                                                              |
+| RN                      | Touchpad source                              | Wheel source                  | Exact?                                                                                                                                            |
+| ----------------------- | -------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `onScrollBeginDrag`     | `GtkEventControllerScroll::scroll-begin`     | first detent in a burst       | **Approximate.** RN's drag is a finger on the content. A touchpad/wheel never touches it, so this means "the user started driving this scroller". |
+| `onScrollEndDrag`       | `::scroll-end`                               | 120 ms with no further detent | Same approximation. The wheel boundary is inferred from idle because GTK provides none.                                                           |
+| `onMomentumScrollBegin` | adjustment moving again after `::scroll-end` | never                         | Exact: a wheel lands its step immediately and never coasts.                                                                                       |
+| `onMomentumScrollEnd`   | that movement coming to rest                 | never                         | Exact, with a 60 ms touchpad rest window (§3).                                                                                                    |
 
 **Momentum is read off the adjustment, not off `::decelerate`.** The
 controller emits `decelerate` at _every_ `scroll-end` — it reports the
@@ -181,13 +181,18 @@ ran last.
 | `onScroll` + all four                        | 6.93                |
 | `useScrollOffset` only, no `onScroll` at all | 5.15                |
 
-**The phase machinery adds nothing to the per-event path**, which is what the
-design intends: the phases are delivered by two signals that fire twice per
-gesture, and the per-event path never learns they exist. The last two rows
-differ from the baseline by less than the spread within a single
-configuration's own fifteen rounds (6.46–8.87 µs for the baseline, with
-occasional 12–25 µs GC outliers discarded by the median), so the honest
-statement is _below the measurement floor_, not _zero_.
+**Native touchpad phases add nothing to the per-event path**: begin/end arrive
+as two signals per gesture and the momentum watch follows the adjustment.
+The last two rows differ from baseline by less than one configuration's own
+spread (6.46–8.87 µs, with 12–25 µs GC outliers discarded by the median).
+
+A wheel session necessarily enters JS on each detent, but only while a
+begin/end consumer is attached. Its pure state-machine cost — cancel/re-arm
+one timer and a generation guard — is **0.235 µs/detent** (20,000 detents,
+15 rounds, median; 0.230–0.556 range, `spike/bench-wheel-session.ts`), about
+3.3% of the 7.17 µs `onScroll` baseline. A momentum-only handler does not
+connect the wheel signal, and a scrollable with no phase handler still pays
+exactly zero.
 
 `useScrollOffset` is cheaper than an `onScroll` because it is strictly less
 work: two adjustment reads and one shared-value write, against `onScroll`'s
@@ -228,14 +233,15 @@ before a hook asks for it.
 ## 5. Proof
 
 [`tests/gtk/components/scroll-phases.gtk.test.tsx`](../../packages/react-native-gtkx/tests/gtk/components/scroll-phases.gtk.test.tsx),
-six tests, all under a real pointer: the wheel reports no phase and the glide
-reports all four in order with the content still moving after the lift; a
-`ScrollView` with no phase handler carries no extra controller and gains
-exactly one when a handler appears and loses it again when it goes; a
-`useAnimatedScrollHandler` receives all four through one `onScroll` prop with
-one shared context; `useScrollOffset` follows a real wheel in both directions
-with zero renders and stops on unmount; and every phase carries the same
-payload `onScroll` carries.
+seven tests, all under a real pointer: four wheel detents report one begin/end
+session in order and no momentum, while the glide reports all four with the
+content still moving after the lift; a `ScrollView` with no phase handler
+carries no extra controller and gains exactly one when a handler appears and
+loses it again; a `useAnimatedScrollHandler` receives all four through one
+`onScroll` prop with one shared context; a `FlatList` preserves that hidden
+phase sink through its windowing wrapper; `useScrollOffset` follows a real
+wheel in both directions with zero renders and stops on unmount; and every
+phase carries the same payload `onScroll` carries.
 
 **Two rig facts, isolated rather than worked around.** The first glide in a
 fresh worker never decelerates — a matrix over _our controller / a bare tick
