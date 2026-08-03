@@ -103,10 +103,12 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "@eslint/*"
         update-types: ["version-update:semver-major"]
-      - dependency-name: "typescript-eslint"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "typescript"
-        update-types: ["version-update:semver-major"]
+      # typescript and typescript-eslint are NOT ignored here on purpose: the
+      # repo did the TS6 migration deliberately (typescript-eslint's own
+      # peerDependencies gate this — it caps at `typescript: ">=4.8.4 <6.1.0"`,
+      # so a typescript major that outruns that range simply cannot install,
+      # the same failure mode as the @eslint/js evidence above). Letting their
+      # majors reach a PR again is what will surface the next such ceiling.
       # vitest's major is tied to @gtkx/vitest's peer range, and that is pinned.
       - dependency-name: "vitest"
         update-types: ["version-update:semver-major"]
