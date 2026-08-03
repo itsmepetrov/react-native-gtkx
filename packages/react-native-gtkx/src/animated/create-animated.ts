@@ -3,6 +3,8 @@
 // tests pass a manual scheduler and drive frames by hand.
 
 import { createDelay, loop, parallel, sequence } from "./composite"
+import { createAnimatedEvent } from "./event"
+import type { AnimatedEventConfig, EventMapping } from "./event"
 import { createSpring } from "./spring"
 import { createTiming } from "./timing"
 import type {
@@ -28,6 +30,10 @@ export type AnimatedApi = {
   ): CompositeAnimation
   delay(ms: number): CompositeAnimation
   loop(animation: CompositeAnimation, config?: LoopConfig): CompositeAnimation
+  event(
+    argMapping: readonly (EventMapping | null | undefined)[],
+    config?: AnimatedEventConfig,
+  ): (...args: unknown[]) => void
 }
 
 export const createAnimated = (scheduler: FrameScheduler): AnimatedApi => ({
@@ -39,4 +45,5 @@ export const createAnimated = (scheduler: FrameScheduler): AnimatedApi => ({
   parallel,
   delay: (ms) => createDelay(scheduler, ms),
   loop,
+  event: createAnimatedEvent,
 })
