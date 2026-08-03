@@ -1,14 +1,32 @@
-// Image → GtkPicture: four resizeMode values over a local SVG from the
-// Adwaita theme, remote http(s) sources through the disk cache, and onError
-// on a nonexistent path / dead URL.
+// Image → GtkPicture: four resizeMode values over a local SVG file, remote
+// http(s) sources through the disk cache, and onError on a nonexistent
+// path / dead URL.
+import { mkdtempSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { useState } from "react"
 import { Image, StyleSheet, Text, View } from "react-native"
 import { Caption, DemoCard, palette, Section } from "../ui"
 
-// Present in any Linux environment with GTK/Adwaita installed — including
-// the visual regression CI container.
-const ICON =
-  "/usr/share/icons/Adwaita/symbolic/status/weather-clear-symbolic.svg"
+// The local file half of the demo used to point at an Adwaita SYMBOLIC icon
+// — the only image guaranteed to exist on every Linux box. Symbolic icons
+// are a monochrome #2e3436 by design, which is unreadable on a dark card:
+// the shot in docs/shots looked like four empty frames. Modern Adwaita
+// ships no full-colour images at a stable path at all, so the demo now
+// writes its own colourful sample next to the process and loads THAT — the
+// mechanism under test (a local file through GtkPicture) is unchanged, and
+// the four resizeMode differences are finally visible: 28×20, deliberately
+// not the frame's aspect ratio.
+const SAMPLE_SVG =
+  "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 20'>" +
+  "<rect width='28' height='20' fill='#1c71d8'/>" +
+  "<rect y='12' width='28' height='8' fill='#26a269'/>" +
+  "<circle cx='21' cy='6.5' r='3.5' fill='#f5c211'/>" +
+  "<path d='M0 14 6 8l5 5 4-4 6 5v6H0z' fill='#613583'/>" +
+  "</svg>"
+
+const ICON = join(mkdtempSync(join(tmpdir(), "rn-gtkx-gallery-")), "sample.svg")
+writeFileSync(ICON, SAMPLE_SVG)
 
 const MODES = ["cover", "contain", "stretch", "center"] as const
 
@@ -56,7 +74,7 @@ export const MediaSection = () => {
     >
       <DemoCard
         title="resizeMode"
-        hint="the same Adwaita icon in a 110×64 frame: cover / contain / stretch / center"
+        hint="the same 28×20 local SVG in a 110×64 frame: cover / contain / stretch / center"
       >
         <View style={styles.row}>
           {MODES.map((mode) => (
