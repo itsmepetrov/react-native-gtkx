@@ -5,11 +5,6 @@
 // preset aliases both onto react-native-gtkx, which is the whole claim: a
 // ported app changes nothing in its source.
 //
-// The immutability rule is off for this file on purpose: writing
-// `sharedValue.value` from a gesture callback is Reanimated's own documented
-// pattern, and the React Compiler's rule cannot tell a shared value apart
-// from ordinary hook state.
-/* eslint-disable react-hooks/immutability */
 import { useLayoutEffect, useRef, useState } from "react"
 import { StyleSheet } from "react-native"
 import { useAnimatedStyle, useSharedValue } from "react-native-reanimated"
@@ -43,11 +38,16 @@ export const board = StyleSheet.create({
  *
  * THE PATTERN TO COPY, and the one bug everybody writes once. `translationX`
  * is measured from where THIS gesture activated, so it starts at zero on
- * every new grab. Writing `x.value = event.translationX` therefore throws
+ * every new grab. Writing `x.set(event.translationX)` therefore throws
  * away everything the card had already accumulated and snaps it back toward
  * its origin the moment you grab it a second time. The offset at the start of
  * the gesture has to be captured and added — which is exactly what upstream's
  * own documentation shows, for exactly this reason.
+ *
+ * Writes go through `set()` rather than `value =` because the React Compiler
+ * is ON by default in every gtkx app, and mutating a value a hook returned is
+ * the thing it warns about. Reanimated added `get()`/`set()` for exactly that;
+ * reads stay on `.value`, which nothing objects to.
  */
 export const useDragged = () => {
   const x = useSharedValue(0)
@@ -58,12 +58,12 @@ export const useDragged = () => {
     transform: [{ translateX: x.value }, { translateY: y.value }],
   }))
   const begin = () => {
-    startX.value = x.value
-    startY.value = y.value
+    startX.set(x.value)
+    startY.set(y.value)
   }
   const moveBy = (dx: number, dy: number) => {
-    x.value = startX.value + dx
-    y.value = startY.value + dy
+    x.set(startX.value + dx)
+    y.set(startY.value + dy)
   }
   return { x, y, style, begin, moveBy }
 }

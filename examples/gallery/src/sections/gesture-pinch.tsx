@@ -61,11 +61,11 @@ const PinchCard = () => {
 
   const gesture = Gesture.Pinch()
     .onStart(() => {
-      start.value = scale.value
+      start.set(scale.value)
       say("pinch", "ACTIVE")
     })
     .onUpdate((event) => {
-      scale.value = start.value * event.scale
+      scale.set(start.value * event.scale)
     })
     .onFinalize(() => say("pinch", `released at ×${scale.value.toFixed(2)}`))
 
@@ -98,11 +98,11 @@ const RotationCard = () => {
 
   const gesture = Gesture.Rotation()
     .onStart(() => {
-      start.value = angle.value
+      start.set(angle.value)
       say("rotation", "ACTIVE")
     })
     .onUpdate((event) => {
-      angle.value = start.value + event.rotation
+      angle.set(start.value + event.rotation)
     })
     .onFinalize(() =>
       say(
@@ -143,20 +143,20 @@ const TogetherCard = () => {
 
   const pinch = Gesture.Pinch()
     .onStart(() => {
-      scaleStart.value = scale.value
+      scaleStart.set(scale.value)
       say("both", "pinching…")
     })
     .onUpdate((event) => {
-      scale.value = scaleStart.value * event.scale
+      scale.set(scaleStart.value * event.scale)
     })
 
   const rotation = Gesture.Rotation()
     .onStart(() => {
-      angleStart.value = angle.value
+      angleStart.set(angle.value)
       say("both", "rotating…")
     })
     .onUpdate((event) => {
-      angle.value = angleStart.value + event.rotation
+      angle.set(angleStart.value + event.rotation)
     })
 
   const style = useAnimatedStyle(() => ({
