@@ -7,7 +7,10 @@
 // returns a marked descriptor outside the initial run, the style layer's leaf
 // test is `typeof value === "number"`, and so the property was neither driven
 // nor written nor warned about — it sat in the style as a spring descriptor.
-// Every case below is about the descriptor becoming a number.
+// Every case below is about the descriptor becoming a number, and the group
+// under `landingCollector` is about WHEN that number is allowed to reach
+// React: one render at the settle turned out to be a promise that a target
+// moving every frame never comes due on.
 import { beforeEach, expect, test } from "vitest"
 import { createAnimated } from "../../../src/animated/index"
 import {
@@ -171,6 +174,121 @@ test("settling reports once per animation, and never on a restart", () => {
   expect(settled).toEqual([])
   runFrames(25)
   expect(settled).toEqual(["height"])
+})
+
+/**
+ * The cadence — LANDING_INTERVAL_MS. `landings` and `settles` are collected
+ * apart because they are different claims: only the settle says the animation
+ * is over.
+ */
+const landingCollector = () => {
+  const settles: string[] = []
+  const landings: string[] = []
+  const animations = createUpdaterAnimations(
+    engine,
+    () => {},
+    (key) => {
+      settles.push(key)
+    },
+    (key) => {
+      landings.push(key)
+    },
+  )
+  return { animations, settles, landings }
+}
+
+test("a running animation lands on a cadence, not only when it settles", () => {
+  // The settle alone kept the refusal's promise only when it came soon.
+  // Measured on `@gorhom/bottom-sheet`'s mount, it came 1.38 s after the mask
+  // needed a height, and the list inside mounted zero cells in the meantime.
+  const probe = landingCollector()
+  probe.animations.run({ height: withTiming(0, { duration: 1000 }) })
+  probe.animations.run({ height: withTiming(1000, { duration: 1000 }) })
+
+  // Five frames is 83 ms — inside the interval, so nothing has landed yet
+  // even though the value has moved a long way.
+  runFrames(5)
+  expect(probe.landings).toEqual([])
+
+  // The sixth crosses 100 ms.
+  runFrames(1)
+  expect(probe.landings).toEqual(["height"])
+  // …and the seventh does not, because the interval starts again from there.
+  runFrames(1)
+  expect(probe.landings).toEqual(["height"])
+  expect(probe.settles).toEqual([])
+
+  runFrames(60)
+  expect(probe.settles).toEqual(["height"])
+  // Ten landings a second at the very most: a 1000 ms animation cannot cost
+  // more than ten, against the sixty frames it publishes.
+  expect(probe.landings.length).toBeLessThanOrEqual(10)
+})
+
+test("a target that keeps moving lands anyway, though it never settles", () => {
+  // This IS the gorhom mount: the mask's target is derived from the sheet's
+  // own position, so every frame of the opening spring re-aims it and every
+  // re-aim cancels the animation that was running. Nothing settles, so under
+  // the settle rule alone nothing ever reached Yoga.
+  const probe = landingCollector()
+  probe.animations.run({ height: withTiming(0, { duration: 400 }) })
+  for (let frame = 0; frame < 30; frame += 1) {
+    probe.animations.run({
+      height: withTiming(1000 + frame, { duration: 400 }),
+    })
+    runFrames(1)
+  }
+  expect(probe.settles).toEqual([])
+  expect(probe.landings.length).toBeGreaterThan(0)
+})
+
+test("a step too small to move a widget does not land", () => {
+  // GTK allocates whole pixels, so a sub-pixel change commits no new
+  // geometry and a render for it is a render for nothing.
+  const probe = landingCollector()
+  probe.animations.run({ height: withTiming(0, { duration: 2000 }) })
+  probe.animations.run({ height: withTiming(0.4, { duration: 2000 }) })
+  runFrames(60)
+  expect(probe.landings).toEqual([])
+  runFrames(90)
+  // It still settles: the promise the settle makes is unchanged.
+  expect(probe.settles).toEqual(["height"])
+})
+
+test("the settle restarts the interval, so a new animation is not owed a landing at once", () => {
+  const probe = landingCollector()
+  probe.animations.run({ height: withTiming(0, { duration: 100 }) })
+  probe.animations.run({ height: withTiming(300, { duration: 100 }) })
+  // Stopped ON the settle rather than a fixed number of frames past it: the
+  // interval is measured from the last value React was given, and the settle
+  // gave it one.
+  while (probe.settles.length === 0) {
+    runFrames(1)
+  }
+  const landingsAtSettle = probe.landings.length
+
+  probe.animations.run({ height: withTiming(600, { duration: 100 }) })
+  runFrames(3)
+  expect(probe.landings.length).toBe(landingsAtSettle)
+})
+
+test("a caller that asks for no cadence gets none", () => {
+  // `useAnimatedProps` drives every numeric prop it publishes, so it has no
+  // refused property to keep a promise about and passes neither callback.
+  const settles: string[] = []
+  const animations = createUpdaterAnimations(
+    engine,
+    () => {},
+    (key) => {
+      settles.push(key)
+    },
+  )
+  animations.run({ height: withTiming(0, { duration: 1000 }) })
+  animations.run({ height: withTiming(1000, { duration: 1000 }) })
+  runFrames(30)
+  expect(settles).toEqual([])
+  runFrames(40)
+  expect(settles).toEqual(["height"])
 })
 
 test("the composites arrive already implemented, because they are the same builder", () => {

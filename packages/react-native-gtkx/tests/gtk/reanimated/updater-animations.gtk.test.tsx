@@ -6,11 +6,14 @@
 // === "number"`, and an object is not a number: the property was neither
 // driven, nor written, nor warned about.
 //
-// The three cases below are the three paths a descriptor can take once it
-// becomes a number, and the third is the one the epic was actually stuck on:
-// a property this platform REFUSES to drive at frame rate, whose warning ends
-// "applied on the next React render" — a promise nothing kept when the value
-// only ever moved inside an animation.
+// The cases below are the paths a descriptor can take once it becomes a
+// number, and the ones that matter are about a property this platform REFUSES
+// to drive at frame rate, whose warning ends "applied on the next React
+// render" — a promise nothing kept when the value only ever moved inside an
+// animation. It is kept at the settle, and on the cadence that carries the
+// value there: the settle alone was 1.38 s late on `@gorhom/bottom-sheet`'s
+// mount, where the target is re-aimed every frame and never settles at all
+// (docs/research/animated-size.md §10).
 //
 // Geometry is read back out of GTK rather than out of the rect store, as
 // everywhere else in this directory: reading our own bookkeeping would pass
@@ -55,6 +58,7 @@ const boxOf = (testID: string): { width: number; height: number } => {
 beforeEach(() => {
   resetAnimatedSizeWarnings()
   resetUndriveableWarnings()
+  sheetDuration = 120
 })
 
 afterEach(() => {
@@ -148,10 +152,18 @@ const Mask = memo(({ style }: { style: unknown }) => {
 })
 Mask.displayName = "Mask"
 
+// Read during render, so a case that needs an animation long enough to be
+// caught mid-flight sets it before mounting — the landing cadence is 100 ms,
+// and 120 ms leaves no room to look inside.
+let sheetDuration = 120
+
 const Sheet = () => {
   const open = useSharedValue(0)
   const animated = useAnimatedStyle(() => ({
-    height: withTiming(open.value, { duration: 120, easing: Easing.linear }),
+    height: withTiming(open.value, {
+      duration: sheetDuration,
+      easing: Easing.linear,
+    }),
   }))
   // gorhom composes exactly like this, and the memo below sees only what comes
   // out of it.
@@ -212,11 +224,47 @@ it("lands a refused size in Yoga when the animation settles, through a memo", as
     expect.stringContaining("an animated `height` cannot be driven here"),
   )
 
-  // ONE render for the settle, not one per animation frame — a 120 ms
-  // animation at 60 Hz is about eight frames, and the whole reason the value
-  // does not go through React per frame is that a layout write costs what the
-  // container costs (docs/research/animated-size.md §3).
-  expect(renderCount - rendersAtMount).toBe(1)
+  // Renders bounded by the CLOCK, not by the frame rate: a 120 ms animation
+  // crosses the 100 ms landing interval at most once, so at most two renders
+  // — against the eight frames it publishes at 60 Hz. The whole reason the
+  // value does not go through React per frame is that a layout write costs
+  // what the CONTAINER costs and not what the animated value costs
+  // (docs/research/animated-size.md §3); the reason it no longer waits for the
+  // settle alone is that on gorhom's mount the settle was 1.38 s away (§10,
+  // and LANDING_INTERVAL_MS).
+  //
+  // An upper bound rather than a number: a landing that falls on the frame the
+  // animation ends on is batched into the settle's render, and this
+  // environment's main loop is coarse enough for that to be the usual case.
+  // That the value arrives BEFORE the settle is asserted by the case below,
+  // where it is a geometry to read rather than a count.
+  expect(renderCount - rendersAtMount).toBeLessThanOrEqual(2)
+})
+
+it("lands a refused size before its animation settles, not only after", async () => {
+  // The §10 case, reduced: a slow animation on a refused property used to be
+  // absent from Yoga for its whole duration, because the one render it was
+  // promised came at the end. `@gorhom/bottom-sheet` mounting is the same
+  // shape at 1.38 s, and the list inside the sheet mounted zero cells for all
+  // of it. A third of the way in is a real value now.
+  vi.spyOn(console, "warn").mockImplementation(() => {})
+  sheetDuration = 900
+  await mountSheet()
+
+  await act(async () => {
+    sheetHandles.open.value = 240
+  })
+  await settle(300)
+  const midway = boxOf("mask").height
+  expect(midway).toBeGreaterThan(0)
+  expect(midway).toBeLessThan(240)
+  // And the child whose height can ONLY come from a Yoga pass followed it
+  // there, which is the whole claim: it is a bounded parent mid-animation and
+  // not merely at the end of one.
+  expect(boxOf("filler").height).toBe(midway)
+
+  await settle(1000)
+  expect(boxOf("mask").height).toBe(240)
 })
 
 it("keeps following a target that moves before the previous animation settled", async () => {
