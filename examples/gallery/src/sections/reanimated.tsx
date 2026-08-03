@@ -20,8 +20,10 @@ import {
   type PanResponderGestureState,
 } from "react-native"
 import Animated, {
+  createAnimatedComponent,
   Easing,
   interpolateColor,
+  useAnimatedProps,
   useAnimatedReaction,
   useAnimatedStyle,
   useDerivedValue,
@@ -30,6 +32,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated"
+import Svg, { Circle } from "react-native-svg"
 import {
   countCrossing,
   countWrite,
@@ -42,6 +45,8 @@ import { Button, Caption, DemoCard, palette, Row, Section, Stat } from "../ui"
 const BOX = 72
 const LOOP_TRAVEL = 200
 const DERIVED_TRAVEL = 220
+const PROPS_RING_RADIUS = 28
+const PROPS_RING_CIRCUMFERENCE = 2 * Math.PI * PROPS_RING_RADIUS
 
 const styles = StyleSheet.create({
   arena: {
@@ -112,6 +117,15 @@ const styles = StyleSheet.create({
   legend: {
     color: palette.textDim,
     fontSize: 12,
+  },
+  svgRow: {
+    flexDirection: "row",
+    gap: 16,
+    alignItems: "center",
+  },
+  svgCanvas: {
+    backgroundColor: palette.cardAlt,
+    borderRadius: 8,
   },
 })
 
@@ -245,12 +259,21 @@ const Readout = () => {
         loud
       />
       <Stat
+        label="React renders — animated props"
+        value={String(counts.props.renders)}
+        loud
+      />
+      <Stat
         label="Frames driven — looping box"
         value={String(counts.loop.writes)}
       />
       <Stat
         label="Frames driven — dragged box"
         value={String(counts.drag.writes)}
+      />
+      <Stat
+        label="Frames driven — animated props"
+        value={String(counts.props.writes)}
       />
       <Stat
         label="Frames per second, now"
@@ -355,10 +378,92 @@ const Derived = () => {
   )
 }
 
+// Wrapped once at module scope, like the SVG shapes it wraps: the wrapper
+// adds no widget, so there is nothing here that benefits from being rebuilt
+// per render.
+const AnimatedCircle = createAnimatedComponent(Circle)
+
+/**
+ * `useAnimatedProps` instead of `useAnimatedStyle` — the same mapper, aimed at
+ * a component's PROPS rather than its style. One shared value, two numeric
+ * leaves on two SVG shapes (`r` on the dot, `strokeDashoffset` on the ring),
+ * both reaching GTK through the shape's own subscription to an animated node
+ * (svg/animated-support.ts's `queueDraw` channel — see props.ts). Counted the
+ * same way the boxes above are, into the same readout.
+ */
+const PropsRing = () => {
+  const progress = useSharedValue(0)
+
+  useRenderCount("props")
+  useAnimatedReaction(
+    () => progress.get(),
+    () => countWrite("props"),
+  )
+
+  useEffect(() => {
+    progress.set(
+      withRepeat(
+        withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.quad) }),
+        -1,
+        true,
+      ),
+    )
+  }, [progress])
+
+  const dotProps = useAnimatedProps(() => ({
+    r: 8 + progress.get() * 14,
+  }))
+  const ringProps = useAnimatedProps(() => ({
+    strokeDashoffset: PROPS_RING_CIRCUMFERENCE * (1 - progress.get()),
+  }))
+
+  return (
+    <View style={styles.svgRow}>
+      <Svg
+        width={72}
+        height={72}
+        style={styles.svgCanvas}
+      >
+        <AnimatedCircle
+          cx={36}
+          cy={36}
+          fill={palette.accent}
+          animatedProps={dotProps}
+        />
+      </Svg>
+      <Svg
+        width={72}
+        height={72}
+        style={styles.svgCanvas}
+      >
+        <Circle
+          cx={36}
+          cy={36}
+          r={PROPS_RING_RADIUS}
+          fill="none"
+          stroke={palette.card}
+          strokeWidth={6}
+        />
+        <AnimatedCircle
+          cx={36}
+          cy={36}
+          r={PROPS_RING_RADIUS}
+          fill="none"
+          stroke={palette.green}
+          strokeWidth={6}
+          strokeLinecap="round"
+          strokeDasharray={`${PROPS_RING_CIRCUMFERENCE}`}
+          animatedProps={ringProps}
+        />
+      </Svg>
+    </View>
+  )
+}
+
 export const ReanimatedSection = () => (
   <Section
     title="Reanimated values"
-    subtitle="Shared values, useAnimatedStyle, useDerivedValue and useAnimatedReaction — and the render counters that show what they cost."
+    subtitle="Shared values, useAnimatedStyle, useAnimatedProps, useDerivedValue and useAnimatedReaction — and the render counters that show what they cost."
   >
     <DemoCard
       title="Drag me"
@@ -383,16 +488,16 @@ export const ReanimatedSection = () => (
 
     <DemoCard
       title="Zero renders per frame"
-      hint="The box has not stopped moving since the app opened. Watch the two green numbers."
+      hint="The box has not stopped moving since the app opened. Watch the three green numbers."
     >
       <LoopBox />
       <Readout />
       <Caption>
         The green counters are React renders of the animated components — this
-        box and the dragged one above. They reach 1 at mount and stay there
-        while the frame counters climb at ~60 a second: a shared value is not
-        React state, so writing it runs the mapper, writes the widget, and never
-        tells React.
+        box, the dragged one above, and the `useAnimatedProps` ring further
+        down. They reach 1 at mount and stay there while the frame counters
+        climb at ~60 a second: a shared value is not React state, so writing it
+        runs the mapper, writes the widget, and never tells React.
       </Caption>
       <Caption>
         The last number is the only thing here on a timer — this readout polls
@@ -417,6 +522,28 @@ export const ReanimatedSection = () => (
         dependencies are recorded from the reads a mapper performs, not from a
         build-time scan. `dependencies` is still accepted — the colour slider in
         &quot;Reanimated motion&quot; passes one.
+      </Caption>
+    </DemoCard>
+
+    <DemoCard
+      title="Aimed at a prop, not a style"
+      hint="useAnimatedProps: the dot's radius and the ring's strokeDashoffset, both off one shared value — its render/frame counters live in the readout above."
+    >
+      <PropsRing />
+      <Caption>
+        `useAnimatedProps` is the same mapper as `useAnimatedStyle`, pointed at
+        a component&apos;s props instead of its style — here
+        `createAnimatedComponent(Circle)` from `react-native-svg`. Only a
+        NUMERIC prop is driven this way: the SVG shapes already accept a number
+        or an animated node on every geometry and paint leaf and subscribe to it
+        themselves, so this hook hands them a node rather than opening a second
+        write path.
+      </Caption>
+      <Caption>
+        Look at the readout in &quot;Zero renders per frame&quot; above: its
+        third pair — &quot;animated props&quot; — is this card&apos;s render
+        count and frame count, climbing at the same ~60 a second while staying
+        at one render, for the reason every other counter here does.
       </Caption>
     </DemoCard>
   </Section>

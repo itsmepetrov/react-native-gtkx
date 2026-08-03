@@ -18,7 +18,7 @@
 // JSX something that actually changes, which is what the compiler needs.
 import { useEffect, useRef, useState } from "react"
 
-export type CounterId = "drag" | "loop"
+export type CounterId = "drag" | "loop" | "props"
 
 export type Counter = {
   /** React renders of the animated component itself. */
@@ -30,6 +30,7 @@ export type Counter = {
 const counters: Record<CounterId, Counter> = {
   drag: { renders: 0, writes: 0 },
   loop: { renders: 0, writes: 0 },
+  props: { renders: 0, writes: 0 },
 }
 
 /** Called from a mapper (`useAnimatedReaction`), which is not a render. */
@@ -51,6 +52,7 @@ export const countCrossing = (): void => {
 export type Snapshot = {
   loop: Counter
   drag: Counter
+  props: Counter
   crossings: number
   /** Frames a second, measured between two snapshots rather than per render. */
   perSecond: number
@@ -59,6 +61,7 @@ export type Snapshot = {
 const EMPTY: Snapshot = {
   loop: { renders: 0, writes: 0 },
   drag: { renders: 0, writes: 0 },
+  props: { renders: 0, writes: 0 },
   crossings: 0,
   perSecond: 0,
 }
@@ -78,6 +81,7 @@ const takeSnapshot = (): Snapshot => {
   return {
     loop: { ...counters.loop },
     drag: { ...counters.drag },
+    props: { ...counters.props },
     crossings,
     perSecond,
   }
