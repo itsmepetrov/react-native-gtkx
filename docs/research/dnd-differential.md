@@ -123,6 +123,79 @@ markup, so the dragged card is a later sibling and paints on top — none of
 screens 6–18 shows the symptom. It is a sortable-list problem, not a
 drag-and-drop problem, and reordering a list is exactly where it hurts most.
 
+## A window-level drag layer: the escape `zIndex` cannot reach
+
+`zIndex` (above) settles paint order among _siblings inside one container_ —
+RN's own rule, checked in [z-index.md](z-index.md): "no stacking context that
+escapes the parent, and a child cannot paint above its parent's sibling."
+Nothing about that rule changes for an `overflow: hidden` ancestor further up
+the tree: a dragged `Draggable`/`SortableItem` row still sits exactly where it
+started, in flow, inside whatever clipped it before the drag — a scrollable
+card list, a clipped panel — and `zIndex` has no more power over an
+ancestor's clip than it has over an ancestor's sibling.
+
+GDK's own drag icon (`setIcon`, `gtk-controllers.tsx`) already escapes that
+clip — it is a compositor surface, drawn above every window, never a
+descendant of anything this process owns. But it is _only_ that: a cue at the
+cursor, invisible to this process's own render tree, so nothing here could
+prove the escape or read its pixels. `react-native-gtkx/dnd` now adds a
+second, deliberately redundant copy that lives IN the app's own tree instead:
+while a `Draggable` or `SortableItem` row is being dragged, a non-interactive
+`Gtk.Picture` showing a live `Gtk.WidgetPaintable` of it is added to a
+`Gtk.Overlay` wrapped once around each window's real content
+(`gtkx/bridge/drag-layer.ts`) — an `Overlay` child, so no ancestor's clip
+reaches it, geometry and pixels a test can read.
+
+**Reparenting the dragged widget itself was tried first, and refused.**
+Moving the real GTK node into a different container re-triggers ITS OWN size
+negotiation under a parent with different constraints — measured, a 100×100
+card came out 800×600 — and an unmount mid-flight strands the widget outside
+the tree React still thinks it owns. A `WidgetPaintable` sidesteps both: it
+is a live VIEW of the widget, not the widget, so the original never moves and
+never leaves the component tree React manages. `zIndex`'s own verdict
+("we own the widget") pointed at the same family of fix; this is the member
+of it that reaches past one container's edge instead of past one sibling.
+
+**The original is ghosted, not hidden**, the way `react-native-draggable-flatlist`'s
+`activeOpacity` and similar libraries do it: `Gtk.Widget.setOpacity()` at
+0.35, restored to whatever it was before (not hardcoded to `1`) when the drag
+ends. Because `Gtk.WidgetPaintable` is a LIVE view of the widget it observes,
+GDK's own drag icon and the window-level copy dim right along with the
+original — the three are one underlying render, not three independent ones.
+Decoupling them would need a frozen texture snapshot taken before the fade
+rather than a live paintable, which is not what the spike validated or what
+is measured below.
+
+**The surface is automatic, not a prop.** Every `Draggable` and every
+`SortableItem` already runs through the one `DragSourceControllers` both are
+built on (`dnd/gtk-controllers.tsx`), so the window-level copy is wired in
+there, once, rather than as an opt-in an app has to ask for. RN dnd libraries
+do not make "the dragged row should be visible while dragged" a prop either.
+
+**What it costs, measured the same way [z-index.md](z-index.md) measured its
+paint sort**: the one thing this feature does per motion event is
+`DragLayerHandle.move()` — two widget property writes (`setMarginStart`,
+`setMarginTop`), both scalar, neither touching Yoga or React. Isolated from a
+real drag (`beginDragLayer` called directly, `move()` timed over five
+interleaved rounds of 400 calls, same VM as z-index.md's numbers): **1.76 µs
+median**, settling from a 4.2 µs first round (JIT warmup) to ~1.7 µs — the
+same order of magnitude as z-index.md's own per-FFI-hop cost (0.9 µs for one
+`snapshotChild()`), consistent with this being two such hops and nothing
+else. Unlike `zIndex`'s paint sort, there is no per-child multiplier: the
+cost is flat regardless of how large the app's tree is, because a motion
+event repositions exactly one widget.
+
+Proof is `tests/gtk/dnd/drag-layer.gtk.test.tsx`: a real Wayland pointer
+drags a `Draggable` card out of a 100×100 `overflow: hidden` box, mid-drag,
+and the test asserts geometry, not eyes — the ghost `Gtk.Picture`'s own
+`computeBounds()` land entirely past the clip's edge, `getCanTarget()` is
+`false` (no input), the card's OWN allocation (what `measure()` reads) is
+unchanged, and a render counter on the card's content stays at zero across
+eight motion steps (zero React renders per frame). A second, untouched
+`overflow: hidden` box elsewhere on the same stage is the negative control —
+asserted exactly as clipped after the gesture as before it, so the fix does
+not read as "clipping stopped working everywhere."
+
 ## `useFlatList` was ours, and it is fixed
 
 [#90](upstream-libraries.md) recorded that `Sortable` needed

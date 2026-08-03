@@ -9,11 +9,13 @@
 import { useRef, type ReactNode } from "react"
 import { Controllers } from "../gtk/controllers"
 import {
+  beginDragLayer,
   Gdk,
   GObject,
   Gtk,
   GtkDragSource,
   GtkDropTarget,
+  type DragLayerHandle,
 } from "../gtkx/bridge/index"
 import { decodePayload, encodePayload, type DragPayload } from "./payload"
 
@@ -36,6 +38,13 @@ export type DragSourceControllersProps = {
  * inside it the drag began — so the thing appears to lift off under the
  * cursor rather than jump to it. That is the visual no JS drag can produce,
  * and the reason this module is built on GDK at all.
+ *
+ * A second, window-level copy of the same picture rides alongside it for as
+ * long as the drag stays over this window — `gtkx/bridge/drag-layer.ts` has
+ * the reason: `setIcon`'s own icon is a compositor surface, unclipped by any
+ * `overflow: hidden` ancestor but also outside this process's own widget
+ * tree, so nothing in it can prove that escape happened. The window-level
+ * copy is the same escape, provable.
  */
 export const DragSourceControllers = ({
   payload,
@@ -47,6 +56,11 @@ export const DragSourceControllers = ({
   // cancel is recorded and read by the end handler rather than reported
   // twice.
   const cancelled = useRef(false)
+  // Set in `onPrepare`, consumed in `onDragBegin` — the window-level layer
+  // only starts once GDK confirms the drag is really happening, but the
+  // widget and grab point it needs are only ever handed to `onPrepare`.
+  const grab = useRef<{ widget: Gtk.Widget; x: number; y: number } | null>(null)
+  const dragLayer = useRef<DragLayerHandle | null>(null)
 
   return (
     <Controllers>
@@ -60,6 +74,7 @@ export const DragSourceControllers = ({
               Math.round(x),
               Math.round(y),
             )
+            grab.current = { widget, x, y }
           }
           onGrab?.(x, y)
           return Gdk.ContentProvider.newForValue(
@@ -70,6 +85,13 @@ export const DragSourceControllers = ({
         }}
         onDragBegin={() => {
           cancelled.current = false
+          if (grab.current) {
+            dragLayer.current = beginDragLayer(
+              grab.current.widget,
+              grab.current.x,
+              grab.current.y,
+            )
+          }
           onDragBegin?.()
         }}
         onDragCancel={() => {
@@ -78,7 +100,11 @@ export const DragSourceControllers = ({
           // platform's way of saying the drop was refused.
           return false
         }}
-        onDragEnd={() => onDragEnd?.(!cancelled.current)}
+        onDragEnd={() => {
+          dragLayer.current?.end()
+          dragLayer.current = null
+          onDragEnd?.(!cancelled.current)
+        }}
       />
     </Controllers>
   )
