@@ -9,11 +9,12 @@ import {
   Animated,
   Easing,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native"
-import { DemoCard, palette, Section } from "../ui"
+import { Caption, DemoCard, palette, Section, Status } from "../ui"
 
 const styles = StyleSheet.create({
   track: {
@@ -38,6 +39,37 @@ const styles = StyleSheet.create({
   buttonText: {
     color: palette.onColor,
     fontWeight: "700",
+    fontSize: 13,
+  },
+  parallaxCard: {
+    height: 220,
+    borderRadius: 10,
+    overflow: "hidden",
+    backgroundColor: palette.cardAlt,
+  },
+  parallaxHeader: {
+    height: 64,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: palette.accent,
+  },
+  parallaxHeaderText: {
+    color: palette.onColor,
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  parallaxScroll: {
+    flex: 1,
+  },
+  parallaxRow: {
+    height: 44,
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.card,
+  },
+  parallaxRowText: {
+    color: palette.text,
     fontSize: 13,
   },
 })
@@ -151,6 +183,164 @@ const SpringToggle = () => {
   )
 }
 
+// `Animated` (the value imported above) has no matching TYPE of the same
+// name — unlike upstream's own `Animated.Value` spelling, which works
+// because RN's own types merge a namespace declaration onto the value. This
+// platform exports the object only, so the instance type is reached the
+// same way any class instance behind a plain value is: through the runtime
+// value's own type.
+type AnimatedValue = InstanceType<typeof Animated.Value>
+
+const PARALLAX_ROWS = Array.from(
+  { length: 14 },
+  (_, index) => `Ported row ${index + 1}`,
+)
+
+// The fade range the header's own interpolation is measured against — past
+// it the header is as dim/receded as it gets, which is what `extrapolate:
+// "clamp"` holds once scrollY keeps climbing past the row content's own
+// range.
+const PARALLAX_FADE_RANGE = 160
+
+// Opacity and translateY, not height: both take the direct widget-write path
+// (setOpacity, the transform's rect-store slot) that costs nothing per
+// scroll tick — the same path Animated.spring's square rides above. An
+// animated `height` here would ask the ScrollView sitting right below it to
+// reflow around the change, which is a real Yoga pass rather than a paint,
+// so this shrinks and fades in place instead of resizing.
+const ScrollLinkedHeader = ({
+  scrollY,
+  renderCountRef,
+}: {
+  scrollY: AnimatedValue
+  // A ref, not state: incrementing it during render is the only way to
+  // observe "React committed this component" without becoming a render
+  // itself — same escape hatch the gallery's other render counters use.
+  renderCountRef: { current: number }
+}) => {
+  renderCountRef.current += 1
+
+  const opacity = useMemo(
+    () =>
+      scrollY.interpolate({
+        inputRange: [0, PARALLAX_FADE_RANGE],
+        outputRange: [1, 0.25],
+        extrapolate: "clamp",
+      }),
+    [scrollY],
+  )
+  const translateY = useMemo(
+    () =>
+      scrollY.interpolate({
+        inputRange: [0, PARALLAX_FADE_RANGE],
+        outputRange: [0, -18],
+        extrapolate: "clamp",
+      }),
+    [scrollY],
+  )
+
+  return (
+    <Animated.View
+      style={[styles.parallaxHeader, { opacity, transform: [{ translateY }] }]}
+    >
+      <Text style={styles.parallaxHeaderText}>Ported header, untouched</Text>
+    </Animated.View>
+  )
+}
+
+// Snapshots the running counters onto a timer rather than reading them
+// directly during render — reading a plain ref during render is exactly what
+// the React Compiler memoises away as having no reactive input, which would
+// freeze this readout at its mount-time value forever (the gotcha the
+// Reanimated section's own stats.ts documents for the identical shape).
+const ScrollEventReadout = ({
+  renderCountRef,
+  offsetRef,
+  ticksRef,
+}: {
+  renderCountRef: { current: number }
+  offsetRef: { current: number }
+  ticksRef: { current: number }
+}) => {
+  const [snapshot, setSnapshot] = useState({ renders: 1, offset: 0, ticks: 0 })
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSnapshot({
+        renders: renderCountRef.current,
+        offset: offsetRef.current,
+        ticks: ticksRef.current,
+      })
+    }, 200)
+    return () => clearInterval(timer)
+  }, [renderCountRef, offsetRef, ticksRef])
+
+  return (
+    <Status>
+      {snapshot.ticks} scroll events, listener offset {snapshot.offset}px —
+      header rendered {snapshot.renders}×
+    </Status>
+  )
+}
+
+// The classic idiom, transcribed unchanged: a ScrollView's onScroll IS
+// Animated.event, mapping contentOffset.y onto a Value the header
+// interpolates. Nothing about this component tree differs from what a ported
+// app already wrote for iOS/Android — the traversal in animated/event.ts is
+// the only thing standing in for the native side that does not exist here.
+const ScrollLinkedParallax = () => {
+  const [scrollY] = useState(() => new Animated.Value(0))
+  const headerRendersRef = useRef(0)
+  const listenerOffsetRef = useRef(0)
+  const listenerTicksRef = useRef(0)
+
+  const onScroll = useMemo(
+    () =>
+      Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+        // The listener RN apps reach for alongside the mapping — analytics,
+        // a sticky title swap — called with the same ScrollEvent, after
+        // scrollY has already been written for this call.
+        listener: (event) => {
+          const { nativeEvent } = event as {
+            nativeEvent: { contentOffset: { y: number } }
+          }
+          listenerOffsetRef.current = Math.round(nativeEvent.contentOffset.y)
+          listenerTicksRef.current += 1
+        },
+      }),
+    [scrollY],
+  )
+
+  return (
+    <>
+      <View style={styles.parallaxCard}>
+        <ScrollLinkedHeader
+          scrollY={scrollY}
+          renderCountRef={headerRendersRef}
+        />
+        <ScrollView
+          style={styles.parallaxScroll}
+          onScroll={onScroll}
+        >
+          {PARALLAX_ROWS.map((row) => (
+            <View
+              key={row}
+              style={styles.parallaxRow}
+            >
+              <Text style={styles.parallaxRowText}>{row}</Text>
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+      <ScrollEventReadout
+        renderCountRef={headerRendersRef}
+        offsetRef={listenerOffsetRef}
+        ticksRef={listenerTicksRef}
+      />
+    </>
+  )
+}
+
 export const AnimatedSection = () => (
   <Section
     title="Animated"
@@ -168,6 +358,21 @@ export const AnimatedSection = () => (
       hint="stiffness/damping physics: the overshoot honestly flies past the edge and springs back — transforms are paint-only, like in RN"
     >
       <SpringToggle />
+    </DemoCard>
+
+    <DemoCard
+      title="Animated.event"
+      hint="scroll the rows — the header fades and rises on scrollY.interpolate(), and the listener alongside it gets the raw offset"
+    >
+      <ScrollLinkedParallax />
+      <Caption>
+        Animated.event&apos;s arg-mapping traversal writes contentOffset.y
+        straight onto scrollY via setValue() — no state, no re-render — so a
+        ported app&apos;s scroll-linked header keeps working exactly as written.
+        The header&apos;s render count above proves it: it is counted once at
+        mount and never again, no matter how many scroll events the listener
+        counts alongside it.
+      </Caption>
     </DemoCard>
   </Section>
 )
