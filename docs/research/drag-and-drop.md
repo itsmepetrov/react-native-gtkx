@@ -315,24 +315,51 @@ achieves what it asks for, or cannot express it), **unsupported**.
 | `positions`, `lowerBound`, `autoScrollDirection`, `itemHeights` | **shape-compatible, different type** | opaque values the app forwards; `SharedValue` cannot exist here                                                                                                               |
 | `itemHeight`, `estimatedItemHeight`, `enableDynamicHeights`     | accepted and ignored                 | rows are laid out by Yoga at their natural height, so a height hint has nothing to correct                                                                                    |
 | `useFlatList`                                                   | accepted and ignored                 | the mirror has no windowing to switch off. The prop is load-bearing against the REAL library, and works there on its default now — [dnd-differential.md](dnd-differential.md) |
-| autoscroll during a drag                                        | unsupported for now                  | GTK's own kinetic autoscroll does not run for a DND motion; a `GtkDropControllerMotion` near the edge could drive `ScrollView`, and that is a follow-up, not a shipped claim  |
-| `direction: "horizontal"`, `SortableGrid`                       | **not implemented**                  | deferred, see below                                                                                                                                                           |
+| autoscroll during a drag                                        | **implemented, 2026-08-04**          | see the update below                                                                                                                                                          |
+| `direction: "horizontal"`, `SortableGrid`                       | **implemented, 2026-08-04**          | see the update below                                                                                                                                                          |
 
-### Deliberately not implemented
+### Deliberately not implemented (superseded)
 
 `SortableGrid`, `SortableGridItem`, `useGridSortable*`, `useHorizontalSortable*`
-and the grid utilities in `utils/gridCalculations`. They are a large surface
-(148 lines of grid types alone) serving a layout that GNOME apps rarely use,
-and none of the mechanism they need is different from the vertical list —
-so they are a later increment, not a research question. Importing them
-fails at build time with a clear "not implemented on Linux" rather than
-silently doing nothing.
+and the grid utilities in `utils/gridCalculations` used to stop here. They were
+a large surface (148 lines of grid types alone) serving a layout that GNOME
+apps rarely use, and none of the mechanism they needed was different from the
+vertical list — so they were a later increment, not a research question.
 
-The deferral's premise has since been checked rather than assumed: both
-surfaces of the REAL package reorder under a real pointer on this platform
-(the gallery's Upstream sortables section), so nothing the mirror would need
-is missing
-from the runtime — see [dnd-differential.md](dnd-differential.md).
+The deferral's premise was checked rather than assumed: both surfaces of the
+REAL package reorder under a real pointer on this platform (the gallery's
+Upstream sortables section), so nothing the mirror needed was missing from the
+runtime — see [dnd-differential.md](dnd-differential.md).
+
+**Update — implemented, 2026-08-04.** The mechanism prediction above held:
+reorder-by-crossing does not look at which axis a list scrolls along, so
+`useHorizontalSortable`/`useHorizontalSortableList` are `useSortable`/
+`useSortableList`'s own code with a horizontal `ScrollView` and
+`leftBound`/`autoScrollHorizontalDirection` plumbing, not a second
+implementation. `SortableGrid` is the one place a genuine choice was made:
+upstream lays every cell `position: absolute` at a `useAnimatedStyle`-computed
+`top`/`left`, which this platform has no equivalent of (no per-frame transform
+outside a real gesture — the same reason the plain list is flow-laid-out, not
+absolutely positioned). So the grid is a real Yoga `flexWrap` layout instead —
+fixed-size cells, a fixed cross-axis dimension (`columns`/`rows` ×
+`itemWidth`/`itemHeight`) — using the exact same row/column arithmetic
+(`calculateGridPosition`, ported verbatim into `grid-order.ts`) to decide
+where a cell lands, just handed to a different engine to paint. Also ported
+verbatim: `getGridCellFromCoordinates` floors onto the cell whose top-left
+corner is at or before a point — upstream's own behaviour, kept rather than
+"fixed" to round to the nearest cell.
+
+Also implemented: edge autoscroll, for both `Sortable` and `SortableGrid`. The
+follow-up this table predicted is what shipped — a `GtkDropControllerMotion`
+on the list's own viewport (the same technique `DropProvider`'s `onDragging`
+already used, see below) reports how close the drag sits to an edge, and a
+`Gtk.Widget` tick callback nudges the real `GtkAdjustment` toward it for as
+long as it stays there. Both are imperative, per-frame writes with no React
+state behind them, so this stays on the zero-render reorder path next to it.
+The one behavioural difference from upstream: the scroll runs at a constant
+speed for as long as the edge band is occupied, rather than easing into a
+1500ms glide, because there is no timing engine here to ease with — recorded
+in [api.md](../api.md#differences-from-react-native-reanimated-dnd).
 
 ## `onDragging` is recoverable, and that was not obvious
 
@@ -442,7 +469,10 @@ already know.
   are kept in the type rather than removed so that a shared file compiles
   for all three platforms — removing them would turn a Linux limitation
   into an iOS and Android compile error.
-- Sortable autoscroll near a container edge is not implemented.
-- The grid and horizontal sortable surfaces are not implemented **in the
-  mirror**. The real package supplies both here, measured under a real
-  pointer — [dnd-differential.md](dnd-differential.md).
+- ~~Sortable autoscroll near a container edge is not implemented.~~
+  **Closed, 2026-08-04** — constant-speed rather than upstream's 1500ms
+  glide, since there is no timing engine here; see the update above.
+- ~~The grid and horizontal sortable surfaces are not implemented **in the
+  mirror**.~~ **Closed, 2026-08-04** — see the update above. The real package
+  still supplies both here too, measured under a real pointer —
+  [dnd-differential.md](dnd-differential.md).

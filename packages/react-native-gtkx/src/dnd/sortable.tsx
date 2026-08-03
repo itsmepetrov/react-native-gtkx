@@ -1,11 +1,17 @@
-// `Sortable`, `SortableItem`, `useSortable` and `useSortableList` — the
-// drag-to-reorder list, which is the shape most apps actually reach for.
+// `Sortable`, `SortableItem`, `useSortable`, `useSortableList` and their
+// horizontal counterparts (`useHorizontalSortable`, `useHorizontalSortableList`)
+// — the drag-to-reorder list, which is the shape most apps actually reach
+// for, in either direction.
 //
 // The reorder is LIVE: crossing another row moves the dragged row into its
 // place immediately, so the list rearranges under the drag icon. That is
 // upstream's behaviour too — its `onMove` fires as rows cross, not at the
 // end — minus the spring, because here the rows are laid out by Yoga rather
-// than transformed.
+// than transformed. The mechanism does not care which axis the list scrolls
+// along: GDK hit-tests the real widget tree either way, which is why
+// `SortableDirection.Horizontal` is a render-time branch here (a horizontal
+// `ScrollView`, `leftBound`/`autoScrollHorizontalDirection` plumbing) rather
+// than a second implementation.
 //
 // The component owns the order, exactly as upstream requires ("do NOT update
 // external state in `onMove`"). An app reads the settled order from
@@ -20,13 +26,17 @@ import {
   useState,
   type ReactNode,
 } from "react"
-import { ScrollView } from "../components/scroll-view"
+import type { MeasureHandle } from "../components/measure"
+import { ScrollView, type ScrollViewHandle } from "../components/scroll-view"
 import { View } from "../components/view"
+import { useEdgeAutoscroll } from "./autoscroll"
 import { DraggableContext, DraggableHandle } from "./draggable"
 import { DragSourceControllers, DropTargetControllers } from "./gtk-controllers"
 import { listToObject } from "./order"
-import { nextDraggableId, type DragPayload } from "./payload"
+import { keyOf, useOrder } from "./order-state"
+import type { DragPayload } from "./payload"
 import {
+  HorizontalScrollDirection,
   ScrollDirection,
   SortableDirection,
   type SharedValueLike,
@@ -34,6 +44,10 @@ import {
   type SortableItemPlumbing,
   type SortableItemProps,
   type SortableProps,
+  type UseHorizontalSortableListOptions,
+  type UseHorizontalSortableListReturn,
+  type UseHorizontalSortableOptions,
+  type UseHorizontalSortableReturn,
   type UseSortableListOptions,
   type UseSortableListReturn,
   type UseSortableOptions,
@@ -51,79 +65,30 @@ type SortableContextValue = {
   /** Namespaces this list's payloads, so dragging a row does not light up
    *  every `Droppable` on the screen. */
   scope: string
+  direction: SortableDirection
   /** Called by a row when the dragged row crosses it. */
   moveOnto: (draggedId: string, targetId: string) => void
   beginDrag: (draggedId: string) => void
   endDrag: (draggedId: string, cancelled: boolean) => void
-  onDragging?: (id: string, overItemId: string | null, y: number) => void
+  onDragging?: (id: string, overItemId: string | null, coord: number) => void
+  onDraggingHorizontal?: (
+    id: string,
+    overItemId: string | null,
+    coord: number,
+  ) => void
 }
 
 const SortableContext = createContext<SortableContextValue | null>(null)
 
-const keyOf = <TData extends SortableData>(
-  item: TData,
-  index: number,
-  extractor?: (item: TData, index: number) => string,
-): string => extractor?.(item, index) ?? item.id
-
-/** The order state, shared by `useSortableList` and `Sortable`. */
-const useOrder = <TData extends SortableData>(
-  data: TData[],
-  itemKeyExtractor?: (item: TData, index: number) => string,
-) => {
-  // Lazy initial state, not a ref: stable for the list's lifetime, and a ref
-  // may not be read during render.
-  const [scope] = useState(() => `sortable-${nextDraggableId()}`)
-
-  const incoming = useMemo(
-    () => data.map((item, index) => keyOf(item, index, itemKeyExtractor)),
-    [data, itemKeyExtractor],
-  )
-  const [order, setOrder] = useState<string[]>(incoming)
-
-  // The list owns the ORDER; the app owns the SET. Adding or removing an item
-  // has to reach the order without discarding a reorder the user already
-  // made — so new ids go to the end, departed ids drop out, and a pure
-  // reorder of `data` by the app is ignored (upstream's contract too: the
-  // component owns the order).
-  //
-  // Adjusted DURING RENDER rather than in an effect. React documents this as
-  // the way to derive state from changed props, and it matters here: an
-  // effect would paint one frame in the stale order every time the app
-  // appends an item.
-  const signature = incoming.join(" ")
-  const [seenSignature, setSeenSignature] = useState(signature)
-  if (seenSignature !== signature) {
-    setSeenSignature(signature)
-    const known = new Set(incoming)
-    const next = [
-      ...order.filter((id) => known.has(id)),
-      ...incoming.filter((id) => !order.includes(id)),
-    ]
-    if (
-      next.length !== order.length ||
-      next.some((id, index) => id !== order[index])
-    ) {
-      setOrder(next)
-    }
-  }
-
-  const items = useMemo(() => {
-    const byId = new Map<string, TData>()
-    data.forEach((item, index) => {
-      byId.set(keyOf(item, index, itemKeyExtractor), item)
-    })
-    return order
-      .map((id) => byId.get(id))
-      .filter((item): item is TData => item !== undefined)
-  }, [order, data, itemKeyExtractor])
-
-  return { scope, order, setOrder, items }
-}
-
 /** The `SharedValue`-shaped boxes upstream hands to `renderItem`. Real,
  *  readable and writable here — just not animated. See `SharedValueLike`. */
-const useSharedBoxes = (order: string[]) => {
+const useSharedBoxes = (
+  order: string[],
+  direction: SortableDirection,
+  autoScrollDirection: SharedValueLike<
+    ScrollDirection | HorizontalScrollDirection
+  >,
+) => {
   // Rebuilt when the order changes rather than mutated in place. Upstream's
   // box keeps its identity and changes its `.value`; here the identity tracks
   // the value, which is the closest thing available without a mutable cell
@@ -136,14 +101,15 @@ const useSharedBoxes = (order: string[]) => {
     }),
     [order],
   )
-  // These three this platform never writes: there is no UI-thread scroll
-  // position, no autoscroll during a drag (see docs/research/drag-and-drop.md)
-  // and no measured row heights, because Yoga lays rows out at their natural
-  // height. Stable, so forwarding them is free.
+  // Two of these three this platform never writes: there is no UI-thread
+  // scroll position and no measured row heights, because Yoga lays rows out
+  // at their natural height. `autoScrollDirection` IS written now — see
+  // `autoscroll.tsx` — which is why it comes in as a parameter rather than
+  // living in this idle bag.
   const idle = useMemo(
     () => ({
       scrollY: { value: 0 },
-      autoScroll: { value: ScrollDirection.None as ScrollDirection },
+      scrollX: { value: 0 },
       itemHeights: { value: {} as Record<string, number> },
     }),
     [],
@@ -155,18 +121,65 @@ const useSharedBoxes = (order: string[]) => {
     () => ({
       positions,
       ...idle,
-      plumbing: (): SortableItemPlumbing => ({
-        positions,
-        lowerBound: idle.scrollY,
-        autoScrollDirection: idle.autoScroll,
-        itemHeights: idle.itemHeights,
-        itemsCount,
-        isDynamicHeight: false,
-      }),
+      plumbing: (
+        itemWidth?: number,
+        gap?: number,
+        paddingHorizontal?: number,
+      ): SortableItemPlumbing =>
+        direction === SortableDirection.Horizontal
+          ? {
+              positions,
+              leftBound: idle.scrollX,
+              autoScrollHorizontalDirection:
+                autoScrollDirection as SharedValueLike<HorizontalScrollDirection>,
+              itemsCount,
+              itemWidth,
+              gap,
+              paddingHorizontal,
+            }
+          : {
+              positions,
+              lowerBound: idle.scrollY,
+              autoScrollDirection:
+                autoScrollDirection as SharedValueLike<ScrollDirection>,
+              itemHeights: idle.itemHeights,
+              itemsCount,
+            },
     }),
-    [positions, idle, itemsCount],
+    [positions, idle, itemsCount, direction, autoScrollDirection],
   )
 }
+
+const noneDirectionFor = (
+  direction: SortableDirection,
+): ScrollDirection | HorizontalScrollDirection =>
+  direction === SortableDirection.Horizontal
+    ? HorizontalScrollDirection.None
+    : ScrollDirection.None
+
+const directionForDelta =
+  (direction: SortableDirection) =>
+  (
+    dx: -1 | 0 | 1,
+    dy: -1 | 0 | 1,
+  ): ScrollDirection | HorizontalScrollDirection => {
+    if (direction === SortableDirection.Horizontal) {
+      if (dx < 0) {
+        return HorizontalScrollDirection.Left
+      }
+      if (dx > 0) {
+        return HorizontalScrollDirection.Right
+      }
+      return HorizontalScrollDirection.None
+    }
+    if (dy < 0) {
+      return ScrollDirection.Up
+    }
+    if (dy > 0) {
+      return ScrollDirection.Down
+    }
+    return ScrollDirection.None
+  }
 
 /**
  * Owns the order of a sortable list, for an app rendering its own container.
@@ -177,19 +190,31 @@ const useSharedBoxes = (order: string[]) => {
  * `SortableItem` outside one throws rather than quietly not dragging. This
  * hook is for reading the order and the `SharedValueLike` boxes, which is
  * what most callers of it actually want.
+ *
+ * No autoscroll wiring: this hook builds no `ScrollView` of its own to drive
+ * one, hence the no-op `handleScroll`/`handleScrollEnd` below, unchanged from
+ * before. `Sortable` is where the edge autoscroll in `autoscroll.tsx` lives.
  */
 export const useSortableList = <TData extends SortableData>(
   options: UseSortableListOptions<TData>,
 ): UseSortableListReturn<TData> => {
   const { order, items } = useOrder(options.data, options.itemKeyExtractor)
-  const boxes = useSharedBoxes(order)
+  const idleAutoScroll = useMemo(
+    (): SharedValueLike<ScrollDirection> => ({ value: ScrollDirection.None }),
+    [],
+  )
+  const boxes = useSharedBoxes(
+    order,
+    SortableDirection.Vertical,
+    idleAutoScroll,
+  )
   const dropProviderRef = useRef(null)
   const noop = useCallback(() => {}, [])
 
   return {
     positions: boxes.positions,
     scrollY: boxes.scrollY,
-    autoScroll: boxes.autoScroll,
+    autoScroll: idleAutoScroll,
     itemHeights: boxes.itemHeights,
     dropProviderRef,
     handleScroll: noop,
@@ -197,7 +222,73 @@ export const useSortableList = <TData extends SortableData>(
     contentHeight: 0,
     isDynamicHeight: false,
     items,
-    getItemProps: boxes.plumbing,
+    getItemProps: () => boxes.plumbing(),
+  }
+}
+
+/**
+ * The horizontal counterpart of {@link useSortableList} — its own hook
+ * upstream, so its own hook here, even though the order state underneath
+ * (`order-state.ts`) is identical.
+ */
+export const useHorizontalSortableList = <TData extends SortableData>(
+  options: UseHorizontalSortableListOptions<TData>,
+): UseHorizontalSortableListReturn<TData> => {
+  const { order, items } = useOrder(options.data, options.itemKeyExtractor)
+  const idleAutoScroll = useMemo(
+    (): SharedValueLike<HorizontalScrollDirection> => ({
+      value: HorizontalScrollDirection.None,
+    }),
+    [],
+  )
+  const boxes = useSharedBoxes(
+    order,
+    SortableDirection.Horizontal,
+    idleAutoScroll,
+  )
+  const dropProviderRef = useRef(null)
+  const noop = useCallback(() => {}, [])
+  const {
+    itemWidth,
+    gap = 0,
+    paddingHorizontal = 0,
+    itemKeyExtractor,
+  } = options
+
+  const getItemProps = useCallback(
+    (item: TData, index: number) => {
+      const plumbing = boxes.plumbing(itemWidth, gap, paddingHorizontal)
+      return {
+        id: keyOf(item, index, itemKeyExtractor),
+        positions: plumbing.positions,
+        leftBound: plumbing.leftBound!,
+        autoScrollDirection: idleAutoScroll,
+        itemsCount: plumbing.itemsCount,
+        itemWidth: itemWidth ?? 0,
+        gap,
+        paddingHorizontal,
+      }
+    },
+    [
+      boxes,
+      itemWidth,
+      gap,
+      paddingHorizontal,
+      itemKeyExtractor,
+      idleAutoScroll,
+    ],
+  )
+
+  return {
+    positions: boxes.positions,
+    scrollX: boxes.scrollX,
+    autoScroll: idleAutoScroll,
+    dropProviderRef,
+    handleScroll: noop,
+    handleScrollEnd: noop,
+    contentWidth: 0,
+    items,
+    getItemProps,
   }
 }
 
@@ -223,6 +314,8 @@ export const useSortableList = <TData extends SortableData>(
  *
  * The rows carry a real GTK drag icon — a picture of the row itself, lifted
  * at the point it was grabbed — and the list rearranges live underneath it.
+ * Near either end of the visible list, the drag keeps the `ScrollView`
+ * scrolling toward it for as long as it stays there (`autoscroll.tsx`).
  */
 export const Sortable = <TData extends SortableData>({
   data,
@@ -232,13 +325,31 @@ export const Sortable = <TData extends SortableData>({
   contentContainerStyle,
   testID,
   direction = SortableDirection.Vertical,
+  itemWidth,
+  gap,
+  paddingHorizontal,
   onMove,
   onDragStart,
   onDrop,
   onDragging,
+  onDraggingHorizontal,
 }: SortableProps<TData>): ReactNode => {
   const { scope, order, setOrder, items } = useOrder(data, itemKeyExtractor)
-  const boxes = useSharedBoxes(order)
+  const isHorizontal = direction === SortableDirection.Horizontal
+
+  const containerRef = useRef<MeasureHandle | null>(null)
+  const scrollViewRef = useRef<ScrollViewHandle | null>(null)
+  const autoscroll = useEdgeAutoscroll<
+    ScrollDirection | HorizontalScrollDirection
+  >({
+    containerRef,
+    scrollViewRef,
+    axes: isHorizontal ? "horizontal" : "vertical",
+    none: noneDirectionFor(direction),
+    directionFor: directionForDelta(direction),
+  })
+
+  const boxes = useSharedBoxes(order, direction, autoscroll.direction)
 
   // The order as it was when the drag began, so a cancelled drag puts the
   // list back rather than leaving it wherever the pointer happened to be.
@@ -254,9 +365,10 @@ export const Sortable = <TData extends SortableData>({
   const beginDrag = useCallback(
     (draggedId: string) => {
       beforeDrag.current = orderRef.current
+      autoscroll.setActive(true)
       onDragStart?.(draggedId, orderRef.current.indexOf(draggedId))
     },
-    [onDragStart],
+    [onDragStart, autoscroll],
   )
 
   const moveOnto = useCallback(
@@ -279,6 +391,7 @@ export const Sortable = <TData extends SortableData>({
 
   const endDrag = useCallback(
     (draggedId: string, cancelled: boolean) => {
+      autoscroll.setActive(false)
       const restore = beforeDrag.current
       beforeDrag.current = null
       if (cancelled) {
@@ -290,60 +403,87 @@ export const Sortable = <TData extends SortableData>({
       const settled = orderRef.current
       onDrop?.(draggedId, settled.indexOf(draggedId), listToObject(settled))
     },
-    [setOrder, onDrop],
+    [setOrder, onDrop, autoscroll],
   )
 
   const contextValue = useMemo<SortableContextValue>(
-    () => ({ scope, moveOnto, beginDrag, endDrag, onDragging }),
-    [scope, moveOnto, beginDrag, endDrag, onDragging],
+    () => ({
+      scope,
+      direction,
+      moveOnto,
+      beginDrag,
+      endDrag,
+      onDragging,
+      onDraggingHorizontal,
+    }),
+    [
+      scope,
+      direction,
+      moveOnto,
+      beginDrag,
+      endDrag,
+      onDragging,
+      onDraggingHorizontal,
+    ],
   )
-
-  if (direction === SortableDirection.Horizontal) {
-    // Loud rather than silent: a horizontal list that lays out vertically is
-    // a bug report waiting to happen. See docs/research/drag-and-drop.md for
-    // why the horizontal surface is deferred rather than approximated.
-    throw new Error(
-      "react-native-gtkx/dnd: SortableDirection.Horizontal is not implemented on Linux",
-    )
-  }
 
   return (
     <SortableContext.Provider value={contextValue}>
-      <ScrollView
-        style={style}
-        // No `alignItems: "stretch"` override here any more. It used to be
-        // needed because this platform's ScrollView content container
-        // defaulted to `flex-start`, which shrank every row to its intrinsic
-        // width and collapsed the `flex: 1` text column inside it. That
-        // default was a parity bug — RN's content container is a plain
-        // `View`, whose default is `stretch` — and it is fixed at the source
-        // now (components/scroll-view.tsx), so a `Sortable` gets full-width
-        // rows the same way any other RN list does.
-        contentContainerStyle={contentContainerStyle}
-        testID={testID}
+      <View
+        ref={containerRef}
+        style={{ flex: 1 }}
       >
-        {items.map((item, index) =>
-          renderItem({
-            item,
-            index,
-            id: keyOf(item, index, itemKeyExtractor),
-            direction,
-            ...boxes.plumbing(),
-          }),
-        )}
-      </ScrollView>
+        {autoscroll.controllers}
+        <ScrollView
+          ref={scrollViewRef}
+          horizontal={isHorizontal}
+          style={style}
+          // No `alignItems: "stretch"` override here any more. It used to be
+          // needed because this platform's ScrollView content container
+          // defaulted to `flex-start`, which shrank every row to its intrinsic
+          // width and collapsed the `flex: 1` text column inside it. That
+          // default was a parity bug — RN's content container is a plain
+          // `View`, whose default `alignItems` is `stretch` — and it is fixed
+          // at the source now (components/scroll-view.tsx), so a `Sortable`
+          // gets full-width rows the same way any other RN list does.
+          //
+          // An app that wants the old behaviour writes it, exactly as it
+          // would on iOS and Android: `contentContainerStyle={{ alignItems:
+          // "flex-start" }}`.
+          contentContainerStyle={[
+            { gap, paddingHorizontal },
+            contentContainerStyle,
+          ]}
+          testID={testID}
+        >
+          {items.map((item, index) =>
+            renderItem({
+              item,
+              index,
+              id: keyOf(item, index, itemKeyExtractor),
+              direction,
+              ...boxes.plumbing(itemWidth, gap, paddingHorizontal),
+            }),
+          )}
+        </ScrollView>
+      </View>
     </SortableContext.Provider>
   )
 }
 
 /**
  * The reorder half of the module, as a hook, for a row that owns its own
- * view. Render `children` inside that view.
+ * view.
+ *
+ * Shared by both directions: which coordinate reaches `onDragging`/
+ * `onDraggingHorizontal` (and which of the two fires at all) comes from the
+ * enclosing `Sortable`'s own `direction`, read through context — the reorder
+ * itself (cross into another cell's drop target) never looks at an axis.
  */
 export const useSortable = <TData,>(
   options: UseSortableOptions<TData>,
 ): UseSortableReturn => {
-  const { id, onDragging } = options
+  const { id, onDragging, onDraggingHorizontal } = options
   const list = useContext(SortableContext)
   if (list === null) {
     // Loudly, because a silent no-op is the worst failure mode this repo has
@@ -403,9 +543,14 @@ export const useSortable = <TData,>(
       // moves the dragged row into its place, so the list rearranges under
       // the drag icon the way upstream's animated gaps do.
       onEnter={(payload) => list.moveOnto(payload.id, id)}
-      onMotion={(payload, _x, y) => {
-        list.onDragging?.(payload.id, id, y)
-        onDragging?.(payload.id, id, y)
+      onMotion={(payload, x, y) => {
+        if (list.direction === SortableDirection.Horizontal) {
+          list.onDraggingHorizontal?.(payload.id, id, x)
+          onDraggingHorizontal?.(payload.id, id, x)
+        } else {
+          list.onDragging?.(payload.id, id, y)
+          onDragging?.(payload.id, id, y)
+        }
       }}
       // Nothing left to do: the order is already right, and `drag-end` on the
       // source is what settles it.
@@ -428,6 +573,27 @@ export const useSortable = <TData,>(
   }
 }
 
+/**
+ * The horizontal counterpart of {@link useSortable} — upstream's own separate
+ * hook, kept separate here too, though it is the same implementation under a
+ * shape matching `UseHorizontalSortableOptions`. Must be inside a
+ * `<Sortable direction="horizontal">`, same as `useSortable` must be inside a
+ * `Sortable`.
+ */
+export const useHorizontalSortable = <TData,>(
+  options: UseHorizontalSortableOptions<TData>,
+): UseHorizontalSortableReturn =>
+  useSortable<TData>({
+    id: options.id,
+    data: options.data,
+    positions: options.positions,
+    itemsCount: options.itemsCount,
+    onMove: options.onMove,
+    onDragStart: options.onDragStart,
+    onDrop: options.onDrop,
+    onDraggingHorizontal: options.onDragging,
+  } as UseSortableOptions<TData>)
+
 /** One row of a {@link Sortable}. Both a drag source and a drop target: the
  *  row you drag onto is the position the dragged row takes. */
 export const SortableItem = <TData,>({
@@ -441,6 +607,7 @@ export const SortableItem = <TData,>({
   onDragStart,
   onDrop,
   onDragging,
+  onDraggingHorizontal,
 }: SortableItemProps<TData>): ReactNode => {
   const sortable = useSortable<TData>({
     id,
@@ -449,6 +616,7 @@ export const SortableItem = <TData,>({
     onDragStart,
     onDrop,
     onDragging,
+    onDraggingHorizontal,
   } as UseSortableOptions<TData>)
 
   // `SortableItem.Handle` is `Draggable.Handle`: the same context carries the

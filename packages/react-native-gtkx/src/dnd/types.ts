@@ -212,31 +212,49 @@ export enum SortableDirection {
 
 /** The plumbing `Sortable` hands `renderItem` and `renderItem` hands
  *  `SortableItem` — opaque in upstream's own examples, which destructure
- *  `item`/`index`/`id` and spread the rest. */
+ *  `item`/`index`/`id` and spread the rest. Vertical and horizontal fields
+ *  sit side by side, both optional, exactly as upstream's own
+ *  `SortableRenderItemProps` does — a single list is only ever one direction,
+ *  so only one half is ever real. */
 export interface SortableItemPlumbing {
   positions: SharedValueLike<Record<string, number>>
-  lowerBound: SharedValueLike<number>
-  autoScrollDirection: SharedValueLike<ScrollDirection>
-  itemHeights: SharedValueLike<Record<string, number>>
+  lowerBound?: SharedValueLike<number>
+  leftBound?: SharedValueLike<number>
+  /** Real now — see `autoscroll.tsx`. A vertical list writes this as the
+   *  drag nears the top or bottom of its own viewport. */
+  autoScrollDirection?: SharedValueLike<ScrollDirection>
+  /** The horizontal counterpart, written as the drag nears the left or
+   *  right edge of a horizontal list's viewport. */
+  autoScrollHorizontalDirection?: SharedValueLike<HorizontalScrollDirection>
+  itemHeights?: SharedValueLike<Record<string, number>>
   itemsCount: number
   /** Accepted and ignored: Yoga lays rows out at their natural height, so
    *  a height hint has nothing to correct. */
   itemHeight?: number
-  /** Accepted and ignored, same reason. */
+  /** Accepted and ignored, same reason, for a horizontal list's columns. */
+  itemWidth?: number
+  /** Applied to the list's own content container as a real Yoga `gap` —
+   *  the space between rows/columns is not a hint here, it is the layout. */
+  gap?: number
+  /** Applied to the content container as real `paddingHorizontal`, same
+   *  reason. */
+  paddingHorizontal?: number
+  /** Accepted and ignored, same reason as `itemHeight`. */
   estimatedItemHeight?: number
   /**
-   * Accepted and ignored. Upstream needs the container's height to know
-   * when a dragged row has reached an edge and autoscroll should start;
-   * there is no autoscroll here (docs/research/drag-and-drop.md), and the
-   * rows are in flow layout inside a real `ScrollView` that already knows
-   * its own size.
+   * Accepted and ignored for sizing. Upstream needs the container's height
+   * to know when a dragged row has reached an edge; the mirror's own
+   * `ScrollView` measures its own viewport for that (`autoscroll.tsx`), so
+   * the hint has nothing left to correct.
    *
    * Kept because upstream's own example app passes it on every
    * `SortableItem` — a mirror that drops it turns a literal port into an
    * edit, which is the one thing this module exists to avoid.
    */
   containerHeight?: number
-  /** Accepted and ignored, same reason. */
+  /** Accepted and ignored, same reason, for a horizontal list. */
+  containerWidth?: number
+  /** Accepted and ignored, same reason as `itemHeight`. */
   isDynamicHeight?: boolean
   scheduleHeightUpdate?: (id: string, height: number) => void
 }
@@ -253,6 +271,14 @@ export interface SortableCallbacks {
     id: string,
     overItemId: string | null,
     yPosition: number,
+  ) => void
+  /** The horizontal counterpart of `onDragging` — upstream's `SortableItem`
+   *  carries both, one per direction, rather than reusing the name with a
+   *  different meaning. */
+  onDraggingHorizontal?: (
+    id: string,
+    overItemId: string | null,
+    xPosition: number,
   ) => void
 }
 
@@ -309,6 +335,13 @@ export interface SortableProps<
   testID?: string
   /** Accepted and ignored — see `SortableItemPlumbing`. */
   itemHeight?: number | number[] | ((item: TData, index: number) => number)
+  /** A horizontal list's column width — required in that direction, same as
+   *  upstream. */
+  itemWidth?: number
+  /** Applied to the content container as a real Yoga `gap`. */
+  gap?: number
+  /** Applied to the content container as real `paddingHorizontal`. */
+  paddingHorizontal?: number
   /** Accepted and ignored. */
   estimatedItemHeight?: number
   /** Accepted and ignored. */
@@ -317,9 +350,9 @@ export interface SortableProps<
   useFlatList?: boolean
   /** Accepted and ignored. */
   onHeightsMeasured?: (heights: Record<string, number>) => void
-  /** `SortableDirection.Horizontal` is not implemented — see
-   *  docs/research/drag-and-drop.md. Passing it throws, rather than
-   *  silently laying out vertically. */
+  /** Vertical (the default) scrolls a column; horizontal scrolls a row, with
+   *  reorder-by-crossing working exactly the same way — GDK hit-tests the
+   *  real widget tree regardless of which axis it is laid out along. */
   direction?: SortableDirection
 }
 
@@ -352,4 +385,252 @@ export interface UseSortableListReturn<TData extends SortableData> {
    *  contract ("do NOT update external state in `onMove`"). */
   items: TData[]
   getItemProps: (item: TData, index: number) => SortableItemPlumbing
+}
+
+// --- horizontal sortable -----------------------------------------------------
+//
+// A separate hook from `useSortable`/`useSortableList`, upstream's own shape
+// (`hooks/useHorizontalSortable.ts` is its own file, not a direction branch of
+// `useSortable.ts`) — kept distinct here too, even though the reorder
+// mechanism underneath (cross into another cell, GDK hit-tests it) does not
+// care which axis the list scrolls along.
+
+export interface UseHorizontalSortableOptions<TData = unknown> {
+  id: string
+  data?: TData
+  positions: SharedValueLike<Record<string, number>>
+  leftBound: SharedValueLike<number>
+  autoScrollDirection: SharedValueLike<HorizontalScrollDirection>
+  itemsCount: number
+  /** Accepted and ignored — see `SortableItemPlumbing.itemWidth`. */
+  itemWidth?: number
+  /** Applied to the content container as a real Yoga `gap`. */
+  gap?: number
+  /** Applied to the content container as real `paddingHorizontal`. */
+  paddingHorizontal?: number
+  /** Accepted and ignored — the mirror's own `ScrollView` measures its own
+   *  viewport (`autoscroll.tsx`). */
+  containerWidth?: number
+  onMove?: (id: string, from: number, to: number) => void
+  onDragStart?: (id: string, position: number) => void
+  onDrop?: (
+    id: string,
+    position: number,
+    allPositions?: Record<string, number>,
+  ) => void
+  onDragging?: (
+    id: string,
+    overItemId: string | null,
+    xPosition: number,
+  ) => void
+}
+
+/** Same shape as `UseSortableReturn` — this platform's reorder is a
+ *  re-render, not a transform, on either axis. */
+export type UseHorizontalSortableReturn = UseSortableReturn
+
+export interface UseHorizontalSortableListOptions<TData extends SortableData> {
+  data: TData[]
+  itemWidth: number
+  gap?: number
+  paddingHorizontal?: number
+  itemKeyExtractor?: (item: TData, index: number) => string
+}
+
+export interface UseHorizontalSortableListReturn<TData extends SortableData> {
+  positions: SharedValueLike<Record<string, number>>
+  scrollX: SharedValueLike<number>
+  autoScroll: SharedValueLike<HorizontalScrollDirection>
+  dropProviderRef: RefObject<DropProviderRef | null>
+  handleScroll: () => void
+  handleScrollEnd: () => void
+  contentWidth: number
+  /** The current order, which this hook owns — same contract as
+   *  `UseSortableListReturn.items`. */
+  items: TData[]
+  getItemProps: (
+    item: TData,
+    index: number,
+  ) => {
+    id: string
+    positions: SharedValueLike<Record<string, number>>
+    leftBound: SharedValueLike<number>
+    autoScrollDirection: SharedValueLike<HorizontalScrollDirection>
+    itemsCount: number
+    itemWidth: number
+    gap: number
+    paddingHorizontal: number
+  }
+}
+
+// --- grid sortable -----------------------------------------------------------
+//
+// `SortableGrid`/`SortableGridItem`/`useGridSortable*` — the 2-D reorder,
+// `grid-order.ts` is the arithmetic (row/column from a flat index and back),
+// this is the surface it plugs into. Deliberately NOT re-exported here:
+// `setGridPosition`/`setGridAutoScroll`, upstream's worklets that MUTATE a
+// `SharedValue` mid-gesture — see index.ts for why `setPosition`/
+// `setAutoScroll` are not re-exported either.
+
+export enum GridScrollDirection {
+  None = "none",
+  Up = "up",
+  Down = "down",
+  Left = "left",
+  Right = "right",
+  UpLeft = "up-left",
+  UpRight = "up-right",
+  DownLeft = "down-left",
+  DownRight = "down-right",
+}
+
+export enum GridOrientation {
+  Vertical = "vertical",
+  Horizontal = "horizontal",
+}
+
+export enum GridStrategy {
+  Insert = "insert",
+  Swap = "swap",
+}
+
+export interface GridPosition {
+  index: number
+  row: number
+  column: number
+  x: number
+  y: number
+}
+
+export interface GridPositions {
+  [id: string]: GridPosition
+}
+
+export interface GridDimensions {
+  /** Required when `orientation` is `Vertical` (the default) — how many
+   *  cells make a row before the grid wraps to the next one. */
+  columns?: number
+  /** Required when `orientation` is `Horizontal` — how many cells make a
+   *  column before the grid wraps to the next one. */
+  rows?: number
+  itemWidth: number
+  itemHeight: number
+  rowGap?: number
+  columnGap?: number
+}
+
+export interface GridCallbacks {
+  onMove?: (id: string, from: number, to: number) => void
+  onDragStart?: (id: string, position: number) => void
+  onDrop?: (id: string, position: number, allPositions?: GridPositions) => void
+  onDragging?: (
+    id: string,
+    overItemId: string | null,
+    x: number,
+    y: number,
+  ) => void
+}
+
+/** The plumbing `SortableGrid` hands `renderItem` and `renderItem` hands
+ *  `SortableGridItem` — opaque, same contract as `SortableItemPlumbing`. */
+export interface GridItemPlumbing {
+  positions: SharedValueLike<GridPositions>
+  scrollY: SharedValueLike<number>
+  scrollX: SharedValueLike<number>
+  /** Real — see `autoscroll.tsx`. Written as the drag nears any of the
+   *  grid's four edges, diagonals included. */
+  autoScrollDirection: SharedValueLike<GridScrollDirection>
+  itemsCount: number
+  dimensions: GridDimensions
+  orientation: GridOrientation
+  strategy?: GridStrategy
+  /** Accepted and ignored — the mirror's own `ScrollView` measures its own
+   *  viewport. */
+  containerWidth?: number
+  /** Accepted and ignored, same reason. */
+  containerHeight?: number
+  /** Accepted and ignored. GDK's own drag threshold already separates a tap
+   *  from a drag — same as `preDragDelay` elsewhere in this module. */
+  activationDelay?: number
+  isBeingRemoved?: boolean
+}
+
+export interface UseGridSortableOptions<TData = unknown>
+  extends GridCallbacks, GridItemPlumbing {
+  id: string
+  data?: TData
+}
+
+export interface UseGridSortableReturn {
+  /** Upstream returns a Reanimated style here; this platform reorders by
+   *  re-rendering, so the cell needs no transform. */
+  animatedStyle: StyleProp
+  isMoving: boolean
+  hasHandle: boolean
+  registerHandle: (registered: boolean) => void
+  /** Everything the cell's view must contain: the drop target always, and
+   *  the drag source unless a handle has claimed it. */
+  children: ReactNode
+  /** The drag source on its own, for a caller placing its own handle. */
+  dragControllers: ReactNode
+}
+
+export interface SortableGridItemProps<TData = unknown>
+  extends Partial<GridItemPlumbing>, GridCallbacks {
+  id: string
+  data?: TData
+  children: ReactNode
+  style?: StyleProp
+  /** Accepted for spread compatibility; upstream's own transform style. */
+  animatedStyle?: StyleProp
+  testID?: string
+}
+
+export interface SortableGridRenderItemProps<
+  TData extends SortableData,
+> extends GridItemPlumbing {
+  item: TData
+  index: number
+  id: string
+}
+
+export interface SortableGridProps<TData extends SortableData> {
+  data: TData[]
+  renderItem: (props: SortableGridRenderItemProps<TData>) => ReactNode
+  dimensions: GridDimensions
+  orientation?: GridOrientation
+  strategy?: GridStrategy
+  style?: StyleProp
+  contentContainerStyle?: StyleProp
+  /** Accepted and ignored — upstream declares it but its own
+   *  `SortableGrid.js` never reads it either; verified against the
+   *  published 2.0.0 source. */
+  itemContainerStyle?: StyleProp
+  itemKeyExtractor?: (item: TData, index: number) => string
+  scrollEnabled?: boolean
+  testID?: string
+}
+
+export interface UseGridSortableListOptions<TData extends SortableData> {
+  data: TData[]
+  dimensions: GridDimensions
+  orientation?: GridOrientation
+  strategy?: GridStrategy
+  itemKeyExtractor?: (item: TData, index: number) => string
+}
+
+export interface UseGridSortableListReturn<TData extends SortableData> {
+  positions: SharedValueLike<GridPositions>
+  scrollY: SharedValueLike<number>
+  scrollX: SharedValueLike<number>
+  autoScrollDirection: SharedValueLike<GridScrollDirection>
+  dropProviderRef: RefObject<DropProviderRef | null>
+  handleScroll: () => void
+  handleScrollEnd: () => void
+  contentWidth: number
+  contentHeight: number
+  /** The current order, which this hook owns — same contract as
+   *  `UseSortableListReturn.items`. */
+  items: TData[]
+  getItemProps: (item: TData, index: number) => GridItemPlumbing
 }
