@@ -40,12 +40,40 @@ export { clamp, listToObject, objectMove } from "./order"
 export {
   Sortable,
   SortableItem,
+  useHorizontalSortable,
+  useHorizontalSortableList,
   useSortable,
   useSortableList,
 } from "./sortable"
 
 export {
+  SortableGrid,
+  SortableGridItem,
+  useGridSortable,
+  useGridSortableList,
+} from "./grid"
+
+// The pure grid arithmetic — worklets upstream, plain functions here, same
+// reasoning as `clamp`/`listToObject`/`objectMove` above. `setGridPosition`/
+// `setGridAutoScroll` are NOT re-exported, for the same reason
+// `setPosition`/`setAutoScroll` are not: both mutate a SharedValue mid-
+// gesture, and there is no gesture on the UI thread here to drive them.
+export {
+  calculateGridContentDimensions,
+  calculateGridPosition,
+  calculateIndexFromRowColumn,
+  findItemIdAtIndex,
+  getGridCellFromCoordinates,
+  listToGridObject,
+  reorderGridInsert,
+  reorderGridSwap,
+} from "./grid-order"
+
+export {
   DraggableState,
+  GridOrientation,
+  GridScrollDirection,
+  GridStrategy,
   HorizontalScrollDirection,
   ScrollDirection,
   SortableDirection,
@@ -59,8 +87,16 @@ export {
   type DropOffset,
   type DropProviderProps,
   type DropProviderRef,
+  type GridCallbacks,
+  type GridDimensions,
+  type GridItemPlumbing,
+  type GridPosition,
+  type GridPositions,
   type SharedValueLike,
   type SortableData,
+  type SortableGridItemProps,
+  type SortableGridProps,
+  type SortableGridRenderItemProps,
   type SortableHandleProps,
   type SortableItemProps,
   type SortableProps,
@@ -69,6 +105,14 @@ export {
   type UseDraggableReturn,
   type UseDroppableOptions,
   type UseDroppableReturn,
+  type UseGridSortableListOptions,
+  type UseGridSortableListReturn,
+  type UseGridSortableOptions,
+  type UseGridSortableReturn,
+  type UseHorizontalSortableListOptions,
+  type UseHorizontalSortableListReturn,
+  type UseHorizontalSortableOptions,
+  type UseHorizontalSortableReturn,
   type UseSortableListOptions,
   type UseSortableListReturn,
   type UseSortableOptions,
