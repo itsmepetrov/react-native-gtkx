@@ -16,7 +16,7 @@
   "dependencies": {
     "@react-navigation/native": "8.0.0-alpha.40",
     "react": "^19.2.0",
-    "react-native-gtkx": "0.2.0-alpha.2",
+    "react-native-gtkx": "0.3.0-alpha.1",
     "react-native-reanimated-dnd": "2.0.0"
   },
   "devDependencies": {
