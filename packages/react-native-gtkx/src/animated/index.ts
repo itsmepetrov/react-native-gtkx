@@ -6,6 +6,8 @@ export type { AnimatedApi } from "./create-animated"
 export { createAnimated } from "./create-animated"
 export type { EasingFunction } from "./easing"
 export { Easing } from "./easing"
+export type { AnimatedEventConfig, EventMapping } from "./event"
+export { createAnimatedEvent } from "./event"
 export type {
   CompositeAnimation,
   EndCallback,

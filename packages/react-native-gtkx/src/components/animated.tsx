@@ -960,8 +960,12 @@ export const createAnimatedComponent = <C extends ElementType>(
  * scrolled window through two layers that exist to hide it.
  *
  * Upstream's `Animated.FlatList` mostly exists so `onScroll` can be an
- * `Animated.event`/`useAnimatedScrollHandler`, and neither of those is
- * implemented here either. So this throws where it is used, naming itself and
+ * `Animated.event`/`useAnimatedScrollHandler` — both work on this platform
+ * (../animated/event.ts, ../reanimated-compat/scroll-handler.ts) — which is
+ * exactly why the refusal survives without taking that with it: either one
+ * still reaches the widget through the plain `FlatList`'s own `onScroll`
+ * (forwarded straight to the windowed core's `ScrollView`) or through
+ * `Animated.ScrollView`. So this throws where it is used, naming itself and
  * naming the two things that do work.
  */
 const AnimatedFlatList = (): never => {
