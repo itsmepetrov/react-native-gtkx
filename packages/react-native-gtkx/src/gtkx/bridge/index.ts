@@ -109,6 +109,7 @@ export { createWidgetCss, type WidgetCss } from "./widget-css"
 
 export { createTextProbe, measureWidget, toNumber } from "./measure"
 export { computePointIn, computePointInWindow, type Point } from "./geometry"
+export { beginDragLayer, type DragLayerHandle } from "./drag-layer"
 // A portal into a NAMED slot of a remote object (the window's action map,
 // its controllers) rather than into its default child slot — see the file
 // for why gtkx's own createPortal is not enough on its own.

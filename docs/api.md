@@ -729,6 +729,45 @@ above every window, with the theme's own cursors and hit testing against the
 real widget tree, including widgets React Native never created. Everything
 below follows from that one fact.
 
+**A dragged `Draggable`/`SortableItem` escapes any `overflow: hidden`
+ancestor automatically — not a prop, the same way GDK's own drag icon is not
+one.** GDK's icon already escapes any clip in this process's own tree (it is
+a compositor surface, not a descendant of anything here), but that is all it
+is — a cue at the cursor this process cannot introspect. While a drag is in
+flight, a second, non-interactive `Gtk.Picture` showing a live
+`Gtk.WidgetPaintable` of the dragged row is added to a `Gtk.Overlay` wrapped
+once around each window's real content, escaping every ancestor's clip the
+same way any `Overlay` child does. The original dims to reduced opacity for
+the drag's duration (restored to whatever it was, not hardcoded) rather than
+disappearing — `react-native-draggable-flatlist`'s `activeOpacity` and
+similar libraries do the same. Because a `Gtk.WidgetPaintable` is a LIVE view
+of the widget it observes, GDK's own icon and this copy dim along with the
+original; the three are one underlying render. The copy takes no input
+(`can-target: false`) and neither hit-testing nor the responder path changes
+— both still resolve against the original widget, unchanged. Zero React
+renders happen per frame: positioning is two widget property writes
+(`setMarginStart`/`setMarginTop`) per motion event, ~1.76 µs median, measured
+and reasoned about next to `zIndex`'s own per-call cost in
+[research/dnd-differential.md](research/dnd-differential.md#a-window-level-drag-layer-the-escape-zindex-cannot-reach).
+Reparenting the dragged widget itself into the overlay was tried first and
+refused — a 100×100 card came out 800×600 under the new parent's own size
+negotiation, and an unmount mid-flight stranded the widget outside the tree
+React still owned; the same document has the detail.
+
+| Prop                                                                                                             | Behaviour here                                                                                                                                                      |
+| ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `preDragDelay`                                                                                                   | Accepted, ignored. GDK's `gtk-dnd-drag-threshold` already separates a tap from a drag.                                                                              |
+| `collisionAlgorithm`                                                                                             | Accepted, ignored. GDK hit-tests the pointer; `"center"` is the closest of the three.                                                                               |
+| `requestPositionUpdate()`                                                                                        | No-op. Nothing caches a slot rectangle, because GDK re-hit-tests every motion.                                                                                      |
+| `onLayoutUpdateComplete`                                                                                         | Accepted, ignored — there is no layout pass to complete.                                                                                                            |
+| `itemHeight`, `estimatedItemHeight`, `enableDynamicHeights`, `useFlatList`, `containerHeight`                    | Accepted, ignored. Yoga lays rows out at their natural height, and there is no autoscroll for `containerHeight` to feed.                                            |
+| `dragAxis`, `dragBoundsRef`, `animationFunction`                                                                 | **Unsupported.** All three describe where the dragged view goes, and it never went anywhere. Kept in the type so a file shared with iOS and Android still compiles. |
+| `dropAlignment`, `dropOffset`                                                                                    | **Unsupported**, same reason.                                                                                                                                       |
+| `positions`, `lowerBound`, `autoScrollDirection`, `itemHeights`                                                  | Real `{ value }` boxes (`SharedValueLike`), not `SharedValue`. Forwarding them with `{...rest}` works, reads work, writes do not animate.                           |
+| `SortableGrid`, `SortableGridItem`, `useGridSortable*`, `useHorizontalSortable*`, `SortableDirection.Horizontal` | **Not implemented.** Importing them fails at build time; passing `Horizontal` throws.                                                                               |
+| Autoscroll near a container edge during a drag                                                                   | Not implemented.                                                                                                                                                    |
+| Sortable list height                                                                                             | Rows are in flow layout, so the list is as tall as its rows — not `itemsCount × itemHeight`.                                                                        |
+
 | Prop                                                                                                            | Behaviour here                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `preDragDelay`                                                                                                  | Accepted, ignored. GDK's `gtk-dnd-drag-threshold` already separates a tap from a drag.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
