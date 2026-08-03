@@ -31,7 +31,7 @@ so window coordinates and output coordinates coincide, drags a list row and
 then the sheet's handle, and prints `[core-exports]` lines. Logs and
 screenshots land in `/tmp/core-exports/`.
 
-`CORE_EXPORTS_SKIP_BUILD=1` skips the rebuild. `npm run build && npm start`
+`CORE_EXPORTS_SKIP_BUILD=1` skips the rebuild — and note what that means: `gtkx build` is what bundles the library INTO the probe, so with the flag set a library change (and any `npm run build:dist` after it) is invisible and the probe re-measures the previous bundle. It is for re-running the same code, not for comparing two versions of it. `npm run build && npm start`
 opens the window to drag by hand instead.
 
 ## What it asserts, and the controls

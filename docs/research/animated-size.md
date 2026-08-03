@@ -711,3 +711,193 @@ sheet's own scrollable, the lock holds it at the top while collapsed
 (`row-one y 559 → 559`, with the events arriving, so non-vacuous), releases
 when extended (`y 240 → -84` under the identical wheel), and the
 negative-control zone the pointer never visited stayed silent.
+
+## 11. The number on the other branch of the ternary, and why nothing played
+
+Date: 2026-08-03, same machine and harness as §9 and §10, same consumer.
+
+§9 made an animation returned from the updater run at all; §10 gave a refused
+property a cadence so the value arrives while the animation is still going.
+Measuring §10 turned up a case neither of them had exercised, and it is the
+plainest shape in the whole area:
+
+```tsx
+useAnimatedStyle(() => ({ height: open.value ? withTiming(200) : 100 }))
+```
+
+While `open` is false the key holds a plain `100`. §9's first rule — a key
+appearing for the first time is seeded at its target — was implemented as "a
+key with no entry is seeded", and a key holding a plain number had no entry,
+because a plain value dropped it. So when the ternary flipped, the seed went
+straight to 200 and **the animation did not play at all**: no warning, nothing
+thrown, and the resting size correct. Exactly the class
+[gestures.md](gestures.md) records `Animated.View` falling into — compiled,
+ran, did nothing.
+
+It is worth its own section rather than a note for two reasons. The idiom is
+what people write when only one direction needs animating — "snap shut, open
+smoothly", `opacity: visible ? withTiming(1) : 0`,
+`height: expanded ? withSpring(h) : 0` — and the failure is silent, so nothing
+but a mid-animation reading finds it. It also predates §9: it was never
+exercised until §9 made updater animations run.
+
+### What upstream does, in both directions, from its source
+
+Read out of `react-native-reanimated` 4.5.3's `src/hook/useAnimatedStyle.ts`,
+not inferred from behaviour — three claims about upstream were corrected by
+measurement in the two days before this, so none of them is inherited.
+
+**Number → animation: it animates from the number.** `styleUpdater` keeps the
+whole previous updater result as `state.last`, raw, and hands
+`prepareAnimation` `oldValues[key]` for every key that is animated on this run.
+`prepareAnimation`'s branches on that value are: a shared value → its `.value`;
+a previous animation → that animation's `current`; and then
+
+```js
+} else {
+  // previously it was a plain value, just set it as starting point
+  value = lastValue;
+}
+```
+
+`value` is what `onStart(animation, value, …)` receives, and `withTiming`'s
+`onStart` assigns it to `animation.startValue`. So `100 → 200` over the
+timing's duration, and the description in the epic was right — but it is right
+because that comment is in the file, not because it was plausible.
+
+Two corollaries fall out of the same code and both matter here:
+
+- a key **absent** from the previous result has `oldValues[key] === undefined`,
+  which fails `prepareAnimation`'s guard entirely and leaves the animation's own
+  `current` — for a timing, its `toValue` — standing. So §9's seeding rule is
+  upstream's, and "was 100 a moment ago" and "was not there a moment ago" are
+  genuinely different questions;
+- upstream's baseline for the FIRST mapper run is `initialUpdaterRun`'s own
+  result, which in every documented shape is the target the first descriptor
+  aims at, so it coincides with the seed. It differs only if a shared value
+  moves between the initial render and the mapper's first run, which is left
+  alone deliberately: adopting it would change the seed on gorhom's mount,
+  where §10 measured the seed as load-bearing (95.9 px, then a moving target).
+
+**Animation → plain number: it cancels and snaps.** Not the mirror image, and
+this is the direction the epic asked to establish rather than assume.
+`styleUpdater`'s non-animated branch is three lines — `nonAnimatedNewValues[key]
+= value`, `delete animations[key]`, and one `updateProps` at the end of the run.
+The animation is removed from the ticked set, its callback is never invoked, no
+`finished` is reported, and the plain number is written in the same run. There
+is no easing back and nothing to be symmetric with.
+
+### What shipped
+
+The starting point is `previous?.[key]` where `previous` is the previous
+updater result — which this module was **already holding**, for `republish`. So
+the fix carries no new state with a lifetime: nothing is stored on the entry,
+nothing outlives an animation, and an entry is still dropped the moment its key
+stops being an animation. `updater-animations.ts`'s `startingPoint` is the
+whole mechanism, and it is upstream's `oldValues[key]` under a different name.
+Numbers only: a percentage or a colour string is not something the numeric
+drivers here can start at, and both fall back to the seed.
+
+The reverse direction needed one addition, because "snaps at once" is a
+different sentence on this platform. For a driven property (`opacity`, a
+transform, a colour, an inset, an accepted size) the plain number goes into the
+node and reaches the widget on that frame, which is upstream's behaviour
+exactly. For a **refused** one there is no widget write, so the snap is a React
+render or it is nothing — and neither the cadence nor a settle is ever coming
+for a value that is no longer animating. So a plain number that differs from
+`landedValue` (this module's model of what React holds for the key) asks for one
+landing. It is compared without the cadence's one-pixel epsilon and for the same
+reason a settle ignores it: this is a resting value, not a step towards one, and
+nothing after it would correct a skipped render.
+
+Three cases deliberately ask for nothing: a value equal to the one React
+already has, a key that vanished from the result, and a number replaced by a
+percentage or a colour — the last two change the style's SHAPE, which the caller
+already pays exactly one render for.
+
+### What it costs
+
+Nothing, and the reason is stronger than "within variance": in
+`@gorhom/bottom-sheet` **neither new branch is ever taken**. `spike/core-exports`,
+same machine, same afternoon, three full runs of each variant, `origin/main`
+checked out into the same tree and the probe **rebuilt for each** — see the trap
+below, which invalidated the first attempt at this table.
+
+| in one full probe run                             | §10 as published | `origin/main` today | with this change |
+| ------------------------------------------------- | ---------------: | ------------------: | ---------------: |
+| animation frames on the two refused properties    |              294 |     302 / 300 / 322 |  308 / 320 / 313 |
+| animations that reached their target (`finished`) |                4 |           4 / 4 / 4 |        4 / 4 / 4 |
+| landings on the cadence                           |               38 |        38 / 37 / 37 |     35 / 36 / 37 |
+| React renders produced for them                   |           **42** |    **42 / 41 / 41** | **39 / 40 / 41** |
+| keys seeded at a target (no starting point)       |                — |                   — |        2 / 2 / 2 |
+| **keys started from a previous number**           |                — |                   — |    **0 / 0 / 0** |
+| **landings on a snap** (the new channel)          |                — |                   — |    **0 / 0 / 0** |
+
+`origin/main`'s first run reproduces §10's published 38 landings and 42 renders
+exactly, so the machine has not drifted and the columns are comparable.
+Renders are 39–41 against 41–42 — lower, and within the ±1 the cadence's clock
+bound gives it either way.
+
+The last three rows are the ones worth having. Both of the sheet's refused keys
+are seeded **once** and never started from a previous number, and no key ever
+goes from an animation to a plain number, so the sheet exercises neither
+`startingPoint` nor the snap landing: the change costs the heaviest consumer of
+this path nothing at all, rather than a little. Which is also the answer to the
+worry that motivated the measurement — the entry does not have to carry a value
+across runs, because the previous updater result already does, so there is no
+new state to have a lifetime and no per-frame work to pay for it. The starting
+point is one property read off an object already in hand, on the run that starts
+an animation and on no other.
+
+**The trap, recorded because it produced a wrong table first.**
+`CORE_EXPORTS_SKIP_BUILD=1` skips `gtkx build`, and `gtkx build` is what BUNDLES
+the library into the probe — so with it set, a library change (and a
+`npm run build:dist` after it) is completely invisible and the probe silently
+re-measures the previous bundle. Two variants measured that way differ only by
+run-to-run noise, which looks exactly like "no regression" and means nothing.
+The flag is for re-running the same code, and only that.
+
+### The geometry, mid-animation
+
+Asserting a stored value would pass with the defect in place — the stored value
+was always the target — so the proof is GTK's own committed geometry, read
+through `computeBounds` on the widget, in `tests/gtk/reanimated/updater-animations.gtk.test.tsx`.
+
+`height: open.value ? withTiming(200, {duration: 900, easing: linear}) : 100` on
+the memo'd mask of §9, whose `height` is refused and whose child's height can
+only come from a Yoga pass:
+
+| when                     | mask height | the Yoga-only child |
+| ------------------------ | ----------: | ------------------: |
+| at rest, key = plain 100 |         100 |                 100 |
+| 300 ms into the 900 ms   |     **133** |             **133** |
+| settled                  |         200 |                 200 |
+| 60 ms after `open` = 0   |     **100** |             **100** |
+
+133 px is where a linear 100 → 200 is a third of the way through, and it is the
+whole assertion: with the key re-seeded, that row reads 200 on the first frame.
+The last row is the reverse direction — 60 ms is inside the 100 ms cadence and
+nowhere near the 900 ms the animation would have taken, so a snap that waited
+for either would still read 200.
+
+The same shape on a driven property, `opacity: visible.value ? withTiming(1,
+{duration: 600, easing: linear}) : 0`, read as the widget's own
+`gtk_widget_get_opacity`: 0 at rest, **0.310** two hundred milliseconds in, 1
+settled, and **0** thirty milliseconds after the flip back — no render involved
+in either direction.
+
+Both are mutation-checked: reverting `startingPoint` fails the two
+number-to-animation cases and the fade, and removing the snap landing fails the
+snap case alone.
+
+### What the probe says
+
+`spike/core-exports`: **0 FAILED**, 10 PASS, unchanged. Scroll events reaching
+the sheet's own scrollable are 166 / 162 / 170 with this change against
+`origin/main`'s 162 / 146 / 172 on the same afternoon — a wider spread than the
+157–162 §9 and §10 recorded, and one the two variants share, so it is the
+wheel-injection race and not a property of either. The lock holds it at the top
+while collapsed
+(`row-one y 559 → 559` with the events arriving, so non-vacuous), releases when
+extended (`y 240 → -84` under the identical wheel), and the negative-control
+zone the pointer never visited stayed silent.

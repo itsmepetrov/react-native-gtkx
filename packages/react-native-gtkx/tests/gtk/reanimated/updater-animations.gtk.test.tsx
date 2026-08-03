@@ -285,3 +285,183 @@ it("keeps following a target that moves before the previous animation settled", 
   expect(boxOf("mask").height).toBe(120)
   expect(boxOf("filler").height).toBe(120)
 })
+
+// --- 4. one branch animated, the other a plain number ---------------------
+//
+// `height: open.value ? withTiming(200) : 100` — "snap shut, open smoothly",
+// which is what people write when the reverse transition does not need
+// animating (`opacity: visible ? withTiming(1) : 0` is the same shape). Both
+// branches animated is the case section 2 covers and it always worked. ONE
+// branch plain did not: the key was dropped while it held the number and
+// re-seeded when it next held an animation, so the seed went straight to the
+// target and the animation never played at all. Nothing warned, nothing threw,
+// the resting size was right.
+//
+// Upstream animates from the old value, and its source says so in as many
+// words: `styleUpdater` keeps the whole previous result as `state.last`, and
+// `prepareAnimation`'s last branch is `// previously it was a plain value,
+// just set it as starting point`.
+
+let togglerHandles: { open: SharedValue<number> }
+
+const Toggler = () => {
+  const open = useSharedValue(0)
+  const animated = useAnimatedStyle(() => ({
+    height: open.value
+      ? withTiming(200, { duration: 900, easing: Easing.linear })
+      : 100,
+  }))
+  const style = useMemo(
+    () => [{ backgroundColor: "#3d3846" }, animated],
+    [animated],
+  )
+  useEffect(() => {
+    togglerHandles = { open }
+  })
+  return (
+    <View
+      style={{ width: 400, height: 300, backgroundColor: "#241f31" }}
+      testID="stage"
+    >
+      <Mask style={style} />
+    </View>
+  )
+}
+
+it("animates from the plain number the key held, not from the target", async () => {
+  vi.spyOn(console, "warn").mockImplementation(() => {})
+  renderCount = 0
+  await render(
+    <Root
+      width={400}
+      height={300}
+    >
+      <Toggler />
+    </Root>,
+  )
+  // At rest the key is a plain 100 and the mask is 100 px tall.
+  await waitFor(() => {
+    expect(boxOf("mask").height).toBe(100)
+  })
+
+  await act(async () => {
+    togglerHandles.open.value = 1
+  })
+  await settle(300)
+
+  // A third of the way through a 900 ms linear 100 → 200: the geometry GTK
+  // committed is BETWEEN the two, which is the whole assertion. Seeding at the
+  // target puts 200 here on the very first frame, and reading a value this
+  // module stored would have passed either way.
+  const midway = boxOf("mask").height
+  expect(midway).toBeGreaterThan(100)
+  expect(midway).toBeLessThan(200)
+  // And the child whose height can only come from a Yoga pass is there too, so
+  // it is a real layout mid-animation rather than a paint.
+  expect(boxOf("filler").height).toBe(midway)
+
+  await settle(1000)
+  expect(boxOf("mask").height).toBe(200)
+})
+
+it("snaps back when the animation is replaced by a plain number", async () => {
+  // The reverse direction, and it is NOT the mirror image of the one above.
+  // Upstream's `styleUpdater` deletes the animation and pushes the plain value
+  // through `updateProps` in the SAME run — cancel and snap, no easing back and
+  // no settle callback — so this platform matches by landing the number at
+  // once instead of inventing a symmetry upstream does not have.
+  vi.spyOn(console, "warn").mockImplementation(() => {})
+  renderCount = 0
+  await render(
+    <Root
+      width={400}
+      height={300}
+    >
+      <Toggler />
+    </Root>,
+  )
+  await waitFor(() => {
+    expect(boxOf("mask").height).toBe(100)
+  })
+  await act(async () => {
+    togglerHandles.open.value = 1
+  })
+  await settle(1200)
+  expect(boxOf("mask").height).toBe(200)
+
+  await act(async () => {
+    togglerHandles.open.value = 0
+  })
+  // 60 ms: inside the 100 ms landing cadence and nowhere near the 900 ms the
+  // animation would have taken, so a snap that waited for either of them would
+  // still read 200 here. This `height` is refused, which means the snap is a
+  // React render or it is nothing at all.
+  await settle(60)
+  expect(boxOf("mask").height).toBe(100)
+  expect(boxOf("filler").height).toBe(100)
+})
+
+// --- 5. the same shape on a property that IS driven -----------------------
+
+let snapFadeHandles: { visible: SharedValue<number> }
+
+const SnapFader = () => {
+  const visible = useSharedValue(0)
+  const style = useAnimatedStyle(() => ({
+    opacity: visible.value
+      ? withTiming(1, { duration: 600, easing: Easing.linear })
+      : 0,
+  }))
+  useEffect(() => {
+    snapFadeHandles = { visible }
+  })
+  return (
+    <View
+      style={{ width: 400, height: 300, backgroundColor: "#241f31" }}
+      testID="stage"
+    >
+      <Animated.View
+        style={[{ width: 100, height: 60, backgroundColor: "#3584e4" }, style]}
+        testID="box"
+      />
+    </View>
+  )
+}
+
+it("fades in from the plain opacity and snaps out again", async () => {
+  // `opacity: visible ? withTiming(1) : 0` is the idiom in its shortest form,
+  // and on a DRIVEN property no React render is involved in either direction —
+  // the value goes to `gtk_widget_set_opacity` on the frame it changes. So this
+  // reads the widget's own opacity rather than a committed layout.
+  await render(
+    <Root
+      width={400}
+      height={300}
+    >
+      <SnapFader />
+    </Root>,
+  )
+  const box = screen.getByName("box") as unknown as Gtk.Widget
+  await waitFor(() => {
+    expect(box.getOpacity()).toBeCloseTo(0, 2)
+  })
+
+  await act(async () => {
+    snapFadeHandles.visible.value = 1
+  })
+  await settle(200)
+  const midway = box.getOpacity()
+  expect(midway).toBeGreaterThan(0)
+  expect(midway).toBeLessThan(1)
+
+  await settle(700)
+  expect(box.getOpacity()).toBeCloseTo(1, 2)
+
+  await act(async () => {
+    snapFadeHandles.visible.value = 0
+  })
+  // No render to wait for and no cadence to clear: the animation is cancelled
+  // and the plain 0 is written to the widget in the same run.
+  await settle(30)
+  expect(box.getOpacity()).toBeCloseTo(0, 2)
+})

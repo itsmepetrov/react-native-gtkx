@@ -83,6 +83,134 @@ test("a key animating for the first time is seeded at the target, not animated t
   expect(manual.activeCount()).toBe(0)
 })
 
+test("a key whose previous result held a plain number animates from that number", () => {
+  // `height: open.value ? withTiming(200) : 100` — snap shut, open smoothly,
+  // which is what people write when only one direction needs animating. The
+  // key held 100, so 100 is what there is to animate FROM: upstream's
+  // `prepareAnimation` takes `oldValues[key]` and its last branch is
+  // "previously it was a plain value, just set it as starting point".
+  //
+  // This used to drop the key while it held the number and re-seed it when it
+  // next held an animation, so the seed went straight to 200 and the animation
+  // never played. Nothing warned and the resting size was right.
+  const sink = collector()
+  const animations = createUpdaterAnimations(engine, (resolved) => {
+    sink.published.push(resolved)
+  })
+  animations.run({ height: 100 })
+  expect(sink.last()).toEqual({ height: 100 })
+
+  animations.run({ height: withTiming(200, { duration: 300 }) })
+  // The animation's FIRST published value is where it came from, not where it
+  // is going. That single assertion is the whole defect.
+  expect(sink.last()).toEqual({ height: 100 })
+  runFrames(9)
+  const midway = sink.last()!.height as number
+  expect(midway).toBeGreaterThan(100)
+  expect(midway).toBeLessThan(200)
+  runFrames(25)
+  expect(sink.last()).toEqual({ height: 200 })
+})
+
+test("a spring takes the previous plain number as its origin too", () => {
+  // Not the same code path as a timing: a spring reads its origin off the
+  // driver when it is BUILT (animation.ts, toPlatformSpringConfig), so the
+  // driver has to be seeded before anything is built on it.
+  const sink = collector()
+  const animations = createUpdaterAnimations(engine, (resolved) => {
+    sink.published.push(resolved)
+  })
+  animations.run({ height: 40 })
+  animations.run({ height: withSpring(300) })
+  expect(sink.last()).toEqual({ height: 40 })
+  runFrames(4)
+  const midway = sink.last()!.height as number
+  expect(midway).toBeGreaterThan(40)
+  expect(midway).toBeLessThan(300)
+})
+
+test("a key ABSENT from the previous result is still seeded at the target", () => {
+  // The distinction the fix rests on. Upstream's `oldValues[key]` is
+  // `undefined` for a key that was not in the last result, and an animation
+  // whose starting point is undefined keeps its own `current` — the target. So
+  // "was 100 a moment ago" and "was not there a moment ago" are different
+  // questions with different answers, and only the first one animates.
+  const sink = collector()
+  const animations = createUpdaterAnimations(engine, (resolved) => {
+    sink.published.push(resolved)
+  })
+  animations.run({ opacity: 1 })
+  animations.run({ opacity: 1, height: withTiming(200, { duration: 300 }) })
+  expect(sink.last()).toEqual({ opacity: 1, height: 200 })
+  expect(manual.activeCount()).toBe(0)
+})
+
+test("a previous value that is not a number leaves nothing to animate from", () => {
+  // A percentage has no point base and a colour is not a number the drivers
+  // here can start at, so both fall back to the seed rather than being coerced
+  // into one.
+  const sink = collector()
+  const animations = createUpdaterAnimations(engine, (resolved) => {
+    sink.published.push(resolved)
+  })
+  animations.run({ height: "50%" })
+  animations.run({ height: withTiming(200, { duration: 300 }) })
+  expect(sink.last()).toEqual({ height: 200 })
+  expect(manual.activeCount()).toBe(0)
+})
+
+test("the number animated from is the PREVIOUS run's, not an older one", () => {
+  const sink = collector()
+  const animations = createUpdaterAnimations(engine, (resolved) => {
+    sink.published.push(resolved)
+  })
+  animations.run({ height: 10 })
+  animations.run({ height: 150 })
+  animations.run({ height: withTiming(400, { duration: 300 }) })
+  expect(sink.last()).toEqual({ height: 150 })
+})
+
+test("a frame of a running animation does not re-seed from the previous result", () => {
+  // Every frame republishes the WHOLE object, which re-enters the same resolve
+  // the mapper's run goes through. It must not look a starting point up again:
+  // the animation is already running from one.
+  const sink = collector()
+  const animations = createUpdaterAnimations(engine, (resolved) => {
+    sink.published.push(resolved)
+  })
+  animations.run({ height: 100 })
+  animations.run({ height: withTiming(200, { duration: 300 }) })
+  runFrames(6)
+  const values = sink.published.map((entry) => entry.height as number)
+  // Monotonic: a re-seed would show up as the value dropping back to 100.
+  for (let i = 1; i < values.length; i += 1) {
+    expect(values[i]).toBeGreaterThanOrEqual(values[i - 1]!)
+  }
+})
+
+test("an animation that follows a plain number is cancelled and snaps back, not eased", () => {
+  // The reverse direction, and it is NOT the mirror image: upstream's
+  // `styleUpdater` deletes the animation and pushes the plain value through
+  // `updateProps` in the same run, so it lands at once with no callback and no
+  // settle. There is no "animate back to 100" anywhere in it.
+  const sink = collector()
+  const animations = createUpdaterAnimations(engine, (resolved) => {
+    sink.published.push(resolved)
+  })
+  animations.run({ height: 100 })
+  animations.run({ height: withTiming(200, { duration: 300 }) })
+  runFrames(9)
+  expect(sink.last()!.height as number).toBeGreaterThan(100)
+
+  animations.run({ height: 100 })
+  expect(sink.last()).toEqual({ height: 100 })
+  const publishedCount = sink.published.length
+  runFrames(30)
+  // Nothing is still running, so nothing publishes.
+  expect(sink.published.length).toBe(publishedCount)
+  expect(manual.activeCount()).toBe(0)
+})
+
 test("a new target animates from where the value is, publishing every frame", () => {
   const sink = collector()
   const animations = createUpdaterAnimations(engine, (resolved) => {
@@ -270,6 +398,85 @@ test("the settle restarts the interval, so a new animation is not owed a landing
   probe.animations.run({ height: withTiming(600, { duration: 100 }) })
   runFrames(3)
   expect(probe.landings.length).toBe(landingsAtSettle)
+})
+
+test("a plain number replacing a RUNNING animation lands at once", () => {
+  // Upstream snaps in the same run, through `updateProps`. On a property this
+  // platform refuses to drive, "snap" is a React render or it is nothing: the
+  // frames up to here never went through React, so React's copy of the key is
+  // whatever the last landing left and the old value stays on screen. Not
+  // rate-limited by the cadence either — this is a state change rather than a
+  // step of one.
+  const probe = landingCollector()
+  probe.animations.run({ height: withTiming(0, { duration: 1000 }) })
+  probe.animations.run({ height: withTiming(1000, { duration: 1000 }) })
+  runFrames(2)
+  expect(probe.landings).toEqual([])
+
+  probe.animations.run({ height: 42 })
+  expect(probe.landings).toEqual(["height"])
+  // And it is not a settle: the animation was cancelled, and reporting one
+  // would be a lie about a promise kept.
+  expect(probe.settles).toEqual([])
+})
+
+test("a plain number replacing a SETTLED animation lands too", () => {
+  // "Was it running" is the wrong question and this is the case that says so:
+  // the settle put 300 into React and then the key went back to 100, which no
+  // animation is ever going to publish. What decides it is `landedValue` — the
+  // last value a render was asked for — and nothing else.
+  const probe = landingCollector()
+  probe.animations.run({ height: withTiming(0, { duration: 100 }) })
+  probe.animations.run({ height: withTiming(300, { duration: 100 }) })
+  while (probe.settles.length === 0) {
+    runFrames(1)
+  }
+  const landingsAtSettle = probe.landings.length
+
+  probe.animations.run({ height: 100 })
+  expect(probe.landings.length).toBe(landingsAtSettle + 1)
+})
+
+test("a plain number equal to the one React already has asks for no render", () => {
+  // A seeded key never ran a frame outside React, so the number React holds is
+  // already this one and a render for it would be a render for nothing.
+  const probe = landingCollector()
+  probe.animations.run({ height: withTiming(200, { duration: 300 }) })
+  probe.animations.run({ height: 200 })
+  expect(probe.landings).toEqual([])
+  expect(probe.settles).toEqual([])
+
+  // And a plain number that merely changes afterwards is not this module's
+  // business at all: there is no entry left, so it is the ordinary refused
+  // path, whose value lands on the next React render for whatever reason one
+  // happens.
+  probe.animations.run({ height: 120 })
+  expect(probe.landings).toEqual([])
+})
+
+test("a percentage replacing an animation asks for no render of its own", () => {
+  // It changes the set of animatable leaves, so the caller rebuilds the style
+  // and pays exactly one render for the shape change (hooks.ts). A second one
+  // would double it.
+  const probe = landingCollector()
+  probe.animations.run({ height: withTiming(0, { duration: 1000 }) })
+  probe.animations.run({ height: withTiming(1000, { duration: 1000 }) })
+  runFrames(2)
+  probe.animations.run({ height: "50%" })
+  expect(probe.landings).toEqual([])
+  expect(probe.settles).toEqual([])
+})
+
+test("a key that VANISHES from the result asks for no render of its own", () => {
+  // It changes the style's SHAPE, and the caller already pays exactly one
+  // render for that (hooks.ts) — asking for a second would double it.
+  const probe = landingCollector()
+  probe.animations.run({ height: withTiming(0, { duration: 1000 }) })
+  probe.animations.run({ height: withTiming(1000, { duration: 1000 }) })
+  runFrames(2)
+  probe.animations.run({ opacity: 1 })
+  expect(probe.landings).toEqual([])
+  expect(probe.settles).toEqual([])
 })
 
 test("a caller that asks for no cadence gets none", () => {

@@ -28,14 +28,27 @@
 // a frame of a running animation costs no React render — it goes down exactly
 // the path a shared value written every frame goes down.
 //
-// TWO RULES, and both are upstream's:
+// THREE RULES, and all three are upstream's — every one of them read out of
+// `hook/useAnimatedStyle.ts`'s `styleUpdater`/`prepareAnimation` rather than
+// inferred from behaviour:
 //
 //  - A key APPEARING for the first time is seeded at the animation's target
 //    rather than animated to it. There is nothing to animate from, and it is
 //    the same collapse `initialUpdaterRun` performs on the updater's first
 //    run. Upstream reaches the same place from the other direction: its
 //    `prepareAnimation` starts at `oldValues[key]`, which for a key that was
-//    not in the last result is the initial run's own value.
+//    not in the last result is `undefined` and leaves the animation's own
+//    `current` — its target — standing.
+//  - A key whose previous result held a PLAIN NUMBER animates from that
+//    number. `oldValues` is `state.last`, the whole previous updater result
+//    kept raw, and `prepareAnimation`'s last branch is one line with the
+//    comment already on it: `// previously it was a plain value, just set it
+//    as starting point`. So `height: open.value ? withTiming(200) : 100` runs
+//    100 → 200, and the idiom people actually write — snap shut, open
+//    smoothly — animates. It did not here: the key was dropped when it held a
+//    number and re-seeded when it next held an animation, so the seed went
+//    straight to 200 and the animation never played at all. Silently, which
+//    is the failure this repo ranks worst.
 //  - A re-run that produces an EQUIVALENT animation does not restart it. A
 //    mapper re-runs whenever anything it read changed, which for a real app is
 //    many times a second, and rebuilding the spring each time would leave it
@@ -43,18 +56,26 @@
 //    (`animationSignature`), not object identity — every run builds a fresh
 //    object.
 //
+// AND THE REVERSE DIRECTION, animation → plain number, which is upstream's
+// too and is not the mirror image of the second rule: `styleUpdater`'s
+// non-animated branch does `delete animations[key]` and pushes the value
+// through `updateProps` in the SAME run, so the animation is cancelled — no
+// callback, no settle — and the number lands at once. It does not ease back.
+// The only thing this platform has to add is the render a refused property
+// needs to land at all, because "at once" through React is still a render (see
+// `onLanding`).
+//
 // WHERE THIS DIFFERS FROM UPSTREAM, said out loud: a restart picks the
 // animation up at the value it is currently at, with the velocity the new
 // descriptor asks for, where upstream also carries the previous animation's
 // VELOCITY across. For a target that moves once that is the same animation;
 // for a target that moves every frame ours is slightly more damped.
 //
-// AND THE CADENCE, which is the third rule and the only one that is ours
-// rather than upstream's — see LANDING_INTERVAL_MS. It exists because the
-// first two are not enough for a property whose frames this platform refuses
-// to write: for those, the value only exists on screen at whatever the last
-// React render committed, and "the render at the settle" turned out to be
-// arbitrarily far away.
+// AND THE CADENCE, the one rule here that is ours rather than upstream's — see
+// LANDING_INTERVAL_MS. It exists because none of the above is enough for a
+// property whose frames this platform refuses to write: for those, the value
+// only exists on screen at whatever the last React render committed, and "the
+// render at the settle" turned out to be arbitrarily far away.
 import type { AnimatedValue, CompositeAnimation } from "../animated/index"
 import {
   animationSignature,
@@ -141,13 +162,20 @@ export type UpdaterAnimations = {
  *   the properties it refuses to drive at frame rate, whose contract is that
  *   the value lands on the next React render — without it, that promise is
  *   only kept when something else happens to re-render.
- * @param onLanding Called while an animation on `key` is still running, at
- *   most once per `LANDING_INTERVAL_MS` and only when the value has moved far
- *   enough to change a committed layout. Same job as `onSettled` and the same
- *   handling at the call site; it is a separate callback because a settle and
- *   a value merely passing through are different claims, and only the first
- *   one is a promise kept. Omit it and the cadence costs nothing at all — a
- *   caller with no refused properties (`useAnimatedProps`) does.
+ * @param onLanding Called when `key`'s current value has to reach React
+ *   without its animation having reached a target. Two occasions: while an
+ *   animation runs, at most once per `LANDING_INTERVAL_MS` and only when the
+ *   value has moved far enough to change a committed layout (the cadence); and
+ *   when a plain number REPLACES a running animation, where upstream cancels
+ *   and snaps and a refused property cannot snap without a render. The snap is
+ *   deliberately not rate-limited — it is a state change rather than a step of
+ *   one, it happens once per mapper run that flips the key rather than once per
+ *   frame, and upstream pushes exactly the same number of `updateProps` for it.
+ *   Same job as `onSettled` and the same handling at the call site; it is a
+ *   separate callback because a settle and a value that has merely got to be
+ *   published are different claims, and only the first one is a promise kept.
+ *   Omit it and both cost nothing at all — a caller with no refused properties
+ *   (`useAnimatedProps`) does.
  */
 export const createUpdaterAnimations = (
   engine: AnimationEngine,
@@ -168,7 +196,26 @@ export const createUpdaterAnimations = (
   // run in progress publishes the final state itself.
   let resolving = false
 
-  const drop = (key: string): void => {
+  /**
+   * @param replacement The plain value that took the key over, or `undefined`
+   *   when the key left the updater's result altogether.
+   *
+   *   A number here owes the caller a render, and `landedValue` is what decides
+   *   it: that field is this module's whole model of what REACT holds for the
+   *   key, and everything since the last landing or settle went to the widget
+   *   without passing through React. So a plain number that differs from it has
+   *   to be published or it never arrives — on a refused property the snap IS
+   *   a render, and neither the cadence nor a settle is ever going to come for
+   *   it. Compared without the cadence's one-pixel epsilon and for the same
+   *   reason a settle ignores it: this is a resting value rather than a step
+   *   towards one, and there is nothing after it to correct a skipped render.
+   *
+   *   Not asked for otherwise. A key that VANISHED, or one replaced by a
+   *   percentage or a colour, changes the style's SHAPE, and the caller already
+   *   pays exactly one render for that (hooks.ts); a value equal to the one
+   *   React already has is a render for nothing.
+   */
+  const drop = (key: string, replacement: unknown): void => {
     const entry = entries.get(key)
     if (entry === undefined) {
       return
@@ -176,13 +223,22 @@ export const createUpdaterAnimations = (
     entries.delete(key)
     entry.running?.stop()
     entry.driver.removeListener(entry.listenerId)
+    if (
+      typeof replacement === "number" &&
+      !Object.is(replacement, entry.landedValue)
+    ) {
+      onLanding?.(key)
+    }
   }
 
   const republish = (): void => {
     if (resolving || lastSource === null) {
       return
     }
-    publish(resolve(lastSource))
+    // No previous result on a frame: nothing can START an animation here — the
+    // source has not changed — so there is nothing to look a starting point up
+    // for.
+    publish(resolve(lastSource, null))
   }
 
   /**
@@ -214,39 +270,20 @@ export const createUpdaterAnimations = (
     onLanding(key)
   }
 
-  const ensure = (key: string, spec: AnimationSpec): Entry => {
-    const signature = animationSignature(spec)
-    const existing = entries.get(key)
-    if (existing === undefined) {
-      // Nothing to animate from — see the header.
-      const driver = new engine.api.Value(targetOf(spec) ?? 0)
-      const entry: Entry = {
-        driver,
-        listenerId: driver.addListener(({ value }) => {
-          republish()
-          considerLanding(key, value)
-        }),
-        signature,
-        running: null,
-        // The seed itself needs no render of its own: a key appearing changes
-        // the style's SHAPE, and the caller already pays one render for that
-        // (hooks.ts). The cadence therefore starts here, at the seed.
-        landedValue: driver.__getValue(),
-        landedAt: now(),
-      }
-      entries.set(key, entry)
-      return entry
-    }
-    if (existing.signature === signature) {
-      return existing
-    }
-    existing.signature = signature
-    existing.running?.stop()
-    const animation = buildAnimation(engine, existing.driver, spec)
-    existing.running = animation
+  /** Aims `entry`'s driver at `spec`, replacing whatever it was running. */
+  const start = (
+    key: string,
+    entry: Entry,
+    spec: AnimationSpec,
+    signature: string,
+  ): Entry => {
+    entry.signature = signature
+    entry.running?.stop()
+    const animation = buildAnimation(engine, entry.driver, spec)
+    entry.running = animation
     animation.start((result) => {
-      if (existing.running === animation) {
-        existing.running = null
+      if (entry.running === animation) {
+        entry.running = null
       }
       // `finished` only: a restart stops the previous animation, and reporting
       // that as a settle would publish through React on every frame the target
@@ -254,31 +291,103 @@ export const createUpdaterAnimations = (
       // still covered — the cadence above is what carries a target that keeps
       // moving, and it does not care whose animation the frames belong to.
       if (result.finished) {
-        markLanded(existing)
+        markLanded(entry)
         onSettled?.(key)
       }
     })
-    return existing
+    return entry
   }
 
-  const resolve = (source: UpdaterObject): UpdaterObject => {
+  /**
+   * Where an animation that is starting has to start FROM, for a key that was
+   * not animating a moment ago: the value the PREVIOUS updater result held for
+   * it, and only when that is a real number.
+   *
+   * This is `prepareAnimation(…, oldValues[key])` and nothing more —
+   * `oldValues` is `state.last`, upstream's copy of the whole previous updater
+   * result — so the second of the header's three rules costs no bookkeeping at
+   * all. The previous result is an object this module was already holding for
+   * `republish`; reading one key out of it is the entire mechanism, and the
+   * entry does not have to carry a value across runs or outlive its animation.
+   *
+   * Numbers only, and `undefined` for everything else, which lines up with
+   * upstream at both ends: a key that was absent has no starting point (its
+   * `oldValues[key]` is `undefined`, and the animation's own `current` — the
+   * target — stands), and a percentage string or a colour is not something the
+   * numeric drivers here can start at.
+   */
+  const startingPoint = (
+    previous: UpdaterObject | null,
+    key: string,
+  ): number | undefined => {
+    const value = previous?.[key]
+    return typeof value === "number" && Number.isFinite(value)
+      ? value
+      : undefined
+  }
+
+  const ensure = (
+    key: string,
+    spec: AnimationSpec,
+    previous: UpdaterObject | null,
+  ): Entry => {
+    const signature = animationSignature(spec)
+    const existing = entries.get(key)
+    if (existing !== undefined) {
+      return existing.signature === signature
+        ? existing
+        : start(key, existing, spec, signature)
+    }
+    const from = startingPoint(previous, key)
+    // The driver is seeded before anything is built on purpose: a spring reads
+    // its origin off the value it is given (animation.ts), so this IS where
+    // "animate from the old number" happens.
+    const driver = new engine.api.Value(from ?? targetOf(spec) ?? 0)
+    const entry: Entry = {
+      driver,
+      listenerId: driver.addListener(({ value }) => {
+        republish()
+        considerLanding(key, value)
+      }),
+      signature,
+      running: null,
+      // Whichever branch follows, React's copy of this key is the value the
+      // driver starts at: a seed changes the style's SHAPE and the caller
+      // already pays one render for that (hooks.ts), and a starting point that
+      // came out of the previous result is a number React was already handed.
+      // So the cadence starts here either way.
+      landedValue: driver.__getValue(),
+      landedAt: now(),
+    }
+    entries.set(key, entry)
+    // Nothing to animate from: seeded at the target and not started at all,
+    // which is the first of the header's three rules.
+    return from === undefined ? entry : start(key, entry, spec, signature)
+  }
+
+  const resolve = (
+    source: UpdaterObject,
+    previous: UpdaterObject | null,
+  ): UpdaterObject => {
     resolving = true
     try {
       let resolved: UpdaterObject | null = null
       for (const key of Object.keys(source)) {
         const value = source[key]
         if (!isAnimationSpec(value)) {
-          // A plain value replacing an animation stops it, exactly as an
-          // assignment to a shared value does.
-          drop(key)
+          // A plain value replacing an animation cancels it and snaps, exactly
+          // as an assignment to a shared value does and exactly as upstream's
+          // `delete animations[key]` + `updateProps` in the same run does. The
+          // number itself is published below, by identity.
+          drop(key, value)
           continue
         }
         resolved ??= { ...source }
-        resolved[key] = ensure(key, value).driver.__getValue()
+        resolved[key] = ensure(key, value, previous).driver.__getValue()
       }
       for (const key of [...entries.keys()]) {
         if (!(key in source)) {
-          drop(key)
+          drop(key, undefined)
         }
       }
       return resolved ?? source
@@ -289,12 +398,17 @@ export const createUpdaterAnimations = (
 
   return {
     run(source) {
+      // `state.last`, upstream's name for it: the result this run's animations
+      // measure themselves against. Held for one run only, and it was already
+      // being held.
+      const previous = lastSource
       lastSource = source
-      publish(resolve(source))
+      publish(resolve(source, previous))
     },
     dispose() {
       for (const key of [...entries.keys()]) {
-        drop(key)
+        // Nothing is owed a render: the component is going away.
+        drop(key, undefined)
       }
       lastSource = null
     },
