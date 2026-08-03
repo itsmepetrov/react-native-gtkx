@@ -172,6 +172,24 @@ export const createHooks = (
     // component does.
     const animationsRef = useRef<UpdaterAnimations | null>(null)
     if (animationsRef.current === null) {
+      // A property this platform will not write at frame rate says so and
+      // promises the value "on the next React render". For a value that only
+      // ever moves inside an animation there IS no next render, so the promise
+      // is kept here — when the animation reaches its target, and on the
+      // cadence that carries it there (updater-animations.ts), never once a
+      // frame.
+      //
+      // `renew` before the render and not merely the render: the view this
+      // style lands on may be behind a `memo`, and a re-render of the
+      // component that owns the hook stops there with every prop identical
+      // unless the style itself has a new identity.
+      const land = (key: string): void => {
+        if (!settlesThroughReact(key)) {
+          return
+        }
+        animatedRef.current?.renew()
+        requestRebuild()
+      }
       animationsRef.current = createUpdaterAnimations(
         engine,
         (resolved) => {
@@ -184,22 +202,8 @@ export const createHooks = (
             requestRebuild()
           }
         },
-        (key) => {
-          // A property this platform will not write at frame rate says so and
-          // promises the value "on the next React render". For a value that
-          // only ever moves inside an animation there IS no next render, so
-          // the promise is kept here — once, when the animation reaches its
-          // target, not once a frame.
-          //
-          // `renew` before the render and not merely the render: the view this
-          // style lands on may be behind a `memo`, and a re-render of the
-          // component that owns the hook stops there with every prop identical
-          // unless the style itself has a new identity.
-          if (settlesThroughReact(key)) {
-            animatedRef.current?.renew()
-            requestRebuild()
-          }
-        },
+        land,
+        land,
       )
     }
     useEffect(

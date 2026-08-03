@@ -592,3 +592,122 @@ tested rather than vacuous) and releases when it is extended (`y 240 → -84`
 under the same injected wheel), the negative-control zone the pointer never
 visited stayed silent, and the draggable-list and plain-scroller controls are
 unchanged.
+
+## 10. The settle was not enough, and a mount is where it shows
+
+Date: 2026-08-03, same machine, same harness, same consumer. §9 shipped one
+React render per settled animation and called the refusal's promise kept. It
+was kept only when the settle came soon, and on the gallery's
+`upstream-bottom-sheet` screen it did not come for **1.38 s**.
+
+### What a person sees
+
+`scripts/shot-example-drag.ts examples/gallery --resolution=1100x1500`, steps
+`wait:3500;click:90,1351;shot…` with the shots at 200/200/400/800/1000 ms after
+the sidebar click, counting non-background pixels in the sheet's body (the
+strip below its header card, x 285–1090, y 1170–1495):
+
+| after the click | before | after |
+| --------------- | -----: | ----: |
+| 0.92 s          |      0 |  6954 |
+| 1.12 s          |      0 |  6954 |
+| 1.32 s          |      0 |  6954 |
+| 1.72 s          |   6954 |  6954 |
+| 2.5 s / 3.5 s   |   6954 |  6954 |
+
+The screen and the sheet's header card were there immediately; the sheet's 18
+rows were **absent** until somewhere between 1.32 s and 1.72 s, and then all of
+them appeared at once. The background colour of the body region says the same
+thing on its own: `#222226`, the window, until the mask exists at all, and
+`#36363a`, the sheet, once it does.
+
+### Which half of §9's seeding it was
+
+§9 says a key appearing for the first time is seeded at its target, so a
+refused property should never spend an animation's worth of time absent. It
+does fire on mount. **The target it fires at is not the one it settles to**,
+and that is the whole bug. Instrumenting the style layer through the same
+filmstrip:
+
+```
+seed paddingBottom=95.949  seed height=95.949   →  yoga height=95.949      (t+2 ms)
+restart height spring(132.702) -> spring(964.902) from=95.949              (t+27 ms)
+… 37 restarts over 673 ms, every one of them a cancel and none a settle …
+settle height 954.607                            →  yoga height=954.607  (t+1380 ms)
+```
+
+`height` reached Yoga exactly **twice** in the whole mount. gorhom computes it
+as `animatedContentHeightMax + paddingBottom`, and on the mapper run that first
+produced a `height` at all — the run that passed gorhom's own
+`containerHeight === INITIAL_LAYOUT_VALUE` guard —
+`animatedContentHeightMax` was still `0`. The real 832 px arrived 27 ms later,
+by which time the key had an entry, and a key with an entry whose target moves
+is an animation rather than a seed. From there the target is derived from the
+sheet's own POSITION, which the opening spring is moving: 37 re-aims, each
+cancelling the animation the last one started, so `finished` is never true and
+§9's one render never comes due. Then a further 677 ms for the final spring to
+converge from 802 px to 954.6 px.
+
+For all 1.38 s the mask was 96 px of 954, the `BottomSheetFlatList` inside it
+had no bounded parent, and it mounted **zero** of its 18 cells. Correct by
+§9's rule, and plainly wrong to anybody opening the screen.
+
+**Candidate 1 — seed at the target it will settle to — is not available.** The
+value is not knowable at seed time: it legitimately goes 0 → 832 → drifting,
+and extending "there is nothing to animate from" to cover a target that keeps
+moving means re-seeding on every one of the 37 re-aims, which is a React render
+per frame and exactly the cost §3 refuses.
+
+### What shipped: the cadence
+
+A property this platform will not drive at frame rate lands **at most once per
+100 ms while its value is moving**, as well as when it settles —
+`LANDING_INTERVAL_MS` in `updater-animations.ts`. 100 ms because that is the
+bound under which a change still reads as immediate, and because it bounds the
+cost by the CLOCK rather than by the animation: at most ten renders a second
+per animated key, against sixty frames, whatever the animation's length. A
+landing also has to move the value by at least one pixel — GTK allocates whole
+pixels, so a sub-pixel step commits no new geometry and a render for it is a
+render for nothing.
+
+Publishing the animation's CURRENT value and not its target, deliberately: the
+same node feeds the driven-size path, where the widget is already showing the
+current value and the render exists to make Yoga agree with it (§8, "THE
+REBASE"). A target written into Yoga mid-flight would put the two out of step
+on the accepted path to fix the refused one.
+
+The same mount now lands the mask at 266 → 546 → 649 → 731 → 792 → 832 → 896
+→ 939 → 951 → 954 px before settling at 954.607, with the first at ~100 ms
+instead of 1.38 s: the shape the animation has, at a tenth of its rate.
+
+### What it costs, both halves on one machine
+
+`spike/core-exports`, one full run each, the second identical but for the
+cadence being disabled:
+
+| in one full probe run                                        | §9 (settle only) | with the cadence |
+| ------------------------------------------------------------ | ---------------: | ---------------: |
+| animation frames published on the two refused properties     |              290 |              294 |
+| animations that reached their target (`finished`)            |                4 |                4 |
+| landings on the cadence                                      |                0 |               38 |
+| React renders produced for them                              |            **4** |           **42** |
+| Yoga passes a per-frame layout write would have cost instead |              290 |              294 |
+
+So the refusal's cost argument survives: 42 renders where the naive write would
+have been 294 is still an order of magnitude, where §9's 4 was two. At §3's
+52 µs for a five-child container that is 2.2 ms instead of 15.3 ms; at 300
+children, 21 ms instead of 146 ms. §9 published 176 frames for the same
+construction on a different run — the 290 above is this machine's count for the
+same probe, and it is the number the two columns are measured against so that
+the comparison is one run against one run.
+
+The frame count is unchanged within run-to-run variance, which is the point:
+the cadence adds renders, not frames, and nothing on the driven path moved.
+
+### What the probe says
+
+`spike/core-exports`: **0 FAILED**, 10 PASS. 162 scroll events reach the
+sheet's own scrollable, the lock holds it at the top while collapsed
+(`row-one y 559 → 559`, with the events arriving, so non-vacuous), releases
+when extended (`y 240 → -84` under the identical wheel), and the
+negative-control zone the pointer never visited stayed silent.

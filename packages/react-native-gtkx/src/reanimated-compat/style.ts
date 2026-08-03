@@ -319,9 +319,14 @@ export const resetUndriveableWarnings = (): void => {
  * screen at the right size already, and the render is what puts the same value
  * into Yoga so the committed layout and the override agree.
  *
- * One render per animation, not one per frame — which is the whole difference
- * between this and the naive layout write the refusal is about
- * (docs/research/animated-size.md §3).
+ * At the end of the animation AND on a cadence while it runs, which is the
+ * correction §10 made to §9: the settle alone kept the promise only when the
+ * animation was short and never when its target moved every frame, and
+ * gorhom's sheet was blank for 1.38 s because of it. Ten renders a second at
+ * the very most, against sixty frames — still the whole difference between
+ * this and the naive layout write the refusal is about
+ * (docs/research/animated-size.md §3, and LANDING_INTERVAL_MS in
+ * ./updater-animations.ts for the numbers).
  */
 export const settlesThroughReact = (property: string): boolean =>
   LAYOUT_PROPERTIES.has(property)
@@ -424,8 +429,10 @@ export type AnimatedStyle = {
    * the height of the animation's first frame while the animation itself ran
    * to 543 px.
    *
-   * Called once per settled animation on a property the platform will not
-   * drive at frame rate, never per frame.
+   * Called for a property the platform will not drive at frame rate when its
+   * animation settles, and at most ten times a second while it runs — never
+   * per frame. See LANDING_INTERVAL_MS in ./updater-animations.ts for why the
+   * settle on its own was not enough.
    */
   renew(): void
 }

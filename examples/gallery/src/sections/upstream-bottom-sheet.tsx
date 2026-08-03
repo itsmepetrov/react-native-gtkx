@@ -150,9 +150,14 @@ export const UpstreamBottomSheetSection = () => {
               from its updater, so that height arrived as a spring descriptor
               and never became a number for Yoga to bound anything with. A
               height this platform will not drive at frame rate is still not
-              driven at frame rate; it lands through one React render when its
-              animation settles, which is 4 renders against 176 animation frames
-              in a measured run. See docs/research/animated-size.md §9, and
+              driven at frame rate; it lands through a React render when its
+              animation settles and at most once per 100 ms while it runs, which
+              is 42 renders against 294 animation frames in a measured run. The
+              rows being here on the first frame is what that cadence bought:
+              with the settle alone the mask sat at 96 px of a 954 px target for
+              1.38 s, because gorhom derives that target from the sheet&apos;s
+              own position and the opening spring re-aims it every frame, so it
+              never settled. See docs/research/animated-size.md §9 and §10, and
               spike/core-exports, which drives this construction with an
               injected pointer and a negative control.
             </Caption>

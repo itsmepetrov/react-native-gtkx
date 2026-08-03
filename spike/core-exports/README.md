@@ -77,12 +77,17 @@ It was not. Instrumenting the style layer in a real run showed the height
 arriving as `{kind: "spring", toValue: 543.4, …}` — an animation DESCRIPTOR,
 never a number. `useAnimatedStyle` did not run animations returned from the
 updater at all, so the driven-size path was never even asked: zero size slots,
-zero refusals. The fix is `src/reanimated-compat/updater-animations.ts`, plus
-one React render published when an animation on a property the platform
-refuses to drive reaches its target — which needs the style object's IDENTITY
-to change, because `BottomSheetDraggableView` is `memo`'d and a re-render of
-the component owning the hook stops there. `docs/research/animated-size.md` §9
-has the numbers.
+zero refusals. The fix is `src/reanimated-compat/updater-animations.ts`, plus a
+React render published when an animation on a property the platform refuses to
+drive reaches its target, and at most one per 100 ms while it is on its way —
+which needs the style object's IDENTITY to change, because
+`BottomSheetDraggableView` is `memo`'d and a re-render of the component owning
+the hook stops there. `docs/research/animated-size.md` §9 and §10 have the
+numbers, and §10 is why the settle alone was not the end of it: gorhom derives
+that height from the sheet's own POSITION, so the opening spring re-aims it on
+every frame and it never settles at all — on a MOUNT (which this probe does not
+photograph, and the gallery screen does) the mask stood at 96 px of a 954 px
+target for 1.38 s with the list inside it mounting zero cells.
 
 With that, the sheet's list reports `allocated height=468` (543 px of mask
 minus 75 px of padding), receives 158 scroll events under the injected wheel,
