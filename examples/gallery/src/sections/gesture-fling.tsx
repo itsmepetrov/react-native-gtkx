@@ -84,9 +84,11 @@ const FlingCard = () => {
           Math.abs(event.velocityX),
         )} px/s`,
       )
-      offset.value = withSpring(direction * 90, { damping: 12 }, () => {
-        offset.value = withSpring(0)
-      })
+      offset.set(
+        withSpring(direction * 90, { damping: 12 }, () => {
+          offset.set(withSpring(0))
+        }),
+      )
     })
     .onFinalize((_event, success) => {
       if (!success) {
@@ -156,10 +158,10 @@ const ManualCard = () => {
     })
     .onStart(() => say("manual", "ACTIVE — the app said so"))
     .onUpdate((event) => {
-      offset.value = event.translationY
+      offset.set(event.translationY)
     })
     .onEnd(() => {
-      offset.value = withTiming(0)
+      offset.set(withTiming(0))
       say("manual", "ended — the app said that too")
     })
 
@@ -204,8 +206,8 @@ const HoverCard = () => {
   const gesture = Gesture.Hover()
     .onStart(() => setInside(true))
     .onUpdate((event) => {
-      x.value = event.x
-      y.value = event.y
+      x.set(event.x)
+      y.set(event.y)
     })
     .onEnd(() => setInside(false))
 
@@ -275,11 +277,11 @@ const ForceTouchCard = () => {
     .minForce(0.2)
     .onStart(() => say("force", "ACTIVE — past minForce"))
     .onUpdate((event) => {
-      pressure.value = event.force
+      pressure.set(event.force)
       say("force", `force ${event.force.toFixed(2)}`)
     })
     .onEnd(() => {
-      pressure.value = withTiming(0)
+      pressure.set(withTiming(0))
       say("force", "lifted")
     })
 
