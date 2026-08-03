@@ -151,7 +151,7 @@ const SheetPane = (): React.ReactNode => (
           report(`sheet list allocated height=${e.nativeEvent.layout.height}`)
         }}
         onScroll={(e: { nativeEvent: { contentOffset: { y: number } } }) => {
-          sheetScrolled()
+          sheetScrolled(e.nativeEvent.contentOffset.y)
           report(`sheet list y=${e.nativeEvent.contentOffset.y.toFixed(1)}`)
         }}
         renderItem={({ item }) => (
@@ -165,6 +165,10 @@ const SheetPane = (): React.ReactNode => (
               if (item === "one") {
                 registerZone("sheet-row-one", handle)
               }
+              // The lock probe chooses whichever row is currently mounted
+              // and inside the viewport. A windowed list legitimately drops
+              // rows after a scroll, so any one fixed item can disappear.
+              registerZone(`sheet-row-${item}`, handle)
             }}
           >
             <Text style={styles.rowText}>{item}</Text>

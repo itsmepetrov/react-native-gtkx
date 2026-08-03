@@ -12,6 +12,7 @@ import {
 import { splitStyle, StyleSheet } from "../style/index"
 import type { StyleProp } from "../contracts"
 import {
+  Gdk,
   Gtk,
   GtkBox,
   GtkScrolledWindow,
@@ -42,6 +43,7 @@ import {
   useRnContainer,
   type LayoutEvent,
 } from "./use-layout-child"
+import { createWheelScrollSession } from "./wheel-scroll-session"
 
 /**
  * The scroll half on its own, because the windowed list core builds its own
@@ -91,10 +93,9 @@ export type ScrollViewProps = ResponderProps & {
   stickyHeaderIndices?: readonly number[]
   onScroll?: (event: ScrollEvent) => void
   // RN's four scroll PHASES. What each one is here — and which input devices
-  // produce it at all — is measured in docs/research/scroll-phases.md; the
-  // short version is that a mouse wheel produces none of them (GTK reports a
-  // detent, with no beginning and no end) while a touchpad glide produces
-  // all four. `onScroll` is unaffected either way.
+  // produce it — is measured in docs/research/scroll-phases.md. A wheel gets
+  // one synthetic begin/end pair around a burst and no momentum; a touchpad
+  // glide gets all four from its real GTK sequence. `onScroll` is unaffected.
   //
   // Every one of them is OPTIONAL in the strong sense: while no phase
   // handler is attached — neither a prop here nor a Reanimated handler
@@ -533,13 +534,13 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
     // (docs/research/scroll-phases.md, and the trace is in
     // tests/gtk/components/scroll-phases.gtk.test.tsx):
     //
-    //   - a mouse WHEEL emits `::scroll` per detent and NOTHING else. No
-    //     `::scroll-begin`, no `::scroll-end`, no `::decelerate`, and the
-    //     adjustment jumps a whole step in one frame with no animation
-    //     after it. There is no drag phase and no momentum phase to report,
-    //     so none is reported. This is the fact PR #88 recorded; what has
-    //     changed is that it is a fact about the WHEEL and not about the
-    //     platform.
+    //   - a mouse WHEEL emits `::scroll` per detent and NOTHING around it.
+    //     GTK gives us no sequence, so while a consumer asks for begin/end we
+    //     synthesize a desktop scroll SESSION: begin before the first detent
+    //     mutates the adjustment, end after a measured idle window, and no
+    //     momentum. This is an intentional desktop extension — RN has no
+    //     wheel — and is what lets a phase-aware consumer capture the offset
+    //     it is about to constrain instead of discovering it one event late.
     //   - a touchpad GLIDE emits `::scroll-begin`, a stream of `::scroll`,
     //     `::scroll-end` and `::decelerate` — a real sequence with a real
     //     beginning and end — and the scrolled window's own kinetic
@@ -568,6 +569,16 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       onMomentumScrollBegin ||
       onMomentumScrollEnd ||
       phaseSink?.wants(),
+    )
+    // GTK brackets touchpad gestures for us. A wheel has only detents, so the
+    // begin/end extension below needs to see those detents — but only when a
+    // consumer asks for either end of the session. A momentum-only handler
+    // still pays no JS call per wheel event, because a wheel never coasts.
+    const wantsWheelSessions = Boolean(
+      onScrollBeginDrag ||
+      onScrollEndDrag ||
+      phaseSink?.wants("beginDrag") ||
+      phaseSink?.wants("endDrag"),
     )
 
     // Read per event rather than captured, exactly as `useAnimatedScrollHandler`
@@ -720,10 +731,11 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       const controller = Gtk.EventControllerScroll.new(
         // An axis flag is REQUIRED, and not for the deltas: measured, a
         // controller created with `KINETIC` alone emits nothing at all — not
-        // even `::scroll-begin`. `::scroll` is therefore emitted, and
-        // deliberately not connected: an unconnected GObject signal is a
-        // handler-list walk over an empty list in C, so the per-scroll-frame
-        // cost of this controller never reaches JS.
+        // even `::scroll-begin`. `::scroll` is therefore emitted. It stays
+        // unconnected unless somebody asks for begin/end: only then does a
+        // wheel detent enter JS to maintain the desktop session below; a
+        // momentum-only or untracked scroller keeps the old empty C signal
+        // path.
         Gtk.EventControllerScrollFlags.BOTH_AXES |
           Gtk.EventControllerScrollFlags.KINETIC,
       )
@@ -732,7 +744,7 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       // here handles the event, so propagation is untouched either way.
       controller.setPropagationPhase(Gtk.PropagationPhase.CAPTURE)
 
-      const onScrollBegin = (): void => {
+      const beginDrag = (): void => {
         // A new drag during a coast: RN ends the momentum before beginning
         // the drag, so a consumer never sees two live phases at once.
         if (coasting) {
@@ -743,21 +755,63 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
         }
         emitPhase("beginDrag")
       }
+      // A wheel gives GTK no begin/end signals. Group its detents into one
+      // user-driven session, ending after an idle interval longer than the
+      // ordinary detent spacing measured in docs/research/scroll-phases.md
+      // (20–33 ms in the trace). The callback runs in CAPTURE, so beginDrag
+      // sees the PRE-scroll offset before GtkScrolledWindow mutates its
+      // adjustment and emits the onScroll callback that consumes the context.
+      const wheelSession = createWheelScrollSession(beginDrag, () =>
+        emitPhase("endDrag"),
+      )
+      // A touchpad brackets itself, so its sequence owns the session while it
+      // runs. Two live sessions at once would hand a consumer a second
+      // `beginDrag` before the first `endDrag` — which is exactly the state
+      // gorhom's lock reads to decide where to pin its list.
+      let nativeSequence = false
+      const onScrollBegin = (): void => {
+        nativeSequence = true
+        // A wheel burst may still be waiting out its idle timer.
+        wheelSession.finish()
+        beginDrag()
+      }
       const onScrollEnd = (): void => {
+        nativeSequence = false
         emitPhase("endDrag")
         watchMomentum()
       }
+      const onScroll = (): boolean => {
+        if (
+          !wantsWheelSessions ||
+          nativeSequence ||
+          controller.getUnit() !== Gdk.ScrollUnit.WHEEL
+        ) {
+          return false
+        }
+        wheelSession.detent()
+        // Observe only. GtkScrolledWindow still receives and applies the
+        // detent, which is what makes this phase seam transparent.
+        return false
+      }
+
       controller.on("scroll-begin", onScrollBegin)
       controller.on("scroll-end", onScrollEnd)
+      if (wantsWheelSessions) {
+        controller.on("scroll", onScroll)
+      }
       widget.addController(controller)
 
       return () => {
         controller.off("scroll-begin", onScrollBegin)
         controller.off("scroll-end", onScrollEnd)
+        if (wantsWheelSessions) {
+          controller.off("scroll", onScroll)
+        }
+        wheelSession.dispose()
         widget.removeController(controller)
         stopMomentumWatch()
       }
-    }, [scrolled, wantsPhases, horizontal])
+    }, [scrolled, wantsPhases, wantsWheelSessions, horizontal])
 
     // Content-size reports dedupe on the engine rect: "changed" also fires
     // for pure viewport (page-size) changes, which RN does not report.

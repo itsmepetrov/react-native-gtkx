@@ -27,12 +27,11 @@
 // device's rather than the platform's. Measured on GTK 4.22.4 under a real
 // pointer (docs/research/scroll-phases.md):
 //
-//   - a MOUSE WHEEL produces none of them. GTK reports a detent — one
-//     `::scroll`, no `::scroll-begin`, no `::scroll-end`, no `::decelerate`,
-//     and the adjustment lands its whole step in one frame with nothing
-//     coasting after it. There is no drag to begin and no momentum to
-//     report, which is what PR #88 recorded; it turned out to be a fact
-//     about the wheel rather than about the platform.
+//   - a MOUSE WHEEL gives GTK no sequence — one `::scroll` per detent and
+//     nothing around it. This platform groups a burst into a desktop scroll
+//     SESSION and reports begin/end (never momentum), which is what lets a
+//     phase-aware consumer capture state before its first detent. This is an
+//     intentional desktop extension: RN has no wheel to define here.
 //   - a TOUCHPAD GLIDE produces all four. The sequence has a real beginning
 //     and end, and the scrolled window's own kinetic animation carries the
 //     content on afterwards.
@@ -79,9 +78,9 @@ export type ScrollHandlerCallback<Context extends Record<string, unknown>> = (
 
 export type ScrollHandlers<Context extends Record<string, unknown>> = {
   onScroll?: ScrollHandlerCallback<Context>
-  /** The scroll sequence began. A wheel has none — see the top of this file. */
+  /** The user-driven scroll session began — native for touchpad, grouped for wheel. */
   onBeginDrag?: ScrollHandlerCallback<Context>
-  /** The scroll sequence ended. A wheel has none — see the top of this file. */
+  /** That session ended. A wheel gets no momentum pair afterwards. */
   onEndDrag?: ScrollHandlerCallback<Context>
   /** The scroller kept moving on its own after the sequence ended. */
   onMomentumBegin?: ScrollHandlerCallback<Context>
@@ -110,12 +109,21 @@ const PHASE_KEY_OF_PHASE = {
  * handlers on every render rather than once: a component that grows a phase
  * handler later gets one, and one that never has any never pays for one.
  */
-const wantsPhases = (handlers: unknown): boolean =>
-  typeof handlers === "object" &&
-  handlers !== null &&
-  Object.values(PHASE_KEY_OF_PHASE).some(
+const wantsPhase = (handlers: unknown, phase?: ScrollPhase): boolean => {
+  if (typeof handlers !== "object" || handlers === null) {
+    return false
+  }
+  if (phase !== undefined) {
+    return (
+      typeof (handlers as Record<string, unknown>)[
+        PHASE_KEY_OF_PHASE[phase]
+      ] === "function"
+    )
+  }
+  return Object.values(PHASE_KEY_OF_PHASE).some(
     (key) => typeof (handlers as Record<string, unknown>)[key] === "function",
   )
+}
 
 /**
  * @internal The hook without the hook: the translation from a
@@ -148,7 +156,7 @@ export const createScrollHandler = <
   // reason gorhom's lock works: `onBeginDrag` writes the offset the drag
   // started at into it and `onScroll` reads it back on the next frame.
   setScrollPhaseSink(handle, {
-    wants: () => wantsPhases(latest()),
+    wants: (phase) => wantsPhase(latest(), phase),
     deliver: (phase, event) => {
       const current = latest()
       if (typeof current !== "object" || current === null) {

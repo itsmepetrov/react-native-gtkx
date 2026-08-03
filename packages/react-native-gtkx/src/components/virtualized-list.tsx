@@ -27,6 +27,7 @@ import {
 } from "../perf"
 import { ActivityIndicator } from "./activity-indicator"
 import { registerHandleAlias } from "./measure"
+import { scrollPhaseSink, setScrollPhaseSink } from "./scroll-phase"
 import {
   ScrollView,
   StickySlot,
@@ -789,6 +790,25 @@ const VirtualizedListInner = forwardRef(
       }
     }
 
+    const toExposedEvent = (event: ScrollEvent): ScrollEvent => {
+      if (!inverted) {
+        return event
+      }
+      const raw = horizontal
+        ? event.nativeEvent.contentOffset.x
+        : event.nativeEvent.contentOffset.y
+      const exposed = Math.max(0, maxRawScroll() - raw)
+      return {
+        nativeEvent: {
+          ...event.nativeEvent,
+          contentOffset: {
+            x: horizontal ? exposed : event.nativeEvent.contentOffset.x,
+            y: horizontal ? event.nativeEvent.contentOffset.y : exposed,
+          },
+        },
+      }
+    }
+
     const handleScroll = (event: ScrollEvent): void => {
       const raw = horizontal
         ? event.nativeEvent.contentOffset.x
@@ -796,27 +816,26 @@ const VirtualizedListInner = forwardRef(
       scrollY.current = raw
       if (inverted) {
         exposedOffset.current = Math.max(0, maxRawScroll() - raw)
-        // The caller sees RN-space offsets: contentOffset 0 is the far end
-        // where the data starts (a chat's latest message).
-        onScroll?.({
-          nativeEvent: {
-            ...event.nativeEvent,
-            contentOffset: {
-              x: horizontal
-                ? exposedOffset.current
-                : event.nativeEvent.contentOffset.x,
-              y: horizontal
-                ? event.nativeEvent.contentOffset.y
-                : exposedOffset.current,
-            },
-          },
-        })
-      } else {
-        onScroll?.(event)
       }
+      onScroll?.(toExposedEvent(event))
       updateRange()
       recomputeViewability()
       maybeFireEndReached()
+    }
+
+    // Reanimated attaches one phase sink to the handler it hands us. This
+    // wrapper used to forward only the function call and silently dropped the
+    // sink, so every FlatList/VirtualizedList received onScroll but NONE of
+    // onBeginDrag/onEndDrag/momentum — direct ScrollView tests could not catch
+    // it. Carry the seam through the composite, translating inverted offsets
+    // exactly as the ordinary event path does.
+    const upstreamPhaseSink = scrollPhaseSink(onScroll)
+    if (upstreamPhaseSink) {
+      setScrollPhaseSink(handleScroll, {
+        wants: (phase) => upstreamPhaseSink.wants(phase),
+        deliver: (phase, event) =>
+          upstreamPhaseSink.deliver(phase, toExposedEvent(event)),
+      })
     }
 
     const handleLayout = (event: LayoutEvent): void => {

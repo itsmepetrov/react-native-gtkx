@@ -19,6 +19,26 @@ import { createVirtualPointer } from "../../../packages/react-native-gtkx/tests/
 const OUTPUT = { width: 1024, height: 768 }
 
 const zones = new Map<string, MeasureHandle>()
+const sheetRowNames = [
+  "one",
+  "two",
+  "three",
+  "four",
+  "five",
+  "six",
+  "seven",
+  "eight",
+  "nine",
+  "ten",
+  "eleven",
+  "twelve",
+  "thirteen",
+  "fourteen",
+  "fifteen",
+  "sixteen",
+  "seventeen",
+  "eighteen",
+] as const
 
 /** Called from App.tsx's refs — the probe measures what the app rendered. */
 export const registerZone = (
@@ -41,10 +61,12 @@ export const report = (message: string): void => {
 // never visited can be shown to have received nothing.
 let controlTouches = 0
 
-/** Scroll events the SHEET's own scrollable received. */
+/** Scroll events and the latest offset of the SHEET's own scrollable. */
 export let sheetScrolls = 0
-export const sheetScrolled = (): void => {
+export let sheetOffset = 0
+export const sheetScrolled = (y: number): void => {
   sheetScrolls += 1
+  sheetOffset = y
 }
 
 export const controlTouched = (): void => {
@@ -159,8 +181,9 @@ export const runPointerProbe = async (): Promise<void> => {
   const scrollList = async (
     detents: number,
     kind: "wheel" | "glide",
+    targetName = "sheet-row-one",
   ): Promise<void> => {
-    const target = await measure("sheet-row-one")
+    const target = await measure(targetName)
     if (!target) {
       return
     }
@@ -175,6 +198,46 @@ export const runPointerProbe = async (): Promise<void> => {
         await step(() => pointer.glideBy(20), 16)
       }
       await step(() => pointer.glideEnd(), 1200)
+    }
+    await sleep(300)
+  }
+
+  // A windowed list may unmount whichever row a previous scroll used as its
+  // aim. Choose a row that is mounted AND visibly allocated right now; this
+  // makes a missing wheel event a platform failure rather than a disappeared
+  // test target. The sheet's content x-range is fixed at the right column.
+  const scrollVisibleSheetRow = async (detents: number): Promise<void> => {
+    const handle = await measure("sheet-handle")
+    const viewportTop = handle ? handle.y + handle.height : 0
+    let target: Rect | null = null
+    for (const name of sheetRowNames) {
+      const candidate = await measure(`sheet-row-${name}`)
+      if (
+        candidate &&
+        candidate.width > 0 &&
+        candidate.height > 0 &&
+        // `measureInWindow` reports the row's allocation even where an
+        // ancestor clips it. The sheet viewport starts below its handle, so
+        // only a row below that live boundary is actually wheel-targetable.
+        candidate.y >= viewportTop &&
+        candidate.y + candidate.height <= OUTPUT.height
+      ) {
+        target = candidate
+        break
+      }
+    }
+    if (!target) {
+      report("no visible sheet row to aim the wheel at")
+      return
+    }
+    report(
+      `wheel aim: ${show(target)}, handle bottom=${Math.round(viewportTop)}`,
+    )
+    const aim = centreOf(target)
+    await step(() => pointer.moveTo(aim.x, aim.y), 120)
+    const direction = Math.sign(detents)
+    for (let i = 0; i < Math.abs(detents); i += 1) {
+      await step(() => pointer.scrollBy(direction), 60)
     }
     await sleep(300)
   }
@@ -325,18 +388,98 @@ export const runPointerProbe = async (): Promise<void> => {
   report(`sheet row one (extended): ${show(freeBefore)}`)
   await scrollList(5, "wheel")
   const freeAfter = await measure("sheet-row-one")
+  const maximumOffset = sheetOffset
   report(
     `sheet extended, same wheel: row-one y ${
       freeBefore ? Math.round(freeBefore.y) : "?"
     } -> ${freeAfter ? Math.round(freeAfter.y) : "?"}, ` +
-      `sheet list onScroll calls = ${sheetScrolls}`,
+      `offset=${maximumOffset.toFixed(1)}, events=${sheetScrolls}`,
   )
   check(
     "EXTENDED: the lock releases and the same wheel scrolls the sheet's list",
     freeBefore !== null &&
       freeAfter !== null &&
-      freeBefore.y - freeAfter.y > 20,
-    `sheet row-one y ${freeBefore ? Math.round(freeBefore.y) : "?"} -> ${freeAfter ? Math.round(freeAfter.y) : "?"}`,
+      freeBefore.y - freeAfter.y > 20 &&
+      maximumOffset > 20,
+    `sheet row-one y ${freeBefore ? Math.round(freeBefore.y) : "?"} -> ${freeAfter ? Math.round(freeAfter.y) : "?"}, offset=${maximumOffset.toFixed(1)}`,
+  )
+
+  // A wheel detent can clamp this short probe list straight to its maximum.
+  // Move one detent back before collapsing: at max a further downward wheel
+  // does not change the adjustment, so no `onScroll` event exists and the
+  // lock check would pass or fail vacuously rather than reproduce the user's
+  // mid-list position.
+  await scrollVisibleSheetRow(-1)
+  const retainedOffset = sheetOffset
+  check(
+    "SETUP: the retained offset is non-zero and away from both boundaries",
+    retainedOffset > 20 && retainedOffset < maximumOffset - 2,
+    `offset ${maximumOffset.toFixed(1)} -> ${retainedOffset.toFixed(1)}`,
+  )
+
+  // --- 4. collapse after scrolling; wheel must retain that offset ---------
+  // This is the bug that found the missing wheel session. Gorhom captures the
+  // current offset in onBeginDrag. A wheel used to have no begin phase here,
+  // so its first onScroll while LOCKED fell back to offset zero and the list
+  // snapped to the top. Collapse with the real handle, then prove both the
+  // first and a later detent keep the non-zero value.
+  const raisedHandle = await measure("sheet-handle")
+  if (raisedHandle) {
+    const grab = centreOf(raisedHandle)
+    await step(() => pointer.moveTo(grab.x, grab.y))
+    await step(() => pointer.press(), 150)
+    for (let i = 1; i <= 16; i += 1) {
+      await step(() => pointer.moveTo(grab.x, grab.y + i * 18))
+    }
+    await step(() => pointer.release(), 2200)
+  }
+  const collapsedWithOffset = await measure("sheet-row-one")
+  const offsetBeforeLockedWheel = sheetOffset
+  const eventsBeforeLockedWheel = sheetScrolls
+  await scrollVisibleSheetRow(1)
+  const offsetAfterFirstLockedWheel = sheetOffset
+  const eventsAfterFirstLockedWheel = sheetScrolls
+  await scrollVisibleSheetRow(3)
+  const offsetAfterBurst = sheetOffset
+  const collapsedAfterWheel = await measure("sheet-row-one")
+  check(
+    "COLLAPSE AFTER SCROLL: the first wheel retains the captured offset",
+    offsetBeforeLockedWheel > 20 &&
+      eventsAfterFirstLockedWheel > eventsBeforeLockedWheel &&
+      Math.abs(offsetAfterFirstLockedWheel - offsetBeforeLockedWheel) <= 2,
+    `offset ${offsetBeforeLockedWheel.toFixed(1)} -> ${offsetAfterFirstLockedWheel.toFixed(1)}, events ${eventsBeforeLockedWheel} -> ${eventsAfterFirstLockedWheel}`,
+  )
+  check(
+    "COLLAPSED AT NON-ZERO: later wheel detents stay pinned there",
+    sheetScrolls > eventsAfterFirstLockedWheel &&
+      Math.abs(offsetAfterBurst - offsetBeforeLockedWheel) <= 2 &&
+      collapsedWithOffset !== null &&
+      collapsedAfterWheel !== null &&
+      Math.abs(collapsedWithOffset.y - collapsedAfterWheel.y) <= 2,
+    `offset ${offsetBeforeLockedWheel.toFixed(1)} -> ${offsetAfterBurst.toFixed(1)}, row y ${collapsedWithOffset ? Math.round(collapsedWithOffset.y) : "?"} -> ${collapsedAfterWheel ? Math.round(collapsedAfterWheel.y) : "?"}`,
+  )
+
+  // Re-open: the remembered offset remains, and an unlocked wheel can move it
+  // further rather than resetting it first.
+  const collapsedHandle = await measure("sheet-handle")
+  if (collapsedHandle) {
+    const grab = centreOf(collapsedHandle)
+    await step(() => pointer.moveTo(grab.x, grab.y))
+    await step(() => pointer.press(), 150)
+    for (let i = 1; i <= 16; i += 1) {
+      await step(() => pointer.moveTo(grab.x, grab.y - i * 18))
+    }
+    await step(() => pointer.release(), 1200)
+  }
+  const offsetBeforeSecondFreeWheel = sheetOffset
+  // Already near the bottom; wheel UP proves the list resumes from the
+  // retained position instead of satisfying the test by clamping at max.
+  await scrollVisibleSheetRow(-2)
+  check(
+    "RE-EXTENDED: keeps the offset and scrolls from it",
+    offsetBeforeSecondFreeWheel >= offsetBeforeLockedWheel - 2 &&
+      sheetOffset < offsetBeforeSecondFreeWheel - 2,
+    `offset ${offsetBeforeLockedWheel.toFixed(1)} -> ${offsetBeforeSecondFreeWheel.toFixed(1)} -> ${sheetOffset.toFixed(1)}`,
   )
 
   check(

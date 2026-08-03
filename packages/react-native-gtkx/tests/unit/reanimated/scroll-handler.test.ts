@@ -13,14 +13,12 @@
 // no prop to report one" — with the note that the day a source appeared the
 // test would fail and say so.
 //
-// A source appeared, and the test says so. Half of the old claim survived
-// measurement and half did not: a wheel really does have no phase (GTK emits
-// `::scroll` per detent and nothing else), but a TOUCHPAD GLIDE emits
-// `::scroll-begin`, `::scroll-end` and a real kinetic deceleration after it.
-// The claim was about the wheel, not about the platform —
-// docs/research/scroll-phases.md has the traces. The four handlers are called
-// now, and what pins the wheel half is the GTK test beside this one, where a
-// real wheel produces `onScroll` and no phase at all.
+// A source appeared, and the test says so. GTK gives a TOUCHPAD GLIDE a real
+// `::scroll-begin`, `::scroll-end` and kinetic deceleration. It gives a wheel
+// only isolated detents, so the platform now groups a burst into one desktop
+// begin/end session and never invents momentum — docs/research/scroll-phases.md
+// has the traces and the explicit parity boundary. The GTK test beside this
+// one pins both device paths with real input.
 //
 // Here the phase half is pinned where it can be: the ROUTING. One handler
 // object, five callbacks, one shared context — and no phase sink offered at
@@ -158,6 +156,7 @@ describe("useAnimatedScrollHandler", () => {
   it("asks for no phase when the caller registered none", () => {
     const onlyScroll = createScrollHandler(() => ({ onScroll: vi.fn() }))
     expect(scrollPhaseSink(onlyScroll)!.wants()).toBe(false)
+    expect(scrollPhaseSink(onlyScroll)!.wants("beginDrag")).toBe(false)
 
     const bareFunction = createScrollHandler(() => vi.fn())
     expect(scrollPhaseSink(bareFunction)!.wants()).toBe(false)
@@ -166,9 +165,12 @@ describe("useAnimatedScrollHandler", () => {
     const grows = createScrollHandler(() => handlers)
     expect(scrollPhaseSink(grows)!.wants()).toBe(false)
     // Asked per render rather than once, so a component that grows a phase
-    // handler later gets the machinery then.
+    // handler later gets the machinery then. The per-phase query is what
+    // keeps a momentum-only handler off the wheel's per-detent path.
     handlers = { onScroll: vi.fn(), onEndDrag: vi.fn() }
     expect(scrollPhaseSink(grows)!.wants()).toBe(true)
+    expect(scrollPhaseSink(grows)!.wants("endDrag")).toBe(true)
+    expect(scrollPhaseSink(grows)!.wants("beginDrag")).toBe(false)
   })
 })
 
