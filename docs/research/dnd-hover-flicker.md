@@ -202,6 +202,25 @@ It does not fix the report, because the whole-cell threshold above is
 arithmetic in a package we do not own. Worth the same upstream issue as §5:
 `getGridCellFromCoordinates` should test the dragged item's CENTRE.
 
+## 5b. The plain `Sortable` list has the identical dead zone, one axis
+
+A later report of the same feel ("the row under a drag does not always step
+aside") on the gallery's Upstream sortables list turned out to be the same
+mechanism as §5, one axis instead of two — see
+[dnd-collision-feel.md](dnd-collision-feel.md) for the full investigation.
+`useSortable`'s `setPosition` floors the dragged row's own top edge onto
+`Math.floor(positionY / itemHeight)`, the same top-left-corner convention
+`getGridCellFromCoordinates` uses: crossing towards a HIGHER index needs the
+row to travel the whole `itemHeight` (ROW_HEIGHT = 56 on the gallery's own
+`Sortable`, ~56px); crossing towards a LOWER one needs about one pixel. Read
+from source and predicted at the gallery's own dimensions, not
+independently re-measured live against the real package with a fresh
+pointer rig — an attempt to do so hit an unrelated `@gtkx/testing`
+rendering gap (`tests/gtk/dnd/_measure-real.gtk.rig.tsx`, kept `.skip`).
+Same verdict as the grid: upstream's own arithmetic, not this platform's
+compat surfaces — `useSortable` never calls `measure()` either, and tracks
+only the delta between two `event.absoluteY` reads.
+
 ## 6. What was left alone
 
 - **`scheduleOnRN` is still a microtask.** It is upstream's, on every build,
