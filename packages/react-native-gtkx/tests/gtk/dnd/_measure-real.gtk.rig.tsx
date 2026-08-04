@@ -1,3 +1,8 @@
+// NAMED .rig.tsx, OUTSIDE the vitest glob (tests/gtk/**/*.test.*), on
+// purpose: it imports the real package by a relative node_modules path,
+// which exists only where an example has installed it (hoisted) — on CI's
+// bare root install the import itself throws at collection time and the
+// file fails as "0 tests". A rig you run by hand is not a test CI collects.
 // Rig for measuring the REAL react-native-reanimated-dnd package's `Sortable`
 // reorder threshold directly, for attribution — kept (not deleted) as the
 // scaffolding for that measurement, per the task's evidence-base

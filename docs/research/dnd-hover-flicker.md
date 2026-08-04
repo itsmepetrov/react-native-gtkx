@@ -216,7 +216,7 @@ row to travel the whole `itemHeight` (ROW_HEIGHT = 56 on the gallery's own
 from source and predicted at the gallery's own dimensions, not
 independently re-measured live against the real package with a fresh
 pointer rig — an attempt to do so hit an unrelated `@gtkx/testing`
-rendering gap (`tests/gtk/dnd/_measure-real.gtk.test.tsx`, kept `.skip`).
+rendering gap (`tests/gtk/dnd/_measure-real.gtk.rig.tsx`, kept `.skip`).
 Same verdict as the grid: upstream's own arithmetic, not this platform's
 compat surfaces — `useSortable` never calls `measure()` either, and tracks
 only the delta between two `event.absoluteY` reads.

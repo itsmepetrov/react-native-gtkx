@@ -27,7 +27,7 @@
 // index 0" direction needs most of an item's size, "toward" needs little.
 //
 // The companion measurement against the REAL `react-native-reanimated-dnd`
-// lives in `_measure-real.gtk.test.tsx`, currently blocked on an unrelated
+// lives in `_measure-real.gtk.rig.tsx`, currently blocked on an unrelated
 // `@gtkx/testing` rendering gap (see that file) — the real package's own
 // source (read directly rather than measured live in this session) and
 // docs/research/dnd-collision-feel.md have the numbers this task actually

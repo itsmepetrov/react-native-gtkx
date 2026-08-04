@@ -83,7 +83,7 @@ gap — mounting the real `Sortable` under `render()` throws from a `View`
 several layers inside `Animated.createAnimatedComponent(ScrollView)`, even
 wrapped in a `<Root>` that renders this platform's OWN mirror `Sortable`
 without incident. Recorded, not chased, in
-`tests/gtk/dnd/_measure-real.gtk.test.tsx` (kept, `.skip`), because the
+`tests/gtk/dnd/_measure-real.gtk.rig.tsx` (kept, `.skip`), because the
 identical real `Sortable`/`SortableGrid` demonstrably DOES run correctly in
 a real `gtkx dev`/build — the gallery's own Upstream sortables section is
 proof, and is where the §5 grid measurement was actually taken. The
@@ -160,5 +160,5 @@ benefits, not only the one running on this platform's compat surfaces.
 npx vitest run --project gtk tests/gtk/dnd/collision-thresholds.gtk.test.tsx
 
 # The blocked real-package rig, kept for whoever picks the rendering gap up:
-npx vitest run --project gtk tests/gtk/dnd/_measure-real.gtk.test.tsx
+npx vitest run --project gtk tests/gtk/dnd/_measure-real.gtk.rig.tsx
 ```
