@@ -60,3 +60,55 @@ it("onScroll reports the viewport size alongside offset and content size", async
     nativeEvent.contentSize.height,
   )
 })
+
+// Regression for a CI flake (component-gaps/scroll-measurement-flake): this
+// component's own layout engine commits a node's rect on the very next
+// microtask, but a GtkScrolledWindow only learns its child's real size on
+// its own next native allocate — a full frame away, queued rather than
+// synchronous. `scrollTo` used to hand `y` straight to
+// `Gtk.Adjustment.setValue()`, which clamps to ITS OWN `upper`/`page-size`;
+// called before that native catch-up landed (freshly mounted: both still
+// 0), the target got clamped right back to the current value, so nothing
+// actually changed and `value-changed` never fired — the scroll this call
+// promised was dropped with no event at all. Skipping the `waitFor` cushion
+// the test above relies on reproduces the drop deterministically (no timing
+// hack needed): the engine's rects are already correct at that point, the
+// adjustment's are not.
+it("onScroll still fires when scrollTo runs before GTK's own layout catches up", async () => {
+  const onScroll = vi.fn()
+  const listRef = createRef<ScrollViewHandle>()
+
+  await act(async () => {
+    await render(
+      <Root
+        width={300}
+        height={200}
+      >
+        <ScrollView
+          ref={listRef}
+          style={{ height: 200 }}
+          onScroll={onScroll}
+        >
+          {Array.from({ length: 20 }, (_, i) => (
+            <View
+              key={i}
+              style={{ height: 40 }}
+            >
+              <Text>{`row-${i}`}</Text>
+            </View>
+          ))}
+        </ScrollView>
+      </Root>,
+    )
+  })
+
+  // No `waitFor` settling cushion — `scrollTo` right on render()'s heels,
+  // which is exactly the window where GTK's real adjustment bounds can
+  // still be the freshly-constructed 0/0 default.
+  await act(async () => {
+    listRef.current!.scrollTo({ y: 80 })
+  })
+
+  expect(onScroll).toHaveBeenCalled()
+  expect(onScroll.mock.calls.at(-1)![0].nativeEvent.contentOffset.y).toBe(80)
+})
