@@ -22,8 +22,14 @@ import { decodePayload, encodePayload, type DragPayload } from "./payload"
 export type DragSourceControllersProps = {
   payload: DragPayload
   /** Reports the grab point in the source widget's own coordinates, which is
-   *  where the drag icon's hotspot goes and where `tx`/`ty` start from. */
-  onGrab?: (x: number, y: number) => void
+   *  where the drag icon's hotspot goes and where `tx`/`ty` start from. The
+   *  widget itself rides along too — `Sortable`/`SortableGrid` use it to
+   *  convert this point into their own container's coordinates with
+   *  `computePointIn` (see sortable.tsx/grid.tsx), the origin their reorder
+   *  tracking measures every subsequent motion event against. `null` only
+   *  when GDK could not resolve a widget for the drag source itself, which
+   *  should not happen in practice. */
+  onGrab?: (x: number, y: number, widget: Gtk.Widget | null) => void
   onDragBegin?: () => void
   /** `dropped` is what GDK's own `drag-end` reports: whether a target took
    *  it. `drag-cancel` reports the negative case separately, so both are
@@ -76,7 +82,7 @@ export const DragSourceControllers = ({
             )
             grab.current = { widget, x, y }
           }
-          onGrab?.(x, y)
+          onGrab?.(x, y, widget)
           return Gdk.ContentProvider.newForValue(
             GObject.buildValue(GObject.TYPE_STRING, (value) =>
               value.setString(encodePayload(payload)),

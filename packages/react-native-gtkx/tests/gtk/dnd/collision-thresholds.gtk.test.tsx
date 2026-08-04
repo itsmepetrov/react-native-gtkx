@@ -1,37 +1,35 @@
 // How far the pointer has to travel, from the grab point, before this
 // mirror's `Sortable`/`SortableGrid` neighbour actually yields — measured
-// with a real pointer, as evidence for the investigation in
-// docs/research/dnd-collision-feel.md.
+// with a real pointer, pinning the SYMMETRIC, GRAB-POINT-INDEPENDENT reorder
+// mechanism (`docs/research/dnd-collision-feel.md`, the task that replaced
+// the numbers this file used to pin).
+//
+// What changed, and why this file was rewritten rather than extended: the
+// mirror's reorder trigger used to be GDK hit-testing the raw pointer against
+// a neighbour's full rect — GRAB-POINT DEPENDENT (a row grabbed near its edge
+// needed roughly double the travel a centre grab did, both readings pinned
+// in the previous version of this file, PR #120). It is now the dragged
+// item's own TRACKED position — `fromIndex * slotSize` plus the pointer's
+// delta since the drag began, resolved onto a slot by ROUNDING (the item's
+// own CENTRE against a slot's centre) rather than upstream's own
+// top-left-corner FLOOR — see `sortable.tsx`/`grid.tsx`'s module comments and
+// `order.ts`'s/`grid-order.ts`'s `resolveTrackedIndex`/
+// `resolveTrackedGridIndex`. Two directly testable consequences:
+//
+//  1. **Grab-point independence**: a centre grab and an edge grab now cross
+//     into a neighbour at essentially the SAME travel — the whole point of
+//     this task. The previous file's own centre/edge numbers (list: ~50-60px
+//     vs ~100-110px) are what this now falsifies.
+//  2. **Symmetry**: crossing AWAY from index 0 and TOWARD it now need the
+//     same travel too (~half the item's own size), not upstream's own
+//     one-pixel-vs-full-item split this mechanism was built to avoid
+//     reproducing.
 //
 // Each candidate offset is a FRESH mount, and the check is the FINAL settled
 // index from `onDrop` rather than counting `onMove` events mid-drag:
 // `drag-begin` fires one settling round of spurious `onEnter`s on GTK's own
 // preloaded-value delivery (see the research doc) which self-cancels by the
 // time of release but would pollute a count-based check.
-//
-// What this measures: the mirror's CURRENT behaviour — reordering on GDK
-// hit-testing the raw pointer against a neighbour's full rect — is
-// GRAB-POINT DEPENDENT, unlike upstream's own item-rect-based reasoning
-// (`docs/research/dnd-collision-feel.md`). Measured before this task's
-// investigation started and left UNCHANGED: the user's reported feel on
-// this platform's own mirror was fine, and the reported symptom traced to
-// the REAL `react-native-reanimated-dnd` running on the "Upstream sortables"
-// gallery screens instead — see the research doc for where the actual fix
-// (if any) belongs. This file stays as the measured record of what the
-// mirror itself does, kept rather than deleted because a later task
-// touching this mechanism should start from real numbers, not a guess.
-//
-// The two `it`s per pair below assert only that a numeric threshold was
-// found (not the specific number, which is expected to vary with grab
-// point), plus loose bounds consistent with the analysis: the "away from
-// index 0" direction needs most of an item's size, "toward" needs little.
-//
-// The companion measurement against the REAL `react-native-reanimated-dnd`
-// lives in `_measure-real.gtk.rig.tsx`, currently blocked on an unrelated
-// `@gtkx/testing` rendering gap (see that file) — the real package's own
-// source (read directly rather than measured live in this session) and
-// docs/research/dnd-collision-feel.md have the numbers this task actually
-// needed instead.
 import { act, cleanup, render, screen, waitFor } from "@gtkx/testing"
 import { afterEach, expect, it } from "vitest"
 import {
@@ -59,11 +57,25 @@ const EDGE_INSET = 8
 // ~7*4=28 times per test; halving the step (doubling the resolution) was
 // observed to push the headless compositor into an occasional native crash
 // under repeated fresh-mount pressure (unrelated to this test's own logic —
-// see docs/research/dnd-collision-feel.md). Resolution lost is immaterial
-// here: nothing in this file pins an exact px value.
+// see docs/research/dnd-collision-feel.md). At this resolution the expected
+// ~half-item threshold (50px for a 100px item/cell) quantizes to 60 — the
+// bounds below allow either neighbouring step, so a few real px of geometry
+// noise cannot flip a passing run into a failing one.
 const PROBE_STEP = 20
 const PROBE_MAX = ROW_H + 40
 const DWELL_MS = 300
+
+// The band a SYMMETRIC, grab-point-independent threshold must land in.
+// Measured (real pointer, this VM, two independent full runs of this file):
+// every one of the nine cases below — both layouts, both grab points, every
+// direction — reads exactly 60px, `PROBE_STEP`'s quantization of the true
+// ~50px (half of ROW_H/CELL's 100px) threshold this mechanism targets. The
+// band keeps a step of slack either way for ordinary run-to-run geometry
+// noise, while still failing loudly on either a degenerate "yields
+// immediately" regression (would read 20) or a return of the OLD
+// grab-point-DEPENDENT mechanism's edge-grab reading (~100-110px, PR #120).
+const SYMMETRIC_MIN = 40
+const SYMMETRIC_MAX = 60
 
 const settle = async (ms = 80): Promise<void> => {
   await act(async () => {
@@ -140,13 +152,16 @@ const dragBy = async (
   await settle(DWELL_MS)
   // A tiny (1px) primer BEFORE the real jump: GTK does not start a drag from
   // a press alone, only from a press PLUS motion past its own small
-  // threshold. This also gives the mirror's motion-tracked reorder
-  // (sortable.tsx/grid.tsx) its origin at a point 1px from the grab —
-  // negligible next to `PROBE_STEP`. One direct jump to the full target
+  // threshold. This platform's tracked reorder takes its ORIGIN from the
+  // press itself (`DragSourceControllers`'s `onGrab`, converted to
+  // container-relative coordinates), not from this primer or any other
+  // motion sample, so unlike the mechanism this file used to measure, the
+  // primer's own size does not skew what gets measured — it exists only to
+  // cross GDK's own drag-start threshold. One direct jump to the full target
   // follows, rather than several interpolated ones: intermediate motion
   // events were observed to coalesce under the headless compositor (only
   // ~3 of 4 arrived), silently capping the effective travel measured — the
-  // reorder mechanism itself only cares about ORIGIN and the LATEST
+  // reorder mechanism itself only cares about the ORIGIN and the LATEST
   // position, so a single jump measures the same threshold without that
   // loss. `dragBetween` in dnd.gtk.test.tsx still interpolates because IT
   // is asserting the reorder rearranges the screen live, under the drag —
@@ -196,6 +211,16 @@ const probeThreshold = async (
     }
   }
   return null
+}
+
+/** Asserts a measured threshold is non-null and lands in the symmetric band
+ *  — the shared check every `it` below runs, so a regression back toward
+ *  the old grab-point-dependent behaviour (an edge grab reading ~100px+)
+ *  fails loudly rather than merely "not null". */
+const expectSymmetricThreshold = (value: number | null): void => {
+  expect(value).not.toBeNull()
+  expect(value as number).toBeGreaterThanOrEqual(SYMMETRIC_MIN)
+  expect(value as number).toBeLessThanOrEqual(SYMMETRIC_MAX)
 }
 
 // --- list --------------------------------------------------------------
@@ -373,18 +398,11 @@ const measureGrid = async (
 
 // --- the measured table --------------------------------------------------
 //
-// No shared bound between grab points on purpose: that IS the finding.
-// Measured once (see docs/research/dnd-collision-feel.md for the full
-// table): list centre ~50-60px either way (roughly half an item, from a
-// pointer starting equidistant from both neighbours); list edge ~100-110px
-// BOTH ways (the pointer starts close to one boundary and far from the
-// other, but "close"/"far" do not resolve into a clean toward/away split the
-// way upstream's own item-rect mechanism does). Each `it` below only checks
-// that a threshold was found within the probed range — the specific numbers
-// are recorded in the research doc, not pinned here as an invariant, because
-// there is no fix in this PR to regress against.
+// Both layouts, both grab points, pinned to the SAME symmetric band —
+// SYMMETRIC_MIN/SYMMETRIC_MAX above. Unlike the file this replaces, there is
+// no separate expectation per grab point: that sameness IS the finding.
 
-it("measures the mirror's list reorder threshold, centre grab, both directions", async () => {
+it("list, centre grab: symmetric threshold, both directions", async () => {
   const device = await withPointer()
   if (!device) {
     return
@@ -392,11 +410,11 @@ it("measures the mirror's list reorder threshold, centre grab, both directions",
   const down = await measureList(device, "centre", "down")
   const up = await measureList(device, "centre", "up")
   console.warn(`[collision-thresholds] list centre down=${down} up=${up}`)
-  expect(down).not.toBeNull()
-  expect(up).not.toBeNull()
+  expectSymmetricThreshold(down)
+  expectSymmetricThreshold(up)
 }, 60000)
 
-it("measures the mirror's list reorder threshold, top-edge grab, both directions", async () => {
+it("list, top-edge grab: SAME symmetric threshold as the centre grab — grab-point independence", async () => {
   const device = await withPointer()
   if (!device) {
     return
@@ -404,50 +422,50 @@ it("measures the mirror's list reorder threshold, top-edge grab, both directions
   const down = await measureList(device, "edge", "down")
   const up = await measureList(device, "edge", "up")
   console.warn(`[collision-thresholds] list edge down=${down} up=${up}`)
-  expect(down).not.toBeNull()
-  expect(up).not.toBeNull()
+  expectSymmetricThreshold(down)
+  expectSymmetricThreshold(up)
 }, 60000)
 
 // Split one direction per `it` — see the note above the "top-left grab"
 // group below; the same mount pressure applies to this group too.
-it("measures the mirror's grid reorder threshold, centre grab, down", async () => {
+it("grid, centre grab, down: symmetric threshold", async () => {
   const device = await withPointer()
   if (!device) {
     return
   }
   const down = await measureGrid(device, "centre", "down")
   console.warn(`[collision-thresholds] grid centre down=${down}`)
-  expect(down).not.toBeNull()
+  expectSymmetricThreshold(down)
 }, 60000)
 
-it("measures the mirror's grid reorder threshold, centre grab, up", async () => {
+it("grid, centre grab, up: symmetric threshold", async () => {
   const device = await withPointer()
   if (!device) {
     return
   }
   const up = await measureGrid(device, "centre", "up")
   console.warn(`[collision-thresholds] grid centre up=${up}`)
-  expect(up).not.toBeNull()
+  expectSymmetricThreshold(up)
 }, 60000)
 
-it("measures the mirror's grid reorder threshold, centre grab, right", async () => {
+it("grid, centre grab, right: symmetric threshold", async () => {
   const device = await withPointer()
   if (!device) {
     return
   }
   const right = await measureGrid(device, "centre", "right")
   console.warn(`[collision-thresholds] grid centre right=${right}`)
-  expect(right).not.toBeNull()
+  expectSymmetricThreshold(right)
 }, 60000)
 
-it("measures the mirror's grid reorder threshold, centre grab, left", async () => {
+it("grid, centre grab, left: symmetric threshold", async () => {
   const device = await withPointer()
   if (!device) {
     return
   }
   const left = await measureGrid(device, "centre", "left")
   console.warn(`[collision-thresholds] grid centre left=${left}`)
-  expect(left).not.toBeNull()
+  expectSymmetricThreshold(left)
 }, 60000)
 
 // Split one direction per `it`, rather than all four in one — the native
@@ -455,34 +473,34 @@ it("measures the mirror's grid reorder threshold, centre grab, left", async () =
 // four in a single test on this VM (unrelated to the measurement logic; see
 // docs/research/dnd-collision-feel.md). Splitting keeps each test's own
 // mount count down without losing any of the four measurements.
-it("measures the mirror's grid reorder threshold, top-left grab, down", async () => {
+it("grid, top-left grab, down: SAME symmetric threshold as the centre grab", async () => {
   const device = await withPointer()
   if (!device) {
     return
   }
   const down = await measureGrid(device, "edge", "down")
   console.warn(`[collision-thresholds] grid edge down=${down}`)
-  expect(down).not.toBeNull()
+  expectSymmetricThreshold(down)
 }, 60000)
 
-it("measures the mirror's grid reorder threshold, top-left grab, up", async () => {
+it("grid, top-left grab, up: SAME symmetric threshold as the centre grab", async () => {
   const device = await withPointer()
   if (!device) {
     return
   }
   const up = await measureGrid(device, "edge", "up")
   console.warn(`[collision-thresholds] grid edge up=${up}`)
-  expect(up).not.toBeNull()
+  expectSymmetricThreshold(up)
 }, 60000)
 
-it("measures the mirror's grid reorder threshold, top-left grab, right", async () => {
+it("grid, top-left grab, right: SAME symmetric threshold as the centre grab", async () => {
   const device = await withPointer()
   if (!device) {
     return
   }
   const right = await measureGrid(device, "edge", "right")
   console.warn(`[collision-thresholds] grid edge right=${right}`)
-  expect(right).not.toBeNull()
+  expectSymmetricThreshold(right)
 }, 60000)
 
 // "top-left grab, left" is deliberately not an automated `it` here: the

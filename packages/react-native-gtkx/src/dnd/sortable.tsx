@@ -8,10 +8,29 @@
 // upstream's behaviour too — its `onMove` fires as rows cross, not at the
 // end — minus the spring, because here the rows are laid out by Yoga rather
 // than transformed. The mechanism does not care which axis the list scrolls
-// along: GDK hit-tests the real widget tree either way, which is why
-// `SortableDirection.Horizontal` is a render-time branch here (a horizontal
-// `ScrollView`, `leftBound`/`autoScrollHorizontalDirection` plumbing) rather
-// than a second implementation.
+// along, which is why `SortableDirection.Horizontal` is a render-time branch
+// here (a horizontal `ScrollView`, `leftBound`/`autoScrollHorizontalDirection`
+// plumbing) rather than a second implementation.
+//
+// WHAT DECIDES A CROSSING, and why it changed: this used to be GDK
+// hit-testing the raw pointer against a neighbour row's full rect (a row's
+// own `onEnter`) — grab-point DEPENDENT, unlike upstream's own item-rect
+// reasoning (`docs/research/dnd-collision-feel.md`). It is now the dragged
+// row's own TRACKED position, upstream's shape without upstream's asymmetry:
+// `useEdgeAutoscroll`'s `GtkDropControllerMotion` (already watching every
+// motion event for edge-autoscroll) also reports each one here via
+// `onDragMotion`, and `handleDragMotion` below tracks `fromIndex * slotSize +
+// (pointer delta since the drag began)`, resolving the row it lands on by
+// ROUNDING rather than upstream's own floor — the dragged row's CENTRE
+// against a slot's centre, not its top-left corner against the slot's origin
+// — see `order.ts`'s `resolveTrackedIndex` for the arithmetic. The origin
+// that delta is measured from is `DragSourceControllers`'s `onGrab`,
+// converted to the list's own container coordinates with `computePointIn`,
+// NEVER the first motion sample: a fast drag's first sample arrives already
+// displaced past GDK's own drag-start threshold, undercounting travel.
+// `SortableItem`'s own `onEnter` no longer drives a reorder at all — only
+// `onMotion` still does, for the public `onDragging`/`onDraggingHorizontal`
+// callbacks, unrelated to this decision.
 //
 // The component owns the order, exactly as upstream requires ("do NOT update
 // external state in `onMove`"). An app reads the settled order from
@@ -27,12 +46,14 @@ import {
   type ReactNode,
 } from "react"
 import type { MeasureHandle } from "../components/measure"
+import { widgetForHandle } from "../components/measure"
 import { ScrollView, type ScrollViewHandle } from "../components/scroll-view"
 import { View } from "../components/view"
+import { computePointIn, type Gtk } from "../gtkx/bridge/index"
 import { useEdgeAutoscroll } from "./autoscroll"
 import { DraggableContext, DraggableHandle } from "./draggable"
 import { DragSourceControllers, DropTargetControllers } from "./gtk-controllers"
-import { listToObject } from "./order"
+import { listToObject, resolveTrackedIndex } from "./order"
 import { keyOf, useOrder } from "./order-state"
 import type { DragPayload } from "./payload"
 import {
@@ -66,9 +87,21 @@ type SortableContextValue = {
    *  every `Droppable` on the screen. */
   scope: string
   direction: SortableDirection
-  /** Called by a row when the dragged row crosses it. */
+  /** Called from the list's own reorder tracking (`handleDragMotion` below)
+   *  when the dragged row's tracked position resolves to a new slot — no
+   *  longer from a row's own `onEnter`, see the module comment. */
   moveOnto: (draggedId: string, targetId: string) => void
-  beginDrag: (draggedId: string) => void
+  /** `grabWidget`/`grabX`/`grabY` are `DragSourceControllers`'s `onGrab`,
+   *  forwarded as-is: the widget-local grab point this converts (via
+   *  `computePointIn`) into the container-relative origin the reorder
+   *  tracking measures every subsequent motion event against. Taken from the
+   *  grab, never the first motion sample — see the module comment for why. */
+  beginDrag: (
+    draggedId: string,
+    grabWidget: Gtk.Widget | null,
+    grabX: number,
+    grabY: number,
+  ) => void
   endDrag: (draggedId: string, cancelled: boolean) => void
   onDragging?: (id: string, overItemId: string | null, coord: number) => void
   onDraggingHorizontal?: (
@@ -339,17 +372,6 @@ export const Sortable = <TData extends SortableData>({
 
   const containerRef = useRef<MeasureHandle | null>(null)
   const scrollViewRef = useRef<ScrollViewHandle | null>(null)
-  const autoscroll = useEdgeAutoscroll<
-    ScrollDirection | HorizontalScrollDirection
-  >({
-    containerRef,
-    scrollViewRef,
-    axes: isHorizontal ? "horizontal" : "vertical",
-    none: noneDirectionFor(direction),
-    directionFor: directionForDelta(direction),
-  })
-
-  const boxes = useSharedBoxes(order, direction, autoscroll.direction)
 
   // The order as it was when the drag began, so a cancelled drag puts the
   // list back rather than leaving it wherever the pointer happened to be.
@@ -361,15 +383,6 @@ export const Sortable = <TData extends SortableData>({
   useEffect(() => {
     orderRef.current = order
   }, [order])
-
-  const beginDrag = useCallback(
-    (draggedId: string) => {
-      beforeDrag.current = orderRef.current
-      autoscroll.setActive(true)
-      onDragStart?.(draggedId, orderRef.current.indexOf(draggedId))
-    },
-    [onDragStart, autoscroll],
-  )
 
   const moveOnto = useCallback(
     (draggedId: string, targetId: string) => {
@@ -389,9 +402,104 @@ export const Sortable = <TData extends SortableData>({
     [setOrder, onMove],
   )
 
+  // The dragged row's own tracked position, and the slot it last resolved
+  // to — null whenever no drag from this list is in flight, or `beginDrag`
+  // could not establish an origin (see below). A ref, not state: written
+  // from a GTK motion callback outside React's commit cycle, exactly like
+  // `beforeDrag`/`orderRef` above.
+  const tracking = useRef<{
+    draggedId: string
+    /** `fromIndex * slotSize - origin`, folded into one constant so
+     *  `handleDragMotion` only ever adds the CURRENT motion coordinate to
+     *  it — see the module comment for the arithmetic this is derived
+     *  from. */
+    base: number
+    slotSize: number
+    lastResolvedIndex: number
+  } | null>(null)
+
+  const handleDragMotion = useCallback(
+    (x: number, y: number) => {
+      const state = tracking.current
+      if (!state) {
+        return
+      }
+      const trackedPosition = (isHorizontal ? x : y) + state.base
+      const resolvedIndex = resolveTrackedIndex(
+        trackedPosition,
+        state.slotSize,
+        orderRef.current.length,
+      )
+      if (resolvedIndex === state.lastResolvedIndex) {
+        return
+      }
+      state.lastResolvedIndex = resolvedIndex
+      const targetId = orderRef.current[resolvedIndex]
+      if (targetId !== undefined && targetId !== state.draggedId) {
+        moveOnto(state.draggedId, targetId)
+      }
+    },
+    [isHorizontal, moveOnto],
+  )
+
+  const autoscroll = useEdgeAutoscroll<
+    ScrollDirection | HorizontalScrollDirection
+  >({
+    containerRef,
+    scrollViewRef,
+    axes: isHorizontal ? "horizontal" : "vertical",
+    none: noneDirectionFor(direction),
+    directionFor: directionForDelta(direction),
+    onDragMotion: handleDragMotion,
+  })
+
+  const boxes = useSharedBoxes(order, direction, autoscroll.direction)
+
+  const beginDrag = useCallback(
+    (
+      draggedId: string,
+      grabWidget: Gtk.Widget | null,
+      grabX: number,
+      grabY: number,
+    ) => {
+      beforeDrag.current = orderRef.current
+      autoscroll.setActive(true)
+      const fromIndex = orderRef.current.indexOf(draggedId)
+      onDragStart?.(draggedId, fromIndex)
+
+      tracking.current = null
+      const container = widgetForHandle(containerRef.current)
+      if (grabWidget && container && fromIndex !== -1) {
+        const origin = computePointIn(grabWidget, container, grabX, grabY)
+        if (origin) {
+          // The row's own real size, measured rather than a hint: rows are
+          // Yoga-natural-height (docs/api.md), so there is no `itemHeight`
+          // prop to trust — the dragged row's own allocation, at the moment
+          // it was grabbed, is what the tracked position's slots are sized
+          // to. `gap` (a real Yoga gap on the content container either
+          // direction) folds into the slot period the same way upstream's
+          // own `itemHeight` would if it accounted for one.
+          const rawSize = isHorizontal
+            ? grabWidget.getWidth()
+            : grabWidget.getHeight()
+          const slotSize = rawSize + (gap ?? 0)
+          const origin1D = isHorizontal ? origin.x : origin.y
+          tracking.current = {
+            draggedId,
+            base: fromIndex * slotSize - origin1D,
+            slotSize,
+            lastResolvedIndex: fromIndex,
+          }
+        }
+      }
+    },
+    [onDragStart, autoscroll, isHorizontal, gap],
+  )
+
   const endDrag = useCallback(
     (draggedId: string, cancelled: boolean) => {
       autoscroll.setActive(false)
+      tracking.current = null
       const restore = beforeDrag.current
       beforeDrag.current = null
       if (cancelled) {
@@ -511,23 +619,36 @@ export const useSortable = <TData,>(
   useEffect(() => setMounted(true), [])
 
   // Same list only — and INCLUDING this row itself. Refusing the self-drop
-  // looks right and is wrong: because the reorder happens live on `::enter`,
-  // by the time the pointer settles it is over the DRAGGED row, so a row that
-  // refuses its own payload leaves GDK with no target, cancels the drag, and
-  // the list snaps back to where it started. Accepting is also the honest
-  // reading: dropping a row on its own current position means "leave it
-  // here", which is a completed drag, not an abandoned one.
+  // looks right and is wrong: the reorder tracking (`Sortable`'s own
+  // `handleDragMotion`) can settle the dragged row back onto its OWN slot,
+  // so by the time the pointer releases it may well be over the DRAGGED row.
+  // A row that refuses its own payload leaves GDK with no target, cancels
+  // the drag, and the list snaps back to where it started. Accepting is also
+  // the honest reading: dropping a row on its own current position means
+  // "leave it here", which is a completed drag, not an abandoned one.
   const accepts = useCallback(
     (payload: DragPayload) => payload.scope === list.scope,
     [list],
   )
 
+  // `DragSourceControllers`'s own grab point (widget-local), captured here
+  // and forwarded to `beginDrag` — see the module comment for why this, and
+  // never the first motion sample, is the reorder tracking's origin.
+  const grab = useRef<{ widget: Gtk.Widget | null; x: number; y: number }>({
+    widget: null,
+    x: 0,
+    y: 0,
+  })
+
   const dragControllers = (
     <DragSourceControllers
       payload={{ scope: list.scope, id }}
+      onGrab={(x, y, widget) => {
+        grab.current = { widget, x, y }
+      }}
       onDragBegin={() => {
         setIsMoving(true)
-        list.beginDrag(id)
+        list.beginDrag(id, grab.current.widget, grab.current.x, grab.current.y)
       }}
       onDragEnd={(dropped) => {
         setIsMoving(false)
@@ -539,10 +660,14 @@ export const useSortable = <TData,>(
   const dropControllers = (
     <DropTargetControllers
       accepts={accepts}
-      // The reorder happens HERE, not on drop: crossing this row is what
-      // moves the dragged row into its place, so the list rearranges under
-      // the drag icon the way upstream's animated gaps do.
-      onEnter={(payload) => list.moveOnto(payload.id, id)}
+      // No `onEnter` any more: crossing this row's drop target used to be
+      // what moved the dragged row into its place. That decision is now
+      // `Sortable`'s own `handleDragMotion`, driven by the list's shared
+      // motion controller rather than each row's own — see the module
+      // comment. This target still has to exist and accept, or GDK would
+      // refuse the drop and snap the drag back; `onMotion` below still
+      // reports the public `onDragging`/`onDraggingHorizontal` callbacks,
+      // unrelated to the reorder decision.
       onMotion={(payload, x, y) => {
         if (list.direction === SortableDirection.Horizontal) {
           list.onDraggingHorizontal?.(payload.id, id, x)

@@ -19,6 +19,21 @@
 // docs/api.md: the grid's overall size is whatever Yoga measures, not
 // `calculateGridContentDimensions`; `useGridSortableList` still reports that
 // number for an app that wants upstream's own formula.
+//
+// WHAT DECIDES A CROSSING, and why it changed: see `sortable.tsx`'s own
+// module comment for the full reasoning — the same change applies here, one
+// more axis. This used to be GDK hit-testing the raw pointer against a
+// neighbour cell's full rect (a cell's own `onEnter`) — grab-point
+// DEPENDENT. It is now the dragged cell's own TRACKED position:
+// `useEdgeAutoscroll`'s `onDragMotion` (this grid's shared motion
+// controller) feeds `handleDragMotion` below, which tracks
+// `calculateGridPosition(fromIndex, ...)` plus the pointer's delta on both
+// axes since the drag began, and resolves the cell it lands on by ROUNDING
+// both axes rather than `getGridCellFromCoordinates`'s own floor — the
+// dragged cell's CENTRE against a slot's centre (`grid-order.ts`'s
+// `resolveTrackedGridIndex`), not its top-left corner against the slot's
+// origin. The origin is `DragSourceControllers`'s `onGrab`, converted to
+// this grid's own container coordinates, never the first motion sample.
 import {
   createContext,
   useCallback,
@@ -30,16 +45,20 @@ import {
   type ReactNode,
 } from "react"
 import type { MeasureHandle } from "../components/measure"
+import { widgetForHandle } from "../components/measure"
 import { ScrollView, type ScrollViewHandle } from "../components/scroll-view"
 import { View } from "../components/view"
+import { computePointIn, type Gtk } from "../gtkx/bridge/index"
 import { useEdgeAutoscroll } from "./autoscroll"
 import { DraggableContext, DraggableHandle } from "./draggable"
 import {
   calculateGridContentDimensions,
+  calculateGridPosition,
   gridPositionsToOrder,
   listToGridObject,
   reorderGridInsert,
   reorderGridSwap,
+  resolveTrackedGridIndex,
 } from "./grid-order"
 import { DragSourceControllers, DropTargetControllers } from "./gtk-controllers"
 import { keyOf, useOrder } from "./order-state"
@@ -83,13 +102,26 @@ type SortableGridContextValue = {
   scope: string
   /** The dragged item's own callbacks live on ITS OWN `SortableGridItem`, not
    *  on `SortableGrid` (upstream has no list-level callbacks for the grid —
-   *  `SortableGridProps` carries none). A reorder is decided by the TARGET
-   *  cell's `onEnter`, a different component instance than the dragged one,
-   *  so the dragged cell's own `onMove` is reached through this small
-   *  registry rather than a closure `moveOnto` could capture directly. */
+   *  `SortableGridProps` carries none). A reorder is decided by the grid's
+   *  own reorder tracking (`handleDragMotion`), not by any one cell's
+   *  component instance, so the dragged cell's own `onMove` is reached
+   *  through this small registry rather than a closure `moveOnto` could
+   *  capture directly. */
   registerCallbacks: (id: string, callbacks: GridItemCallbacks | null) => void
+  /** Called from the grid's own reorder tracking when the dragged cell's
+   *  tracked position resolves to a new slot — no longer from a cell's own
+   *  `onEnter`, see the module comment. */
   moveOnto: (draggedId: string, targetId: string) => void
-  beginDrag: (draggedId: string) => number
+  /** `grabWidget`/`grabX`/`grabY` are `DragSourceControllers`'s `onGrab`,
+   *  forwarded as-is — see `sortable.tsx`'s `SortableContextValue.beginDrag`
+   *  for what this converts them into. Still returns the dragged cell's
+   *  `fromIndex`, unchanged, for `onDragStart`. */
+  beginDrag: (
+    draggedId: string,
+    grabWidget: Gtk.Widget | null,
+    grabX: number,
+    grabY: number,
+  ) => number
   endDrag: (
     draggedId: string,
     dropped: boolean,
@@ -283,21 +315,6 @@ export const SortableGrid = <TData extends SortableData>({
 
   const containerRef = useRef<MeasureHandle | null>(null)
   const scrollViewRef = useRef<ScrollViewHandle | null>(null)
-  const autoscroll = useEdgeAutoscroll<GridScrollDirection>({
-    containerRef,
-    scrollViewRef,
-    axes: "both",
-    none: GridScrollDirection.None,
-    directionFor: gridDirectionFor,
-  })
-
-  const boxes = useGridSharedBoxes(
-    order,
-    dimensions,
-    orientation,
-    strategy,
-    autoscroll.direction,
-  )
 
   const beforeDrag = useRef<string[] | null>(null)
   const orderRef = useRef(order)
@@ -315,15 +332,6 @@ export const SortableGrid = <TData extends SortableData>({
       }
     },
     [],
-  )
-
-  const beginDrag = useCallback(
-    (draggedId: string): number => {
-      beforeDrag.current = orderRef.current
-      autoscroll.setActive(true)
-      return orderRef.current.indexOf(draggedId)
-    },
-    [autoscroll],
   )
 
   const moveOnto = useCallback(
@@ -371,12 +379,101 @@ export const SortableGrid = <TData extends SortableData>({
     [setOrder, dimensions, orientation, strategy],
   )
 
+  // The dragged cell's own tracked position — see `sortable.tsx`'s twin for
+  // why this is a ref, and its `base` field's derivation.
+  const tracking = useRef<{
+    draggedId: string
+    baseX: number
+    baseY: number
+    lastResolvedIndex: number
+  } | null>(null)
+
+  const handleDragMotion = useCallback(
+    (x: number, y: number) => {
+      const state = tracking.current
+      if (!state) {
+        return
+      }
+      const trackedX = x + state.baseX
+      const trackedY = y + state.baseY
+      const resolvedIndex = resolveTrackedGridIndex(
+        trackedX,
+        trackedY,
+        dimensions,
+        orientation,
+        orderRef.current.length,
+      )
+      if (resolvedIndex === state.lastResolvedIndex) {
+        return
+      }
+      state.lastResolvedIndex = resolvedIndex
+      const targetId = orderRef.current[resolvedIndex]
+      if (targetId !== undefined && targetId !== state.draggedId) {
+        moveOnto(state.draggedId, targetId)
+      }
+    },
+    [dimensions, orientation, moveOnto],
+  )
+
+  const autoscroll = useEdgeAutoscroll<GridScrollDirection>({
+    containerRef,
+    scrollViewRef,
+    axes: "both",
+    none: GridScrollDirection.None,
+    directionFor: gridDirectionFor,
+    onDragMotion: handleDragMotion,
+  })
+
+  const boxes = useGridSharedBoxes(
+    order,
+    dimensions,
+    orientation,
+    strategy,
+    autoscroll.direction,
+  )
+
+  const beginDrag = useCallback(
+    (
+      draggedId: string,
+      grabWidget: Gtk.Widget | null,
+      grabX: number,
+      grabY: number,
+    ): number => {
+      beforeDrag.current = orderRef.current
+      autoscroll.setActive(true)
+      const fromIndex = orderRef.current.indexOf(draggedId)
+
+      tracking.current = null
+      const container = widgetForHandle(containerRef.current)
+      if (grabWidget && container && fromIndex !== -1) {
+        const origin = computePointIn(grabWidget, container, grabX, grabY)
+        if (origin) {
+          // Unlike the plain list, a grid cell's size is not measured: it is
+          // already a real, enforced Yoga size — `SortableGridItem` styles
+          // every cell to exactly `dimensions.itemWidth`/`itemHeight`
+          // (grid.tsx below), so the same numbers this component was
+          // already handed are what the tracked position's slots use too.
+          const rest = calculateGridPosition(fromIndex, dimensions, orientation)
+          tracking.current = {
+            draggedId,
+            baseX: rest.x - origin.x,
+            baseY: rest.y - origin.y,
+            lastResolvedIndex: fromIndex,
+          }
+        }
+      }
+      return fromIndex
+    },
+    [autoscroll, dimensions, orientation],
+  )
+
   const endDrag = useCallback(
     (
       draggedId: string,
       dropped: boolean,
     ): { index: number; positions: GridPositions } | null => {
       autoscroll.setActive(false)
+      tracking.current = null
       const restore = beforeDrag.current
       beforeDrag.current = null
       if (!dropped) {
@@ -490,12 +587,29 @@ export const useGridSortable = <TData,>(
     [grid],
   )
 
+  // `DragSourceControllers`'s own grab point — see sortable.tsx's
+  // `useSortable` for the same field and why it is captured here rather than
+  // read from the first motion sample.
+  const grab = useRef<{ widget: Gtk.Widget | null; x: number; y: number }>({
+    widget: null,
+    x: 0,
+    y: 0,
+  })
+
   const dragControllers = (
     <DragSourceControllers
       payload={{ scope: grid.scope, id }}
+      onGrab={(x, y, widget) => {
+        grab.current = { widget, x, y }
+      }}
       onDragBegin={() => {
         setIsMoving(true)
-        const position = grid.beginDrag(id)
+        const position = grid.beginDrag(
+          id,
+          grab.current.widget,
+          grab.current.x,
+          grab.current.y,
+        )
         onDragStart?.(id, position)
       }}
       onDragEnd={(dropped) => {
@@ -511,9 +625,10 @@ export const useGridSortable = <TData,>(
   const dropControllers = (
     <DropTargetControllers
       accepts={accepts}
-      // The reorder happens HERE, not on drop — same reasoning as the
-      // vertical/horizontal list.
-      onEnter={(payload) => grid.moveOnto(payload.id, id)}
+      // No `onEnter` any more — the reorder decision is the grid's own
+      // tracking (`handleDragMotion`), not this cell's drop target. This
+      // target still has to exist and accept, or GDK would refuse the drop;
+      // `onMotion` still reports the public `onDragging` callback.
       onMotion={(payload, x, y) => {
         onDragging?.(payload.id, id, x, y)
       }}
