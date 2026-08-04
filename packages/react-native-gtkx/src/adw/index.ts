@@ -13,7 +13,7 @@
 // Here, this subpath exposes primitives and react-native-gtkx/navigation
 // binds them to react-navigation. You can skip the binding entirely — drive
 // NavigationStack from useState, from your own router, from anything.
-import { requireAdwGi, requireAdwJsx } from "../gtkx/bridge/adw"
+import { requireAdwJsx } from "../gtkx/bridge/adw"
 
 // The raw widgets, exactly as gtkx binds them — every GObject property and
 // signal, including ones added after this file was written.
@@ -29,22 +29,23 @@ import { requireAdwGi, requireAdwJsx } from "../gtkx/bridge/adw"
 export * from "./widgets.generated"
 
 // This whole subpath REQUIRES Adw-1 (see .claude/epics/adw-optional/001.md
-// and docs/api.md) — called eagerly, at module scope, so importing
-// react-native-gtkx/adw without it throws the loud named error right away
-// rather than at some later, harder-to-place call site.
-//
-// A VALUE only: it carries the enums you need at runtime
-// (`Adw.BreakpointCondition.newLength(...)`). Unlike a plain
-// `import * as Adw`, a value re-exported through requireAdwGi() cannot also
-// merge in the namespace's dotted-member TYPE access (`Adw.NavigationView`
-// as a type) — TypeScript has no re-export form that reliably preserves
-// both facets across this hop (tried: a same-named type-only import next to
-// the const, and two export specifiers under one name — both rejected as
-// duplicate/conflicting identifiers). Code that needs `Adw.Foo` as a TYPE
-// (e.g. `useRef<Adw.NavigationView | null>`) imports `type { Adw }` from
-// "../gtkx/bridge/adw" directly instead — a single hop, which works (see
-// common/navigation-stack.tsx).
-export const Adw = requireAdwGi("react-native-gtkx/adw")
+// and docs/api.md) — a bare re-export of an actual namespace import (see
+// gtkx/bridge/adw-namespace.ts), so `Adw` keeps working exactly as it did
+// before this epic: both a value (`Adw.Toast.new(title)`, `Adw.ColorScheme
+// .FORCE_DARK`) and a namespace in type position (`Ref<Adw.ToastOverlay |
+// null>`), in ONE import, from real apps (examples/tasks-app/tasks-nav's
+// toast.tsx and window.tsx, examples/gallery's adwaita-stack.tsx) as well
+// as ours. That duality does not survive being synthesized through a
+// function call (tried: adw.ts's requireAdwGi() — the value comes through
+// fine, but "Cannot find namespace 'Adw'" everywhere it was used as a
+// type), which is why this is a re-export of a plain, eager, static import
+// rather than routed through the lazy probe every other Adw value in this
+// package goes through. Importing react-native-gtkx/adw without Adw-1
+// throws at import time regardless — just as a build failure one line
+// down (adw-namespace.ts's own `@gtkx/gi/adw` import, unresolvable without
+// it) instead of a thrown Error, which is an equally loud refusal for a
+// subpath that always requires Adw.
+export { Adw } from "../gtkx/bridge/adw-namespace"
 
 // Auxiliary JSX elements that are not Adw.Widget subclasses, so the
 // generated widget surface above never sees them: a responsive breakpoint
