@@ -321,6 +321,54 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
     // over this scrollable is talking about.
     useResponder(outerRef, responderProps)
 
+    // `scrollTo`/`scrollToEnd` can run before GTK's OWN widget-level
+    // measure/allocate has caught up to content the ENGINE already
+    // committed — Yoga's flush is a same-microtask JS computation, while a
+    // GtkScrolledWindow only learns its child's real size on its next native
+    // allocate, which is queued (a frame away) rather than synchronous.
+    // `Gtk.Adjustment.setValue()` clamps to ITS OWN `upper`/`page-size`, so a
+    // target beyond a still-stale (freshly mounted: 0/0) range is silently
+    // absorbed as a no-op — the value does not actually change, so
+    // `value-changed` never fires and the scroll this call was supposed to
+    // produce is dropped with no event at all. Reproduced deterministically
+    // by calling `scrollTo` immediately after `render()` with no extra
+    // settling tick: the adjustment reads upper=0/page=0 while
+    // `contentNode`/`outerNode` already have the real (correct) rect.
+    //
+    // The engine's own rects are the fix: they commit before GTK's real
+    // geometry ever could (same tick vs. next frame), so reconfiguring the
+    // adjustment's range from them — right before setting the value — closes
+    // the gap using truth this component already has in hand. Only these two
+    // rare, explicitly-invoked entry points pay for it; the per-event
+    // `onAdjustment`/`readScrollEvent` path (docs/research/scroll-phases.md)
+    // is untouched.
+    const syncAdjustmentRange = (
+      adjustment: Gtk.Adjustment,
+      axis: "width" | "height",
+    ): void => {
+      const content = contentNode.getRect()
+      const viewport = outerNode.getRect()
+      if (!content || !viewport) {
+        return
+      }
+      const upper = content[axis]
+      const pageSize = viewport[axis]
+      if (
+        adjustment.getUpper() === upper &&
+        adjustment.getPageSize() === pageSize
+      ) {
+        return
+      }
+      adjustment.configure(
+        adjustment.getValue(),
+        0,
+        upper,
+        adjustment.getStepIncrement(),
+        adjustment.getPageIncrement(),
+        pageSize,
+      )
+    }
+
     useImperativeHandle(handleRef, () => {
       const handle: ScrollViewHandle = {
         ...createMeasureHandle(outerRef, outerNode),
@@ -331,10 +379,18 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
             return
           }
           if (y !== undefined) {
-            widget.getVadjustment()?.setValue(y)
+            const vadjustment = widget.getVadjustment()
+            if (vadjustment) {
+              syncAdjustmentRange(vadjustment, "height")
+              vadjustment.setValue(y)
+            }
           }
           if (x !== undefined) {
-            widget.getHadjustment()?.setValue(x)
+            const hadjustment = widget.getHadjustment()
+            if (hadjustment) {
+              syncAdjustmentRange(hadjustment, "width")
+              hadjustment.setValue(x)
+            }
           }
         },
         scrollToEnd() {
@@ -343,6 +399,7 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
             ? widget?.getHadjustment()
             : widget?.getVadjustment()
           if (adjustment) {
+            syncAdjustmentRange(adjustment, horizontal ? "width" : "height")
             adjustment.setValue(
               adjustment.getUpper() - adjustment.getPageSize(),
             )
