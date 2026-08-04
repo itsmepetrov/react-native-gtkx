@@ -18,6 +18,7 @@ import {
   listToGridObject,
   reorderGridInsert,
   reorderGridSwap,
+  resolveTrackedGridIndex,
 } from "../../src/dnd/grid-order"
 import { GridOrientation } from "../../src/dnd/types"
 
@@ -190,4 +191,141 @@ test("findItemIdAtIndex looks up the id occupying an index, or null", () => {
   )
   expect(findItemIdAtIndex(positions, 1)).toBe("b")
   expect(findItemIdAtIndex(positions, 9)).toBeNull()
+})
+
+// `resolveTrackedGridIndex` is grid.tsx's own live reorder trigger — the
+// symmetric replacement for `getGridCellFromCoordinates`'s top-left floor,
+// proven here with no gaps (matching the gallery's own pinned GTK numbers,
+// tests/gtk/dnd/collision-thresholds.gtk.test.tsx) and again WITH gaps, to
+// show the divisor (`itemSize + gap`) keeps the symmetry rather than only
+// happening to hold at gap = 0.
+const NO_GAP = { columns: 3, itemWidth: 100, itemHeight: 100 }
+
+test("resolveTrackedGridIndex resolves the tracked rect back to its own cell at rest", () => {
+  // Cell 4 of a 3x3 grid: row 1, column 1 — a neighbour on all four sides.
+  const rest = calculateGridPosition(4, NO_GAP, GridOrientation.Vertical)
+  expect(
+    resolveTrackedGridIndex(
+      rest.x,
+      rest.y,
+      NO_GAP,
+      GridOrientation.Vertical,
+      9,
+    ),
+  ).toBe(4)
+})
+
+test("resolveTrackedGridIndex needs about half a cell's travel, BOTH directions, BOTH axes — the symmetry getGridCellFromCoordinates does not have", () => {
+  const rest = calculateGridPosition(4, NO_GAP, GridOrientation.Vertical)
+  // Short of the threshold either way on the row axis: no crossing.
+  expect(
+    resolveTrackedGridIndex(
+      rest.x,
+      rest.y + 49,
+      NO_GAP,
+      GridOrientation.Vertical,
+      9,
+    ),
+  ).toBe(4)
+  expect(
+    resolveTrackedGridIndex(
+      rest.x,
+      rest.y - 49,
+      NO_GAP,
+      GridOrientation.Vertical,
+      9,
+    ),
+  ).toBe(4)
+  // Past it: crosses DOWN (away from index 0 on this axis) and UP (toward
+  // it) at essentially the SAME distance — upstream's own floor needs the
+  // full 100px one way and about 1px the other (docs/research/
+  // dnd-collision-feel.md); this needs ~50px either way.
+  expect(
+    resolveTrackedGridIndex(
+      rest.x,
+      rest.y + 51,
+      NO_GAP,
+      GridOrientation.Vertical,
+      9,
+    ),
+  ).toBe(7) // row 2, column 1
+  expect(
+    resolveTrackedGridIndex(
+      rest.x,
+      rest.y - 51,
+      NO_GAP,
+      GridOrientation.Vertical,
+      9,
+    ),
+  ).toBe(1) // row 0, column 1
+  // Same shape on the column axis.
+  expect(
+    resolveTrackedGridIndex(
+      rest.x + 51,
+      rest.y,
+      NO_GAP,
+      GridOrientation.Vertical,
+      9,
+    ),
+  ).toBe(5) // row 1, column 2
+  expect(
+    resolveTrackedGridIndex(
+      rest.x - 51,
+      rest.y,
+      NO_GAP,
+      GridOrientation.Vertical,
+      9,
+    ),
+  ).toBe(3) // row 1, column 0
+})
+
+test("resolveTrackedGridIndex's threshold follows itemSize + gap, not itemSize alone", () => {
+  // DIMENSIONS: itemWidth 100 + columnGap 10 = a 110px column period, itemHeight
+  // 80 + rowGap 6 = an 86px row period — half of each is the threshold.
+  const rest = calculateGridPosition(4, DIMENSIONS, GridOrientation.Vertical)
+  expect(
+    resolveTrackedGridIndex(
+      rest.x,
+      rest.y + 42,
+      DIMENSIONS,
+      GridOrientation.Vertical,
+      9,
+    ),
+  ).toBe(4) // 42 < 43 (86 / 2): short of the row threshold
+  expect(
+    resolveTrackedGridIndex(
+      rest.x,
+      rest.y + 44,
+      DIMENSIONS,
+      GridOrientation.Vertical,
+      9,
+    ),
+  ).toBe(7) // 44 > 43: crosses
+  expect(
+    resolveTrackedGridIndex(
+      rest.x + 54,
+      rest.y,
+      DIMENSIONS,
+      GridOrientation.Vertical,
+      9,
+    ),
+  ).toBe(4) // 54 < 55 (110 / 2): short of the column threshold
+  expect(
+    resolveTrackedGridIndex(
+      rest.x + 56,
+      rest.y,
+      DIMENSIONS,
+      GridOrientation.Vertical,
+      9,
+    ),
+  ).toBe(5) // 56 > 55: crosses
+})
+
+test("resolveTrackedGridIndex clamps to a valid index past either end", () => {
+  expect(
+    resolveTrackedGridIndex(9999, 9999, NO_GAP, GridOrientation.Vertical, 9),
+  ).toBe(8)
+  expect(
+    resolveTrackedGridIndex(-9999, -9999, NO_GAP, GridOrientation.Vertical, 9),
+  ).toBe(0)
 })

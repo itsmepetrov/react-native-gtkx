@@ -105,6 +105,39 @@ export const getGridCellFromCoordinates = (
   }
 }
 
+/**
+ * Resolves a TRACKED cell rect (`grid.tsx`'s `useGridSortable`: the cell's
+ * own top-left, `calculateGridPosition(fromIndex, ...)` plus the pointer's
+ * delta since the drag began — never a measured layout) onto the nearest
+ * cell, ROUNDING rather than flooring both axes.
+ *
+ * The 2-D sibling of `resolveTrackedIndex` in `order.ts` — see its comment
+ * for why rounding this exact quantity is mathematically the same as
+ * resolving by the dragged cell's own CENTRE against each slot's centre,
+ * regardless of `columnGap`/`rowGap`, rather than `getGridCellFromCoordinates`'s
+ * OWN top-left floor above (upstream's own behaviour, kept faithfully there
+ * — this is a DIFFERENT function, the mirror's own live reorder trigger, not
+ * a replacement for it).
+ */
+export const resolveTrackedGridIndex = (
+  trackedX: number,
+  trackedY: number,
+  dimensions: GridDimensions,
+  orientation: GridOrientation,
+  totalItems: number,
+): number => {
+  const { itemWidth, itemHeight, rowGap = 0, columnGap = 0 } = dimensions
+  const column = Math.round(trackedX / (itemWidth + columnGap))
+  const row = Math.round(trackedY / (itemHeight + rowGap))
+  const index = calculateIndexFromRowColumn(
+    row,
+    column,
+    dimensions,
+    orientation,
+  )
+  return clamp(index, 0, totalItems - 1)
+}
+
 /** Every id shifts by one slot between the dragged item's old and new index
  *  (`Insert` strategy) — the same "make room" reorder `Sortable`'s own
  *  `objectMove` does for a plain list, generalised to row/column. */

@@ -75,6 +75,17 @@ export type UseEdgeAutoscrollOptions<TDirection> = {
   axes: AutoscrollAxes
   none: TDirection
   directionFor: (dx: -1 | 0 | 1, dy: -1 | 0 | 1) => TDirection
+  /**
+   * Every motion event this list's own `GtkDropControllerMotion` sees, in the
+   * SAME container-relative coordinates `onMotion` below already computes
+   * edge deltas from — gated the same way (only while THIS list's own drag
+   * is active, never a foreign one passing over). `Sortable`/`SortableGrid`
+   * drive their reorder decision from this instead of a row/cell's own
+   * `onEnter` (docs/research/dnd-collision-feel.md): one controller reports
+   * both edge-autoscroll AND reorder tracking, rather than a second
+   * `GtkDropControllerMotion` duplicating the same signal.
+   */
+  onDragMotion?: (x: number, y: number) => void
 }
 
 const clampValue = (value: number, lower: number, upper: number): number =>
@@ -122,6 +133,7 @@ export const useEdgeAutoscroll = <TDirection,>({
   axes,
   none,
   directionFor,
+  onDragMotion,
 }: UseEdgeAutoscrollOptions<TDirection>): AutoscrollHandle<TDirection> => {
   const active = useRef(false)
   const tickId = useRef<number | null>(null)
@@ -210,6 +222,11 @@ export const useEdgeAutoscroll = <TDirection,>({
       if (!active.current) {
         return
       }
+      // Reported here, before the async `measure()` round trip below: the
+      // reorder tracking this feeds needs every sample, not only the ones
+      // edge-detection happens to keep (a measure that never resolves — the
+      // container unmounted mid-drag — would otherwise silently starve it).
+      onDragMotion?.(x, y)
       const container = containerRef.current
       if (!container) {
         return
@@ -234,7 +251,7 @@ export const useEdgeAutoscroll = <TDirection,>({
         applyDelta(dx, dy)
       })
     },
-    [containerRef, axes, applyDelta],
+    [containerRef, axes, applyDelta, onDragMotion],
   )
 
   const onLeave = useCallback(() => {

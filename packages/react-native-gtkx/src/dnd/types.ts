@@ -351,8 +351,9 @@ export interface SortableProps<
   /** Accepted and ignored. */
   onHeightsMeasured?: (heights: Record<string, number>) => void
   /** Vertical (the default) scrolls a column; horizontal scrolls a row, with
-   *  reorder-by-crossing working exactly the same way — GDK hit-tests the
-   *  real widget tree regardless of which axis it is laid out along. */
+   *  reorder-by-crossing working exactly the same way regardless of which
+   *  axis it is laid out along — the tracked position (sortable.tsx) reads
+   *  whichever coordinate this axis cares about. */
   direction?: SortableDirection
 }
 
@@ -392,8 +393,8 @@ export interface UseSortableListReturn<TData extends SortableData> {
 // A separate hook from `useSortable`/`useSortableList`, upstream's own shape
 // (`hooks/useHorizontalSortable.ts` is its own file, not a direction branch of
 // `useSortable.ts`) — kept distinct here too, even though the reorder
-// mechanism underneath (cross into another cell, GDK hit-tests it) does not
-// care which axis the list scrolls along.
+// mechanism underneath (the dragged item's own tracked position, sortable.tsx)
+// does not care which axis the list scrolls along.
 
 export interface UseHorizontalSortableOptions<TData = unknown> {
   id: string
