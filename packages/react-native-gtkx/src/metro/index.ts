@@ -72,6 +72,19 @@ export const HOST_MODULE_EXTERNALS = [
   "yoga-layout",
 ]
 
+// Present in the codegen store only when the app's gtkx.config.ts declares
+// "Adw-1" (see .claude/epics/adw-optional/001.md — the plain-GTK profile).
+// Still generated a proxy unconditionally, same as every other external
+// above (so an app that later adds "Adw-1" needs no Metro config change) —
+// but the runner (../runner/host.ts, ../runner/host-dev.ts) must not treat
+// EITHER one failing to load as fatal the way it does for the rest of this
+// list: that failure is the expected, normal shape of a plain-GTK app, not
+// a broken install.
+export const OPTIONAL_HOST_MODULE_EXTERNALS = new Set<string>([
+  "@gtkx/gi/adw",
+  "@gtkx/jsx/adw",
+])
+
 export const LINUX_PLATFORM = "linux"
 
 // Structural slices of Metro's config/resolution types: Metro is the app's

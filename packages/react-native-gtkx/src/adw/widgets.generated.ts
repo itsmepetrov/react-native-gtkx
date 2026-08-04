@@ -58,7 +58,7 @@ import {
   AdwViewSwitcherTitle as RawAdwViewSwitcherTitle,
   AdwWindowTitle as RawAdwWindowTitle,
   AdwWrapBox as RawAdwWrapBox,
-} from "../gtkx/bridge/widgets.generated"
+} from "../gtkx/bridge/widgets.generated.adw"
 
 export const AdwAboutDialog = wrapReactNative(
   RawAdwAboutDialog,
@@ -205,7 +205,7 @@ export {
   AdwSpinRow, // child-only (derives Gtk.ListBoxRow)
   AdwSwitchRow, // child-only (derives Gtk.ListBoxRow)
   AdwWindow, // toplevel (implements GtkRoot)
-} from "../gtkx/bridge/widgets.generated"
+} from "../gtkx/bridge/widgets.generated.adw"
 
 export const ADW_WRAPPED_WIDGET_NAMES = [
   "AdwAboutDialog",

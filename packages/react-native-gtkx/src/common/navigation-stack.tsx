@@ -40,11 +40,18 @@ import {
   type Ref,
 } from "react"
 import { InteractionManager } from "../apis/interaction-manager"
-import {
-  AdwNavigationPage as RawAdwNavigationPage,
-  AdwNavigationView as RawAdwNavigationView,
-  type Adw,
-} from "../gtkx/bridge/index"
+import { requireAdwJsx, type Adw } from "../gtkx/bridge/adw"
+
+// Types only — requireAdwJsx() itself is called lazily, inside each
+// component below, not at module scope: this file lives under
+// react-native-gtkx/common, whose barrel ALSO exports Adw-free helpers
+// (Widget, Icon, SlotContent — see ./index.ts), so importing e.g. Widget
+// alone must not force Adw-1 to exist. Rendering NavigationStack (or
+// NavigationStackPage) without it is what throws the named error — see
+// .claude/epics/adw-optional/001.md.
+type AdwJsxModule = ReturnType<typeof requireAdwJsx>
+type RawAdwNavigationPageComponent = AdwJsxModule["AdwNavigationPage"]
+type RawAdwNavigationViewComponent = AdwJsxModule["AdwNavigationView"]
 
 /** A conservative fallback window for the two cases described above, where
  *  no real per-page signal ever arrives for this specific transition. This
@@ -67,7 +74,7 @@ const PageLifecycleContext = createContext<PageLifecycle | null>(null)
 // Every prop Adw.NavigationPage exposes flows through untouched, so anything
 // gtkx binds today (and anything it binds tomorrow) is reachable without a
 // change here. Only `onHidden` is intercepted, and it is still forwarded.
-type AdwPageProps = ComponentProps<typeof RawAdwNavigationPage>
+type AdwPageProps = ComponentProps<RawAdwNavigationPageComponent>
 
 export type NavigationStackPageProps = AdwPageProps & {
   /** Stable identity of this page inside the view. Required: the whole sync
@@ -89,6 +96,13 @@ export const NavigationStackPage = ({
   onShown,
   ...rest
 }: NavigationStackPageProps) => {
+  // Called on every render rather than memoized: requireAdwJsx() itself is
+  // memoized (see gtkx/bridge/adw.ts), so this is a cheap cache read once
+  // Adw has resolved, and the loud throw on the FIRST render is exactly the
+  // point when it has not.
+  const { AdwNavigationPage: RawAdwNavigationPage } = requireAdwJsx(
+    "NavigationStackPage",
+  )
   const lifecycle = useContext(PageLifecycleContext)
   const handleHidden = ((...args: unknown[]) => {
     lifecycle?.reportHidden(tag)
@@ -111,7 +125,7 @@ export const NavigationStackPage = ({
   )
 }
 
-type AdwViewProps = ComponentProps<typeof RawAdwNavigationView>
+type AdwViewProps = ComponentProps<RawAdwNavigationViewComponent>
 
 export type NavigationStackProps = Omit<AdwViewProps, "onPopped" | "ref"> & {
   /**
@@ -189,6 +203,9 @@ export const NavigationStack = ({
   ref,
   ...rest
 }: NavigationStackProps) => {
+  // See NavigationStackPage above — lazy for the same reason.
+  const { AdwNavigationView: RawAdwNavigationView } =
+    requireAdwJsx("NavigationStack")
   const viewRef = useRef<Adw.NavigationView | null>(null)
   // Mirror of the widget's visible stack. Maintained by the sync effect and
   // by the popped handler; the two never race, because GTK signals run

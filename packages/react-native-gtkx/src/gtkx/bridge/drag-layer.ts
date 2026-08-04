@@ -31,7 +31,6 @@
 // docs/api.md rather than fought: decoupling them would need a frozen
 // texture snapshot taken before the fade, not a live paintable, and a frozen
 // snapshot is not what the spike validated or what this measures.
-import * as Adw from "@gtkx/gi/adw"
 import * as Gtk from "@gtkx/gi/gtk"
 import { computePointIn } from "./geometry"
 
@@ -73,9 +72,33 @@ const overlaysByRoot = new WeakMap<Gtk.Root, OverlayEntry>()
 // instead of the app's content. Anything else `AppRegistry.tsx` builds
 // (`Gtk.ApplicationWindow`) is a plain `Gtk.Window`, whose own `child` slot
 // IS the app's content, so `getChild`/`setChild` is right for it.
+//
+// Told apart by DUCK TYPING (does it have setContent/getContent?) rather
+// than `instanceof Adw.ApplicationWindow`: this file backs the RN core's
+// drag-and-drop (react-native-gtkx/dnd), which must build without Adw-1 at
+// all (see .claude/epics/adw-optional/001.md) — `@gtkx/gi/adw` is not
+// something this module can import even just to compare against it. A
+// plain Gtk.Window/GtkApplicationWindow never has these methods, so the
+// check is exactly as precise as the instanceof it replaces.
+type AdwApplicationWindowLike = {
+  setContent: (content: Gtk.Widget | null) => void
+  getContent: () => Gtk.Widget | null
+}
+
+const asAdwApplicationWindow = (
+  root: Gtk.Root,
+): AdwApplicationWindowLike | null => {
+  const candidate = root as unknown as Partial<AdwApplicationWindowLike>
+  return typeof candidate.setContent === "function" &&
+    typeof candidate.getContent === "function"
+    ? (candidate as AdwApplicationWindowLike)
+    : null
+}
+
 const setWindowContent = (root: Gtk.Root, content: Gtk.Widget | null): void => {
-  if (root instanceof Adw.ApplicationWindow) {
-    root.setContent(content)
+  const adwWindow = asAdwApplicationWindow(root)
+  if (adwWindow) {
+    adwWindow.setContent(content)
   } else {
     ;(root as unknown as Gtk.Window).setChild(content)
   }
@@ -89,10 +112,10 @@ const setWindowContent = (root: Gtk.Root, content: Gtk.Widget | null): void => {
  * the overlay can adopt it, not after.
  */
 const detachWindowContent = (root: Gtk.Root): Gtk.Widget | null => {
-  const current =
-    root instanceof Adw.ApplicationWindow
-      ? root.getContent()
-      : (root as unknown as Gtk.Window).getChild()
+  const adwWindow = asAdwApplicationWindow(root)
+  const current = adwWindow
+    ? adwWindow.getContent()
+    : (root as unknown as Gtk.Window).getChild()
   if (current) {
     setWindowContent(root, null)
   }

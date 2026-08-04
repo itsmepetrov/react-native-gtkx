@@ -14,7 +14,8 @@ import {
   NavigationStackPage,
   SlotContent,
 } from "../../../src/common"
-import type { Adw, Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
+import type { Adw } from "../../../src/gtkx/bridge/adw"
+import type { Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
 import { Text, View } from "../../../src/index"
 
 const findNavigationView = (

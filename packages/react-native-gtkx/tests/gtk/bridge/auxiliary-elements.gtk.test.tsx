@@ -11,14 +11,14 @@
 import { render, screen, userEvent, waitFor } from "@gtkx/testing"
 import { createRef } from "react"
 import { expect, it } from "vitest"
+import { Adw, AdwBreakpoint, AdwToggle } from "../../../src/adw"
 import {
   AdwBreakpointBin,
   AdwToggleGroup,
 } from "../../../src/adw/widgets.generated"
+// Type-only: react-native-gtkx/adw's own `Adw` is a value-only re-export.
+import type { Adw as AdwNs } from "../../../src/gtkx/bridge/adw"
 import {
-  Adw,
-  AdwBreakpoint,
-  AdwToggle,
   Gdk,
   GMenu,
   GObject,
@@ -96,7 +96,7 @@ it("mounts a GMenu inside a GtkMenuButton's menuModel without crashing", async (
 // authority on whether AdwBreakpoint works on this platform at all.
 it("mounts an AdwBreakpoint through a bin's breakpoints prop without crashing", async () => {
   const windowRef = createRef<Gtk.ApplicationWindow | null>()
-  const binRef = createRef<Adw.BreakpointBin | null>()
+  const binRef = createRef<AdwNs.BreakpointBin | null>()
 
   await render(
     <GtkApplicationWindow
@@ -264,7 +264,7 @@ it("carries a drag from a GtkDragSource to a GtkDropTarget", async () => {
 })
 
 it("switches AdwToggleGroup's active option through its AdwToggle children", async () => {
-  const groupRef = createRef<Adw.ToggleGroup | null>()
+  const groupRef = createRef<AdwNs.ToggleGroup | null>()
   const seen: (string | null)[] = []
 
   await render(

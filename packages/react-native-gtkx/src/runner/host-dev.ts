@@ -16,7 +16,10 @@ import { createRequire, registerHooks } from "node:module"
 import { join } from "node:path"
 import { pathToFileURL } from "node:url"
 import vm from "node:vm"
-import { HOST_MODULE_EXTERNALS } from "react-native-gtkx/metro"
+import {
+  HOST_MODULE_EXTERNALS,
+  OPTIONAL_HOST_MODULE_EXTERNALS,
+} from "react-native-gtkx/metro"
 
 type HostModule = Record<string, unknown>
 
@@ -137,6 +140,10 @@ for (const name of HOST_MODULE_EXTERNALS) {
   try {
     globalThis.__hostModules[name] = await load(name)
   } catch (error) {
+    if (OPTIONAL_HOST_MODULE_EXTERNALS.has(name)) {
+      // See host.ts's identical guard — expected on the plain-GTK profile.
+      continue
+    }
     fail(
       `failed to load host module "${name}" — is the codegen store in ` +
         `place (npx gtkx codegen) and GTK4/libadwaita installed?\n${String(error)}`,

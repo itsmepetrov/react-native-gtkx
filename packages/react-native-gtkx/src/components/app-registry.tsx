@@ -1,6 +1,6 @@
 import { useLayoutEffect, type ComponentType, type ReactNode } from "react"
+import { requireAdwJsx } from "../gtkx/bridge/adw"
 import {
-  AdwApplicationWindow,
   createRoot,
   Gtk,
   GtkApplication,
@@ -202,19 +202,29 @@ export const AppRegistry = {
       />
     )
 
+    // Adw is reached ONLY here, and only when chrome: "content" was actually
+    // requested — chrome: "system" (the default) never touches it, which is
+    // what lets an app with no Adw-1 declared run at all (see
+    // .claude/epics/adw-optional/001.md). Its absence throws the loud named
+    // error below; a graceful fallback is a later task, not this one.
     const AppWindow = () =>
       contentChrome ? (
-        <AdwApplicationWindow
-          title={params.title ?? appKey}
-          defaultWidth={width}
-          defaultHeight={height}
-          onCloseRequest={quit}
-          actions={params.windowActions}
-          controllers={params.windowControllers}
-          breakpoints={params.breakpoints}
-        >
-          {content}
-        </AdwApplicationWindow>
+        (() => {
+          const { AdwApplicationWindow } = requireAdwJsx('chrome: "content"')
+          return (
+            <AdwApplicationWindow
+              title={params.title ?? appKey}
+              defaultWidth={width}
+              defaultHeight={height}
+              onCloseRequest={quit}
+              actions={params.windowActions}
+              controllers={params.windowControllers}
+              breakpoints={params.breakpoints}
+            >
+              {content}
+            </AdwApplicationWindow>
+          )
+        })()
       ) : (
         <GtkApplicationWindow
           title={params.title ?? appKey}

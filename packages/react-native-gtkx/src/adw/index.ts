@@ -13,6 +13,7 @@
 // Here, this subpath exposes primitives and react-native-gtkx/navigation
 // binds them to react-navigation. You can skip the binding entirely — drive
 // NavigationStack from useState, from your own router, from anything.
+import { requireAdwGi, requireAdwJsx } from "../gtkx/bridge/adw"
 
 // The raw widgets, exactly as gtkx binds them — every GObject property and
 // signal, including ones added after this file was written.
@@ -27,9 +28,23 @@
 // replacement, and a standard widget must stay reachable.
 export * from "./widgets.generated"
 
-// Exported as a value: it carries both the enums you need at runtime and the
-// types you need for refs — `useRef<Adw.NavigationView | null>(null)`.
-export { Adw } from "../gtkx/bridge/index"
+// This whole subpath REQUIRES Adw-1 (see .claude/epics/adw-optional/001.md
+// and docs/api.md) — called eagerly, at module scope, so importing
+// react-native-gtkx/adw without it throws the loud named error right away
+// rather than at some later, harder-to-place call site.
+//
+// A VALUE only: it carries the enums you need at runtime
+// (`Adw.BreakpointCondition.newLength(...)`). Unlike a plain
+// `import * as Adw`, a value re-exported through requireAdwGi() cannot also
+// merge in the namespace's dotted-member TYPE access (`Adw.NavigationView`
+// as a type) — TypeScript has no re-export form that reliably preserves
+// both facets across this hop (tried: a same-named type-only import next to
+// the const, and two export specifiers under one name — both rejected as
+// duplicate/conflicting identifiers). Code that needs `Adw.Foo` as a TYPE
+// (e.g. `useRef<Adw.NavigationView | null>`) imports `type { Adw }` from
+// "../gtkx/bridge/adw" directly instead — a single hop, which works (see
+// common/navigation-stack.tsx).
+export const Adw = requireAdwGi("react-native-gtkx/adw")
 
 // Auxiliary JSX elements that are not Adw.Widget subclasses, so the
 // generated widget surface above never sees them: a responsive breakpoint
@@ -40,9 +55,6 @@ export { Adw } from "../gtkx/bridge/index"
 // to size" — createSidebarNavigator's own collapse
 // (src/navigation/sidebar.tsx) pairs AdwBreakpoint with AdwBreakpointBin
 // (a real widget, wrapped above) to scope a breakpoint to a subtree.
-export {
-  AdwBreakpoint,
-  AdwShortcutsItem,
-  AdwShortcutsSection,
-  AdwToggle,
-} from "../gtkx/bridge/index"
+const { AdwBreakpoint, AdwShortcutsItem, AdwShortcutsSection, AdwToggle } =
+  requireAdwJsx("react-native-gtkx/adw")
+export { AdwBreakpoint, AdwShortcutsItem, AdwShortcutsSection, AdwToggle }

@@ -3,16 +3,8 @@
 // pure and receive this object (or a mock in unit tests) via injection.
 
 import type { SubscriptionHandle } from "../contracts"
-import {
-  Adw,
-  colorScheme,
-  Gdk,
-  Gio,
-  Gtk,
-  quit,
-  styleManager,
-  toNumber,
-} from "../gtkx/bridge/index"
+import { colorScheme, requireAdwGi, styleManager } from "../gtkx/bridge/adw"
+import { Gdk, Gio, Gtk, quit, toNumber } from "../gtkx/bridge/index"
 import type {
   ColorSchemeName,
   Host,
@@ -279,12 +271,13 @@ const gtkVersion = (): string =>
 // warning per call — seven per test run.
 const setColorScheme = (scheme: ColorSchemeName | null): void => {
   const manager = styleManager()
+  const { ColorScheme } = requireAdwGi("Appearance")
   if (scheme === "dark") {
-    manager.setColorScheme(Adw.ColorScheme.FORCE_DARK)
+    manager.setColorScheme(ColorScheme.FORCE_DARK)
   } else if (scheme === "light") {
-    manager.setColorScheme(Adw.ColorScheme.FORCE_LIGHT)
+    manager.setColorScheme(ColorScheme.FORCE_LIGHT)
   } else {
-    manager.setColorScheme(Adw.ColorScheme.DEFAULT)
+    manager.setColorScheme(ColorScheme.DEFAULT)
   }
 }
 
@@ -296,7 +289,8 @@ const onColorSchemeChange = (notify: () => void): SubscriptionHandle => {
 }
 
 const showAlert = async (request: HostAlertRequest): Promise<string | null> => {
-  const dialog = new Adw.AlertDialog()
+  const { AlertDialog, ResponseAppearance } = requireAdwGi("Alert")
+  const dialog = new AlertDialog()
   dialog.setHeading(request.title)
   if (request.message !== undefined && request.message.length > 0) {
     dialog.setBody(request.message)
@@ -305,13 +299,10 @@ const showAlert = async (request: HostAlertRequest): Promise<string | null> => {
   for (const button of request.buttons) {
     dialog.addResponse(button.id, button.label)
     if (button.style === "destructive") {
-      dialog.setResponseAppearance(
-        button.id,
-        Adw.ResponseAppearance.DESTRUCTIVE,
-      )
+      dialog.setResponseAppearance(button.id, ResponseAppearance.DESTRUCTIVE)
     }
     if (button.isPreferred) {
-      dialog.setResponseAppearance(button.id, Adw.ResponseAppearance.SUGGESTED)
+      dialog.setResponseAppearance(button.id, ResponseAppearance.SUGGESTED)
       dialog.setDefaultResponse(button.id)
     }
     if (button.style === "cancel") {

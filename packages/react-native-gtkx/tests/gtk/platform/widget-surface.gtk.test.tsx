@@ -33,11 +33,12 @@
 import { render } from "@gtkx/testing"
 import { type ComponentType } from "react"
 import { describe, expect, it } from "vitest"
+import { Adw } from "../../../src/adw"
 import { ADW_WRAPPED_WIDGET_NAMES } from "../../../src/adw/widgets.generated"
 import * as AdwWidgets from "../../../src/adw/widgets.generated"
 import { GTK_WRAPPED_WIDGET_NAMES } from "../../../src/gtk/widgets.generated"
 import * as GtkWidgets from "../../../src/gtk/widgets.generated"
-import { Adw, Gtk } from "../../../src/gtkx/bridge/index"
+import { Gtk } from "../../../src/gtkx/bridge/index"
 import { Root, View } from "../../../src/index"
 
 // Verified empirically (see .claude/epics/widget-surface/updates/ for the
