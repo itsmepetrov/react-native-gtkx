@@ -199,6 +199,15 @@ touched.
   notification pushed back to JS through `scheduleOnRN`, and every row's
   `top` driven per frame through `useAnimatedStyle` on an absolutely
   positioned node.
+  **The reorder threshold it computes has a dead zone** — flooring the
+  dragged row's own top-left corner onto a slot boundary, so crossing
+  towards a lower index takes about a pixel and crossing towards a higher
+  one takes the whole row height. Read from source and checked against this
+  compat's own coordinate reporting (no distortion found, same conclusion
+  the grid case's real-pointer measurement already reached): upstream's own
+  arithmetic, present on a real phone too, not a bug this platform's
+  `gesture-handler-compat`/`reanimated-compat` introduces. See
+  [dnd-collision-feel.md](dnd-collision-feel.md).
 
 ### The two things that still differ
 

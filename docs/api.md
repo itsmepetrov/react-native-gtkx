@@ -710,6 +710,27 @@ list _appearance_ written in React Native, and that is an app's business (see
 [platform-layer.md](platform-layer.md#listlistrowlistseparator-were-here-and-are-not-any-more)).
 Nothing about `List` has anything to do with dragging any more.
 
+### A dead zone in the REAL `Sortable`/`SortableGrid`, ported unchanged
+
+Porting an app onto the real package (unaliased, or via `DND_IMPL=real` —
+the gallery's Upstream sortables section) reproduces a dead zone that is
+upstream's own arithmetic, not a compat-surface distortion this platform
+introduces — checked directly against the published source and, for the
+grid, an independent real-pointer measurement; see
+[research/dnd-collision-feel.md](research/dnd-collision-feel.md) for the
+full reasoning. Both `useSortable` and `useGridSortable` floor the dragged
+item's own rect onto a slot boundary from its TOP-LEFT corner: crossing a
+neighbour TOWARD index 0 takes about one pixel of travel; crossing one AWAY
+from it takes the neighbour's entire size in that axis — the item has to
+arrive exactly on top of it. Measured (grid, `research/dnd-hover-flicker.md`
+§5) and read from source (list): the gallery's own `Sortable` (`ROW_HEIGHT
+= 56`) needs ~56px away from index 0 and ~1px toward it; its `SortableGrid`
+(74px tiles + 8px gaps) needs the full 82px away and ~1px toward. This
+repo's own mirror does not reproduce this dead zone the same way (see
+`Differences` below and `tests/gtk/dnd/collision-thresholds.gtk.test.tsx`),
+because its reorder trigger is a different mechanism entirely (GDK
+hit-testing), not because it fixes upstream's.
+
 | Export                                                                                                                                                                                                  | Notes                                                                                                                                                                                                                                                                                                                                         |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DropProvider`                                                                                                                                                                                          | Scopes a set of draggables and droppables. Renders a `View` (upstream renders a fragment) because `onDragging` needs a widget. `ref` gives `getDroppedItems()` and `requestPositionUpdate()`.                                                                                                                                                 |
