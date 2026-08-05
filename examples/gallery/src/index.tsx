@@ -47,6 +47,7 @@ import { TransformsSection } from "./sections/transforms"
 import { UpstreamBottomSheetSection } from "./sections/upstream-bottom-sheet"
 import { UpstreamDrawerSection } from "./sections/upstream-drawer"
 import { UpstreamDropZonesSection } from "./sections/upstream-drop-zones"
+import { UpstreamRnSortablesSection } from "./sections/upstream-rn-sortables"
 import { UpstreamSortablesSection } from "./sections/upstream-sortables"
 import { ViewsSection } from "./sections/views"
 import { WidgetHostingSection } from "./sections/widget-hosting"
@@ -187,6 +188,12 @@ const SECTION_DEFS: Record<SectionId, SectionDef> = {
     title: "Upstream sortables",
     group: GROUP.modules,
     Component: UpstreamSortablesSection,
+    fillsCanvas: true,
+  },
+  "upstream-rn-sortables": {
+    title: "Upstream rn-sortables",
+    group: GROUP.modules,
+    Component: UpstreamRnSortablesSection,
     fillsCanvas: true,
   },
   "upstream-drawer": {
