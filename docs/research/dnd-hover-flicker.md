@@ -216,7 +216,9 @@ row to travel the whole `itemHeight` (ROW_HEIGHT = 56 on the gallery's own
 from source and predicted at the gallery's own dimensions, not
 independently re-measured live against the real package with a fresh
 pointer rig — an attempt to do so hit an unrelated `@gtkx/testing`
-rendering gap (`tests/gtk/dnd/_measure-real.gtk.rig.tsx`, kept `.skip`).
+rendering gap, since root-caused as this repo's own test-harness aliasing
+and fixed (`tests/gtk/dnd/_measure-real.gtk.test.tsx`, no longer skipped —
+see `.claude/epics/component-gaps/gtkx-testing-animated-scrollview.md`).
 Same verdict as the grid: upstream's own arithmetic, not this platform's
 compat surfaces — `useSortable` never calls `measure()` either, and tracks
 only the delta between two `event.absoluteY` reads.
