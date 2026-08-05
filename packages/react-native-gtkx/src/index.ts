@@ -13,9 +13,16 @@
 // request-animation-frame.ts for the semantics.
 import { glibScheduler } from "./components/frame-scheduler"
 import { installGlobalRequestAnimationFrame } from "./components/request-animation-frame"
+// Installs the global-environment parity gaps (navigator.product,
+// requestIdleCallback, global.alert, ErrorUtils — see ./globals/index.ts)
+// before anything below runs. Both toolchains resolve `react-native` here
+// (../aliases/index.ts), so this is the one place a side effect reaches
+// every app regardless of which bundler built it.
+import { installGlobals } from "./globals/install"
 
 installGlobalRequestAnimationFrame(glibScheduler)
 
+installGlobals()
 export {
   ActivityIndicator,
   Animated,
