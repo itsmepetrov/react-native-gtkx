@@ -33,6 +33,7 @@ import {
   type Rect,
 } from "./recognizer"
 import { bindGestureTag, unbindGestureTag } from "./relations"
+import { registerRecognizer, unregisterRecognizer } from "./tag-registry"
 import { mintHandlerTag, type GestureKind, type GestureSpec } from "./types"
 
 /**
@@ -362,6 +363,9 @@ export const createDetectorRuntime = (): DetectorRuntime => {
         },
       ),
     }
+    // Populated the instant a recognizer exists — this IS "at GestureDetector
+    // mount" for the gesture the tag belongs to. See ./tag-registry.
+    registerRecognizer(tag, gesture.recognizer)
     return gesture
   }
 
@@ -430,6 +434,7 @@ export const createDetectorRuntime = (): DetectorRuntime => {
       }
       for (const dropped of reusable) {
         unbindGestureTag(dropped.spec)
+        unregisterRecognizer(dropped.tag)
         detachController(dropped)
         dropped.recognizer.dispose()
       }
@@ -457,6 +462,7 @@ export const createDetectorRuntime = (): DetectorRuntime => {
     dispose: () => {
       for (const gesture of mounted) {
         unbindGestureTag(gesture.spec)
+        unregisterRecognizer(gesture.tag)
         detachController(gesture)
         gesture.recognizer.dispose()
       }

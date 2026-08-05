@@ -490,6 +490,17 @@ export type Recognizer = {
   controller: ControllerChannel | null
   /** This gesture's seat in the arbitration loop. */
   participant: Participant
+  /**
+   * The four transitions an app may drive by hand, exposed rather than kept
+   * private to the `onTouches*` closures below.
+   *
+   * Until ./tag-registry this was reachable only as the second argument
+   * `onTouchesDown`/`onTouchesMove`/`onTouchesUp`/`onTouchesCancel` receive —
+   * which is still how `Gesture.Manual()` itself works, unchanged. Putting
+   * the same object here too is what lets a numeric handler tag be turned
+   * back into it, which is the whole of what `GestureStateManager` needs.
+   */
+  stateManager: GestureStateManagerApi
   /** Cancels any pending timer and leaves the loop; called on unmount. */
   dispose: () => void
 }
@@ -1560,6 +1571,7 @@ export const createRecognizer = (
     handlers: drivenByController ? {} : handlers,
     controller: drivenByController ? controller : null,
     participant,
+    stateManager,
     dispose: () => {
       clearActivationTimer()
       clearDelayTimer()
