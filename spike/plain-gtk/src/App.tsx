@@ -15,12 +15,15 @@
 // mount without crashing.
 import { useEffect, useState } from "react"
 import {
+  Alert,
+  Appearance,
   Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
+  useColorScheme,
   View,
 } from "react-native"
 import {
@@ -108,6 +111,7 @@ const App = () => {
   const [appActionFired, setAppActionFired] = useState(false)
   const [winActionFired, setWinActionFired] = useState(false)
   const window = useParentWindow()
+  const colorScheme = useColorScheme()
 
   // Headless-proof convenience only: auto-opens the modal so the screenshot
   // script (run-headless.sh) can capture it without a scripted pointer.
@@ -147,6 +151,28 @@ const App = () => {
       clearTimeout(closeTimer)
     }
   }, [window])
+  // Same idea, for Alert — .claude/epics/adw-optional/003.md's manual proof:
+  // shows the Gtk.AlertDialog fallback and logs which button resolved it.
+  useEffect(() => {
+    if (process.env.PLAIN_GTK_AUTO_SHOW_ALERT === "1") {
+      const timer = setTimeout(() => {
+        Alert.alert("Delete file?", "This cannot be undone.", [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: () => console.log("[plain-gtk] alert resolved: Delete"),
+          },
+        ])
+      }, 1500)
+      return () => clearTimeout(timer)
+    }
+    return undefined
+  }, [])
+
+  useEffect(() => {
+    console.log(`[plain-gtk] color scheme: ${colorScheme}`)
+  }, [colorScheme])
 
   return (
     <View style={styles.root}>
@@ -227,6 +253,40 @@ const App = () => {
       >
         <Text style={styles.buttonText}>open modal</Text>
       </Pressable>
+
+      <Pressable
+        style={({ pressed }) => [
+          styles.button,
+          pressed && styles.buttonPressed,
+        ]}
+        onPress={() =>
+          Alert.alert("Delete file?", "This cannot be undone.", [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Delete",
+              style: "destructive",
+              onPress: () => console.log("[plain-gtk] alert resolved: Delete"),
+            },
+          ])
+        }
+      >
+        <Text style={styles.buttonText}>show alert (Gtk.AlertDialog)</Text>
+      </Pressable>
+
+      <View style={styles.toggleRow}>
+        <Text style={styles.rowText}>color scheme: {colorScheme}</Text>
+        <Pressable
+          style={({ pressed }) => [
+            styles.button,
+            pressed && styles.buttonPressed,
+          ]}
+          onPress={() =>
+            Appearance.setColorScheme(colorScheme === "dark" ? "light" : "dark")
+          }
+        >
+          <Text style={styles.buttonText}>toggle scheme</Text>
+        </Pressable>
+      </View>
 
       <Modal
         visible={modalVisible}
