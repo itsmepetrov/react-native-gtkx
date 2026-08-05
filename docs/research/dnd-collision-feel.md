@@ -79,7 +79,7 @@ so the same conclusion applies: **(a) is not supported.**
 This task's attempt to re-confirm (a) directly for the LIST case with a
 fresh, real-pointer measurement (extending the same rig, against the REAL
 package rather than the mirror) hit an unrelated `@gtkx/testing` rendering
-gap — mounting the real `Sortable` under `render()` throws from a `View`
+gap — mounting the real `Sortable` under `render()` threw from a `View`
 several layers inside `Animated.createAnimatedComponent(ScrollView)`, even
 wrapped in a `<Root>` that renders this platform's OWN mirror `Sortable`
 without incident. Recorded, not chased, in
@@ -90,6 +90,18 @@ proof, and is where the §5 grid measurement was actually taken. The
 conclusion for LIST rests on source-reading plus the grid case's precedent,
 not an independent fresh measurement of the list's own exact px number —
 the honest state of the evidence, not the strong form.
+
+**Root-caused and fixed in a follow-up task**
+(`.claude/epics/component-gaps/gtkx-testing-animated-scrollview.md`): the
+gap was this repo's own test harness, not `@gtkx/testing` — the gtk vitest
+project pinned the bare specifier `"react-native"` straight at this
+package's `src`, but left `react-native-reanimated` (and every other
+aliased package) resolving through `node_modules`/`dist`, so a real
+package's bare `import Animated from "react-native-reanimated"` loaded a
+SECOND copy of this platform with its own `HostNodeContext`, never
+provided by this file's (source-resolved) `<Root>`. Fixed in
+`vitest.config.ts`; the rig is un-`skip`ped and renamed
+`_measure-real.gtk.test.tsx`, a real, CI-collected test.
 
 ## (b): upstream's own arithmetic, with numbers
 
@@ -159,6 +171,6 @@ benefits, not only the one running on this platform's compat surfaces.
 # The mirror's own (unchanged) measured thresholds, for the record:
 npx vitest run --project gtk tests/gtk/dnd/collision-thresholds.gtk.test.tsx
 
-# The blocked real-package rig, kept for whoever picks the rendering gap up:
-npx vitest run --project gtk tests/gtk/dnd/_measure-real.gtk.rig.tsx
+# The real-package rig (now a real, running test — see the note above):
+npx vitest run --project gtk tests/gtk/dnd/_measure-real.gtk.test.tsx
 ```
