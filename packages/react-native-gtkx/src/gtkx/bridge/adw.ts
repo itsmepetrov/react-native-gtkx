@@ -9,35 +9,70 @@
 // plugin throws while resolving it, unconditionally, whether or not the
 // import is ever reached at runtime.
 //
-// Both are therefore loaded through a COMPUTED specifier (never a string
-// literal written directly into an import()/require() call) — the same
-// reason @gtkx/codegen's own readBuiltinElements defers ITS optional
-// imports with `/* @vite-ignore */`: a bundler's import-analysis
-// (Vite/Rolldown here) resolves every specifier it can see textually in an
-// import call, static or dynamic; a specifier assembled at runtime is
-// invisible to it, so resolution is left to whatever is actually running
-// this code.
+// __GTKX_ADW_AVAILABLE__ (declared ambient just above probeViaDynamicImport
+// below) is a build-time constant the vite preset injects (src/vite/index.ts,
+// see its own doc for the full story — .claude/epics/adw-optional/006.md is
+// the regression this exists to fix): true only when THIS app's codegen
+// store actually has an
+// "adw" entry. `probeViaDynamicImport` below guards on it and, only inside
+// that guard, imports @gtkx/gi/adw and @gtkx/jsx/adw as LITERAL specifiers —
+// deliberately, unlike the pre-006 version of this file, which hid them
+// behind a runtime-assembled string. A hidden specifier is invisible to
+// Rollup's build graph, which sounds like the safer choice, but it is ALSO
+// invisible to everything that graph gives every OTHER gtkx import for
+// free: `resolve.dedupe` (RC4-WORKAROUND(runtime-dedupe) in
+// docs/gtkx-rc4-notes.md) and `gtkx build`'s own asset pipeline for the
+// native addon (`@gtkx/cli`'s `gtkx:native` plugin, which rewrites every
+// STATICALLY reachable `@gtkx/native` import onto the single `dist/gtkx.node`
+// it emits) — a hidden specifier resolves a SECOND, independent copy from
+// node_modules at runtime instead, and two distinct native addons
+// double-initialize the gtkx runtime and abort the process
+// (`g_log_set_writer_func() called multiple times`, proven with a core dump
+// showing both `.node` files mapped into one process). A literal specifier
+// gets the exact same static treatment as every other gtkx import; when the
+// build-time constant folds to `false` instead, esbuild's dead-code
+// elimination removes the whole guarded body — literal specifiers included —
+// before Rollup's graph walk ever starts, so `gtkx:undeclared-library` never
+// throws on the plain-GTK profile either.
 //
-// import(), not require(): tried require() first (a computed specifier
-// behind createRequire()) because every call site this file backs —
-// styleManager(), showAlert(), <AdwApplicationWindow>, <NavigationStackPage>
-// — used its value SYNCHRONOUSLY before this seam existed. It resolves
-// @gtkx/gi/adw fine (Node 24 does support require(esm)) but throws
-// ERR_UNSUPPORTED_ESM_URL_SCHEME on @gtkx/jsx/adw specifically: gtkx's own
-// JSX modules resolve a "virtual:gtkx-config" specifier internally, which
-// only a bundler's loader (Vite, or the run-linux host's own
-// module.registerHooks) understands — Node's plain module resolution does
-// not know what a "virtual:" URL is. So this probes once, asynchronously,
-// via top-level await — resolved long before any component can render or
-// any Host function can be called (ES module evaluation of anything that
-// imports this file, even transitively, does not complete until this
-// settles), which is what lets every call site below stay synchronous.
+// This also fixes the other half of the same regression: under `gtkx dev`'s
+// SSR module runner, a hidden (`/* @vite-ignore */`, runtime-assembled)
+// specifier was invisible to Vite's SSR import interception too, so the
+// import ran as a raw Node `import()` instead — and Node's plain ESM loader
+// has no idea what to do with the "virtual:gtkx-config" specifier
+// @gtkx/jsx/adw resolves internally (`ERR_UNSUPPORTED_ESM_URL_SCHEME`,
+// confirmed by instrumenting the catch below before this fix), so the probe
+// always failed and Adw looked undeclared even with "Adw-1" in
+// gtkx.config.ts. A literal specifier lets Vite's own ssrTransform wrap the
+// call, routing it through the SAME plugin pipeline (noExternal, the
+// `gtkx:config` virtual-module plugin) every other gtkx/jsx import already
+// gets — no separate polyfill, no toolchain-specific branch.
+//
+// import(), not require(): tried require() first (a specifier behind
+// createRequire()) because every call site this file backs — styleManager(),
+// showAlert(), <AdwApplicationWindow>, <NavigationStackPage> — used its
+// value SYNCHRONOUSLY before this seam existed. It resolves @gtkx/gi/adw
+// fine (Node 24 does support require(esm)) but throws
+// ERR_UNSUPPORTED_ESM_URL_SCHEME on @gtkx/jsx/adw specifically, for the same
+// "virtual:gtkx-config" reason above. Fixed by probing via a top-level-await
+// dynamic `import()` instead — resolved long before any component can
+// render or any Host function can be called (ES module evaluation of
+// anything that imports this file, even transitively, does not complete
+// until this settles), which is what lets every call site below stay
+// synchronous — with a synchronous fast path through `global.__hostModules`
+// when running under the run-linux (Metro) host (which already resolved
+// everything, including these two when present, before the bundle runs,
+// and never reaches __GTKX_ADW_AVAILABLE__ at all — a vite `define`
+// constant, meaningless to Metro's bundler).
 import type * as AdwGi from "@gtkx/gi/adw"
 import type * as AdwJsx from "@gtkx/jsx/adw"
 
-// Assembled rather than written as one literal, so neither a text search
-// nor a bundler's static import graph finds "@gtkx/gi/adw" or
-// "@gtkx/jsx/adw" as a plain specifier anywhere in this file.
+// Assembled rather than written as one literal: used only as a lookup key
+// into global.__hostModules (an object property read, not an import), which
+// the run-linux host populates keyed by these exact strings
+// (HOST_MODULE_EXTERNALS in src/metro/index.ts). Kept opaque to a plain text
+// search for consistency with the rest of this file, not because anything
+// would fail resolving it — fromHostModules never imports.
 const GI_ADW = ["@gtkx", "gi", "adw"].join("/")
 const JSX_ADW = ["@gtkx", "jsx", "adw"].join("/")
 
@@ -72,11 +107,25 @@ const fromHostModules = (): AdwModules | null | undefined => {
     : null
 }
 
+// Skips the probe outright when the vite preset has POSITIVELY told us Adw
+// is not in this app's codegen store (see the module doc above for why a
+// literal specifier below needs this guard to exist at all). `typeof`, not
+// a direct reference: safe on any toolchain that never defines the constant
+// (vitest, a consumer not using our preset) — reads as "undefined", so the
+// guard is skipped and the probe runs for real, same as before this file
+// started folding it. Only an explicit `false` short-circuits.
+declare const __GTKX_ADW_AVAILABLE__: boolean | undefined
 const probeViaDynamicImport = async (): Promise<AdwModules | null> => {
+  if (
+    typeof __GTKX_ADW_AVAILABLE__ !== "undefined" &&
+    !__GTKX_ADW_AVAILABLE__
+  ) {
+    return null
+  }
   try {
     const [gi, jsx] = await Promise.all([
-      import(/* @vite-ignore */ GI_ADW),
-      import(/* @vite-ignore */ JSX_ADW),
+      import("@gtkx/gi/adw"),
+      import("@gtkx/jsx/adw"),
     ])
     return { gi: gi as typeof AdwGi, jsx: jsx as typeof AdwJsx }
   } catch {

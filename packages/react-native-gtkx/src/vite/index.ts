@@ -9,6 +9,7 @@
 // — the pure resolution helpers live here rather than in a sibling module,
 // and the one import that does cross a file boundary spells out its `.js`.
 import { existsSync } from "node:fs"
+import { createRequire } from "node:module"
 import { dirname, extname, isAbsolute, resolve } from "node:path"
 import type { Plugin } from "vite"
 import {
@@ -156,6 +157,48 @@ export const resolvePlatformSpecifier = (
   return null
 }
 
+// The bridge's Adw probe (gtkx/bridge/adw.ts) needs to know, AT BUILD TIME,
+// whether this app's codegen store actually generated Adwaita bindings —
+// see the epic's own regression notes (.claude/epics/adw-optional/006). A
+// runtime-only check (a bare specifier assembled from string parts, so
+// Rollup's build-time graph walk never reaches it) is invisible to the
+// STATIC machinery every other gtkx import gets for free: `resolve.dedupe`
+// (RC4-WORKAROUND(runtime-dedupe) above) and `gtkx build`'s own asset
+// pipeline for the native addon (`@gtkx/cli`'s `gtkx:native` plugin, which
+// rewrites every STATICALLY reachable `@gtkx/native` import onto the single
+// `dist/gtkx.node` it emits) both only ever see specifiers Rollup's graph
+// walk actually visits. A second, independently-resolved copy of the native
+// addon double-initializes the gtkx runtime and aborts the process
+// (`g_log_set_writer_func() called multiple times`) — the exact failure
+// `runtime-dedupe` exists for, reached through a path dedupe cannot see.
+//
+// The fix: make the specifier a literal wherever Adw genuinely exists, so
+// it gets the SAME static treatment as every other gtkx import — and prune
+// it entirely wherever it does not, so `gtkx:undeclared-library` never
+// throws on the plain-GTK profile. `__GTKX_ADW_AVAILABLE__` is that lever:
+// a `define`d boolean CONSTANT (like `__DEV__` above), true only when this
+// app's OWN codegen store actually has an "adw" entry. The bridge guards
+// its probe on it; when the guard folds to a literal `false`, esbuild's
+// dead-code elimination removes the whole probe body — literal specifiers
+// and all — before Rollup's build ever walks the module graph, so the
+// undeclared-library plugin never sees them either.
+//
+// require.resolve, not a static/dynamic import: this file is a vite CONFIG
+// module (not part of the app's own bundle), so nothing here is subject to
+// the eslint bridge fence or Rollup's build-time graph at all — it is a
+// plain Node path lookup, run once while vite starts, mirroring exactly
+// what `gtkx:undeclared-library`'s own resolveId does with `this.resolve`.
+const hasAdwStore = (root: string): boolean => {
+  try {
+    createRequire(resolve(root, "package.json")).resolve(
+      ["@gtkx", "gi", "adw"].join("/"),
+    )
+    return true
+  } catch {
+    return false
+  }
+}
+
 // --- the vite plugin ----------------------------------------------------
 
 export type ReactNativeGtkxOptions = PlatformResolutionOptions & {
@@ -200,6 +243,11 @@ export const reactNativeGtkx = (
       // `gtkx build` in production, which is exactly the distinction RN draws.
       define: {
         __DEV__: JSON.stringify(env.mode !== "production"),
+        // See hasAdwStore's doc above — process.cwd(), not _config.root:
+        // `gtkx dev`/`gtkx build` always run from the app's own directory
+        // (root defaults there too), and this must be resolvable before the
+        // rest of the merged config is settled.
+        __GTKX_ADW_AVAILABLE__: JSON.stringify(hasAdwStore(process.cwd())),
       },
       ssr: {
         // `gtkx dev` runs vite with ssr.external: true, which would hand
@@ -273,6 +321,29 @@ export const reactNativeGtkx = (
           "@react-navigation/native",
           "react",
         ],
+      },
+      build: {
+        rolldownOptions: {
+          output: {
+            // A literal, code-split dynamic import (the Adw seam,
+            // gtkx/bridge/adw.ts — see its own doc and 006 above) lands its
+            // chunk under the Rolldown default `assets/[name]-[hash].js`
+            // UNLESS told otherwise. `@gtkx/cli`'s own `gtkx:native` plugin
+            // rewrites every reachable `@gtkx/native` import into
+            // `require("./gtkx.node")` — a path RELATIVE TO WHATEVER FILE
+            // THE REWRITE LANDS IN, correct only when that file sits next to
+            // the emitted `dist/gtkx.node` asset. The entry chunk is pinned
+            // there already (`entryFileNames: "bundle.js"`, set by
+            // `@gtkx/cli`'s own builder); a chunk placed one level down in
+            // `assets/` breaks the SAME relative path
+            // ("Cannot find module './gtkx.node'" — reproduced building
+            // examples/gallery with the Adw seam's dynamic import made
+            // literal). Keeping every chunk in `dist/` alongside the entry
+            // and the addon sidesteps the mismatch instead of guessing at
+            // gtkx's own relative-path assumption.
+            chunkFileNames: "[name]-[hash].js",
+          },
+        },
       },
     }),
 
