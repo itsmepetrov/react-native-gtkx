@@ -8,6 +8,13 @@ export type { EasingFunction } from "./easing"
 export { Easing } from "./easing"
 export type { AnimatedEventConfig, EventMapping } from "./event"
 export { createAnimatedEvent } from "./event"
+// The pure per-frame closed-form solvers behind Animated.timing/.spring,
+// exported alongside MakeStep for the same reason createValueAnimation is: a
+// layer built on this engine may need the exact curve without a single
+// AnimatedValue attached to it — reanimated-compat's object/array leaves
+// (one MakeStep per leaf, stepped in lockstep) are the first such caller.
+export { springStep } from "./spring"
+export { timingStep } from "./timing"
 export type {
   CompositeAnimation,
   EndCallback,
