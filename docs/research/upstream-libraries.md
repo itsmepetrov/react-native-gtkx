@@ -284,3 +284,173 @@ What would make it a shorter conversation:
   the container widget rather than by reordering siblings, and picking follows
   the paint. [z-index.md](z-index.md), and the chip in this example now rides
   over the zone under a real pointer.
+
+## A third experiment, 2026-08-05: `react-native-sortables` does not run
+
+Motivation: npm's dnd field, same day — draggable-flatlist 425k/wk (runs
+here already), reorderable-list 100k, **react-native-sortables 94k and the
+fastest-growing**, reanimated-dnd 45k (runs here, above). Sortables is the
+most modern of the set — grids, an `insert`/`swap` strategy toggle, and
+`reorderTriggerOrigin: "center"` as its own default, the same centre
+resolution this platform's own dnd mirror chose for itself in PR #122 — and
+it advertises no native module. That claim checks out: no `android`/`ios`/
+codegen directory in the published tarball, `files` in `package.json` lists
+only `src`, `dist`, `LICENSE`, `README.md`, `CHANGELOG.md`, and the only
+native-module-shaped code is the _optional_ haptics integration, which looks
+up an existing Turbo Module by name rather than shipping one.
+
+**Verdict: it builds and it mounts, after two real fixes — and then a third,
+structural gap stops it before a pointer ever reaches it.** Unlike the first
+two experiments, this is not "it runs" reversing an older reading; it is a
+clean "no", arrived at by fixing every wall that was fixable at the example
+level and finding the next one is not.
+
+### The recon: what it reaches for, against what this platform implements
+
+Every value symbol `react-native-sortables@1.10.0`'s source imports at module
+scope from the three aliased packages, counted once each:
+
+| Package                            | Value symbols reached                                                                                                                                                                                                                                             | Not implemented here                                                                                                       |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `react-native` (7)                 | `Dimensions`, `NativeModules`, `Platform`, `StyleSheet`, `Text`, `TurboModuleRegistry`, `View`                                                                                                                                                                    | `NativeModules`, `TurboModuleRegistry` — both confined to the optional haptics adapters                                    |
+| `react-native-reanimated` (15)     | `Animated` (default), `Extrapolation`, `LayoutAnimationConfig`, `interpolate`, `isSharedValue`, `isWorkletFunction`, `makeMutable`, `measure`, `runOnJS`, `runOnUI`, `useAnimatedReaction`, `useAnimatedRef`, `useAnimatedStyle`, `useDerivedValue`, `withTiming` | none missing — but see below: `withTiming` is exported with a narrower runtime contract                                    |
+| `react-native-gesture-handler` (9) | `Gesture`, `GestureDetector`, `GestureHandlerRootView`, `GestureStateManager`, `useExclusiveGestures`, `useLongPressGesture`, `useManualGesture`, `useSimultaneousGestures`, `useTapGesture`                                                                      | `GestureStateManager` — deliberately refused (see docs/api.md); the rest are implemented, including all five v3 hook names |
+| `react-native-worklets`            | none                                                                                                                                                                                                                                                              | —                                                                                                                          |
+
+31 distinct value symbols reached, 3 gaps — a smaller surface than either
+`react-native-drawer-layout` or `@gorhom/bottom-sheet` needed added, and it
+still does not run. Two of the three gaps (below) were fixable from the
+example; the wall that actually stops it is not one of these three at all —
+`withTiming` IS exported, and the crash is in what it does when called.
+
+### Wall 1 (fixed here): the optional haptics backend crashes the BUILD
+
+`integrations/haptics/adapters/index.js` (a no-op) sits next to
+`index.native.js`, which eagerly imports three real-device haptics backends
+(`react-native-pulsar`, `expo-haptics`, `react-native-haptic-feedback`) and
+reads `NativeModules`/`TurboModuleRegistry` off `react-native` at module
+scope. This platform's own platform-extension rule (`.linux` → `.native` →
+base) is Metro's rule, applied correctly — there is no `.linux` file, so
+`.native` wins — but this platform exports neither symbol, so the build
+fails immediately:
+
+```
+[MISSING_EXPORT] "TurboModuleRegistry" is not exported by "react-native-gtkx".
+    at react-native-sortables/dist/module/integrations/haptics/adapters/pulsar.js:12:10
+
+[MISSING_EXPORT] "NativeModules" is not exported by "react-native-gtkx".
+    at react-native-sortables/dist/module/integrations/haptics/adapters/react-native-haptic-feedback.js:17:10
+
+[REQUIRE_TLA] This require call is not allowed because the transitive dependency
+"node_modules/yoga-layout/dist/src/index.js" contains a top-level await
+    at node_modules/react-native-haptic-feedback/lib/commonjs/codegenSpec/NativeHapticFeedback.js:7:20
+```
+
+The third error is its own small surprise: `react-native-haptic-feedback` is
+an `optionalDependencies` entry, and npm installs it anyway (nothing about
+its own `package.json` restricts it to a platform this one is not), so its
+`require("react-native")` really is reachable, and collides with
+`yoga-layout`'s top-level await elsewhere in the same graph. All three
+disappear together once the `.native` file is out of the bundle, because none
+of the three real backends is reachable from anywhere else — confirmed by
+building with the fix removed, not assumed. `examples/gallery/vite.config.ts`
+carries the fix, `sortablesHapticsAreANoop`: a `resolveId` hook that resolves
+the concrete no-op file directly, because asking `this.resolve` for the same
+base name (the way the neighboring drawer-layout fix does) just re-enters
+this preset's own platform substitution and lands back on `.native`.
+
+### Wall 2 (fixed here, temporarily, to see past it): no global `requestAnimationFrame`
+
+Past wall 1, the app crashed the whole process at mount:
+
+```
+ReferenceError: requestAnimationFrame is not defined
+    at setAnimatedTimeout (react-native-sortables/dist/module/integrations/reanimated/utils/animatedTimeout.js:41:3)
+    at MeasurementsProvider.js:169:51
+```
+
+Real React Native supplies `requestAnimationFrame`/`cancelAnimationFrame` as
+globals from its own bootstrap; grepping this platform's Metro, vite and
+runner code turns up neither, on either path — this platform's OWN
+`runOnUI`/`scheduleOnUI` deliberately does not wait on one (see
+`reanimated-compat/threads.ts`: a real UI hop posts to a real thread without
+waiting for a frame, and `requestAnimationFrame` is what a runtime WITHOUT one
+— the web — uses to stand in for it). That is the right call for this
+platform's OWN scheduling, and it is a separate question from whether the
+GLOBAL should exist for library code that reaches for it directly, the way
+`react-native-sortables` does here.
+
+This platform already has the machinery a real one could be built on:
+`components/frame-scheduler.ts`'s `glibScheduler` is a genuine ~60fps frame
+driver — `GLib.timeoutAdd` off the real monotonic clock, the one clock
+`Animated` and the Reanimated compat surface already share — wrapped by
+`animated/frame-loop.ts`'s `createFrameLoop`. A platform-level
+`requestAnimationFrame` would be a thin global wrapper over that scheduler,
+not a new mechanism. That is a platform change, and this task's scope is the
+gallery: a temporary, app-local `setTimeout`-paced polyfill was written only
+to see past this wall and find the next one, exactly as a probe, and was
+**removed again** once the next wall turned out to be unconditional — shipping
+a permanent global-behaviour change in one example, for a library that still
+cannot run, would be worse than the gap it papers over.
+
+### Wall 3 (not fixable here): `withTiming` on a `{x, y}` Vector
+
+With both of the above patched, the app still crashes at mount, before any
+pointer input is possible:
+
+```
+Error: react-native-reanimated: withTiming() on this platform animates finite
+numbers only, got [object Object]. Colors and layout properties cannot be
+driven imperatively here yet — see docs/api.md.
+    at assertAnimatable (reanimated-compat/animation.ts:96)
+    at withTiming (reanimated-compat/animation.ts:109)
+    at react-native-sortables/dist/module/providers/shared/hooks/useItemLayout.js:210
+      (position.value = withTiming(layoutPos))
+```
+
+`useItemLayout` is the library's per-item reflow: every sortable item's
+screen position is one `{x, y}` Vector held in a single shared value, and the
+library re-targets it with one `withTiming(layoutPos)` call whenever the
+layout changes — which is the library's _whole_ animation model for moving
+items out of a dragged item's way, not an edge case. Upstream's real
+Reanimated (native or its own non-native/web build) animates an
+object-shaped shared value by walking its numeric leaves; this platform's
+`withTiming`/`withSpring` deliberately animate finite numbers only
+(`docs/api.md`, "Animated values" — colours go through `interpolateColor`
+instead, and there is no vector equivalent). This is documented, intentional
+platform behaviour, not a bug being tripped over.
+
+It fires on the very FIRST layout pass of any `Sortable.Grid`/`Sortable.Flex`
+— every item's position starts undefined and is always “different” from its
+computed target the first time — so this is not a configuration this
+platform's users could dodge: `shouldAnimateLayout` is an internal shared
+value with no corresponding public prop, and `animateLayoutOnReorderOnly`
+only changes WHEN it re-fires during a drag, never whether it fires on
+mount. There is no prop on `SortableGridProps`/`SortableFlexProps` that skips
+this path. A fourth wall was found waiting behind it and never reached:
+`GestureStateManager` (wall count above) is deliberately refused here — its
+static `.activate`/`.deactivate`/`.fail`, which the library's own
+gesture-handler v3 adapter needs to re-arm a manual gesture asynchronously,
+throw by name (`docs/api.md`: "the global tag→handler registry... its
+absence is deliberate"). Upstream's own README says as much from the other
+side — v3's hook adapter "requires the New Architecture" — so this was never
+going to be free even if wall 3 were fixed.
+
+### What is kept, and why
+
+`examples/gallery/package.json` keeps `react-native-sortables@1.10.0` at the
+version measured. `vite.config.ts` keeps `sortablesHapticsAreANoop` and the
+`ssr.noExternal` entry — wall 1's fix is real and harmless whether or not
+anything imports the package, and removing it would mean re-discovering the
+same three build errors from scratch on a future revisit. There is no
+gallery section: a sidebar entry that reliably crashes the whole process the
+moment it is opened is not a demo, and the temporary `requestAnimationFrame`
+polyfill that let wall 2 be seen past was removed with it, for the reason in
+that section above.
+
+A future revisit needs two platform-level changes, both scoped and both
+already have a seam to hang off: a real `requestAnimationFrame`/
+`cancelAnimationFrame` global over `glibScheduler` (wall 2), and either
+vector-shaped `withTiming`/`withSpring` or an equivalent per-item reflow
+primitive (wall 3, the one that actually matters — wall 2 alone does not
+unblock this).
