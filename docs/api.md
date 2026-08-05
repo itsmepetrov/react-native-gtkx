@@ -76,6 +76,139 @@ Styles (which keys go where and what is unsupported) — [style system table](..
 
 10. **Pre-commit hooks regenerate derived data**: editing this file (or the other generator inputs) and forgetting to run `scripts/generate-mcp-data.mjs` no longer fails CI — the pre-commit hook regenerates `packages/react-native-gtkx/src/mcp/data/generated.ts` and stages it for you.
 
+## Globals
+
+React Native installs a whole global environment at startup —
+`Libraries/Core/setUp*.js`, run once from `InitializeCore` before any app
+code — not just the API modules above. This platform's runtime is Node, so
+most of that is already there natively; the rest is installed by
+`packages/react-native-gtkx/src/globals/index.ts`, called once from the top
+of the package's own entry point (`src/index.ts`) — the one place both
+toolchains share, since both alias `react-native` onto this package (see
+Package aliases below). Verified empirically on both the vite dev path and
+the Metro/run-linux host, not assumed from reading RN's source.
+
+**Already node-native, nothing installed** — `fetch`/`Headers`/`Request`/
+`Response`, `Blob`/`File`, `WebSocket`, `URL`/`URLSearchParams`,
+`AbortController`/`AbortSignal`, `structuredClone`, `TextEncoder`/
+`TextDecoder`, `atob`/`btoa`, `queueMicrotask`, `setImmediate`/
+`clearImmediate`, `performance` (`.now()` confirmed monotonic), `crypto`,
+`DOMException`, and `console` (Node's own already has `group`/
+`groupCollapsed`/`groupEnd`, so RN's console polyfill — which only replaces
+`console` when a native `nativeLoggingHook` exists — is a no-op on both
+toolchains here). `FormData` is node-native too, for the spec: **it does
+NOT understand react-native's own `formData.append('photo', {uri, type,
+name})` file-entry shape** — Node coerces the object with `String(value)`
+and silently sends the literal text `"[object Object]"` instead of the
+file. Filed as its own task
+(`.claude/epics/component-gaps/xhr-formdata-uri-upload.md`) alongside
+`XMLHttpRequest`, which is not node-native at all (Node has never shipped
+it) and RN installs unconditionally
+(`Libraries/Core/setUpXHR.js`). `FileReader` is the same story —
+`Libraries/Core/setUpXHR.js` installs it too, Node has no equivalent (its
+`Blob` has `.text()`/`.arrayBuffer()`/`.stream()` but nothing like
+`readAsDataURL()`) — filed separately
+(`.claude/epics/component-gaps/filereader-missing.md`), since reading an
+in-memory `Blob` is independent of the network stack. Redirect/cookie-jar
+behavioural differences between Node's `fetch` and RN's are out of scope —
+noted, not chased.
+
+**Installed for parity** (`src/globals/index.ts`, each guarded so an
+existing global always wins):
+
+- **`window = globalThis`, `self = globalThis`** — the very first thing
+  react-native's own setup chain does
+  (`Libraries/Core/setUpGlobals.js`, ahead of everything else in
+  `InitializeCore`). Node has neither. This exists on a real RN app for the
+  same reason it is worth having here: an isomorphic library's
+  `typeof window !== "undefined"` check — often meaning "not a server/SSR
+  context, safe to run browser-shaped init" — should read the same way on
+  this platform as on any other RN platform.
+- **`navigator.product = "ReactNative"`** — the ecosystem's standard
+  environment-detection idiom
+  (`Libraries/Core/setUpNavigator.js`). Node ≥ 21 already ships a minimal
+  `navigator` (`.userAgent` only, e.g. `"Node.js/24"` — RN itself never
+  sets `userAgent`, so that value is this platform's own, not RN's), so
+  this mirrors RN's exact fallback (`Object.defineProperty` onto the
+  existing object) rather than assuming a bare one needs creating. Judgment
+  call, resolved by evidence rather than caution: every real, currently
+  running third-party package in this platform's dependency graph —
+  `@gorhom/bottom-sheet`, `@gorhom/portal`, `react-native-drawer-layout`,
+  the real `react-native-reanimated-dnd`, `react-native-sortables`,
+  `@react-navigation/native` — was grepped directly (source, not memory)
+  and **none of them read `navigator.product`**; they branch on
+  `Platform.OS` instead (e.g. `react-native-drawer-layout`'s
+  `Drawer.native.tsx`: `swipeEnabled = Platform.OS !== 'web' &&
+Platform.OS !== 'windows' && Platform.OS !== 'macos'`, already correctly
+  `true` here since `Platform.OS` is `"linux"`). The real upstream
+  `react-native-reanimated`/`react-native-gesture-handler` — the two
+  libraries this platform substitutes with its own compat surfaces,
+  precisely because their real implementations cannot run here — were also
+  checked (their actual npm packages, not the compat shims): their
+  `PlatformChecker`/web-detection code also uses `Platform.OS`, not
+  `navigator.product`. So installing it changes no observed behaviour
+  today. It is set anyway because "RN semantics are the contract"
+  (`CLAUDE.md`) and this is exactly what a real RN app's global environment
+  reports — a future library reading it (the idiom exists for a reason:
+  `whatwg`-style isomorphic packages use it to pick their RN code path over
+  a browser assumption) should get the RN answer, not Node's bare
+  `"Node.js/NN"` `userAgent` with no `product` at all, which resembles
+  neither a browser nor RN.
+- **`requestIdleCallback`/`cancelIdleCallback`** — RN's real one
+  (`Libraries/Core/setUpTimers.js`) is a TurboModule with true native idle
+  scheduling; Node has none. This installs the standard web-fallback shape
+  every userland "requestidlecallback polyfill" package uses: fires on the
+  next macrotask (`setTimeout(…, options.timeout ?? 1)`), reports a fixed
+  50ms budget through `timeRemaining()`, and `didTimeout` is always
+  `false`. Good enough for "run this off the current tick, eventually" —
+  not a real scheduling primitive, and code that depends on genuine idle
+  detection should not rely on it.
+- **`global.alert`** — RN's own (`Libraries/Core/setUpAlert.js`) forwards a
+  single string to `Alert.alert('Alert', text)`; this does the same against
+  the platform's real `Alert` (Adw.AlertDialog) module above.
+- **`ErrorUtils`** — not in RN's `InitializeCore` JS chain at all, but
+  required by it: `Libraries/Core/setUpErrorHandling.js` reads
+  `global.ErrorUtils` and expects it to already exist. On a real RN app it
+  does, via `@react-native/js-polyfills`' `error-guard.js`, which
+  `@react-native/metro-config`'s `getDefaultConfig` prepends to **every**
+  Metro bundle unconditionally — independent of, and not disabled by, this
+  platform's own `serializer.getModulesRunBeforeMainModule: () => []`.
+  Confirmed empirically: the Metro/run-linux host already had `ErrorUtils`
+  before this change (Metro's own polyfill), the vite dev path did not —
+  a genuine cross-toolchain gap this closes, with a faithful port of the
+  real polyfill (`setGlobalHandler`/`reportError`/`reportFatalError`/
+  `applyWithGuard`/`guard`; the default handler rethrows, exactly RN's
+  un-hooked behaviour).
+
+**`__DEV__`** is bundler-provided, not something either RN or this globals
+module sets, and both presets were checked directly rather than assumed:
+the vite preset (`src/vite/index.ts`) defines it from vite's own `mode`
+(`__DEV__: JSON.stringify(env.mode !== "production")`) — found necessary
+after a library reading it at module scope (`@gorhom/bottom-sheet`'s logger
+and four of its components) crashed the bundle with `ReferenceError:
+__DEV__ is not defined` on the vite path, where nothing else supplies it.
+The Metro path gets it from the app's own stock `@react-native/metro-config`
+preset (`metro-transform-plugins`' inline-requires transform, driven by
+`--dev`/`NODE_ENV`), unrelated to this platform's `withLinuxPlatform` wrap.
+
+**`requestAnimationFrame`/`cancelAnimationFrame`** are a confirmed
+RN-parity gap too (real native RN provides both on every platform) but are
+deliberately **not** installed here — a parallel, focused effort owns them
+(off `components/frame-scheduler.ts`'s GTK frame clock, with real
+next-frame/cancel semantics this module has no reason to duplicate or
+race). Both belong in `src/globals/index.ts` next to the installers above
+once that work lands.
+
+**Not applicable, by architecture**: RN's Fabric-era DOM-compatibility
+globals (`Node`, `Element`, `HTMLElement`, `Document`, `Event`,
+`EventTarget`, `CustomEvent`, `DOMRect(ReadOnly/List)`, `HTMLCollection`,
+`NodeList` — `react-native`'s own `src/private/setup/setUpDOM.js`) exist to
+back Fabric's public-instance DOM-traversal API on top of its C++ shadow
+tree. This platform has neither Fabric nor a shadow tree — its own React
+reconciler drives GTK widgets and Yoga directly — so there is no shadow
+tree to expose through a DOM-shaped facade, and installing these globals
+without one behind them would be a facade over nothing.
+
 ## Package aliases
 
 Both presets — `withLinuxPlatform` (Metro) and `reactNativeGtkx` (vite) —
