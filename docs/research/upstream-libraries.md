@@ -509,3 +509,99 @@ Kept from the original recon, unchanged by this revisit: the dependency at
 the measured version, the vite wiring, and the decision not to add a gallery
 section — wall 4 is still there, so a sidebar entry would still need a
 disclaimer explaining why dragging it does nothing.
+
+## Wall 4, confirmed: `GestureStateManager` is reached from a real drag, 2026-08-05
+
+The task that follows this revisit (a gallery screen for the real package)
+opened by asking the question the revisit above explicitly left open: does a
+real drag actually reach `GestureStateManager`, or was that reasoning from
+upstream's README (v3's hook adapter "requires the New Architecture")
+optimistic? Read from source first, the way the original recon read every
+other wall.
+
+**The mechanism, traced end to end:**
+
+`react-native-sortables`' `integrations/gesture-handler/index.js` picks its
+gesture-handler adapter once at module load — `v3` when
+`GestureHandler.useManualGesture` is a function, `v2` otherwise. This
+platform implements `useManualGesture` (docs/api.md, the ten recognizers
+table), so every `Sortable`/`SortableGrid` on this platform runs the v3
+adapter, never the v2 one. `adapters/v3.ts`'s `useDragGesture` wraps a single
+`useManualGesture(...)` call; `useItemPanGesture.ts` wires its
+`onTouchesDown` to `DragProvider.handleTouchStart`, which — once
+`sortEnabled`, `usesAbsoluteLayout` and "no other item already active" all
+hold, the ordinary case for any real drag — arms a `setAnimatedTimeout` for
+`dragActivationDelay` (200ms default, `constants/props.ts`) and then calls
+the adapter's `activate()`, which only sets a `pendingActivation` flag. The
+next `onTouchesMove` — i.e. the very next pointer movement after that
+200ms, which any real drag has — reads `pendingActivation.value`, finds it
+true, and calls `GestureStateManager.activate(event.handlerTag)` directly.
+Nothing upstream stands between an ordinary press-hold-move and that call;
+it is the library's only path to starting a drag under gesture-handler v3.
+
+This platform's own `GestureStateManager` export is
+`unsupported("GestureStateManager")` (`gesture-handler-compat/index.tsx`) —
+a function wrapped in a `Proxy` whose `get` trap throws for every property
+name outside a small introspection allowlist (`unsupported-export.ts`). So
+`GestureStateManager.activate` throws on the PROPERTY READ, before the call
+even happens. There is no code path around it: the throw is unconditional
+once a drag survives its activation delay, which is the ordinary case, not
+an edge one.
+
+**The live probe, and why it stayed inconclusive on the crash itself.** A
+private headless sway, a real `zwlr_virtual_pointer_manager_v1` pointer
+(the same rig `scripts/shot-example-drag.ts` and the GTK tests use), and a
+throwaway app — deliberately NOT the gallery: it mounted only a bare
+`Sortable.Grid` of six tiles under `GestureHandlerRootView`, with its own
+`gtkx.config.ts` declaring `Gtk-4.0` only (no `Adw-1`), the same
+Adw-free probe-app shape `spike/plain-gtk` uses, built with `gtkx build` and
+run as `node dist/bundle.js`. It was built this way, rather than as a
+gallery section, for two reasons found while setting the probe up, both
+orthogonal to `react-native-sortables` and neither fixed here:
+
+- `gtkx dev`'s SSR module runner cannot resolve Adw for ANY app right now.
+  `gtkx/bridge/adw.js`'s `probeViaDynamicImport` does
+  `import(/* @vite-ignore */ "@gtkx/jsx/adw")`, and `@vite-ignore` hands
+  that import to Node's raw ESM loader instead of Vite's module graph —
+  which has no handler for the `virtual:gtkx-config` specifier
+  `@gtkx/react`'s bootstrap touches at module scope, so the import throws
+  `ERR_UNSUPPORTED_ESM_URL_SCHEME` and the probe silently reports "no Adw",
+  even though the app's `gtkx.config.ts` declares it.
+- A `gtkx build` bundle of an Adw-declaring app aborts on launch —
+  `gtkx: GLib-ERROR: g_log_set_writer_func() called multiple times` — even
+  from a pristine, unmodified `examples/gallery` (`git diff --stat` against
+  origin/main empty, rebuilt, still aborts). Consistent with two separate
+  init paths — the core door and the Adw door (#121) — each calling GLib's
+  one-shot log setup once Adw actually resolves at build time (a build
+  bundles away the `virtual:` specifier the dev-mode bug above trips on, so
+  the probe likely succeeds for real here, which is what exposes the double
+  init).
+
+Both predate this task, reproduce on unmodified `main`, and block launching
+the FULL gallery headless by either toolchain path right now — not specific
+to sortables, and not this task's to fix; filed separately.
+
+The Adw-free probe app sidestepped both and ran cleanly (six tiles, three
+columns, correct gaps, no crash on mount — wall 3 stays fallen). But the
+drag itself never registered: a diagnostic build with a `console.error` at
+the top of `gesture-handler-compat/recognizer.ts`'s `onTouchesDown` and
+`onTouchesMove` — the ONE place every recognizer on this platform, not just
+`Gesture.Manual()`, reports a delivered touch — printed nothing across
+several pointer sequences (varied hold time, added a settle-in jiggle,
+widened the movement past `dragActivationDelay`). The virtual pointer moves
+and clicks the compositor sees; nothing downstream of GTK's own gesture
+claim in this particular minimal `chrome: "content"`, `Adw`-free probe
+window received them. That is a rig gap in this probe, not a statement
+about the mounted `GestureDetector` widgets the GTK test suite drives
+successfully every day through the same pointer machinery — there was not
+time in this task's budget to chase why this ONE probe shape did not
+deliver touches before the verdict was due.
+
+**Verdict: wall 4 stands, decided from the mechanism rather than a caught
+exception.** The call site is unconditional, the throw is a property read
+with no call needed, and the precondition (a drag surviving its own
+200ms activation delay) is not an edge case — it is what every real drag
+does. `examples/gallery` gains no `react-native-sortables` section from
+this task; the two Adw/build-path bugs above are recorded for whoever picks
+them up, and the vite wiring plus the dependency stay exactly where PR #124
+left them, unchanged again.
