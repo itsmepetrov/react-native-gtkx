@@ -1,6 +1,21 @@
 // Public surface of react-native-gtkx, mirroring the `react-native` module.
 // Components · APIs · StyleSheet, with the Yoga layout engine underneath.
 
+// Side effect, evaluated before anything below: installs
+// requestAnimationFrame/cancelAnimationFrame as globals, on the same frame
+// clock Animated and the Reanimated compat surface already run on
+// (glibScheduler — see frame-scheduler.ts's header for why nothing else may
+// add a second one). RN provides both globals from its own bootstrap on
+// every platform; this is the one module BOTH toolchains load before any
+// app code runs — "react-native" resolves here (aliased) for the Metro
+// bundle and for the vite dev/build graph alike, so installing it here
+// covers both without a second call site. See components/
+// request-animation-frame.ts for the semantics.
+import { glibScheduler } from "./components/frame-scheduler"
+import { installGlobalRequestAnimationFrame } from "./components/request-animation-frame"
+
+installGlobalRequestAnimationFrame(glibScheduler)
+
 export {
   ActivityIndicator,
   Animated,
