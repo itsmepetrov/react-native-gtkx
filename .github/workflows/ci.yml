@@ -71,3 +71,17 @@ jobs:
         # be checked before it exists. Nothing looked here until now, and
         # main once shipped an example importing components that did not.
         run: runuser -u ci -- env HOME=/home/ci npm run typecheck:examples
+      - name: Smoke test the flagship example actually launches
+        # Every other gate above exercises components under the test harness
+        # or typechecks source — none of them LAUNCH a built app the way a
+        # user would run it. That gap is exactly how a double gtkx-runtime
+        # init shipped on main for a day (the Adw door's dynamic import
+        # resolved a second, independent native addon copy, invisible to
+        # every static check here) before anyone noticed by hand — see
+        # .claude/epics/adw-optional/006-gallery-launch-regression.md. This
+        # builds examples/gallery (the Adw profile) and asserts the actual
+        # `node dist/bundle.js` output stays alive for 10s under headless
+        # sway; needs the non-root "ci" user, same as the Tests step.
+        run: |
+          runuser -u ci -- env HOME=/home/ci XDG_RUNTIME_DIR=/tmp/xdg GTK_A11Y=none \
+            node scripts/gallery-smoke.ts
