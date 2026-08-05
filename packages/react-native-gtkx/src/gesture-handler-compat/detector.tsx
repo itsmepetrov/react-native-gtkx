@@ -20,6 +20,26 @@
 // measured against the gesture's own view, which is not necessarily the
 // widget the event arrived on.
 //
+// WHEN THE CHILD FORWARDS NOTHING. The merge above assumes the child either
+// IS a widget-backed component or forwards its ref to one — true for a plain
+// `View`, an `Animated.View`, anything this package or an app writes by hand.
+// `react-native-sortables`'s v3 gesture-handler path hands this component an
+// opaque composite instead (`ItemCell`: renders an `Animated.View`, forwards
+// neither its ref nor its own unknown props onto it), so the cloned ref is
+// dropped and the merged handlers never reach a widget — confirmed by
+// instrumenting a real drag in the built gallery: zero touches, ever
+// (docs/research/upstream-libraries.md). Upstream does not hit this, because
+// its own v3 detector does not reach through the child either — it wraps in
+// its OWN `display: "contents"` native view, a primitive this platform's
+// layout does not have (contracts.ts's `display` is "none" | "flex" only,
+// and a plain wrapping box would break react-native-sortables' own absolute
+// item positioning rather than fix it — see ./attach-context for the full
+// account). So the fallback there is used here instead: try the direct ref
+// first, and only once a layout effect confirms it produced nothing does
+// this component start providing ./attach-context, letting one of this
+// package's own components somewhere inside the child claim the gesture on
+// ITS OWN widget instead.
+//
 // Everything mutable lives in ./detector-runtime, so nothing here reads or
 // writes a ref while rendering.
 import {
@@ -31,6 +51,7 @@ import {
   type ReactNode,
   type Ref,
 } from "react"
+import { GestureAttachContext, type GestureAttach } from "./attach-context"
 import { prepareGestures } from "./composition"
 import { createDetectorRuntime, PREDICATES } from "./detector-runtime"
 import { isAnyGestureSpec, type AnyGestureSpec } from "./types"
@@ -89,6 +110,19 @@ export const GestureDetector = ({
   // app's gesture object onto the tag that identity minted.
   const [runtime] = useState(createDetectorRuntime)
 
+  // The fallback attach value handed to ./attach-context, built once: its
+  // two fields are already stable for the runtime's whole life, so there is
+  // nothing to recompute on a later render.
+  const [attach] = useState<GestureAttach>(() => ({
+    assignHandle: runtime.assignHandle,
+    handlers: runtime.handlers,
+  }))
+  // False until a layout effect below finds the direct ref produced nothing.
+  // Never reset back to false: once a child needed the fallback it keeps
+  // needing it, and flipping back and forth on every render would detach and
+  // reattach the responder registration the fallback's own consumer made.
+  const [useFallback, setUseFallback] = useState(false)
+
   // A composition is flattened to the recognizers it contains, each carrying
   // the relations composition gave it. `Race`, `Simultaneous` and `Exclusive`
   // do all of their work here and contribute no mechanism past this point.
@@ -111,8 +145,29 @@ export const GestureDetector = ({
 
   // A silent no-op is the failure this repo refuses. Checked after the child's
   // own layout effects have run, which is where its `useImperativeHandle`
-  // publishes the handle.
+  // publishes the handle. The direct ref gets exactly one render to prove
+  // itself before the fallback engages — every child that forwards one
+  // (a plain View, an Animated.View, this package's own components) resolves
+  // synchronously within that same render's effects, so this never
+  // second-guesses a child that was going to work anyway.
+  //
+  // react-hooks/set-state-in-effect is disabled rather than worked around,
+  // the same call gtk/controllers.tsx's own `Controllers` already makes: the
+  // rule guards effects that derive state from PROPS, which belongs in render
+  // instead. This derives it from whether the child produced a widget, which
+  // does not exist until after the commit — an effect is the only place that
+  // can come from. `!useFallback` guards it, so it runs once and settles;
+  // there is no cascade for the rule to be protecting against. No dependency
+  // array is deliberate too, matching the `sync` effect above: every render
+  // re-checks, because a child that starts producing a widget only after a
+  // LATER render (an app's own delayed ref, say) should still be found.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
+    if (!useFallback && !runtime.hasWidget()) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setUseFallback(true)
+      return
+    }
     runtime.checkWidget()
   })
 
@@ -139,5 +194,9 @@ export const GestureDetector = ({
         }
   }
 
-  return cloneElement(children, merged)
+  return (
+    <GestureAttachContext.Provider value={useFallback ? attach : null}>
+      {cloneElement(children, merged)}
+    </GestureAttachContext.Provider>
+  )
 }

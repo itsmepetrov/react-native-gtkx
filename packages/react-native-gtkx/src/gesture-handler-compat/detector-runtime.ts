@@ -23,6 +23,7 @@ import {
 } from "../gtkx/bridge/index"
 import type { GestureResponderEvent } from "../responder/types"
 import { requestResponder } from "../responder/use-responder"
+import { PREDICATES } from "./attach-context"
 import type { PreparedGesture } from "./composition"
 import { DECIDERS } from "./deciders"
 import { gestureOrchestrator } from "./orchestrator"
@@ -57,11 +58,13 @@ const HANDLER_NAMES = [
   "onResponderTerminate",
 ] as const
 
-/** The two responder props that answer a question rather than take an event. */
-export const PREDICATES = new Set<string>([
-  "onStartShouldSetResponder",
-  "onMoveShouldSetResponder",
-])
+/**
+ * The two responder props that answer a question rather than take an event.
+ * Canonical in ./attach-context now (components/animated.tsx's fallback
+ * needs the same set without pulling in the rest of this file); re-exported
+ * here so ./detector.tsx's own import keeps working.
+ */
+export { PREDICATES }
 
 /** A ref in either of React's two spellings. */
 type AnyRef =
@@ -262,6 +265,12 @@ export type DetectorRuntime = {
   assignHandle: (instance: unknown) => void
   /** Called from a layout effect on every render. */
   sync: (prepared: readonly PreparedGesture[], forwarded: AnyRef) => void
+  /**
+   * Whether the child (reached directly, via the ref merged onto it) has
+   * produced a widget yet. False for a child that forwards no ref at all —
+   * see ./attach-context for what happens next.
+   */
+  hasWidget: () => boolean
   /** Warns once if the child turned out to carry no widget. */
   checkWidget: () => void
   /** Every mounted recognizer, in the order the gestures were written. */
@@ -450,6 +459,8 @@ export const createDetectorRuntime = (): DetectorRuntime => {
         publish(handle)
       }
     },
+
+    hasWidget: () => widgetForHandle(handle) !== null,
 
     checkWidget: () => {
       if (widgetForHandle(handle) === null) {

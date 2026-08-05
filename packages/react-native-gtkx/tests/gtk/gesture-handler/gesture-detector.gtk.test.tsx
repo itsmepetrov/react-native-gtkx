@@ -21,7 +21,7 @@ import {
   State,
 } from "../../../src/gesture-handler-compat/index"
 import { Gtk, type Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
-import { Root, Text, View, type ViewHandle } from "../../../src/index"
+import { Animated, Root, Text, View, type ViewHandle } from "../../../src/index"
 import {
   createVirtualPointer,
   VirtualPointerUnavailable,
@@ -252,6 +252,64 @@ it("adds no widget to the tree", async () => {
   }
 
   expect(depth).toBe(bareDepth)
+})
+
+it("reaches a real press through a child that forwards no ref at all — the react-native-sortables shape", async () => {
+  // GestureDetector's PRIMARY mechanism clones its ref and handler props
+  // straight onto the child element, which every other test in this file
+  // relies on. `react-native-sortables`'s v3 gesture-handler path hands it a
+  // plain composite instead (`ItemCell`): it renders a real `Animated.View`
+  // but forwards neither its own ref nor GestureDetector's unknown props onto
+  // it, so that clone is silently dropped. Confirmed by instrumenting a real
+  // drag in the built gallery (docs/research/upstream-libraries.md): zero
+  // touches ever reached the recognizer. This is the fallback
+  // (./attach-context) being exercised for real, over a real widget and a
+  // real pointer, rather than the ref-forwarding path — an OpaqueCell here
+  // stands in for ItemCell, `Animated.View` included.
+  const device = await withPointer()
+  if (!device) {
+    return
+  }
+  const moved: number[] = []
+  const pan = Gesture.Pan().onUpdate((event) => {
+    moved.push(event.translationY)
+  })
+
+  const OpaqueCell = ({ children }: { children?: ReactNode }) => (
+    <Animated.View
+      style={{ width: 200, height: 200, backgroundColor: "#62a0ea" }}
+    >
+      {children}
+    </Animated.View>
+  )
+
+  await mount(
+    <View style={{ padding: 20 }}>
+      <GestureDetector gesture={pan}>
+        <OpaqueCell>
+          <Text>opaque target</Text>
+        </OpaqueCell>
+      </GestureDetector>
+    </View>,
+    "opaque target",
+  )
+
+  const target = screen.getByText("opaque target").getParent()!
+  const root = target.getRoot() as unknown as GtkNs.Widget
+  const [, bounds] = target.computeBounds(root)
+  const start = {
+    x: bounds.getX() + bounds.getWidth() / 2,
+    y: bounds.getY() + bounds.getHeight() / 2,
+  }
+
+  await step(() => device.moveTo(start.x, start.y))
+  await step(() => device.press())
+  await dragBy(device, start, 0, 90)
+  await step(() => device.release())
+
+  expect(moved.length).toBeGreaterThan(0)
+  expect(moved[moved.length - 1]!).toBeGreaterThan(60)
+  expect(moved[moved.length - 1]!).toBeLessThanOrEqual(90)
 })
 
 it("holds the gesture BEGAN below activeOffsetY and activates above it", async () => {
