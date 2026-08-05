@@ -69,6 +69,19 @@ the test, so each row was re-run on the real runtime rather than read about.
   core dumped. Neither half of the condition is met — the init is not
   idempotent, and while the error names the symbol it does not name the
   duplicate package, which is the part that would make it debuggable.
+
+  **Not the only SIGABRT out of this subsystem.** A second, separate crash —
+  a Rust panic inside the `writer_trampoline` `log_set_writer_func` installs
+  (registered fine, once) rather than a double-registration — twice took
+  down a CI worker fork under `tests/gtk/dnd/collision-thresholds.gtk.test.tsx`
+  (2026-08-04, runs 30903167960 and 30904467362). Not a new
+  `RC4-WORKAROUND` row: the trigger was our own bug (`scroll-view.tsx`'s
+  `syncAdjustmentRange` calling `Gtk.Adjustment.configure()` with an invalid
+  range, retried every frame), now fixed, not gtkx drift to absorb in the
+  bridge. Full backtrace and the upstream ask (harden `writer_trampoline`
+  with `catch_unwind`) are in
+  [docs/upstream-gtkx.md](upstream-gtkx.md#2-a-panic-inside-the-glib-log-writer-trampoline-aborts-the-whole-process-not-just-the-offending-log-call).
+
 - **`prop-portal`** — enumerated the real module objects on the runtime rather
   than reading the `.d.ts`. `@gtkx/react` exports exactly `createPortal`,
   `createRoot`, `quit`, `rootElement`, `useApplication`, `useBindSetting`,
