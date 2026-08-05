@@ -113,17 +113,34 @@ it("renders its children", async () => {
 
 it("throws with the symbol's name when an unsupported export is called", () => {
   // A hook or factory: called directly. `useTapGesture` stood here first,
-  // `usePinchGesture` after it and `useFlingGesture` after that; all three are
-  // implemented now, so the assertion has moved to a symbol that is refused on
-  // purpose rather than one waiting to be written. `GestureStateManager` is
-  // upstream's standalone `create(tag)` factory, which needs the process-wide
-  // tag-to-handler registry this platform deliberately does not have — the
-  // manager an app actually receives is handed into `onTouches*`, and that one
-  // works and is what drives `Gesture.Manual()`.
-  expect(() => (entry.GestureStateManager as () => void)()).toThrow(
-    /`GestureStateManager` is not supported/,
+  // `usePinchGesture` after it, `useFlingGesture` after that and
+  // `GestureStateManager` after that (reversed 2026-08-05, docs/api.md); all
+  // are implemented now, so the assertion has moved to a symbol that is
+  // refused on purpose rather than one waiting to be written.
+  // `VirtualGestureDetector` drives a gesture with no view at all, which the
+  // tag registry does not change: every recognizer here is still built by a
+  // mounted `GestureDetector` wrapping exactly one child.
+  expect(() => (entry.VirtualGestureDetector as () => void)()).toThrow(
+    /`VirtualGestureDetector` is not supported/,
   )
   expect(useFlingGesture().kind).toBe("fling")
+})
+
+it("GestureStateManager is a real object of three functions, not a throwing stand-in", () => {
+  // The reversal itself, asserted at the export an app (and
+  // react-native-sortables' v3 gesture-handler adapter) actually imports —
+  // not at ./gesture-state-manager directly, so a regression that broke only
+  // the re-export would still be caught here. Behaviour against a mounted
+  // recognizer is gesture-state-manager.test.ts's job, and the real drag is
+  // the headless probe.
+  expect(entry.GestureStateManager.activate).toBeTypeOf("function")
+  expect(entry.GestureStateManager.fail).toBeTypeOf("function")
+  expect(entry.GestureStateManager.deactivate).toBeTypeOf("function")
+  // Upstream's own shape: unlike the legacy `.create(tag)` factory, calling a
+  // method with a tag that names nothing must not throw — it is a no-op, the
+  // same way `Gesture.Manual()`'s own `.activate()` no-ops on a state that
+  // does not allow the transition.
+  expect(() => entry.GestureStateManager.activate(-1)).not.toThrow()
 })
 
 it("keeps the hook spelling exactly as wide as upstream's", () => {
@@ -141,11 +158,12 @@ it("keeps the hook spelling exactly as wide as upstream's", () => {
   ).toBeUndefined()
 })
 
-it("still refuses the 1.x component API, the buttons and the tag registry", () => {
-  // The refusals that REMAIN, now that all ten recognizers ship. Each carries
-  // its reason in src/gesture-handler-compat/index.tsx and in docs/api.md
-  // rather than being a bare `unsupported()`, and this pins the list so that
-  // "still refused" stays a decision rather than drift.
+it("still refuses the 1.x component API, the buttons and the view-less detectors", () => {
+  // The refusals that REMAIN, now that all ten recognizers ship and
+  // `GestureStateManager` has been reversed. Each carries its reason in
+  // src/gesture-handler-compat/index.tsx and in docs/api.md rather than being
+  // a bare `unsupported()`, and this pins the list so that "still refused"
+  // stays a decision rather than drift.
   for (const name of [
     // the RNGH 1.x COMPONENT API — a second public surface over the same
     // recognizers, deprecated upstream before the builder was
@@ -162,8 +180,9 @@ it("still refuses the 1.x component API, the buttons and the tag registry", () =
     "TouchableNativeFeedback",
     "Touchable",
     "RefreshControl",
-    // the global tag-to-handler registry this platform deliberately lacks
-    "GestureStateManager",
+    // the two experimental detectors: one needs an irrevocable claim this
+    // platform cannot take back, the other a gesture mounted with no view —
+    // the tag registry answers "which recognizer", not "mint one with nothing"
     "VirtualGestureDetector",
     "InterceptingGestureDetector",
     // 2.x aliases for components whose 3.x spelling is implemented or refused

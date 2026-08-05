@@ -3,12 +3,17 @@
 // responder system, and a loud refusal for what is left.
 //
 // WHAT IS LEFT is now a short and deliberate list rather than a backlog: the
-// RNGH 1.x component API, the native button family, and the three exports that
-// need a process-wide handler-tag registry this platform does not keep. Each
+// RNGH 1.x component API, the native button family, and three exports refused
+// for reasons that are each their own rather than one shared excuse. Each
 // carries its reason where it is declared below and in docs/api.md, because a
 // refusal that does not say why is indistinguishable from one nobody has
 // revisited — which is exactly what happened to `Gesture.Hover()`, refused for
-// a year on a judgement about the test rig that turned out to be wrong.
+// a year on a judgement about the test rig that turned out to be wrong, and to
+// `GestureStateManager`, refused for a process-wide handler-tag registry this
+// platform did not keep — reversed 2026-08-05 once react-native-sortables'
+// real v3 adapter turned out to reach for exactly that. ./tag-registry is what
+// changed; see it and ./gesture-state-manager for the how, and docs/api.md for
+// the why.
 //
 // NOT A PORT. `docs/research/gestures.md` refused RNGH on four grounds, two of
 // which expired when `react-native-gtkx/reanimated` shipped; the other two —
@@ -48,6 +53,7 @@ import type { StyleProp } from "../contracts"
 import { createUnsupportedFactory } from "../unsupported-export"
 import { Gesture } from "./builder"
 import { GestureDetector } from "./detector"
+import { GestureStateManager } from "./gesture-state-manager"
 import {
   useCompetingGestures,
   useExclusiveGestures,
@@ -73,6 +79,7 @@ import {
 export {
   Gesture,
   GestureDetector,
+  GestureStateManager,
   useCompetingGestures,
   useExclusiveGestures,
   useFlingGesture,
@@ -168,15 +175,15 @@ export const GestureHandlerRootView = ({
 
 const unsupported = createUnsupportedFactory(
   "react-native-gesture-handler",
-  "Implemented: GestureHandlerRootView, GestureDetector, `State`, `Directions`, `HoverEffect`, " +
-    "the re-exported ScrollView/FlatList/TextInput/Switch and the three Touchables, and ALL TEN " +
-    "recognizers — Pan, Tap, LongPress, Native, Pinch, Rotation, Fling, Manual, Hover and " +
-    "ForceTouch — in both spellings where upstream has two (`Gesture.Pan()` and " +
-    "`usePanGesture()`, and so on), plus the three cross-gesture relations and the three " +
-    "composers. Three of them need input a mouse cannot produce: Pinch and Rotation need a " +
-    "TOUCHPAD (GtkGestureZoom/GtkGestureRotate) and ForceTouch needs a pressure-reporting " +
-    "STYLUS (GtkGestureStylus). RN's own responder system and PanResponder also work " +
-    "(docs/api.md); drag-and-drop is react-native-gtkx/dnd.",
+  "Implemented: GestureHandlerRootView, GestureDetector, GestureStateManager, `State`, " +
+    "`Directions`, `HoverEffect`, the re-exported ScrollView/FlatList/TextInput/Switch and the " +
+    "three Touchables, and ALL TEN recognizers — Pan, Tap, LongPress, Native, Pinch, Rotation, " +
+    "Fling, Manual, Hover and ForceTouch — in both spellings where upstream has two " +
+    "(`Gesture.Pan()` and `usePanGesture()`, and so on), plus the three cross-gesture relations " +
+    "and the three composers. Three of them need input a mouse cannot produce: Pinch and " +
+    "Rotation need a TOUCHPAD (GtkGestureZoom/GtkGestureRotate) and ForceTouch needs a " +
+    "pressure-reporting STYLUS (GtkGestureStylus). RN's own responder system and PanResponder " +
+    "also work (docs/api.md); drag-and-drop is react-native-gtkx/dnd.",
 )
 
 // Every runtime value `react-native-gesture-handler` 3.1.0 exports, minus
@@ -235,12 +242,24 @@ export const legacy_createNativeWrapper: any = unsupported(
 )
 
 // --- the new (v3) gesture API ---
-// `Gesture`, `GestureDetector`, the nine gesture hooks and the three composer
-// hooks are re-exported at the top of this file. `Gesture` is a real namespace
-// and none of its statics throws any more.
+// `Gesture`, `GestureDetector`, `GestureStateManager`, the nine gesture hooks
+// and the three composer hooks are re-exported at the top of this file.
+// `Gesture` is a real namespace and none of its statics throws any more.
 //
-// The four below are refused for four different reasons, none of them "not got
-// round to it":
+// `GestureStateManager` used to be refused here, for a global tag→handler
+// registry this platform deliberately did not keep — identity was the
+// mounted detector, and ./relations resolved an app's gesture object to a
+// tag lazily precisely so nothing had to be looked up in a process-wide map.
+// Reversed 2026-08-05: react-native-sortables' real v3 gesture-handler
+// adapter calls the standalone `GestureStateManager.activate(handlerTag)`
+// from its own `onTouchesMove`, on every ordinary drag, reading only the
+// numeric tag off the event — no lazy path was available to it. ./tag-registry
+// is the registry that reversal needed; ./gesture-state-manager is the export
+// built on it. Full account: docs/api.md, docs/research/upstream-libraries.md
+// ("Wall 4, confirmed").
+//
+// The three below stay refused, for three different reasons, none of them
+// "not got round to it":
 //
 //   - `GestureDetectorType` is a TYPE upstream, not a value. It only ever
 //     appears in a type position, where this module is not in the path at all
@@ -248,25 +267,17 @@ export const legacy_createNativeWrapper: any = unsupported(
 //     from node_modules — see the note at the top of this file). A runtime
 //     value under that name could only be reached by code that has already
 //     gone wrong;
-//   - `GestureStateManager` is upstream's standalone FACTORY, `create(tag)`,
-//     which looks a mounted handler up by tag in a global `NodeManager`. The
-//     manager an app actually uses is the one handed into `onTouchesDown` /
-//     `onTouchesMove` / `onTouchesUp` / `onTouchesCancel`, and that one IS
-//     implemented — it is what drives `Gesture.Manual()`. What is missing is
-//     the global tag→handler registry, and its absence is deliberate: identity
-//     here is the mounted detector, and ./relations resolves an app's gesture
-//     object to a tag lazily precisely so that nothing has to be looked up in
-//     a process-wide map. Upstream marks this export deprecated in favour of
-//     the hook API in the same breath;
-//   - `InterceptingGestureDetector` and `VirtualGestureDetector` are 3.1.0's
-//     new experimental detectors. The first intercepts events destined for
-//     views BELOW it, which on this platform would mean claiming a GTK
-//     sequence before deciding — and `CLAIMED` is irrevocable here, so the
-//     "intercept, look, maybe give back" shape is not expressible. The second
-//     drives a gesture with no view at all, which needs the tag registry the
-//     entry above says why this platform does not have.
+//   - `InterceptingGestureDetector` intercepts events destined for views
+//     BELOW it, which on this platform would mean claiming a GTK sequence
+//     before deciding — and `CLAIMED` is irrevocable here, so the "intercept,
+//     look, maybe give it back" shape is not expressible;
+//   - `VirtualGestureDetector` drives a gesture with no view at all. The tag
+//     registry above answers "which recognizer does this number mean", not
+//     "mint a recognizer with nothing to measure, no bounds and no widget to
+//     attach a controller to" — every recognizer here is still built by a
+//     mounted `GestureDetector` wrapping exactly one child, and giving it none
+//     is a structural feature this reversal did not add.
 export const GestureDetectorType: any = unsupported("GestureDetectorType")
-export const GestureStateManager: any = unsupported("GestureStateManager")
 export const InterceptingGestureDetector: any = unsupported(
   "InterceptingGestureDetector",
 )
