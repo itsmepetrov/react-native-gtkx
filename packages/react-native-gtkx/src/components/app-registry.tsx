@@ -1,5 +1,6 @@
 import { useLayoutEffect, type ComponentType, type ReactNode } from "react"
-import { requireAdwJsx } from "../gtkx/bridge/adw"
+import { warnOnce } from "../style/dev-warning"
+import { adwAvailable, requireAdwJsx } from "../gtkx/bridge/adw"
 import {
   createRoot,
   Gtk,
@@ -37,6 +38,10 @@ export type RunApplicationParams = {
   // titlebar. "content": an AdwApplicationWindow with NO window titlebar —
   // the app's content provides HeaderBars (navigation apps: the page
   // HeaderBar becomes the titlebar, with the window controls in it).
+  // Plain-GTK profile (no "Adw-1" in this app's gtkx.config.ts): "content"
+  // falls back to the same GtkApplicationWindow "system" uses — Adw is what
+  // makes chrome: "content" work, not just this option — see adwAvailable()
+  // in .claude/epics/adw-optional/002.md.
   chrome?: "system" | "content"
   /**
    * GSimpleAction elements registered on the GApplication itself
@@ -76,9 +81,11 @@ export type RunApplicationParams = {
    */
   windowControllers?: ReactNode
   // AdwBreakpoint elements, evaluated against the window's own allocated
-  // size. Only meaningful under chrome: "content" (AdwApplicationWindow) —
-  // GtkApplicationWindow has no such concept, so this is ignored (with a
-  // dev warning) under the default "system" chrome.
+  // size. Only meaningful under chrome: "content" WITH Adw actually present
+  // (AdwApplicationWindow) — GtkApplicationWindow has no such concept, so
+  // this is ignored (with a dev warning) under the default "system" chrome,
+  // and equally ignored (with a different dev warning, once) when chrome:
+  // "content" was requested but this app has no "Adw-1" declared.
   breakpoints?: ReactNode
 }
 
@@ -176,19 +183,33 @@ export const AppRegistry = {
     const height = params.height ?? 600
 
     const contentChrome = params.chrome === "content"
-    activeChrome = contentChrome ? "content" : "system"
+    // What chrome: "content" actually gets: AdwApplicationWindow needs Adw
+    // itself, so a plain-GTK app (no "Adw-1" in gtkx.config.ts) falls back to
+    // exactly the "system" chrome path — same window type, same content
+    // wrapper — rather than throwing, per
+    // .claude/epics/adw-optional/002.md. The Adw profile is unaffected:
+    // adwAvailable() is true there, so useAdwChrome === contentChrome always,
+    // and every branch below takes the same route it did before this probe
+    // existed.
+    const useAdwChrome = contentChrome && adwAvailable()
+    activeChrome = useAdwChrome ? "content" : "system"
 
-    if (
-      process.env.NODE_ENV !== "production" &&
-      params.breakpoints &&
-      !contentChrome
-    ) {
-      console.warn(
-        '[react-native-gtkx] breakpoints was passed to runApplication without chrome: "content" — GtkApplicationWindow (the "system" chrome default) has no breakpoints concept, so it is ignored.',
-      )
+    if (process.env.NODE_ENV !== "production" && params.breakpoints) {
+      if (!contentChrome) {
+        console.warn(
+          '[react-native-gtkx] breakpoints was passed to runApplication without chrome: "content" — GtkApplicationWindow (the "system" chrome default) has no breakpoints concept, so it is ignored.',
+        )
+      } else if (!useAdwChrome) {
+        // Once, not every run: contentChrome apps in a long-lived dev loop
+        // (Fast Refresh) would otherwise re-warn on every reload.
+        warnOnce(
+          "app-registry:breakpoints-no-adw",
+          '[react-native-gtkx] breakpoints was passed to runApplication with chrome: "content", but this app has no "Adw-1" in its gtkx.config.ts `libraries` — falling back to GtkApplicationWindow, which has no breakpoints concept, so it is ignored.',
+        )
+      }
     }
 
-    const content = contentChrome ? (
+    const content = useAdwChrome ? (
       <ContentChrome
         App={App}
         initialProps={params.initialProps ?? {}}
@@ -203,12 +224,12 @@ export const AppRegistry = {
     )
 
     // Adw is reached ONLY here, and only when chrome: "content" was actually
-    // requested — chrome: "system" (the default) never touches it, which is
-    // what lets an app with no Adw-1 declared run at all (see
-    // .claude/epics/adw-optional/001.md). Its absence throws the loud named
-    // error below; a graceful fallback is a later task, not this one.
+    // requested AND this app's codegen store actually has it — chrome:
+    // "system" (the default), and a plain-GTK app's chrome: "content", never
+    // touch it, which is what lets an app with no Adw-1 declared run at all
+    // (see .claude/epics/adw-optional/001.md and 002.md for the fallback).
     const AppWindow = () =>
-      contentChrome ? (
+      useAdwChrome ? (
         (() => {
           const { AdwApplicationWindow } = requireAdwJsx('chrome: "content"')
           return (
