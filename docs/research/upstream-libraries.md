@@ -393,6 +393,18 @@ to see past this wall and find the next one, exactly as a probe, and was
 a permanent global-behaviour change in one example, for a library that still
 cannot run, would be worse than the gap it papers over.
 
+**Update — implemented, 2026-08-05.** Exactly the platform change predicted
+above: `requestAnimationFrame`/`cancelAnimationFrame` are now real globals,
+installed from the package entry (`src/index.ts`, the one module both the
+Metro and vite toolchains load before any app code runs) and built on
+`glibScheduler` — no second frame source. Semantics: an id back, a
+monotonic high-resolution timestamp in, a callback requested mid-batch lands
+on the NEXT frame, cancel is silent, one callback throwing is reported and
+does not stop its siblings. See docs/api.md's `requestAnimationFrame`/
+`cancelAnimationFrame` row. Re-running this section's own probe confirms
+wall 2 is gone: `react-native-sortables` gets past the `ReferenceError` and
+mounts up to wall 3 below, unchanged and still unfixed.
+
 ### Wall 3 (not fixable here): `withTiming` on a `{x, y}` Vector
 
 With both of the above patched, the app still crashes at mount, before any
@@ -448,9 +460,7 @@ moment it is opened is not a demo, and the temporary `requestAnimationFrame`
 polyfill that let wall 2 be seen past was removed with it, for the reason in
 that section above.
 
-A future revisit needs two platform-level changes, both scoped and both
-already have a seam to hang off: a real `requestAnimationFrame`/
-`cancelAnimationFrame` global over `glibScheduler` (wall 2), and either
-vector-shaped `withTiming`/`withSpring` or an equivalent per-item reflow
-primitive (wall 3, the one that actually matters — wall 2 alone does not
-unblock this).
+A future revisit needed two platform-level changes; the first is done (see
+the Update under wall 2 above — the global is real now, not a probe). What is
+left is the one that actually matters: either vector-shaped
+`withTiming`/`withSpring` or an equivalent per-item reflow primitive (wall 3) — wall 2 alone was never going to unblock this on its own.
