@@ -13,7 +13,8 @@ import {
 } from "@react-navigation/native"
 import { useEffect } from "react"
 import { expect, it } from "vitest"
-import type { Adw, Gtk } from "../../../src/gtkx/bridge/index"
+import type { Adw } from "../../../src/gtkx/bridge/adw"
+import type { Gtk } from "../../../src/gtkx/bridge/index"
 import { Text, View } from "../../../src/index"
 import { createStackNavigator } from "../../../src/navigation/index"
 

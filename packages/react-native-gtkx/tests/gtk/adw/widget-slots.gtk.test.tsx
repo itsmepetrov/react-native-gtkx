@@ -30,7 +30,8 @@ import {
   AdwWindowTitle,
 } from "../../../src/adw/index"
 import { IntrinsicContent, SlotContent } from "../../../src/common/index"
-import type { Adw as AdwNs, Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
+import type { Adw as AdwNs } from "../../../src/gtkx/bridge/adw"
+import type { Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
 import { Text, View } from "../../../src/index"
 
 const lastLayout = (spy: ReturnType<typeof vi.fn>) =>

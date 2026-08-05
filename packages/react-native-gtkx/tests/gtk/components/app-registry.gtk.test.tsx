@@ -29,6 +29,7 @@ import { act, userEvent, waitFor } from "@gtkx/testing"
 import { createContext, useContext, useEffect, useState } from "react"
 import { beforeAll, expect, it, vi } from "vitest"
 import { AppRegistry } from "../../../src/components/app-registry"
+import { Adw, AdwBreakpoint } from "../../../src/adw"
 import {
   ApplicationActions,
   GSimpleAction,
@@ -36,8 +37,6 @@ import {
   WindowControllers,
 } from "../../../src/gtk/window-actions"
 import {
-  Adw,
-  AdwBreakpoint,
   Gio,
   Gtk,
   GtkShortcut,

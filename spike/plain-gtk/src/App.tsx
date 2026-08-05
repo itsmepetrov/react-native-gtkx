@@ -1,0 +1,165 @@
+// The RN core the probe exercises: a few Views/Text, a ScrollView with
+// enough rows to actually scroll, and a Modal — the acceptance bar from
+// .claude/epics/adw-optional/001.md ("spike/plain-gtk runs the RN core with
+// no Adw-1 declared"). Nothing here reaches for react-native-gtkx/adw,
+// /navigation or any AdwXxx widget — those still require Adw-1 and are
+// exercised by the OTHER spikes and the gallery, unchanged.
+import { useEffect, useState } from "react"
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from "react-native"
+
+const ROWS = Array.from({ length: 24 }, (_, index) => `row ${index + 1}`)
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: "#1e1e2e",
+    padding: 16,
+    gap: 12,
+  },
+  heading: {
+    color: "#cdd6f4",
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  subheading: {
+    color: "#a6adc8",
+    fontSize: 13,
+  },
+  row: {
+    backgroundColor: "#313244",
+    borderRadius: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  rowText: {
+    color: "#cdd6f4",
+    fontSize: 14,
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    gap: 8,
+  },
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  button: {
+    backgroundColor: "#89b4fa",
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  buttonPressed: {
+    backgroundColor: "#74a8f8",
+  },
+  buttonText: {
+    color: "#1e1e2e",
+    fontWeight: "700",
+  },
+  modalBody: {
+    flex: 1,
+    padding: 20,
+    gap: 12,
+    backgroundColor: "#1e1e2e",
+    justifyContent: "center",
+  },
+  modalText: {
+    color: "#cdd6f4",
+    fontSize: 14,
+    textAlign: "center",
+  },
+})
+
+const App = () => {
+  const [modalVisible, setModalVisible] = useState(false)
+  const [switchOn, setSwitchOn] = useState(false)
+
+  // Headless-proof convenience only: auto-opens the modal so the screenshot
+  // script (run-headless.sh) can capture it without a scripted pointer.
+  useEffect(() => {
+    if (process.env.PLAIN_GTK_AUTO_OPEN_MODAL === "1") {
+      const timer = setTimeout(() => setModalVisible(true), 1500)
+      return () => clearTimeout(timer)
+    }
+    return undefined
+  }, [])
+
+  return (
+    <View style={styles.root}>
+      <Text style={styles.heading}>plain-gtk probe</Text>
+      <Text style={styles.subheading}>
+        Gtk-4.0 only — no Adw-1 in gtkx.config.ts, no libadwaita import anywhere
+        in this process.
+      </Text>
+
+      <View style={styles.toggleRow}>
+        <Switch
+          value={switchOn}
+          onValueChange={setSwitchOn}
+        />
+        <Text style={styles.rowText}>
+          GtkSwitch is {switchOn ? "on" : "off"}
+        </Text>
+      </View>
+
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {ROWS.map((label) => (
+          <View
+            key={label}
+            style={styles.row}
+          >
+            <Text style={styles.rowText}>{label}</Text>
+          </View>
+        ))}
+      </ScrollView>
+
+      <Pressable
+        style={({ pressed }) => [
+          styles.button,
+          pressed && styles.buttonPressed,
+        ]}
+        onPress={() => setModalVisible(true)}
+      >
+        <Text style={styles.buttonText}>open modal</Text>
+      </Pressable>
+
+      <Modal
+        visible={modalVisible}
+        title="Modal — GtkWindow"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalBody}>
+          <Text style={styles.modalText}>
+            A modal GtkWindow, transient for the parent — same as under the Adw
+            profile, no AdwApplicationWindow involved either way.
+          </Text>
+          <Pressable
+            style={({ pressed }) => [
+              styles.button,
+              pressed && styles.buttonPressed,
+            ]}
+            onPress={() => setModalVisible(false)}
+          >
+            <Text style={styles.buttonText}>close</Text>
+          </Pressable>
+        </View>
+      </Modal>
+    </View>
+  )
+}
+
+export default App

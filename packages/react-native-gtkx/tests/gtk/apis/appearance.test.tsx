@@ -5,7 +5,8 @@
 import { act, render, renderHook, screen, waitFor } from "@gtkx/testing"
 import { afterEach, expect, it } from "vitest"
 import { Appearance, useColorScheme } from "../../../src/apis/index"
-import { styleManager, type Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
+import { styleManager } from "../../../src/gtkx/bridge/adw"
+import type { Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
 import { Root, Text } from "../../../src/index"
 
 afterEach(() => {

@@ -10,7 +10,10 @@ import { readFileSync } from "node:fs"
 import { createRequire, registerHooks } from "node:module"
 import { pathToFileURL } from "node:url"
 import vm from "node:vm"
-import { HOST_MODULE_EXTERNALS } from "react-native-gtkx/metro"
+import {
+  HOST_MODULE_EXTERNALS,
+  OPTIONAL_HOST_MODULE_EXTERNALS,
+} from "react-native-gtkx/metro"
 
 type HostModule = Record<string, unknown>
 
@@ -114,6 +117,14 @@ for (const name of HOST_MODULE_EXTERNALS) {
   try {
     globalThis.__hostModules[name] = await load(name)
   } catch (error) {
+    if (OPTIONAL_HOST_MODULE_EXTERNALS.has(name)) {
+      // Expected and fine: this app's gtkx.config.ts never declared the GIR
+      // library this module binds (e.g. "Adw-1" — the plain-GTK profile,
+      // see .claude/epics/adw-optional/001.md). Left unset in
+      // __hostModules; a feature that actually needs it throws its own
+      // named error when it is reached, not here at startup.
+      continue
+    }
     fail(
       `failed to load host module "${name}" — is the codegen store in ` +
         `place (npx gtkx codegen) and GTK4/libadwaita installed?\n${String(error)}`,

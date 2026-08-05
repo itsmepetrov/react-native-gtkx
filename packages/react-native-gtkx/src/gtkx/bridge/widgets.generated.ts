@@ -7,8 +7,9 @@
 // Every widget the classifier resolved to a Gtk.Widget subclass, re-exported
 // RAW. This is the only generated file (besides the hand-written bridge
 // modules) allowed to import @gtkx/jsx directly — src/gtk/widgets.generated
-// and src/adw/widgets.generated pull from here instead, so the
-// no-restricted-imports carve-out for src/gtkx/bridge/** stays the only door.
+// pulls from here instead, so the no-restricted-imports carve-out for
+// src/gtkx/bridge/** stays the only door. Adwaita's raw widgets are the
+// sibling file, widgets.generated.adw.ts — see gtkx/bridge/adw.ts.
 
 export {
   GtkAboutDialog,
@@ -114,68 +115,3 @@ export {
   GtkWindowControls,
   GtkWindowHandle,
 } from "@gtkx/jsx/gtk"
-
-export {
-  AdwAboutDialog,
-  AdwAboutWindow,
-  AdwActionRow,
-  AdwAlertDialog,
-  AdwApplicationWindow,
-  AdwAvatar,
-  AdwBanner,
-  AdwBin,
-  AdwBottomSheet,
-  AdwBreakpointBin,
-  AdwButtonContent,
-  AdwButtonRow,
-  AdwCarousel,
-  AdwCarouselIndicatorDots,
-  AdwCarouselIndicatorLines,
-  AdwClamp,
-  AdwClampScrollable,
-  AdwComboRow,
-  AdwDialog,
-  AdwEntryRow,
-  AdwExpanderRow,
-  AdwFlap,
-  AdwHeaderBar,
-  AdwInlineViewSwitcher,
-  AdwLayoutSlot,
-  AdwLeaflet,
-  AdwMessageDialog,
-  AdwMultiLayoutView,
-  AdwNavigationPage,
-  AdwNavigationSplitView,
-  AdwNavigationView,
-  AdwOverlaySplitView,
-  AdwPasswordEntryRow,
-  AdwPreferencesDialog,
-  AdwPreferencesGroup,
-  AdwPreferencesPage,
-  AdwPreferencesRow,
-  AdwPreferencesWindow,
-  AdwShortcutLabel,
-  AdwShortcutsDialog,
-  AdwSidebar,
-  AdwSpinRow,
-  AdwSpinner,
-  AdwSplitButton,
-  AdwSqueezer,
-  AdwStatusPage,
-  AdwSwitchRow,
-  AdwTabBar,
-  AdwTabButton,
-  AdwTabOverview,
-  AdwTabView,
-  AdwToastOverlay,
-  AdwToggleGroup,
-  AdwToolbarView,
-  AdwViewStack,
-  AdwViewSwitcher,
-  AdwViewSwitcherBar,
-  AdwViewSwitcherSidebar,
-  AdwViewSwitcherTitle,
-  AdwWindow,
-  AdwWindowTitle,
-  AdwWrapBox,
-} from "@gtkx/jsx/adw"

@@ -86,6 +86,11 @@ import {
   GtkListBoxRow,
   GtkScrolledWindow,
 } from "../gtk"
+// Type-only: react-native-gtkx/adw's own `Adw` is a value-only re-export
+// (see its file for why) — the dotted-member TYPE access below
+// (`Adw.NavigationSplitView`, `Adw.Breakpoint`) needs the bridge's own type,
+// one hop closer to @gtkx/gi/adw.
+import type { Adw as AdwNs } from "../gtkx/bridge/adw"
 import { warnIgnoredOptions } from "./option-warnings"
 
 const SIDEBAR_OPTION_KEYS: ReadonlySet<string> = new Set([
@@ -388,8 +393,8 @@ const SidebarNavigator = ({
     })
 
   const listRef = useRef<Gtk.ListBox | null>(null)
-  const splitViewRef = useRef<Adw.NavigationSplitView | null>(null)
-  const breakpointRef = useRef<Adw.Breakpoint | null>(null)
+  const splitViewRef = useRef<AdwNs.NavigationSplitView | null>(null)
+  const breakpointRef = useRef<AdwNs.Breakpoint | null>(null)
   const collapseRegisteredRef = useRef(false)
 
   // Registers the native setter exactly once: Breakpoint.addSetter wants a
