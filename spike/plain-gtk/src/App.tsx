@@ -4,6 +4,15 @@
 // no Adw-1 declared"). Nothing here reaches for react-native-gtkx/adw,
 // /navigation or any AdwXxx widget — those still require Adw-1 and are
 // exercised by the OTHER spikes and the gallery, unchanged.
+//
+// index.tsx now runs this under chrome: "content" — .claude/epics/adw-optional/
+// 002.md's window fallback: on a store with no Adw-1, AppRegistry falls
+// chrome: "content" back to the same GtkApplicationWindow chrome: "system"
+// uses. ApplicationActions/WindowActions/WindowControllers below are the
+// modern (non-deprecated) way to reach that window's action maps and
+// controller list — self-triggered here (no ydotool in this private headless
+// sway) so the probe log proves they actually fire, not just that they
+// mount without crashing.
 import { useEffect, useState } from "react"
 import {
   Modal,
@@ -14,6 +23,18 @@ import {
   Text,
   View,
 } from "react-native"
+import {
+  ApplicationActions,
+  Gio,
+  GSimpleAction,
+  Gtk,
+  GtkShortcut,
+  GtkShortcutController,
+  quit,
+  useParentWindow,
+  WindowActions,
+  WindowControllers,
+} from "react-native-gtkx/gtk"
 
 const ROWS = Array.from({ length: 24 }, (_, index) => `row ${index + 1}`)
 
@@ -84,6 +105,9 @@ const styles = StyleSheet.create({
 const App = () => {
   const [modalVisible, setModalVisible] = useState(false)
   const [switchOn, setSwitchOn] = useState(false)
+  const [appActionFired, setAppActionFired] = useState(false)
+  const [winActionFired, setWinActionFired] = useState(false)
+  const window = useParentWindow()
 
   // Headless-proof convenience only: auto-opens the modal so the screenshot
   // script (run-headless.sh) can capture it without a scripted pointer.
@@ -95,12 +119,74 @@ const App = () => {
     return undefined
   }, [])
 
+  // Headless-proof convenience only, same idea: self-activates the app- and
+  // window-level actions declared below (no ydotool in this private headless
+  // sway to press a real key), and then closes the window through the same
+  // quit() the window's own onCloseRequest wires up — proving the fallback
+  // GtkApplicationWindow's action maps and shutdown path both work when
+  // reached through chrome: "content" with no Adw-1 declared, not just
+  // through chrome: "system". See .claude/epics/adw-optional/002.md.
+  useEffect(() => {
+    if (process.env.PLAIN_GTK_AUTO_PROBE !== "1" || !window) {
+      return undefined
+    }
+    const probeTimer = setTimeout(() => {
+      const app = Gio.Application.getDefault()
+      app?.activateAction("plain-gtk-app-ping", null)
+      const winResult = window.activateAction("win.plain-gtk-win-ping", null)
+      console.log(
+        `[plain-gtk] window.activateAction("plain-gtk-win-ping") -> ${winResult}`,
+      )
+    }, 700)
+    const closeTimer = setTimeout(() => {
+      console.log("[plain-gtk] closing via quit()")
+      quit()
+    }, 7000)
+    return () => {
+      clearTimeout(probeTimer)
+      clearTimeout(closeTimer)
+    }
+  }, [window])
+
   return (
     <View style={styles.root}>
+      <ApplicationActions>
+        <GSimpleAction
+          name="plain-gtk-app-ping"
+          onActivate={() => {
+            setAppActionFired(true)
+            console.log("[plain-gtk] applicationActions GSimpleAction fired")
+          }}
+        />
+      </ApplicationActions>
+      <WindowActions>
+        <GSimpleAction
+          name="plain-gtk-win-ping"
+          onActivate={() => {
+            setWinActionFired(true)
+            console.log("[plain-gtk] windowActions GSimpleAction fired")
+          }}
+        />
+      </WindowActions>
+      <WindowControllers>
+        <GtkShortcutController
+          shortcuts={
+            <GtkShortcut
+              trigger={Gtk.ShortcutTrigger.parseString("<Control>p")}
+              action={Gtk.CallbackAction.new(() => {
+                console.log("[plain-gtk] windowControllers shortcut fired")
+                return true
+              })}
+            />
+          }
+        />
+      </WindowControllers>
+
       <Text style={styles.heading}>plain-gtk probe</Text>
       <Text style={styles.subheading}>
         Gtk-4.0 only — no Adw-1 in gtkx.config.ts, no libadwaita import anywhere
-        in this process.
+        in this process. chrome: &ldquo;content&rdquo; falls back to
+        GtkApplicationWindow here (see .claude/epics/adw-optional/002.md).
       </Text>
 
       <View style={styles.toggleRow}>
@@ -112,6 +198,11 @@ const App = () => {
           GtkSwitch is {switchOn ? "on" : "off"}
         </Text>
       </View>
+
+      <Text style={styles.rowText}>
+        actions fired — app: {String(appActionFired)}, window:{" "}
+        {String(winActionFired)}
+      </Text>
 
       <ScrollView
         style={styles.scroll}
