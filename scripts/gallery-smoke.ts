@@ -8,7 +8,7 @@
 // guards against shipped on main for a day before anyone noticed it by
 // hand — see .claude/epics/adw-optional/006-gallery-launch-regression.md.
 //
-// usage: gallery-smoke.ts [seconds] (default 10)
+// usage: gallery-smoke.ts [seconds] (default 5)
 import { spawn, spawnSync } from "node:child_process"
 import { openSync, readFileSync } from "node:fs"
 import { join } from "node:path"
@@ -22,9 +22,14 @@ import {
 const REPO = join(import.meta.dirname, "..")
 const APP = join(REPO, "examples/gallery")
 const LOG = "/tmp/gallery-smoke.log"
-const aliveSeconds = Number(process.argv[2] ?? "10")
+const aliveSeconds = Number(process.argv[2] ?? "5")
 
-process.env.XDG_RUNTIME_DIR = `/run/user/${process.getuid?.() ?? 0}`
+// Default only. CI runs this as its dedicated non-root user with
+// XDG_RUNTIME_DIR=/tmp/xdg (the same env the Tests step builds) — an
+// unconditional overwrite here pointed sway at a /run/user/<uid> that does
+// not exist inside the container, and the app died with "Failed to open
+// display" while the script blamed the gallery.
+process.env.XDG_RUNTIME_DIR ??= `/run/user/${process.getuid?.() ?? 0}`
 
 console.log(`[gallery-smoke] building ${APP}`)
 const build = spawnSync("npx", ["gtkx", "build"], {
@@ -58,7 +63,17 @@ try {
     stdio: ["ignore", logFd, logFd],
   })
 
-  await sleep(aliveSeconds * 1000)
+  // Poll for death instead of one blind sleep, so a crash fails the step
+  // the moment it happens. No success marker exists to wait for here: the
+  // built bundle prints its "Connected application ID" line only when a
+  // session bus lets GApplication register, and this run deliberately has
+  // none. Both real crashes this guard exists for died within ~2s, so the
+  // default cap of a few seconds catches them with margin while keeping
+  // the green path cheap.
+  const deadline = Date.now() + aliveSeconds * 1000
+  while (Date.now() < deadline && isProcessAlive(app)) {
+    await sleep(250)
+  }
 
   if (isProcessAlive(app)) {
     console.log(`[gallery-smoke] ALIVE after ${aliveSeconds}s`)
