@@ -76,12 +76,20 @@
 // property whose frames this platform refuses to write: for those, the value
 // only exists on screen at whatever the last React render committed, and "the
 // render at the settle" turned out to be arbitrarily far away.
-import type { AnimatedValue, CompositeAnimation } from "../animated/index"
+import type { CompositeAnimation } from "../animated/index"
+import {
+  isAnimatableValue,
+  maxAnimatableLeafDelta,
+  sameAnimatableValue,
+  type AnimatableValue,
+} from "./animatable-value"
 import {
   animationSignature,
   buildAnimation,
   isAnimationSpec,
+  makeAnimationDriver,
   targetOf,
+  type AnimationDriver,
   type AnimationEngine,
   type AnimationSpec,
 } from "./animation"
@@ -132,15 +140,16 @@ const LANDING_INTERVAL_MS = 100
 const LANDING_EPSILON = 1
 
 type Entry = {
-  driver: AnimatedValue
+  driver: AnimationDriver
   listenerId: string
   signature: string
   running: CompositeAnimation | null
   // The value React was last given for this key, and the moment it was given
   // — the two the cadence is measured against. They survive a restart on
   // purpose: what matters is how stale REACT's copy is, not how far the
-  // animation currently in flight has come.
-  landedValue: number
+  // animation currently in flight has come. A number for a scalar key, an
+  // object/array for a shape one (AnimatableValue, animatable-value.ts).
+  landedValue: AnimatableValue
   landedAt: number
 }
 
@@ -223,9 +232,15 @@ export const createUpdaterAnimations = (
     entries.delete(key)
     entry.running?.stop()
     entry.driver.removeListener(entry.listenerId)
+    // A number originally; now also an object/array of numbers — either way
+    // a resting AnimatableValue owes the caller a render if it differs from
+    // what React was last given. `sameAnimatableValue` replaces the original
+    // `Object.is`: a merged object is rebuilt fresh every frame
+    // (rebuildAnimatableValue), so it is never the SAME reference as the
+    // landed value even when every leaf agrees.
     if (
-      typeof replacement === "number" &&
-      !Object.is(replacement, entry.landedValue)
+      isAnimatableValue(replacement) &&
+      !sameAnimatableValue(replacement, entry.landedValue)
     ) {
       onLanding?.(key)
     }
@@ -251,8 +266,13 @@ export const createUpdaterAnimations = (
     entry.landedAt = now()
   }
 
-  /** The cadence: see LANDING_INTERVAL_MS. */
-  const considerLanding = (key: string, value: number): void => {
+  /**
+   * The cadence: see LANDING_INTERVAL_MS. For a shape key (`{x, y}`, …) "far
+   * enough to change a committed layout" is ANY leaf crossing the epsilon —
+   * `maxAnimatableLeafDelta` is the largest single-leaf change, not a sum, so
+   * a diagonal move is not double-counted into landing twice as often.
+   */
+  const considerLanding = (key: string, value: AnimatableValue): void => {
     if (onLanding === undefined || !hasClock) {
       return
     }
@@ -263,7 +283,7 @@ export const createUpdaterAnimations = (
     if (now() - entry.landedAt < LANDING_INTERVAL_MS) {
       return
     }
-    if (Math.abs(value - entry.landedValue) < LANDING_EPSILON) {
+    if (maxAnimatableLeafDelta(value, entry.landedValue) < LANDING_EPSILON) {
       return
     }
     markLanded(entry)
@@ -310,11 +330,17 @@ export const createUpdaterAnimations = (
    * `republish`; reading one key out of it is the entire mechanism, and the
    * entry does not have to carry a value across runs or outlive its animation.
    *
-   * Numbers only, and `undefined` for everything else, which lines up with
-   * upstream at both ends: a key that was absent has no starting point (its
-   * `oldValues[key]` is `undefined`, and the animation's own `current` — the
-   * target — stands), and a percentage string or a colour is not something the
-   * numeric drivers here can start at.
+   * Numbers only, and `undefined` for everything else — which, now that a key
+   * can hold an OBJECT too, is worth stating precisely: a plain object
+   * (`{x: 5, y: 10}`) does NOT carry over here, on purpose, and it is
+   * upstream's own rule, not a gap in this one. `prepareAnimation`'s branches
+   * are `typeof lastValue === "object"` → was it a shared value (`.value`) or
+   * an animation node (`.onFrame`)? Neither matches a plain data object, so
+   * `value` is left at its default — the animation's own target. A key whose
+   * previous value was a plain OBJECT is therefore seeded at the target
+   * exactly like a key that was absent, and only a plain NUMBER ever carries
+   * over as a starting point. This function already implemented that rule by
+   * accident, before objects were legal at all; nothing here changed.
    */
   const startingPoint = (
     previous: UpdaterObject | null,
@@ -341,8 +367,14 @@ export const createUpdaterAnimations = (
     const from = startingPoint(previous, key)
     // The driver is seeded before anything is built on purpose: a spring reads
     // its origin off the value it is given (animation.ts), so this IS where
-    // "animate from the old number" happens.
-    const driver = new engine.api.Value(from ?? targetOf(spec) ?? 0)
+    // "animate from the old number" happens. makeAnimationDriver picks the
+    // right driver kind for the seed — a number for a scalar key, a shape
+    // (animatable-value.ts) for an object/array one.
+    const driver = makeAnimationDriver(
+      engine.api,
+      from ?? targetOf(spec) ?? 0,
+      `the "${key}" key of an updater's result`,
+    )
     const entry: Entry = {
       driver,
       listenerId: driver.addListener(({ value }) => {

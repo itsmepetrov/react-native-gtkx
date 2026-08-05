@@ -67,4 +67,39 @@ describe("the initial updater run", () => {
     expect(initialUpdaterRun(() => 12)).toBe(12)
     expect(initialUpdaterRun(() => ({ width: 3 }))).toEqual({ width: 3 })
   })
+
+  it("collapses an object-targeted withTiming/withSpring to the target OBJECT, by reference — upstream's defineAnimation returns `starting` unchanged, never a clone", () => {
+    const target = { x: 10, y: 20 }
+    expect(initialUpdaterRun(() => withTiming(target))).toBe(target)
+    const springTarget = { x: 1, y: 2 }
+    expect(initialUpdaterRun(() => withSpring(springTarget))).toBe(springTarget)
+  })
+
+  it("collapses an array-targeted withTiming to the target array, by reference", () => {
+    const target = [1, 2, 3]
+    expect(initialUpdaterRun(() => withTiming(target))).toBe(target)
+  })
+
+  it("collapses the composites over an object target to the object the innermost builder collapsed to", () => {
+    expect(
+      initialUpdaterRun(() => withDelay(500, withTiming({ x: 3, y: 4 }))),
+    ).toEqual({ x: 3, y: 4 })
+    expect(
+      initialUpdaterRun(() =>
+        withSequence(withTiming({ x: 1, y: 1 }), withTiming({ x: 9, y: 9 })),
+      ),
+    ).toEqual({ x: 1, y: 1 })
+    expect(
+      initialUpdaterRun(() => withRepeat(withTiming({ x: 5, y: 6 }), 3)),
+    ).toEqual({ x: 5, y: 6 })
+  })
+
+  it("still throws for an object with a non-numeric leaf, and for a colour string leaf", () => {
+    expect(() =>
+      initialUpdaterRun(() => withTiming({ x: 10, label: "left" } as never)),
+    ).toThrow(/withTiming/)
+    expect(() =>
+      initialUpdaterRun(() => withTiming({ background: "#ff0000" } as never)),
+    ).toThrow(/withTiming/)
+  })
 })

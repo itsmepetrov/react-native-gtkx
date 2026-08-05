@@ -25,17 +25,69 @@
 // 0.5 and visibly bounces, Reanimated 4's is exactly critically damped and
 // does not. Every config below is therefore passed explicitly.
 import {
+  AnimatedValue,
   createValueAnimation,
   type AnimatedApi,
-  type AnimatedValue,
   type CompositeAnimation,
   type FrameScheduler,
 } from "../animated/index"
+import {
+  animatableValueSignature,
+  AnimatedShapeValue,
+  assertAnimatableValue,
+  createShapeValueAnimation,
+  isAnimatableValue,
+  springShapeMakeSteps,
+  timingShapeMakeSteps,
+  type AnimatableValue,
+} from "./animatable-value"
 import { decayStep, resolveDecayConfig, type WithDecayConfig } from "./decay"
 import { Easing, resolveEasing, type EasingFunction } from "./easing"
 
+export type {
+  AnimatableArray,
+  AnimatableObject,
+  AnimatableValue,
+} from "./animatable-value"
+
 /** Called when an animation settles or is cancelled, as upstream. */
-export type AnimationCallback = (finished?: boolean, current?: number) => void
+export type AnimationCallback = (
+  finished?: boolean,
+  current?: AnimatableValue,
+) => void
+
+/**
+ * What every animation in this layer runs on: a single-number `AnimatedValue`
+ * for a number target, or an `AnimatedShapeValue` (animatable-value.ts) for
+ * an object/array one — the SAME driver a spec was built against throughout
+ * its whole tree (a `withSequence`'s steps, a `withRepeat`'s iterations),
+ * because the driver IS the value being animated, not a detail of one step.
+ */
+export type AnimationDriver = AnimatedValue | AnimatedShapeValue
+
+/**
+ * Builds the right driver for `seed`'s type — the ONE place mutable.ts
+ * (a shared-value write) and updater-animations.ts (a key newly animating)
+ * both make this decision, so a number and a shape are dispatched the same
+ * way in both. Throws the same "not animatable" shape of error either module
+ * used to throw on its own number-only gate, widened to name what it got.
+ */
+export const makeAnimationDriver = (
+  api: AnimatedApi,
+  seed: unknown,
+  context: string,
+): AnimationDriver => {
+  if (typeof seed === "number") {
+    return new api.Value(seed)
+  }
+  if (isAnimatableValue(seed)) {
+    return new AnimatedShapeValue(seed)
+  }
+  throw new Error(
+    `react-native-reanimated: ${context} can only be a number, or a plain object/array of numbers ` +
+      `(got ${typeof seed}). Colors and layout values cannot be animated on this platform yet — see docs/api.md.`,
+  )
+}
 
 export type WithTimingConfig = {
   duration?: number
@@ -62,14 +114,14 @@ export type WithSpringConfig = {
 
 type TimingSpec = {
   kind: "timing"
-  toValue: number
+  toValue: AnimatableValue
   config: WithTimingConfig
   callback?: AnimationCallback
 }
 
 type SpringSpec = {
   kind: "spring"
-  toValue: number
+  toValue: AnimatableValue
   config: WithSpringConfig
   callback?: AnimationCallback
 }
@@ -170,25 +222,30 @@ const DEFAULT_SPRING_DURATION = 550
 const DEFAULT_SPRING_DAMPING_RATIO = 1
 const DEFAULT_ENERGY_THRESHOLD = 6e-9
 
-const assertAnimatable = (value: unknown, api: string): number => {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new Error(
-      `react-native-reanimated: ${api}() on this platform animates finite numbers only, got ${typeof value === "string" ? `"${value}"` : String(value)}. ` +
-        "Colors and layout properties cannot be driven imperatively here yet — see docs/api.md.",
-    )
-  }
-  return value
-}
+/**
+ * The number-only gate this whole layer started with, widened to upstream's
+ * real `AnimatableValue` — see animatable-value.ts's header for the
+ * transcription this widening is based on. A thin, generic-preserving
+ * wrapper: every `with*` builder below calls this exactly where it always
+ * called the number-only version.
+ */
+const assertAnimatable = <T extends AnimatableValue>(
+  value: T,
+  api: string,
+): T => assertAnimatableValue(value, api)
 
 /**
  * Lets you animate a value over a duration with an easing curve. Assign the
- * result to a shared value to start it.
+ * result to a shared value to start it. `toValue` is upstream's
+ * `AnimatableValue`: a finite number, or a plain object/array whose leaves
+ * are — a colour string is not (that keeps the separate `interpolateColor`
+ * path, docs/api.md).
  */
-export const withTiming = (
-  toValue: number,
+export const withTiming = <T extends AnimatableValue>(
+  toValue: T,
   config?: WithTimingConfig,
   callback?: AnimationCallback,
-): number =>
+): T =>
   inInitialRun
     ? assertAnimatable(toValue, "withTiming")
     : (mark({
@@ -196,14 +253,14 @@ export const withTiming = (
         toValue: assertAnimatable(toValue, "withTiming"),
         config: config ?? {},
         callback,
-      }) as unknown as number)
+      }) as unknown as T)
 
-/** Lets you animate a value with spring physics. */
-export const withSpring = (
-  toValue: number,
+/** Lets you animate a value with spring physics. See withTiming for `toValue`'s shape. */
+export const withSpring = <T extends AnimatableValue>(
+  toValue: T,
   config?: WithSpringConfig,
   callback?: AnimationCallback,
-): number =>
+): T =>
   inInitialRun
     ? assertAnimatable(toValue, "withSpring")
     : (mark({
@@ -211,10 +268,13 @@ export const withSpring = (
         toValue: assertAnimatable(toValue, "withSpring"),
         config: config ?? {},
         callback,
-      }) as unknown as number)
+      }) as unknown as T)
 
 /** Delays another animation by `delayMs`. */
-export const withDelay = (delayMs: number, animation: number): number => {
+export const withDelay = <T extends AnimatableValue>(
+  delayMs: number,
+  animation: T,
+): T => {
   // Upstream's `starting` for every composite is the animation it wraps,
   // which the initial run has already collapsed to a plain value.
   if (inInitialRun) {
@@ -229,13 +289,15 @@ export const withDelay = (delayMs: number, animation: number): number => {
     kind: "delay",
     delayMs,
     animation,
-  }) as unknown as number
+  }) as unknown as T
 }
 
 /** Runs animations one after another on the same shared value. */
-export const withSequence = (...animations: number[]): number => {
+export const withSequence = <T extends AnimatableValue>(
+  ...animations: T[]
+): T => {
   if (inInitialRun) {
-    return animations[0] ?? 0
+    return animations[0] ?? (0 as T)
   }
   const specs: AnimationSpec[] = []
   for (const animation of animations) {
@@ -246,19 +308,19 @@ export const withSequence = (...animations: number[]): number => {
     }
     specs.push(animation)
   }
-  return mark({ kind: "sequence", animations: specs }) as unknown as number
+  return mark({ kind: "sequence", animations: specs }) as unknown as T
 }
 
 /**
  * Repeats an animation. `numberOfReps <= 0` repeats forever; `reverse` plays
  * every other repetition backwards.
  */
-export const withRepeat = (
-  animation: number,
+export const withRepeat = <T extends AnimatableValue>(
+  animation: T,
   numberOfReps = 2,
   reverse = false,
   callback?: AnimationCallback,
-): number => {
+): T => {
   if (inInitialRun) {
     return animation
   }
@@ -273,7 +335,7 @@ export const withRepeat = (
     numberOfReps,
     reverse,
     callback,
-  }) as unknown as number
+  }) as unknown as T
 }
 
 /**
@@ -553,7 +615,7 @@ export const toPlatformSpringConfig = (
  * The last value an animation aims at, used by `withRepeat`'s reverse and by
  * `updater-animations.ts` to seed a key that is animating for the first time.
  */
-export const targetOf = (spec: AnimationSpec): number | null => {
+export const targetOf = (spec: AnimationSpec): AnimatableValue | null => {
   switch (spec.kind) {
     case "timing":
     case "spring":
@@ -577,7 +639,10 @@ export const targetOf = (spec: AnimationSpec): number | null => {
 }
 
 /** A copy of `spec` aimed at `toValue`, for a reversed repetition. */
-const aimedAt = (spec: AnimationSpec, toValue: number): AnimationSpec => {
+const aimedAt = (
+  spec: AnimationSpec,
+  toValue: AnimatableValue,
+): AnimationSpec => {
   switch (spec.kind) {
     case "timing":
     case "spring":
@@ -618,9 +683,9 @@ const aimedAt = (spec: AnimationSpec, toValue: number): AnimationSpec => {
 export const animationSignature = (spec: AnimationSpec): string => {
   switch (spec.kind) {
     case "timing":
-      return `timing(${spec.toValue},${spec.config.duration ?? ""})`
+      return `timing(${animatableValueSignature(spec.toValue)},${spec.config.duration ?? ""})`
     case "spring":
-      return `spring(${spec.toValue})`
+      return `spring(${animatableValueSignature(spec.toValue)})`
     case "delay":
       return `delay(${spec.delayMs},${animationSignature(spec.animation)})`
     case "sequence":
@@ -654,7 +719,7 @@ const callbackOf = (spec: AnimationSpec): AnimationCallback | undefined =>
 const reportingTo = (
   animation: CompositeAnimation,
   callback: AnimationCallback | undefined,
-  driver: AnimatedValue,
+  driver: AnimationDriver,
 ): CompositeAnimation =>
   callback
     ? {
@@ -680,9 +745,61 @@ export type AnimationEngine = {
   scheduler: FrameScheduler
 }
 
+/**
+ * `withDecay`/`withClamp` stay number-only (they are not in the
+ * AnimatableValue widening — neither is a real upstream export a shape
+ * target would make sense for), so the driver reaching their branch of
+ * `buildAnimation` must already be a plain `AnimatedValue`. Asserted rather
+ * than assumed: a spec tree can only mix a number-only node with a
+ * shape-targeted one by construction that this platform's own generics do
+ * not rule out (`withSequence<T>` unifies `T` across a mixed array), so this
+ * is the same "fail loudly on a shape this driver was not built for" rule
+ * `zipAnimatableLeaves` applies to a mismatched target.
+ */
+const asNumberDriver = (
+  driver: AnimationDriver,
+  api: string,
+): AnimatedValue => {
+  if (!(driver instanceof AnimatedValue)) {
+    throw new Error(
+      `react-native-reanimated: ${api}() only animates a single number on this platform, but the shared value it is animating holds a shape (an object or array), not a number.`,
+    )
+  }
+  return driver
+}
+
+/**
+ * The mirror of `asNumberDriver`: an object/array-targeted `withTiming`/
+ * `withSpring` needs the shared value it is animating to already hold a
+ * shape, not a plain number — the two do not upgrade into one another.
+ */
+const asShapeDriver = (
+  driver: AnimationDriver,
+  api: string,
+): AnimatedShapeValue => {
+  if (!(driver instanceof AnimatedShapeValue)) {
+    throw new Error(
+      `react-native-reanimated: ${api}() was given an object/array target, but the shared value it is animating holds a plain number.`,
+    )
+  }
+  return driver
+}
+
+/** Force-sets `driver` without going through an animation — the two driver kinds each expose their own `setValue`, narrowed by which one `driver` actually is. */
+const setDriverValue = (
+  driver: AnimationDriver,
+  value: AnimatableValue,
+): void => {
+  if (driver instanceof AnimatedValue) {
+    driver.setValue(value as number)
+    return
+  }
+  driver.setValue(value)
+}
+
 const buildRepeat = (
   engine: AnimationEngine,
-  driver: AnimatedValue,
+  driver: AnimationDriver,
   spec: RepeatSpec,
 ): CompositeAnimation => {
   let child: CompositeAnimation | null = null
@@ -717,7 +834,7 @@ const buildRepeat = (
           } else {
             // Replay: snap back to where the repeat began and run again,
             // which is what upstream's onStart(startValue) amounts to.
-            driver.setValue(from)
+            setDriverValue(driver, from)
           }
           runIteration()
         })
@@ -742,29 +859,52 @@ const buildRepeat = (
  */
 export const buildAnimation = (
   engine: AnimationEngine,
-  driver: AnimatedValue,
+  driver: AnimationDriver,
   spec: AnimationSpec,
 ): CompositeAnimation => {
   const { api, scheduler } = engine
   const build = (): CompositeAnimation => {
     switch (spec.kind) {
-      case "timing":
-        return api.timing(driver, {
-          toValue: spec.toValue,
-          duration: spec.config.duration ?? DEFAULT_TIMING_DURATION,
-          easing: spec.config.easing
-            ? resolveEasing(spec.config.easing)
-            : defaultTimingEasing,
-        })
-      case "spring":
-        return api.spring(
-          driver,
-          toPlatformSpringConfig(
-            spec.config,
+      case "timing": {
+        const duration = spec.config.duration ?? DEFAULT_TIMING_DURATION
+        const easing = spec.config.easing
+          ? resolveEasing(spec.config.easing)
+          : defaultTimingEasing
+        if (typeof spec.toValue === "number") {
+          return api.timing(asNumberDriver(driver, "withTiming"), {
+            toValue: spec.toValue,
+            duration,
+            easing,
+          })
+        }
+        return createShapeValueAnimation(
+          scheduler,
+          asShapeDriver(driver, "withTiming"),
+          timingShapeMakeSteps(spec.toValue, duration, easing),
+        )
+      }
+      case "spring": {
+        if (typeof spec.toValue === "number") {
+          const numberDriver = asNumberDriver(driver, "withSpring")
+          return api.spring(
+            numberDriver,
+            toPlatformSpringConfig(
+              spec.config,
+              spec.toValue,
+              numberDriver.__getValue(),
+            ),
+          )
+        }
+        return createShapeValueAnimation(
+          scheduler,
+          asShapeDriver(driver, "withSpring"),
+          springShapeMakeSteps(
             spec.toValue,
-            driver.__getValue(),
+            toPlatformSpringConfig,
+            spec.config,
           ),
         )
+      }
       case "delay":
         return api.sequence([
           api.delay(spec.delayMs),
@@ -777,9 +917,13 @@ export const buildAnimation = (
       case "repeat":
         return buildRepeat(engine, driver, spec)
       case "decay":
-        return createValueAnimation(scheduler, driver, decayStep(spec.config))
+        return createValueAnimation(
+          scheduler,
+          asNumberDriver(driver, "withDecay"),
+          decayStep(spec.config),
+        )
       case "clamp":
-        return buildClamp(engine, driver, spec)
+        return buildClamp(engine, asNumberDriver(driver, "withClamp"), spec)
     }
   }
   return reportingTo(build(), callbackOf(spec), driver)
@@ -798,6 +942,9 @@ const buildClamp = (
   driver: AnimatedValue,
   spec: ClampSpec,
 ): CompositeAnimation => {
+  // withClamp stays number-only (it is not part of this platform's
+  // AnimatableValue widening — see asNumberDriver), so `driver` here is
+  // always a plain AnimatedValue by construction.
   const inner = new engine.api.Value(driver.__getValue())
   inner.addListener(({ value }) => {
     const clipped =

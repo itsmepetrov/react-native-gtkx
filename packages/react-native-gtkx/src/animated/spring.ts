@@ -8,13 +8,18 @@
 import { warnNativeDriverIgnored } from "./native-driver"
 import type { CompositeAnimation, FrameScheduler, SpringConfig } from "./types"
 import type { AnimatedValue } from "./value"
+import type { MakeStep } from "./value-animation"
 import { createValueAnimation } from "./value-animation"
 
-export const createSpring = (
-  scheduler: FrameScheduler,
-  value: AnimatedValue,
-  config: SpringConfig,
-): CompositeAnimation => {
+/**
+ * The pure per-frame math, with no `AnimatedValue` or scheduler attached —
+ * exported for the same reason `timingStep` is (see timing.ts): a caller
+ * animating one leaf of an object/array target needs this exact solver, not
+ * a re-derivation of it, and needs it without a single number driver
+ * attached. `createSpring` below is a thin wrapper over this and
+ * `createValueAnimation`.
+ */
+export const springStep = (config: SpringConfig): MakeStep => {
   const { toValue, delay = 0 } = config
   const stiffness = config.stiffness ?? 100
   const damping = config.damping ?? 10
@@ -28,15 +33,12 @@ export const createSpring = (
       "Animated.spring: stiffness, damping and mass must be positive",
     )
   }
-  if (config.useNativeDriver) {
-    warnNativeDriverIgnored()
-  }
 
   const zeta = damping / (2 * Math.sqrt(stiffness * mass))
   const omega0 = Math.sqrt(stiffness / mass) // undamped frequency, rad/s
   const omega1 = omega0 * Math.sqrt(Math.abs(1 - zeta * zeta))
 
-  return createValueAnimation(scheduler, value, (startValue) => {
+  return (startValue) => {
     const x0 = toValue - startValue
     const v0 = -initialVelocity
     return (elapsedMs) => {
@@ -77,5 +79,19 @@ export const createSpring = (
       }
       return { position, done: false }
     }
-  })
+  }
+}
+
+export const createSpring = (
+  scheduler: FrameScheduler,
+  value: AnimatedValue,
+  config: SpringConfig,
+): CompositeAnimation => {
+  // Built before the native-driver check, so an invalid config still throws
+  // first — exactly the order this had before the math moved into springStep.
+  const step = springStep(config)
+  if (config.useNativeDriver) {
+    warnNativeDriverIgnored()
+  }
+  return createValueAnimation(scheduler, value, step)
 }

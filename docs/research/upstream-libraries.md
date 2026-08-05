@@ -464,3 +464,48 @@ A future revisit needed two platform-level changes; the first is done (see
 the Update under wall 2 above — the global is real now, not a probe). What is
 left is the one that actually matters: either vector-shaped
 `withTiming`/`withSpring` or an equivalent per-item reflow primitive (wall 3) — wall 2 alone was never going to unblock this on its own.
+
+## Revisit, 2026-08-05: wall 3 falls
+
+`withTiming`/`withSpring` now animate upstream's real `AnimatableValue` —
+numbers, and plain objects/arrays whose leaves are numbers, walked
+recursively the way `decorateAnimation` does upstream — not just finite
+numbers (`docs/api.md`, "Animated values"; the reading is transcribed in
+`reanimated-compat/animatable-value.ts`'s header). `useItemLayout`'s
+`position.value = withTiming(layoutPos)` is exactly the shape that widening
+targets, so wall 3 was worth re-running against.
+
+**Verdict: wall 3 falls.** A private headless sway, `gtkx build`'s own
+output (`node dist/bundle.js`, not the Metro `run-linux` path this example
+does not use), a temporary `SortableGrid` of six tiles standing in for a
+gallery section (never committed, reverted after the run — same discipline
+the original recon used for its own temporary `requestAnimationFrame`
+polyfill), and the SAME temporary polyfill again: wall 2
+(`requestAnimationFrame`) is fixed in a parallel, unmerged branch
+(`feat/global-raf`) at the time of this revisit, so the app-local stub stood
+in for it a second time rather than waiting on that branch or committing a
+platform-level global from this one. The grid mounted, laid out all six
+tiles in three columns with the configured gaps, and rendered a marker text
+placed above it — no `assertAnimatableValue` throw, no crash, on the exact
+first-layout-pass path the original wall 3 error trace named
+(`useItemLayout.js:210`).
+
+**Wall 4 (`GestureStateManager`) is not re-verified by this revisit.** The
+previous write-up's reasoning for it stands untouched — upstream's own
+README says the v3 gesture-handler hook adapter it needs "requires the New
+Architecture", so it was never going to be free even with wall 3 gone — but
+this pass only re-ran the MOUNT, the same scope the task that prompted it
+asked for; no drag was attempted, so wall 4 is documented rather than hit.
+
+**Cost, now that a per-item Vector is a real capability and not a crash**:
+an `{x, y}` `withTiming` frame costs about 2× a single number's own
+frame — 0.24 µs against 0.12 µs, VM-measured median of 15 rounds ×
+100,000 frames, `spike/bench-vector-animated-values.ts` — well inside the
+budget a per-item reflow across a whole grid needs, and nowhere near the
+per-property write costs `docs/api.md`'s boundary table carries (a driven
+`transform` is 1.5 µs on its own).
+
+Kept from the original recon, unchanged by this revisit: the dependency at
+the measured version, the vite wiring, and the decision not to add a gallery
+section — wall 4 is still there, so a sidebar entry would still need a
+disclaimer explaining why dragging it does nothing.

@@ -12,7 +12,7 @@
 // React: one render at the settle turned out to be a promise that a target
 // moving every frame never comes due on.
 import { beforeEach, expect, test } from "vitest"
-import { createAnimated } from "../../../src/animated/index"
+import { createAnimated, Easing } from "../../../src/animated/index"
 import {
   withDelay,
   withSequence,
@@ -553,4 +553,151 @@ test("dispose stops everything and publishes nothing more", () => {
   animations.dispose()
   runFrames(60)
   expect(sink.published.length).toBe(publishedCount)
+})
+
+// --- object-valued keys: react-native-sortables' whole reflow model is one
+// `position.value = withTiming(layoutPos)` on a `{x, y}` shared value — this
+// is the SAME machinery, one level up: a style/props key held by ONE
+// withTiming/withSpring call whose target is an object, not a number.
+
+test("an object key animating for the first time is seeded at the target — the SAME rule as an absent one, not the plain-number rule", () => {
+  // The surprising half of the upstream reading: prepareAnimation's
+  // typeof lastValue === "object" branch has no case for a plain data
+  // object (only a shared value's `.value` or an animation's `.onFrame`), so
+  // a key that previously held `{x: 0, y: 0}` does NOT carry over as a
+  // starting point — it is seeded at the target exactly like a key that was
+  // never there. See updater-animations.ts's startingPoint doc.
+  const sink = collector()
+  const animations = createUpdaterAnimations(engine, (resolved) => {
+    sink.published.push(resolved)
+  })
+  animations.run({ position: { x: 0, y: 0 } })
+  animations.run({
+    position: withTiming({ x: 100, y: 200 }, { duration: 300 }),
+  })
+  expect(sink.last()).toEqual({ position: { x: 100, y: 200 } })
+  expect(manual.activeCount()).toBe(0)
+})
+
+test("an object key interpolates every leaf together and publishes the whole object each frame", () => {
+  const sink = collector()
+  const animations = createUpdaterAnimations(engine, (resolved) => {
+    sink.published.push(resolved)
+  })
+  animations.run({
+    position: withTiming(
+      { x: 0, y: 0 },
+      { duration: 200, easing: Easing.linear },
+    ),
+  })
+  runFrames(6)
+  expect(sink.last()).toEqual({ position: { x: 0, y: 0 } })
+
+  animations.run({
+    position: withTiming(
+      { x: 100, y: 200 },
+      { duration: 200, easing: Easing.linear },
+    ),
+  })
+  runFrames(6)
+  const midway = sink.last()!.position as { x: number; y: number }
+  expect(midway.x).toBeGreaterThan(0)
+  expect(midway.x).toBeLessThan(100)
+  expect(midway.y).toBeCloseTo(midway.x * 2, 5) // same progress fraction, both leaves
+  runFrames(25)
+  expect(sink.last()).toEqual({ position: { x: 100, y: 200 } })
+})
+
+test("the callback on an object animation fires exactly once, not once per leaf", () => {
+  const settled: string[] = []
+  const animations = createUpdaterAnimations(
+    engine,
+    () => {},
+    (key) => settled.push(key),
+  )
+  // Seeds at {x: 0, y: 0} without starting (first time the key is seen).
+  animations.run({ position: withTiming({ x: 0, y: 0 }, { duration: 100 }) })
+  // A new, distinct target on the SAME key restarts the entry — THIS run
+  // actually starts an animation.
+  animations.run({
+    position: withTiming({ x: 10, y: 20 }, { duration: 100 }),
+  })
+  runFrames(10)
+  expect(settled).toEqual(["position"])
+})
+
+test("an object key restart continues from wherever it currently is, not from the new target's origin", () => {
+  const sink = collector()
+  const animations = createUpdaterAnimations(engine, (resolved) => {
+    sink.published.push(resolved)
+  })
+  animations.run({
+    position: withTiming({ x: 0, y: 0 }, { duration: 300 }),
+  })
+  animations.run({
+    position: withTiming({ x: 100, y: 100 }, { duration: 300 }),
+  })
+  runFrames(9)
+  const midway = sink.last()!.position as { x: number; y: number }
+  expect(midway.x).toBeGreaterThan(0)
+
+  animations.run({
+    position: withTiming({ x: 40, y: 40 }, { duration: 300 }),
+  })
+  // No discontinuity: the very next publish is still where it was.
+  expect(sink.last()).toEqual({ position: midway })
+})
+
+test("a plain object replacing a running object animation snaps at once, not eased back", () => {
+  const sink = collector()
+  const animations = createUpdaterAnimations(engine, (resolved) => {
+    sink.published.push(resolved)
+  })
+  animations.run({
+    position: withTiming({ x: 0, y: 0 }, { duration: 300 }),
+  })
+  animations.run({
+    position: withTiming({ x: 100, y: 100 }, { duration: 300 }),
+  })
+  runFrames(4)
+  animations.run({ position: { x: 5, y: 5 } })
+  expect(sink.last()).toEqual({ position: { x: 5, y: 5 } })
+  const publishedCount = sink.published.length
+  runFrames(25)
+  expect(sink.published.length).toBe(publishedCount)
+})
+
+test("a re-aim whose target shape does not match the key's own current value throws, rather than silently dropping the extra leaf the way upstream does", () => {
+  const sink = collector()
+  const animations = createUpdaterAnimations(engine, (resolved) => {
+    sink.published.push(resolved)
+  })
+  // Seeded at {x: 0, y: 0} — the first of the header's three rules, no
+  // animation runs yet.
+  animations.run({ position: withTiming({ x: 0, y: 0 }, { duration: 300 }) })
+  expect(sink.last()).toEqual({ position: { x: 0, y: 0 } })
+
+  // A later run re-aims the SAME key at a differently-shaped target — a
+  // genuine programming mistake (not react-native-sortables' actual usage,
+  // whose Vector is always {x, y}), and this platform throws naming the
+  // path rather than upstream's silent NaN/dropped-key accident.
+  expect(() =>
+    animations.run({
+      position: withTiming({ x: 5, y: 5, z: 5 } as never, { duration: 100 }),
+    }),
+  ).toThrow(/withTiming/)
+})
+
+test("a plain object leaves updater's result byte-identical when nothing animates it — an object of leaves is not mistaken for an animation spec", () => {
+  // The MARKER (animation.ts) is what makes this possible: withTiming's
+  // result carries it, a plain `{x, y}` object never does, so isAnimationSpec
+  // tells them apart without inspecting shape at all.
+  const sink = collector()
+  const animations = createUpdaterAnimations(engine, (resolved) => {
+    sink.published.push(resolved)
+  })
+  const source = { position: { x: 10, y: 20 } }
+  animations.run(source)
+  expect(sink.last()).toBe(source)
+  expect(manual.activeCount()).toBe(0)
 })

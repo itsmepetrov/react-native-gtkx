@@ -342,16 +342,18 @@ test("withSpring accepts the perceptual duration/dampingRatio config", () => {
 
 test("an animation assigned to a non-numeric value refuses loudly", () => {
   // The property gap, made visible: a colour cannot be driven here yet, and
-  // saying so beats animating nothing.
+  // saying so beats animating nothing. The gate widened (numbers AND
+  // object/array shapes of numbers, see animatable-value.ts) but a colour
+  // string is still on neither side of it.
   const colour = makeMutable("#ff0000")
   expect(() => {
     colour.value = withTiming(1) as unknown as string
-  }).toThrow(/shared value holding a number/)
+  }).toThrow(/can only be a number, or a plain object\/array of numbers/)
 })
 
 test("withTiming refuses a non-numeric target at the call site", () => {
   expect(() => withTiming("#ff0000" as unknown as number)).toThrow(
-    /animates finite numbers only/,
+    /animates finite numbers, and plain objects\/arrays whose leaves are finite numbers/,
   )
 })
 
@@ -359,4 +361,117 @@ test("withSequence and withRepeat refuse a plain value", () => {
   expect(() => withSequence(1 as number)).toThrow(/takes animations/)
   expect(() => withRepeat(1 as number)).toThrow(/takes an animation/)
   expect(() => withDelay(10, 1 as number)).toThrow(/takes an animation/)
+})
+
+// --- object-valued shared values: react-native-sortables' own reflow model,
+// `position.value = withTiming(layoutPos)` on a `{x, y}` Vector — the wall
+// PR #124 found and this widening exists to fall.
+
+test("withTiming drives every leaf of an object shared value, publishing the whole object each frame", () => {
+  const position = makeMutable({ x: 0, y: 0 })
+  position.value = withTiming(
+    { x: 100, y: 200 },
+    { duration: 100, easing: Easing.linear },
+  )
+  manual.advance(0)
+  manual.advance(50)
+  expect(position.value).toEqual({ x: 50, y: 100 })
+  manual.advance(50)
+  expect(position.value).toEqual({ x: 100, y: 200 })
+})
+
+test("withSpring drives every leaf of an object shared value, each with its own independently-solved physics", () => {
+  const position = makeMutable({ x: 0, y: 0 })
+  position.value = withSpring({ x: 10, y: 1000 })
+  manual.advance(0)
+  for (let i = 0; i < 400 && manual.activeCount() > 0; i++) {
+    manual.advance(16)
+  }
+  expect(position.value).toEqual({ x: 10, y: 1000 })
+})
+
+test("withDelay/withSequence/withRepeat compose over an object target exactly as they do over a number", () => {
+  const position = makeMutable({ x: 0, y: 0 })
+  const order: string[] = []
+  position.value = withSequence(
+    withTiming({ x: 10, y: 10 }, { duration: 100, easing: Easing.linear }, () =>
+      order.push("first"),
+    ),
+    withDelay(
+      50,
+      withTiming(
+        { x: 20, y: 0 },
+        { duration: 100, easing: Easing.linear },
+        () => order.push("second"),
+      ),
+    ),
+  )
+  manual.advance(0)
+  manual.advance(100)
+  expect(position.value).toEqual({ x: 10, y: 10 })
+  expect(order).toEqual(["first"])
+
+  manual.advance(0)
+  manual.advance(50) // the delay
+  expect(position.value).toEqual({ x: 10, y: 10 })
+  manual.advance(100)
+  expect(position.value).toEqual({ x: 20, y: 0 })
+  expect(order).toEqual(["first", "second"])
+})
+
+test("withRepeat(reverse) ping-pongs an object target back to where it started", () => {
+  const position = makeMutable({ x: 0, y: 0 })
+  position.value = withRepeat(
+    withTiming({ x: 10, y: 20 }, { duration: 100, easing: Easing.linear }),
+    2,
+    true,
+  )
+  manual.advance(0)
+  manual.advance(100)
+  expect(position.value).toEqual({ x: 10, y: 20 })
+  manual.advance(0)
+  manual.advance(100)
+  expect(position.value).toEqual({ x: 0, y: 0 })
+})
+
+test("a callback on an object animation reports the whole merged object as `current`, once", () => {
+  const position = makeMutable({ x: 0, y: 0 })
+  const done = vi.fn()
+  position.value = withTiming(
+    { x: 5, y: 9 },
+    { duration: 100, easing: Easing.linear },
+    done,
+  )
+  manual.advance(0)
+  manual.advance(100)
+  expect(done).toHaveBeenCalledTimes(1)
+  expect(done).toHaveBeenCalledWith(true, { x: 5, y: 9 })
+})
+
+test("an object shared value assigned a differently-shaped animation target throws, not NaN", () => {
+  const position = makeMutable({ x: 0, y: 0 })
+  expect(() => {
+    position.value = withTiming({ x: 1, y: 2, z: 3 } as never)
+  }).toThrow(/shape/)
+})
+
+test("an array shared value animates its flat numeric leaves the same way an object does", () => {
+  const stops = makeMutable([0, 0, 0])
+  stops.value = withTiming([1, 2, 3], { duration: 100, easing: Easing.linear })
+  manual.advance(0)
+  manual.advance(100)
+  expect(stops.value).toEqual([1, 2, 3])
+})
+
+test("a plain object assigned to a shared value is never mistaken for an animation — the MARKER, not the shape, decides", () => {
+  const position = makeMutable({ x: 0, y: 0 })
+  const listener = vi.fn()
+  position.addListener(({ value }) => listener(value))
+  // A plain object write — same shape an animation's target would have — is
+  // just a write. isAnimationSpec checks animation.ts's MARKER field, never
+  // the shape of the value, so this never starts an animation.
+  position.value = { x: 3, y: 4 }
+  expect(position.value).toEqual({ x: 3, y: 4 })
+  expect(listener).toHaveBeenCalledTimes(1)
+  expect(manual.activeCount()).toBe(0)
 })

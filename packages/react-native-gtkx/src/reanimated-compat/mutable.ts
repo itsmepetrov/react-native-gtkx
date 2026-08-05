@@ -24,14 +24,11 @@
 // silently, which this repo treats as the worst outcome. The convention is
 // picked from what actually arrived, and the two id spaces are kept apart so
 // a caller-chosen numeric id cannot collide with a generated one.
-import type {
-  AnimatedApi,
-  AnimatedValue,
-  FrameScheduler,
-} from "../animated/index"
+import type { AnimatedApi, FrameScheduler } from "../animated/index"
 import {
   buildAnimation,
   isAnimationSpec,
+  makeAnimationDriver,
   type AnimationEngine,
   type AnimationSpec,
 } from "./animation"
@@ -107,16 +104,18 @@ export const createMakeMutable = (
 
     const startAnimation = (spec: AnimationSpec): void => {
       stopAnimation()
-      if (typeof current !== "number") {
-        throw new Error(
-          "react-native-reanimated: an animation can only be assigned to a shared value holding a number " +
-            `(this one holds ${typeof current}). Colors and layout values cannot be animated on this platform yet — see docs/api.md.`,
-        )
-      }
       // A fresh driver per run, constructed at the current value: restarting
       // an animation must pick up from wherever the value is now, and the
       // platform's engine derives its start value from the node it drives.
-      const driver: AnimatedValue = new api.Value(current)
+      // A number gets the platform's own AnimatedValue, unchanged; an object
+      // or array of numbers — upstream's AnimatableValue, widened from
+      // number-only (animatable-value.ts) — gets its shape counterpart.
+      // Anything else was never animatable and still is not.
+      const driver = makeAnimationDriver(
+        api,
+        current,
+        "a shared value that an animation is assigned to",
+      )
       const driverListener = driver.addListener(({ value }) => {
         commit(value as T)
       })
