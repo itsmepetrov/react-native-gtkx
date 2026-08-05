@@ -57,9 +57,86 @@ by an async fetch comes up blank.
 - Nothing for gtkx to do here. Kept in this file so the next release does
   not re-open the question.
 
+### 2. A panic inside the GLib log-writer trampoline aborts the whole process, not just the offending log call
+
+A burst of ordinary (non-fatal) `g_log()` traffic — many `Gtk-CRITICAL`
+warnings issued back-to-back, nothing a consuming app would consider
+fatal — can bring the entire embedding process down with `SIGABRT`,
+because the writer function gtkx installs via `log_set_writer_func` (the
+`glib` crate's own hook) panics while handling one of them, and that panic
+crosses a C→Rust callback boundary Rust's runtime has decided cannot
+unwind.
+
+- Repro: our own `tests/gtk/dnd/collision-thresholds.gtk.test.tsx`, run
+  under `@gtkx/vitest`'s `pool: "forks"` (one headless-compositor fork per
+  test file). One of our own components (see "our bug" below) was calling
+  `Gtk.Adjustment.configure()` with a `page_size` bigger than `upper` —
+  invalid per `gtk_adjustment_configure`'s own precondition. GTK's
+  `g_return_if_fail` rejects the call, logs a `Gtk-CRITICAL`, and — this is
+  the part that matters — leaves the adjustment'S properties UNCHANGED, so
+  a caller gating a retry on "did the properties already reach the target"
+  (ours did, inside a per-frame tick callback) reissues the exact same
+  invalid call on every animation frame for as long as the callback stays
+  active. In one 73-second run this produced 1,699 identical rejected
+  calls; somewhere inside that burst, the writer trampoline panics and
+  takes the whole Node process with it — full gdb backtrace on file, main
+  thread:
+  ```
+  #3  __GI_abort
+  #4  std::sys::pal::unix::abort_internal          (native.linux-arm64-gnu.node)
+  #5  std::process::abort                          (native.linux-arm64-gnu.node)
+  #6  std::panicking::panic_with_hook               (native.linux-arm64-gnu.node)
+  ...
+  #10 core::panicking::panic_nounwind_fmt           (native.linux-arm64-gnu.node)
+  #12 core::panicking::panic_cannot_unwind          (native.linux-arm64-gnu.node)
+  #13 glib::log::log_set_writer_func::writer_trampoline (native.linux-arm64-gnu.node)
+  #14 g_log_structured_array                        (libglib-2.0.so.0)
+  #15 g_log_default_handler                         (libglib-2.0.so.0)
+  #16 g_logv                                        (libglib-2.0.so.0)
+  #17 g_log                                         (libglib-2.0.so.0)
+  #18 ffi_call_SYSV                                 (native.linux-arm64-gnu.node)
+  ...
+  #23 v8impl::FunctionCallbackWrapper::Invoke
+  ```
+  `panic_cannot_unwind` is Rust's own "this panic tried to cross an
+  `extern "C"` frame, which is undefined behaviour, so abort instead of
+  unwind" path — the panic itself, not the log message, is what is
+  uncharacterized: we do not know what inside `writer_trampoline` panics
+  under this traffic, only that something does.
+- CI sightings this closed (both 2026-08-04, same signature — a green test
+  summary followed by `[vitest-pool]: Worker forks emitted error` /
+  `Worker exited unexpectedly`, the pool discovering only after the fact
+  that one file's fork died mid-run): runs 30903167960 and 30904467362.
+  Reproduced locally at will once the trigger was known — see "our bug".
+- **This is the same subsystem as the `runtime-dedupe` workaround above**
+  (`docs/gtkx-rc4-notes.md`): that row is a SIGABRT from calling
+  `log_set_writer_func` twice; this is a SIGABRT from a panic inside the
+  function it installs. Different call sites, same conclusion — the
+  writer-func integration is not yet hardened against being wrong in an
+  ordinary way.
+- Our bug, fixed here: `syncAdjustmentRange` in
+  `packages/react-native-gtkx/src/components/scroll-view.tsx` computed
+  `upper` as the content's own size, which can be smaller than the
+  viewport's (a short list in a tall `ScrollView` — routine, not an edge
+  case). Clamping `upper` to at least `page_size` (the standard "nothing to
+  scroll" `GtkAdjustment` range) makes every call valid and stops the
+  retry loop entirely, removing the one path we had into this. It does not
+  touch gtkx.
+- Ask: wrap `writer_trampoline`'s body in `std::panic::catch_unwind`,
+  returning `glib::LogWriterOutput::Unhandled` (or the crate's equivalent
+  "let GLib fall back to its own default handler") on a caught panic,
+  rather than letting the panic reach the FFI boundary at all. A bug in
+  formatting or forwarding one log line should cost that log line, not the
+  process embedding gtkx — the same principle the `runtime-dedupe` ask
+  above is already asking for at the registration site.
+- We do not have a minimal repro outside our own app (constructing one
+  needs whatever inside `writer_trampoline` panics, which we have not
+  isolated) — the backtrace and the reproduction path above are what we
+  have to open an issue with.
+
 ## API asks
 
-### 2. A layout-manager contract for embedders
+### 3. A layout-manager contract for embedders
 
 We subclass `GtkLayoutManager` (`RnGtkxLayout`) to place children at
 Yoga-computed rects, and `GtkWidget.contains()` (via `registerClass`) to
@@ -94,7 +171,7 @@ undocumented as an embedding surface.
   not the GObject class hierarchy — there is no `peek_parent` anywhere in the
   runtime.
 
-### 3. Config registration for embedders — **it has now broken us three releases running**
+### 4. Config registration for embedders — **it has now broken us three releases running**
 
 Our runner hosts execute a plain Node bundle, so they synthesize the
 `virtual:gtkx-config` module themselves, through `createConfigLoader` from
@@ -132,7 +209,7 @@ we own.
   direction: it is exactly the case an embedder that is not the CLI has no
   seat at.
 
-### 4. Keep the settings types importable from where the hooks are
+### 5. Keep the settings types importable from where the hooks are
 
 rc.4 moved `SettingsSchema`, `SettingsSchemaKeys` and `SettingValue` off
 `@gtkx/react` into `@gtkx/react/internal`, while `useSetting` and
@@ -153,7 +230,7 @@ to import from `/internal` and inherit that subpath's no-promises status.
   `/** @public */` annotation pass rc.4 did across the entry points rather
   than a decision — the hooks kept their annotations and their types did not.
 
-### 5. Set the Wayland `app_id` from `applicationId`
+### 6. Set the Wayland `app_id` from `applicationId`
 
 `gtkx.config.ts` makes an app declare `applicationId`, validated against
 `g_application_id_is_valid`, and it becomes the GApplication id. Nothing
@@ -185,7 +262,7 @@ our PR #88.
 - Happy to send the patch; it is a one-line bootstrap change plus a test that
   reads the app_id back through a compositor.
 
-### 6. Let `GtkScrolledWindow` report the phases of the controller it owns
+### 7. Let `GtkScrolledWindow` report the phases of the controller it owns
 
 RN's `ScrollView` contract has four phases — `onScrollBeginDrag`,
 `onScrollEndDrag`, `onMomentumScrollBegin`, `onMomentumScrollEnd` — and a
@@ -212,7 +289,7 @@ contract pays it forever.
   either answer: a gtkx-side wrapper over what GTK exposes today would help
   even if the underlying signals never appear.
 
-### 7. Keep the user-event signal table extensible and documented
+### 8. Keep the user-event signal table extensible and documented
 
 rc.2 inverted commit-time signal suppression (an allowlist became a
 built-in per-type table plus `userEventSignals`), and rc.3 narrowed the
@@ -225,7 +302,7 @@ by reading `@gtkx/config/dist/user-event-signals.js` and a release note.
 - Ask: document the table and the extension point; it is exactly what a
   library embedding gtkx must reason about.
 
-### 8. `userEvent` cannot produce a real `GdkEvent` — and the missing piece is already in the box
+### 9. `userEvent` cannot produce a real `GdkEvent` — and the missing piece is already in the box
 
 `@gtkx/testing`'s `userEvent` drives widgets by **emitting GtkGesture
 signals** on the controllers of the widget you name — `userEvent.drag` calls

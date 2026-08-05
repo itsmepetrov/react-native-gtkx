@@ -351,8 +351,22 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
       if (!content || !viewport) {
         return
       }
-      const upper = content[axis]
       const pageSize = viewport[axis]
+      // A viewport taller/wider than its content (a short list in a tall
+      // ScrollView — routine, not an edge case) must still satisfy GTK's own
+      // `gtk_adjustment_configure` precondition (`lower + page_size <=
+      // upper`): clamping `upper` up to at least `pageSize` is the standard
+      // "nothing to scroll" range, exactly like a GtkScrollbar whose thumb
+      // fills the whole trough. Without this, a page size bigger than the
+      // content invalidates every `configure()` call — GTK logs a
+      // Gtk-CRITICAL and, per `gtk_adjustment_configure`'s own
+      // `g_return_if_fail`, leaves the adjustment UNCHANGED, so the
+      // `getUpper()`/`getPageSize()` guard above never starts matching and a
+      // caller retrying every frame (`autoscroll.tsx`'s tick callback, while
+      // active) reissues the same invalid call on every tick for as long as
+      // it stays active — a burst of thousands of identical criticals from
+      // one stuck loop rather than one-off noise.
+      const upper = Math.max(content[axis], pageSize)
       if (
         adjustment.getUpper() === upper &&
         adjustment.getPageSize() === pageSize
