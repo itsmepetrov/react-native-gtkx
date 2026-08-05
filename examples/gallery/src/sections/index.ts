@@ -54,6 +54,7 @@ export const SECTION_IDS = [
   "svg",
   "upstream-drop-zones",
   "upstream-sortables",
+  "upstream-rn-sortables",
   "upstream-drawer",
   "upstream-bottom-sheet",
 ] as const
