@@ -151,14 +151,17 @@ export const adwAvailable = (): boolean => cached !== null
 
 const NOT_AVAILABLE =
   ' requires "Adw-1" in this app\'s gtkx.config.ts `libraries` — see ' +
-  "docs/api.md (the plain-GTK profile). Fallbacks for the plain profile are " +
-  "a separate, later change; today this throws rather than silently doing " +
-  "nothing."
+  "docs/api.md (the plain-GTK profile) for what needs Adw unconditionally " +
+  "and what falls back without it."
 
 /** The repo's loud named throw for a feature that reached for Adw and found
- *  none — every Adw-dependent call site in the seam funnels through this,
- *  so the message is the same whether it is Alert, Appearance, chrome:
- *  "content", NavigationStack or react-native-gtkx/adw itself asking. */
+ *  none. Every Adw-dependent call site in the seam funnels through this, but
+ *  most no longer reach it in practice: Alert, Appearance and chrome:
+ *  "content" all check `adwAvailable()` themselves first and take a
+ *  plain-GTK fallback instead (see .claude/epics/adw-optional/002.md,
+ *  003.md, 004.md) — this throw is what is left for the features with no
+ *  fallback at all (NavigationStack, react-native-gtkx/adw's own
+ *  AdwBreakpoint family). */
 const requireAdw = (feature: string): AdwModules => {
   if (!cached) {
     throw new Error(`[react-native-gtkx] ${feature}${NOT_AVAILABLE}`)

@@ -199,6 +199,54 @@ const hasAdwStore = (root: string): boolean => {
   }
 }
 
+// The two raw specifiers every Adw-dependent file in the bridge imports as a
+// LITERAL (gtkx/bridge/adw.ts's own probe, gtkx/bridge/adw-namespace.ts,
+// gtkx/bridge/widgets.generated.adw.ts) — needed as literals so `gtkx
+// build`'s real Rollup graph gives them the same static treatment as every
+// other gtkx import (see the doc above and .claude/epics/adw-optional/006.md).
+// That literal-ness has a cost `gtkx build` never pays but `gtkx dev` and
+// vitest do: both run every file through Vite's SSR module runner, which
+// resolves every import() call it can find in a file's text — including one
+// inside a dead `if (__GTKX_ADW_AVAILABLE__ === false)` branch — as part of
+// loading that FILE, before any of the file's own code (the runtime guard,
+// the try/catch around it) ever executes. `esbuild`'s dead-code elimination
+// is what makes the literal safe for `gtkx build`, and it is a real BUNDLE
+// optimization, not something the dev server or vitest's request-based
+// transform ever performs — so on a store with no "Adw-1" declared, every
+// one of those three files failed to even LOAD (a raw "'./adw' is not
+// exported" resolver error out of Vite's own builtin:vite-resolve, not any
+// message this package writes), which took the ENTIRE package down with it:
+// gtkx/bridge/adw.ts is an ordinary dependency of apis/host.gtkx.ts,
+// components/app-registry.tsx and common/navigation-stack.tsx, so nothing
+// that reaches any of those — which is most of the surface — could load
+// either. Found writing .claude/epics/adw-optional/005.md's own guard
+// tests: spike/plain-gtk's PRE-EXISTING alert/appearance GTK tests (003.md,
+// 004.md) failed the exact same way.
+//
+// Fixed the same way `gtkx:undeclared-library` itself is a resolveId hook,
+// not a source change: intercept these two specifiers HERE, before Vite's
+// own resolver (or gtkx's) ever sees them, whenever this app's store
+// genuinely lacks Adw — resolving them to a tiny virtual module that THROWS
+// ONLY WHEN ACTUALLY EVALUATED (i.e. lazily, exactly when something really
+// awaits the dynamic import, or — for the two eager importers above — when
+// something actually loads react-native-gtkx/adw). That is late enough for
+// gtkx/bridge/adw.ts's own `try { ... } catch { return null }` to catch it
+// as a genuine rejected promise, same as it always could for a specifier
+// Node's own loader could not find; for the two EAGER importers, it turns
+// what used to be a generic third-party resolver error into this package's
+// own named, actionable throw (the ONE message text below, since neither
+// eager importer has a call-site "feature" name available to it the way
+// requireAdwGi/requireAdwJsx's callers do — see gtkx/bridge/adw.ts). When
+// the store DOES have Adw, `hasAdwStore` is true and this hook falls
+// through to real resolution, unchanged: `gtkx build`'s dedupe and native-
+// asset rewrite still see a real, literal specifier.
+const ADW_ONLY_SPECIFIERS = new Set(["@gtkx/gi/adw", "@gtkx/jsx/adw"])
+const ADW_UNAVAILABLE_PREFIX = "\0gtkx-adw-unavailable:"
+const adwUnavailableMessage = (specifier: string): string =>
+  `[react-native-gtkx] "${specifier}" requires "Adw-1" in this app's ` +
+  "gtkx.config.ts `libraries` — see docs/api.md (the plain-GTK profile) " +
+  "for what needs Adw unconditionally and what falls back without it."
+
 // --- the vite plugin ----------------------------------------------------
 
 export type ReactNativeGtkxOptions = PlatformResolutionOptions & {
@@ -348,6 +396,14 @@ export const reactNativeGtkx = (
     }),
 
     async resolveId(source, importer) {
+      // See ADW_ONLY_SPECIFIERS' own doc above: on a store with no "Adw-1",
+      // resolving either of these for real fails the whole file that
+      // imports them, before that file's own code (a runtime guard, a
+      // try/catch) ever runs. Checked first, ahead of the alias table below
+      // (neither specifier is in it).
+      if (ADW_ONLY_SPECIFIERS.has(source) && !hasAdwStore(process.cwd())) {
+        return ADW_UNAVAILABLE_PREFIX + source
+      }
       // The app's table, not the default one: a package dropped with `false`
       // falls through to vite's own resolution and the real package loads.
       const aliased = applyAliases(aliases, source)
@@ -358,6 +414,14 @@ export const reactNativeGtkx = (
         return resolved ?? aliased
       }
       return resolvePlatformSpecifier(source, importer, existsSync, options)
+    },
+
+    load(id) {
+      if (!id.startsWith(ADW_UNAVAILABLE_PREFIX)) {
+        return null
+      }
+      const specifier = id.slice(ADW_UNAVAILABLE_PREFIX.length)
+      return `throw new Error(${JSON.stringify(adwUnavailableMessage(specifier))})`
     },
   }
 }
