@@ -3,7 +3,17 @@
 // pure and receive this object (or a mock in unit tests) via injection.
 
 import type { SubscriptionHandle } from "../contracts"
-import { colorScheme, requireAdwGi, styleManager } from "../gtkx/bridge/adw"
+import {
+  adwAvailable,
+  colorScheme,
+  requireAdwGi,
+  styleManager,
+} from "../gtkx/bridge/adw"
+import {
+  getPlainColorScheme,
+  onPlainColorSchemeChange,
+  setPlainColorScheme,
+} from "../gtkx/bridge/color-scheme-portal"
 import { Gdk, Gio, Gtk, quit, toNumber } from "../gtkx/bridge/index"
 import type {
   ColorSchemeName,
@@ -269,7 +279,7 @@ const gtkVersion = (): string =>
 // answers the setting with "unsupported ... use AdwStyleManager:color-scheme
 // instead" and keeps its own value, so all the duplicate ever produced was a
 // warning per call — seven per test run.
-const setColorScheme = (scheme: ColorSchemeName | null): void => {
+const setColorSchemeAdw = (scheme: ColorSchemeName | null): void => {
   const manager = styleManager()
   const { ColorScheme } = requireAdwGi("Appearance")
   if (scheme === "dark") {
@@ -281,14 +291,27 @@ const setColorScheme = (scheme: ColorSchemeName | null): void => {
   }
 }
 
-const onColorSchemeChange = (notify: () => void): SubscriptionHandle => {
+const onColorSchemeChangeAdw = (notify: () => void): SubscriptionHandle => {
   const manager = styleManager()
   const listener = (): void => notify()
   manager.on("notify::dark", listener)
   return { remove: () => manager.off("notify::dark", listener) }
 }
 
-const showAlert = async (request: HostAlertRequest): Promise<string | null> => {
+// Without Adw-1 (adwAvailable() === false): the org.freedesktop.appearance
+// portal, falling back to Gtk.Settings — see gtkx/bridge/color-scheme-portal.ts
+// for the two-tier mechanism and .claude/epics/adw-optional/004.md for why.
+const setColorScheme = (scheme: ColorSchemeName | null): void =>
+  adwAvailable() ? setColorSchemeAdw(scheme) : setPlainColorScheme(scheme)
+
+const onColorSchemeChange = (notify: () => void): SubscriptionHandle =>
+  adwAvailable()
+    ? onColorSchemeChangeAdw(notify)
+    : onPlainColorSchemeChange(notify)
+
+const showAlertAdw = async (
+  request: HostAlertRequest,
+): Promise<string | null> => {
   const { AlertDialog, ResponseAppearance } = requireAdwGi("Alert")
   const dialog = new AlertDialog()
   dialog.setHeading(request.title)
@@ -325,6 +348,63 @@ const showAlert = async (request: HostAlertRequest): Promise<string | null> => {
     : null
 }
 
+// Without Adw-1: Gtk.AlertDialog (GTK >= 4.10) — index-based rather than
+// Adw's string response ids, so the button's position in request.buttons IS
+// its Gtk.AlertDialog index; no id bookkeeping needed. What is LOST: Adw's
+// ResponseAppearance (DESTRUCTIVE/SUGGESTED) has no Gtk.AlertDialog
+// equivalent at all — every button renders the same, undocumented-away in
+// docs/api.md's Alert row rather than silently dropped. Default/cancel
+// mapping is preserved via defaultButton/cancelButton, same idea as Adw's
+// defaultResponse/closeResponse above.
+const showAlertPlain = async (
+  request: HostAlertRequest,
+): Promise<string | null> => {
+  const dialog = new Gtk.AlertDialog({
+    message: request.title,
+    detail: request.message ?? "",
+    buttons: request.buttons.map((button) => button.label),
+    modal: true,
+  })
+  const preferredIndex = request.buttons.findIndex(
+    (button) => button.isPreferred,
+  )
+  if (preferredIndex >= 0) {
+    dialog.setDefaultButton(preferredIndex)
+  }
+  const cancelIndex = request.buttons.findIndex(
+    (button) => button.style === "cancel",
+  )
+  if (cancelIndex >= 0) {
+    // Esc maps onto the cancel button, same as the Adw path's closeResponse.
+    dialog.setCancelButton(cancelIndex)
+  } else if (!request.cancelable && process.env.NODE_ENV !== "production") {
+    // Unlike Adw.AlertDialog.setCanClose(false), Gtk.AlertDialog has no way
+    // to block Esc/window-close dismissal outright — with no cancel button
+    // set, GTK closes the dialog anyway and rejects choose() with
+    // Gtk.DialogError.DISMISSED (caught below, mapped to the same null
+    // dismissal cancelable: true would produce). Documented in docs/api.md;
+    // an app that truly needs to block dismissal should add a cancel
+    // button on both profiles rather than relying on cancelable: false alone.
+    console.warn(
+      '[react-native-gtkx] Alert.alert was called with cancelable: false and no "cancel" ' +
+        "style button. The plain-GTK profile's Gtk.AlertDialog fallback cannot block " +
+        "Esc/window-close dismissal the way Adw.AlertDialog does — the dialog stays " +
+        "dismissable. Add a cancel-style button for identical behavior on both profiles.",
+    )
+  }
+  try {
+    const index = await dialog.choose(resolveWindow())
+    return request.buttons[index]?.id ?? null
+  } catch {
+    // Dismissed (Esc / window-close) with no valid cancel button — the
+    // plain-profile equivalent of the Adw path's unmatched "close" response.
+    return null
+  }
+}
+
+const showAlert = async (request: HostAlertRequest): Promise<string | null> =>
+  adwAvailable() ? showAlertAdw(request) : showAlertPlain(request)
+
 const launchUri = async (uri: string): Promise<void> => {
   const launcher = new Gtk.UriLauncher({ uri })
   // Promisified by the gi codegen; rejects with the GError on failure.
@@ -346,7 +426,8 @@ export const gtkxHost: Host = {
   getScreenMetrics: screenMetrics,
   onMetricsChange: (notify) =>
     watchWindow(WINDOW_SIZE_SIGNALS, SURFACE_SIZE_SIGNALS, notify),
-  getColorScheme: () => colorScheme(),
+  getColorScheme: () =>
+    adwAvailable() ? colorScheme() : getPlainColorScheme(),
   setColorScheme,
   onColorSchemeChange,
   isActive: isAnyWindowActive,
