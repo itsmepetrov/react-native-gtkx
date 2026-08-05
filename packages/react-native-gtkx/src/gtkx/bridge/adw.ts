@@ -9,18 +9,16 @@
 // plugin throws while resolving it, unconditionally, whether or not the
 // import is ever reached at runtime.
 //
-// __GTKX_ADW_AVAILABLE__ (declared ambient just above probeViaDynamicImport
-// below) is a build-time constant the vite preset injects (src/vite/index.ts,
-// see its own doc for the full story — .claude/epics/adw-optional/006.md is
-// the regression this exists to fix): true only when THIS app's codegen
-// store actually has an
-// "adw" entry. `probeViaDynamicImport` below guards on it and, only inside
-// that guard, imports @gtkx/gi/adw and @gtkx/jsx/adw as LITERAL specifiers —
-// deliberately, unlike the pre-006 version of this file, which hid them
-// behind a runtime-assembled string. A hidden specifier is invisible to
-// Rollup's build graph, which sounds like the safer choice, but it is ALSO
-// invisible to everything that graph gives every OTHER gtkx import for
-// free: `resolve.dedupe` (RC4-WORKAROUND(runtime-dedupe) in
+// __GTKX_ADW_AVAILABLE__ (declared ambient just below) is a build-time
+// constant the vite preset injects (src/vite/index.ts, see its own doc for
+// the full story — .claude/epics/adw-optional/006.md is the regression this
+// exists to fix): true only when THIS app's codegen store actually has an
+// "adw" entry. The probe below guards on it and, only inside that guard,
+// imports @gtkx/gi/adw and @gtkx/jsx/adw as LITERAL specifiers —
+// deliberately, unlike a runtime-assembled string. A hidden specifier is
+// invisible to Rollup's build graph, which sounds like the safer choice,
+// but it is ALSO invisible to everything that graph gives every OTHER gtkx
+// import for free: `resolve.dedupe` (RC4-WORKAROUND(runtime-dedupe) in
 // docs/gtkx-rc4-notes.md) and `gtkx build`'s own asset pipeline for the
 // native addon (`@gtkx/cli`'s `gtkx:native` plugin, which rewrites every
 // STATICALLY reachable `@gtkx/native` import onto the single `dist/gtkx.node`
@@ -30,40 +28,65 @@
 // (`g_log_set_writer_func() called multiple times`, proven with a core dump
 // showing both `.node` files mapped into one process). A literal specifier
 // gets the exact same static treatment as every other gtkx import; when the
-// build-time constant folds to `false` instead, esbuild's dead-code
-// elimination removes the whole guarded body — literal specifiers included —
-// before Rollup's graph walk ever starts, so `gtkx:undeclared-library` never
+// build-time constant folds to `false` instead, dead-code elimination
+// removes the whole guarded body — literal specifiers included — before
+// Rollup's graph walk ever starts, so `gtkx:undeclared-library` never
 // throws on the plain-GTK profile either.
 //
-// This also fixes the other half of the same regression: under `gtkx dev`'s
-// SSR module runner, a hidden (`/* @vite-ignore */`, runtime-assembled)
-// specifier was invisible to Vite's SSR import interception too, so the
-// import ran as a raw Node `import()` instead — and Node's plain ESM loader
-// has no idea what to do with the "virtual:gtkx-config" specifier
-// @gtkx/jsx/adw resolves internally (`ERR_UNSUPPORTED_ESM_URL_SCHEME`,
-// confirmed by instrumenting the catch below before this fix), so the probe
-// always failed and Adw looked undeclared even with "Adw-1" in
-// gtkx.config.ts. A literal specifier lets Vite's own ssrTransform wrap the
-// call, routing it through the SAME plugin pipeline (noExternal, the
-// `gtkx:config` virtual-module plugin) every other gtkx/jsx import already
-// gets — no separate polyfill, no toolchain-specific branch.
+// No module-scope await, anywhere — the one thing that actually changed
+// here (.claude/epics/adw-optional/007-sea-tla.md): this file used to
+// resolve Adw with a TOP-LEVEL AWAIT (both the #132 guarded literal imports
+// and the fallback probe), so every call site below could stay synchronous
+// without an explicit wait of its own. That broke `react-native
+// build-linux` outright — reproduced empirically in the VM, WITH OR
+// WITHOUT --sea/--standalone (all three share the same Metro `bundle()`
+// call, `--dev false`): Metro's own minifier (metro-minify-terser, i.e.
+// terser) parses each module's compiled factory as a plain SCRIPT, not an
+// ES module — `await` is just an ordinary identifier there, not a keyword,
+// so "await probeViaDynamicImport()" is a hard syntax error ("Unexpected
+// token: name (probeViaDynamicImport)"), independent of the SEA/rolldown
+// CJS-format restriction the task file also names (CJS has no TLA either —
+// the same file would have failed a second time even past Metro).
 //
-// import(), not require(): tried require() first (a specifier behind
-// createRequire()) because every call site this file backs — styleManager(),
-// showAlert(), <AdwApplicationWindow>, <NavigationStackPage> — used its
-// value SYNCHRONOUSLY before this seam existed. It resolves @gtkx/gi/adw
-// fine (Node 24 does support require(esm)) but throws
-// ERR_UNSUPPORTED_ESM_URL_SCHEME on @gtkx/jsx/adw specifically, for the same
-// "virtual:gtkx-config" reason above. Fixed by probing via a top-level-await
-// dynamic `import()` instead — resolved long before any component can
-// render or any Host function can be called (ES module evaluation of
-// anything that imports this file, even transitively, does not complete
-// until this settles), which is what lets every call site below stay
-// synchronous — with a synchronous fast path through `global.__hostModules`
-// when running under the run-linux (Metro) host (which already resolved
-// everything, including these two when present, before the bundle runs,
-// and never reaches __GTKX_ADW_AVAILABLE__ at all — a vite `define`
-// constant, meaningless to Metro's bundler).
+// Tried and reverted: resolving gi through a synchronous `require()` (via
+// `createRequire(import.meta.url)`) instead of a dynamic import — it does
+// answer synchronously under vite build/dev and vitest, but
+// `import.meta.url` is ITSELF ESM-only syntax, exactly like top-level
+// await: Metro's minifier happened not to reject it at minify time (unlike
+// `await`), but Node's own parser does, the moment the Metro/SEA host
+// actually executes the bundle via `vm.runInThisContext` (which runs the
+// whole bundle as a plain SCRIPT, not a module) — "SyntaxError: Cannot use
+// 'import.meta' outside a module", reproduced building and running
+// examples/hn-app's SEA artifact. Same class of bug as the TLA one this
+// file exists to fix, so back to a dynamic import for both gi and jsx —
+// their own literal specifiers, unlike ours, are genuinely fine either way
+// since Metro/the SEA host never reach this branch at all (see
+// fromHostModules below) and every other toolchain is real ESM.
+//
+// So: a single, ordinary (non-async, non-top-level-await) function starts
+// BOTH imports together — Promise.all, exactly like the old probe — the
+// moment this module itself finishes evaluating, fire-and-forget (no
+// module-scope await to block on this time). No formal ordering guarantee
+// versus the old TLA probe's, but starting it as early as this module can
+// (not lazily, on the first actual `requireAdwJsx()`/`requireAdwGi()` call)
+// gives it a real, if informal, chance to have already settled — verified
+// against this package's own gtk test suite, including the one caller with
+// the least slack of all: react-native-gtkx/adw's own `adw/index.ts` calls
+// `requireAdwJsx()` eagerly, at ITS OWN module scope, the moment it is
+// imported (immediately after this file). Under Vite's SSR module runner
+// (dev and vitest both), every static import a transformed module has is
+// itself an awaited call in that runner, cached or not — so `adw/index.ts`
+// evaluating is always at least one module-boundary await after this
+// file's own module body, including the Promise.all it starts, finished
+// running. tests/gtk/bridge/auxiliary-elements.gtk.test.tsx (imports
+// react-native-gtkx/adw) and tests/gtk/adw/* are all green under this.
+//
+// The Metro/SEA host fast path (fromHostModules, below) takes priority over
+// all of this and never touches import() at all: `global.__hostModules` is
+// already populated — both gi and jsx together, when present — before the
+// run-linux host or the SEA entry's own async wrapper (src/sea/bundle.ts's
+// `buildEntrySource`, itself already just an ordinary async FUNCTION, never
+// a module-scope await) ever executes the bundle that reaches this file.
 import type * as AdwGi from "@gtkx/gi/adw"
 import type * as AdwJsx from "@gtkx/jsx/adw"
 
@@ -90,11 +113,12 @@ type HostModulesGlobal = typeof globalThis & {
 // BEFORE the bundle ever runs (see src/runner/host.ts) — synchronously, as
 // far as this module is concerned, and the authoritative answer on that
 // toolchain: reading it directly is both correct and avoids a second,
-// redundant dynamic import attempt Metro's bundler cannot serve anyway
-// (no "virtual:gtkx-config" loader hook outside Vite's own pipeline).
+// redundant resolution attempt Metro's bundler cannot serve anyway (no
+// "virtual:gtkx-config" loader hook outside Vite's own pipeline or the
+// host's own module.registerHooks).
 // Returns undefined (not false) when there is no host indirection in play
 // at all — the vite dev/build toolchain, where every spike and example in
-// this repo runs — so the caller knows to fall through to a real probe.
+// this repo runs — so the caller knows to fall through to the real probe.
 const fromHostModules = (): AdwModules | null | undefined => {
   const hostModules = (globalThis as HostModulesGlobal).__hostModules
   if (!hostModules) {
@@ -107,47 +131,51 @@ const fromHostModules = (): AdwModules | null | undefined => {
     : null
 }
 
+const hostModulesResult = fromHostModules()
+
 // Skips the probe outright when the vite preset has POSITIVELY told us Adw
 // is not in this app's codegen store (see the module doc above for why a
 // literal specifier below needs this guard to exist at all). `typeof`, not
 // a direct reference: safe on any toolchain that never defines the constant
-// (vitest, a consumer not using our preset) — reads as "undefined", so the
-// guard is skipped and the probe runs for real, same as before this file
-// started folding it. Only an explicit `false` short-circuits.
+// (a bare `vitest` "unit" project, or a consumer not using our preset) —
+// reads as "undefined", so the guard is skipped and the probe runs for
+// real. Only an explicit `false` short-circuits.
 declare const __GTKX_ADW_AVAILABLE__: boolean | undefined
-const probeViaDynamicImport = async (): Promise<AdwModules | null> => {
-  if (
-    typeof __GTKX_ADW_AVAILABLE__ !== "undefined" &&
-    !__GTKX_ADW_AVAILABLE__
-  ) {
-    return null
-  }
-  try {
-    const [gi, jsx] = await Promise.all([
-      import("@gtkx/gi/adw"),
-      import("@gtkx/jsx/adw"),
-    ])
-    return { gi: gi as typeof AdwGi, jsx: jsx as typeof AdwJsx }
-  } catch {
-    return null
-  }
-}
 
-const hostModulesResult = fromHostModules()
-// Only actually awaits (and only actually imports) when NOT running under
-// the Metro host — see fromHostModules' doc.
-const cached: AdwModules | null =
-  hostModulesResult !== undefined
-    ? hostModulesResult
-    : await probeViaDynamicImport()
+let cached: AdwModules | null | undefined
+
+if (hostModulesResult !== undefined) {
+  cached = hostModulesResult
+} else if (
+  typeof __GTKX_ADW_AVAILABLE__ !== "undefined" &&
+  !__GTKX_ADW_AVAILABLE__
+) {
+  cached = null
+} else {
+  // Fire-and-forget — see the module doc above for why this can no longer
+  // be a module-scope `await` and why starting it here, unconditionally,
+  // still settles in time for every real caller.
+  Promise.all([import("@gtkx/gi/adw"), import("@gtkx/jsx/adw")])
+    .then(([gi, jsx]) => {
+      cached = { gi: gi as typeof AdwGi, jsx: jsx as typeof AdwJsx }
+    })
+    .catch(() => {
+      cached = null
+    })
+}
 
 /**
  * True when this app's codegen store actually generated Adwaita bindings —
- * i.e. `"Adw-1"` is in this app's gtkx.config.ts `libraries`. Already
- * resolved by the time any application code can call this (see the module
- * doc above) — synchronous from every caller's point of view.
+ * i.e. `"Adw-1"` is in this app's gtkx.config.ts `libraries`. Synchronous
+ * from every caller's point of view on the Metro/SEA host and the
+ * plain-GTK profile (both resolved above with nothing to await); on vite
+ * build/dev and vitest this reads whatever the fire-and-forget probe above
+ * has settled to by the time it is called — see the module doc for why
+ * that is reliably "already settled" for every real call site in this
+ * package, not a formal guarantee.
  */
-export const adwAvailable = (): boolean => cached !== null
+export const adwAvailable = (): boolean =>
+  cached !== null && cached !== undefined
 
 const NOT_AVAILABLE =
   ' requires "Adw-1" in this app\'s gtkx.config.ts `libraries` — see ' +
