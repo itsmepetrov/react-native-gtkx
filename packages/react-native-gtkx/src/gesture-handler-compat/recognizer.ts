@@ -1156,11 +1156,36 @@ export const createRecognizer = (
     },
 
     onTouchMove: (event: GestureResponderEvent) => {
+      if (
+        runtime.state !== GESTURE_STATE.BEGAN &&
+        runtime.state !== GESTURE_STATE.ACTIVE
+      ) {
+        // A finished gesture is not tracked at all.
+        return
+      }
+      const config = readConfig()
+      // Fires for as long as the gesture has not finished, ACTIVE included —
+      // matching `onTouchesUp`/`onTouchesCancel` below, which never gated on
+      // state either. `Gesture.Manual()` has no `onUpdate`/`onChange` channel
+      // of its own (`ManualGestureProperties` adds neither upstream), so this
+      // touch-level callback continuing past activation is the ONLY way an
+      // app driving one by hand — `react-native-sortables`' v3 gesture-handler
+      // adapter among them — can keep tracking a finger after its own
+      // `GestureStateManager.activate()` call. Skipping it once ACTIVE looked
+      // harmless for `Pan`/`Tap` (they have `onUpdate` for that), and quietly
+      // froze every `Manual` drag at the position it activated at instead —
+      // confirmed by instrumenting a real drag in the built gallery: the
+      // active item highlighted and never moved.
+      config.onTouchesMove?.(
+        touchEventOf(event, TOUCH_EVENT_TYPE.TOUCHES_MOVE),
+        stateManager,
+      )
+
       if (runtime.state === GESTURE_STATE.ACTIVE) {
         // A gesture that does not hold the lock has no `onResponderMove`
-        // coming, so this is where its updates live. One that does is driven
-        // from there instead, and emitting here as well would double every
-        // update it reports.
+        // coming, so this is where its continuous updates live. One that
+        // does is driven from there instead, and emitting here as well would
+        // double every update it reports.
         //
         // Two kinds of gesture end up here and the flag covers both: one that
         // never takes the lock (`claimsResponder: false`), and one that would
@@ -1172,16 +1197,8 @@ export const createRecognizer = (
         }
         return
       }
-      if (runtime.state !== GESTURE_STATE.BEGAN) {
-        // A finished gesture is not tracked at all.
-        return
-      }
+
       track(event)
-      const config = readConfig()
-      config.onTouchesMove?.(
-        touchEventOf(event, TOUCH_EVENT_TYPE.TOUCHES_MOVE),
-        stateManager,
-      )
       const view = viewOf()
       // Failure is tested before activation, and the comparisons differ —
       // failure is strict, activation is not — so a translation sitting

@@ -36,6 +36,11 @@ import type {
   TransformPart,
 } from "../contracts"
 import {
+  GestureAttachContext,
+  mergeGestureHandlers,
+  useGestureAttach,
+} from "../gesture-handler-compat/attach-context"
+import {
   createWidgetCss,
   GtkBox,
   queueAllocate,
@@ -743,7 +748,20 @@ const AnimatedView = ({
     onLayout,
   })
   useRnContainer(widgetRef, node)
-  useResponder(widgetRef, responderProps)
+
+  // A gesture whose own GestureDetector could not reach a widget directly —
+  // its child was an opaque composite that renders this Animated.View but
+  // forwards neither a ref nor its own props onto it, react-native-sortables'
+  // ItemCell being the confirmed case (gesture-handler-compat/attach-context.ts)
+  // — claims this widget instead, through context rather than through the
+  // props ItemCell dropped.
+  const gestureAttach = useGestureAttach()
+  useResponder(
+    widgetRef,
+    gestureAttach
+      ? mergeGestureHandlers(responderProps, gestureAttach.handlers)
+      : responderProps,
+  )
 
   // `animatedProps` LAST, matching `createAnimatedComponent`'s
   // `{ ...rest, ...animatedProps }` — a value produced by the updater is the
@@ -767,6 +785,17 @@ const AnimatedView = ({
 
   useImperativeHandle(ref, () => createMeasureHandle(widgetRef, node), [node])
 
+  // Registers this widget as the fallback gesture's handle — the same
+  // `assignHandle` its GestureDetector would have put directly on the ref, had
+  // its child forwarded one. A fresh handle rather than reusing the one above:
+  // `useImperativeHandle`'s factory only runs when `ref` itself is non-null,
+  // which is not the case here (ItemCell passes none), so there is nothing to
+  // reuse — and a second handle for the same widget is harmless, `measure.ts`
+  // keys by handle identity, not by widget.
+  useLayoutEffect(() => {
+    gestureAttach?.assignHandle(createMeasureHandle(widgetRef, node))
+  }, [gestureAttach, node])
+
   useAnimatedBinding(
     () => widgetRef.current,
     host,
@@ -787,7 +816,11 @@ const AnimatedView = ({
       <HostNodeContext.Provider
         value={{ engine: host.engine, node, widgetRef }}
       >
-        {children}
+        {/* Claimed here (or never offered at all) either way — a nested
+        Animated.View further down must not claim the same gesture again. */}
+        <GestureAttachContext.Provider value={null}>
+          {children}
+        </GestureAttachContext.Provider>
       </HostNodeContext.Provider>
     </GtkBox>
   )

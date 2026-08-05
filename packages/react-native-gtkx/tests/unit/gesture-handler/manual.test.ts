@@ -263,6 +263,29 @@ describe("the state manager is the whole API", () => {
     expect(trace.filter((entry) => entry === "update")).toHaveLength(2)
   })
 
+  it("keeps calling onTouchesMove after activation — Manual's only continuous channel", () => {
+    // `ManualGestureProperties` adds no `onUpdate`/`onChange` upstream, so an
+    // app driving one by hand — react-native-sortables' v3 gesture-handler
+    // adapter among them — has no channel but this touch-level callback to
+    // keep tracking a finger past its own `GestureStateManager.activate()`
+    // call. A recognizer that stopped calling it once ACTIVE (matching how
+    // `onTouchesUp`/`onTouchesCancel` never gated on state either) silently
+    // froze every real drag at the position it activated at — confirmed by
+    // instrumenting one in the built gallery (docs/research/
+    // upstream-libraries.md): the active tile highlighted and never moved.
+    let touchesMoveCalls = 0
+    const rig = mount({
+      onTouchesMove: () => {
+        touchesMoveCalls += 1
+      },
+    })
+    rig.press()
+    rig.manager().activate()
+    rig.moveTo(CX + 40, CY)
+    rig.moveTo(CX + 80, CY)
+    expect(touchesMoveCalls).toBe(2)
+  })
+
   it("ends with the interaction when the pointer lifts while ACTIVE", () => {
     // THE ONE DELIBERATE DEVIATION from upstream, asserted rather than left to
     // be discovered. Upstream leaves an ACTIVE Manual active after the lift;
