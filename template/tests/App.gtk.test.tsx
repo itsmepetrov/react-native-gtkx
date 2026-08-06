@@ -5,7 +5,7 @@ import { App } from "../src/App"
 
 it("renders the template's default screen", async () => {
   // react-native-gtkx components need a layout root — AppRegistry.runApplication()
-  // in the real app, <Root> in a test (see docs/getting-started.md#tests).
+  // in the real app, <Root> in a test (see docs/guide/toolchains.md#testing).
   await render(
     <Root
       width={800}

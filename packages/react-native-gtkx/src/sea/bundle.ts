@@ -38,7 +38,7 @@
 //   resolved once here, at bundle time (see ./gtkx-config-module.ts).
 //
 // Not attempted here: the vite path. Investigated, not a drop-in of this
-// same technique — see docs/getting-started.md's "Shipping an app"
+// same technique — see docs/guide/packaging.md's "Choosing an artifact"
 // section for the concrete blocker found empirically while building this:
 // the vite bundle loads the native addon through a DYNAMICALLY obtained
 // require (`createRequire(import.meta.url)("./gtkx.node")`), which a

@@ -77,7 +77,7 @@ jobs:
           # An EXTRA artifact, never a replacement for the .deb: the debs above
           # are how you install these apps. This is the one file to hand
           # someone who has no Node at all — build-linux --sea wraps the app in
-          # a copy of the Node binary. Metro-path only (docs/getting-started.md
+          # a copy of the Node binary. Metro-path only (docs/guide/packaging.md
           # explains why the vite path cannot do this), so hn-app is the whole
           # list.
           #
