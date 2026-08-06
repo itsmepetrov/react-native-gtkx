@@ -17,26 +17,28 @@
 //      own prose widget list is NOT this: it names a handful by hand where
 //      classification.json has 86 gtk + 46 adw wrapped — that list is
 //      illustrative, not exhaustive, and untouched by any doc-coverage gate.
-//   2. docs/reference/'s Components tables (components-core.md,
-//      components-inputs.md, components-lists.md, components-overlays.md)
-//      and API modules table (apis.md) — gated by `npm run docs:check`
+//   2. docs/reference/components/*.md — one page per portable component
+//      (title = the export name, a `**Backed by:**` fact line, "Supported
+//      props:"/"Differs from react-native:" sections) — and apis.md's `##`
+//      sections (one per API module) — gated by `npm run docs:check`
 //      against every value export of packages/react-native-gtkx/src/index.ts,
-//      so these rows cannot omit a portable export, even though their prose
-//      content (the Supported/Differences columns) is hand-written and only
-//      as accurate as the person who last touched it.
+//      so a page/section cannot omit a portable export, even though its
+//      prose content (the Supported/Differs bullets) is hand-written and
+//      only as accurate as the person who last touched it.
 //   3. Two real tables inside docs/architecture/ (Declarative primitives, in
 //      integration.md; React Native content inside GTK slots, in
 //      layout-and-styling.md) — not gated by anything, but small, stable,
 //      and the only place NavigationStack/SlotContent/IntrinsicContent are
 //      documented at all.
 //   4. Full sections (by ## / ### heading) of every docs/reference/*.md
-//      page, docs/guide/*.md, docs/getting-started.md (a pointer stub since
+//      page (apis.md's own `##` entries are picked up this way too),
+//      docs/guide/*.md, docs/getting-started.md (a pointer stub since
 //      the docs-site Guide rewrite — kept in the list because it's still a
 //      valid, if now tiny, input), docs/gtkx-rc4-notes.md,
 //      docs/research/navigation-extensibility.md and every
 //      docs/architecture/*.md page, plus a few
-//      individually-chunked table rows (component rows, API module rows,
-//      the gtkx-rc4-notes live-workaround rows) — a full-text search corpus
+//      individually-chunked entries (one per component page, the
+//      gtkx-rc4-notes live-workaround rows) — a full-text search corpus
 //      for rn_gtkx_search_docs, the fallback tool for anything the
 //      structured records above do not cover (e.g. "what's known-broken",
 //      which has no stable per-component key — RC4-WORKAROUND rows are
@@ -63,11 +65,32 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, "..")
 
 const REFERENCE_DIR = join(ROOT, "docs/reference")
+const COMPONENTS_DIR = join(REFERENCE_DIR, "components")
+// One page per portable component, in the same core → inputs → lists →
+// overlays reading order the sidebar uses. `index.md` (the category
+// overview) is deliberately not in this list — it carries no component of
+// its own.
 const COMPONENT_FILES = [
-  "components-core.md",
-  "components-inputs.md",
-  "components-lists.md",
-  "components-overlays.md",
+  "view.md",
+  "text.md",
+  "image.md",
+  "safe-area-view.md",
+  "status-bar.md",
+  "activity-indicator.md",
+  "root.md",
+  "nested-root.md",
+  "intrinsic-root.md",
+  "text-input.md",
+  "switch.md",
+  "pressable.md",
+  "touchable-opacity.md",
+  "touchable-highlight.md",
+  "touchable-without-feedback.md",
+  "scroll-view.md",
+  "flat-list.md",
+  "section-list.md",
+  "virtualized-list.md",
+  "modal.md",
 ]
 const API_MODULES_FILE = "apis.md"
 const ARCH_OVERVIEW_MD = join(ROOT, "docs/architecture/overview.md")
@@ -187,9 +210,156 @@ const parseSections = (text, doc) => {
     .filter((s) => s.text.length > 0)
 }
 
+/**
+ * Pulls the block that follows a "Label:" marker inside a component page or
+ * an apis.md `##` section. Two shapes are both real in these docs, and a
+ * page may use either: the label starts an inline paragraph ("Supported
+ * props: `style`, ...") that continues over following non-blank lines, or
+ * the label stands alone, a blank line follows, then either a bullet list
+ * (one `text` per list item, list items may themselves wrap onto
+ * continuation lines) or another paragraph. Returns the joined text and the
+ * line index right after the consumed block.
+ */
+const extractLabeledBlock = (lines, startIndex, label) => {
+  const m = new RegExp(`^${label}\\s*(.*)$`).exec(lines[startIndex])
+  if (!m) {
+    throw new Error(`expected line ${startIndex} to start with "${label}"`)
+  }
+  const inline = m[1].trim()
+  let i = startIndex + 1
+
+  if (inline.length > 0) {
+    const parts = [inline]
+    while (i < lines.length && lines[i].trim() !== "") {
+      parts.push(lines[i].trim())
+      i++
+    }
+    return { text: parts.join(" "), nextIndex: i }
+  }
+
+  while (i < lines.length && lines[i].trim() === "") {
+    i++
+  }
+
+  if (i < lines.length && /^- /.test(lines[i].trim())) {
+    const bullets = []
+    let current = null
+    while (i < lines.length && lines[i].trim() !== "") {
+      const trimmed = lines[i].trim()
+      if (/^- /.test(trimmed)) {
+        if (current !== null) {
+          bullets.push(current.trim())
+        }
+        current = trimmed.replace(/^- /, "")
+      } else if (current !== null) {
+        current += ` ${trimmed}`
+      }
+      i++
+    }
+    if (current !== null) {
+      bullets.push(current.trim())
+    }
+    return { text: bullets.join(" "), nextIndex: i }
+  }
+
+  const parts = []
+  while (i < lines.length && lines[i].trim() !== "") {
+    parts.push(lines[i].trim())
+    i++
+  }
+  return { text: parts.join(" "), nextIndex: i }
+}
+
+const SUPPORTED_LABEL_RE = /^Supported( props)?:/
+const DIFFERS_LABEL_RE = /^Differs from react-native:/
+
+/**
+ * Parses one docs/reference/components/*.md page: title (H1) → name,
+ * "**Backed by:**" line → gtkImplementation, the "Supported props:"/
+ * "Differs from react-native:" blocks (either form `extractLabeledBlock`
+ * understands) → supported/differences, defaulting each to "—" when the
+ * page has no such block at all (an honest thin page — SafeAreaView,
+ * StatusBar, TouchableOpacity, ...).
+ */
+const parseComponentPage = (text, docLabel) => {
+  const lines = text.split("\n")
+
+  const h1Index = lines.findIndex((l) => /^# /.test(l))
+  if (h1Index === -1) {
+    throw new Error(`${docLabel}: no "# Title" heading found`)
+  }
+  const name = lines[h1Index].replace(/^# /, "").trim()
+
+  const backedByIndex = lines.findIndex((l) => /^\*\*Backed by:\*\*/.test(l))
+  if (backedByIndex === -1) {
+    throw new Error(`${docLabel}: no "**Backed by:**" line found`)
+  }
+  const gtkImplementation = lines[backedByIndex]
+    .replace(/^\*\*Backed by:\*\*\s*/, "")
+    .trim()
+
+  const supportedIndex = lines.findIndex((l) => SUPPORTED_LABEL_RE.test(l))
+  const supported =
+    supportedIndex === -1
+      ? "—"
+      : extractLabeledBlock(
+          lines,
+          supportedIndex,
+          lines[supportedIndex].match(SUPPORTED_LABEL_RE)[0],
+        ).text
+
+  const differsIndex = lines.findIndex((l) => DIFFERS_LABEL_RE.test(l))
+  const differences =
+    differsIndex === -1
+      ? "—"
+      : extractLabeledBlock(lines, differsIndex, "Differs from react-native:")
+          .text
+
+  return { name, gtkImplementation, supported, differences }
+}
+
+/**
+ * Parses one `##` section of apis.md into a PortableRecord's fields. Most
+ * sections carry an explicit "Supported:" line; the two sections that are
+ * also full prose write-ups (`Animated`, merged with its detailed surface
+ * below the API-modules row it used to be) carry no such marker — for
+ * those, everything before "Differs from react-native:" (or the whole
+ * section, if it has none) doubles as `supported`, which is not a loss of
+ * information: the full write-up is strictly more informative than the
+ * table row it replaces.
+ */
+const parseApiSection = (heading, text, docLabel) => {
+  const lines = text.split("\n")
+  const differsIndex = lines.findIndex((l) => DIFFERS_LABEL_RE.test(l))
+  const supportedIndex = lines.findIndex((l) => SUPPORTED_LABEL_RE.test(l))
+
+  let supported
+  if (supportedIndex !== -1) {
+    supported = extractLabeledBlock(lines, supportedIndex, "Supported:").text
+  } else {
+    const end = differsIndex === -1 ? lines.length : differsIndex
+    supported = lines
+      .slice(0, end)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0)
+      .join(" ")
+    if (supported.length === 0) {
+      throw new Error(`${docLabel}: "## ${heading}" has no supported content`)
+    }
+  }
+
+  const differences =
+    differsIndex === -1
+      ? "—"
+      : extractLabeledBlock(lines, differsIndex, "Differs from react-native:")
+          .text
+
+  return { name: heading, supported, differences }
+}
+
 // ---------------------------------------------------------------------------
-// 1. Portable surface (docs/reference/) — Components tables (one per
-//    components-*.md page, merged) + the API modules table (apis.md).
+// 1. Portable surface (docs/reference/) — one page per component under
+//    components/ + apis.md's `##` sections.
 // ---------------------------------------------------------------------------
 
 const referenceFileNames = readdirSync(REFERENCE_DIR)
@@ -202,31 +372,28 @@ const referenceTexts = new Map(
   ]),
 )
 
-// Components carry their source file (docs/reference/<file>) alongside the
-// parsed fields — PortableRecord itself has no `doc` field (kept identical
-// to what packages/react-native-gtkx/src/mcp/resolve.ts already expects),
-// but the per-row search-corpus chunks below need to point at the right
-// page now that the components are split across four of them.
-const portableComponentRows = COMPONENT_FILES.flatMap((file) => {
-  const docLabel = `docs/reference/${file}`
-  const text = referenceTexts.get(file)
-  if (text === undefined) {
-    throw new Error(
-      `${docLabel}: expected file not found under ${REFERENCE_DIR}`,
-    )
+// Components carry their source file (docs/reference/components/<file>)
+// alongside the parsed fields — PortableRecord itself has no `doc` field
+// (kept identical to what packages/react-native-gtkx/src/mcp/resolve.ts
+// already expects), but the per-page search-corpus chunks below need to
+// point at the right page.
+const portableComponentRows = COMPONENT_FILES.map((file) => {
+  const docLabel = `docs/reference/components/${file}`
+  const path = join(COMPONENTS_DIR, file)
+  if (!existsSync(path)) {
+    throw new Error(`${docLabel}: expected file not found`)
   }
-  const table = parseTableAfterHeading(text, "## Reference", docLabel)
-  assertColumnCount(table, 4, docLabel, "## Reference")
-  return table.rows.map(
-    ([name, gtkImplementation, supported, differences]) => ({
-      name: stripBacktickSpan(name),
-      subpath: "react-native",
-      gtkImplementation,
-      supported,
-      differences,
-      doc: docLabel,
-    }),
-  )
+  const text = readFileSync(path, "utf8")
+  const { name, gtkImplementation, supported, differences } =
+    parseComponentPage(text, docLabel)
+  return {
+    name,
+    subpath: "react-native",
+    gtkImplementation,
+    supported,
+    differences,
+    doc: docLabel,
+  }
 })
 
 const portableComponents = portableComponentRows.map(
@@ -246,21 +413,24 @@ if (apiModulesText === undefined) {
     `${apiModulesDocLabel}: expected file not found under ${REFERENCE_DIR}`,
   )
 }
-const apiModulesTable = parseTableAfterHeading(
-  apiModulesText,
-  "## API modules",
-  apiModulesDocLabel,
-)
-assertColumnCount(apiModulesTable, 3, apiModulesDocLabel, "## API modules")
+const apiModulesSections = parseSections(apiModulesText, apiModulesDocLabel)
+if (apiModulesSections.length === 0) {
+  throw new Error(`${apiModulesDocLabel}: no "##" sections found`)
+}
 
-const portableApis = apiModulesTable.rows.map(
-  ([name, supported, differences]) => ({
+const portableApis = apiModulesSections.map(({ heading, text }) => {
+  const { name, supported, differences } = parseApiSection(
+    heading,
+    text,
+    apiModulesDocLabel,
+  )
+  return {
     name: stripBacktickSpan(name),
     subpath: "react-native",
     supported,
     differences,
-  }),
-)
+  }
+})
 
 // ---------------------------------------------------------------------------
 // 2. Common subpath (docs/architecture/) — the two real tables.
@@ -365,17 +535,24 @@ const workaroundChunks = workaroundsTable.rows.map(
   }),
 )
 
+// Component pages are titled with an H1 (`# View`), not `##`/`###`, so
+// parseSections (below) never sees them — one dedicated chunk per page
+// covers the gap. apis.md needs no such treatment: its `##` sections are
+// already full prose write-ups, picked up by parseSections like any other
+// reference page's sections (see referenceSectionChunks), so there is no
+// separate apiModuleRowChunks anymore — the full section text is strictly
+// more informative than a one-line summary would be.
 const componentRowChunks = portableComponentRows.map((c) => ({
   doc: c.doc,
   heading: c.name,
   text: `${c.name} — GTK implementation: ${c.gtkImplementation}. Supported: ${c.supported}. Differences from RN: ${c.differences}`,
 }))
 
-const apiModuleRowChunks = portableApis.map((a) => ({
-  doc: apiModulesDocLabel,
-  heading: a.name,
-  text: `${a.name} — Supported: ${a.supported}. Differences: ${a.differences}`,
-}))
+const componentsIndexDocLabel = "docs/reference/components/index.md"
+const componentsIndexChunks = parseSections(
+  readFileSync(join(COMPONENTS_DIR, "index.md"), "utf8"),
+  componentsIndexDocLabel,
+)
 
 const referenceSectionChunks = referenceFileNames.flatMap((file) =>
   parseSections(referenceTexts.get(file), `docs/reference/${file}`),
@@ -383,6 +560,7 @@ const referenceSectionChunks = referenceFileNames.flatMap((file) =>
 
 const docChunks = [
   ...referenceSectionChunks,
+  ...componentsIndexChunks,
   ...parseSections(archOverviewText, "docs/architecture/overview.md"),
   ...parseSections(archLayoutText, "docs/architecture/layout-and-styling.md"),
   ...parseSections(archIntegrationText, "docs/architecture/integration.md"),
@@ -393,7 +571,6 @@ const docChunks = [
   ...parseSections(navExtText, "docs/research/navigation-extensibility.md"),
   ...workaroundChunks,
   ...componentRowChunks,
-  ...apiModuleRowChunks,
 ]
 
 // ---------------------------------------------------------------------------
@@ -401,7 +578,8 @@ const docChunks = [
 // ---------------------------------------------------------------------------
 
 const HEADER = `// GENERATED FILE — do not edit by hand.
-// Produced by scripts/generate-mcp-data.mjs from docs/reference/*.md,
+// Produced by scripts/generate-mcp-data.mjs from docs/reference/*.md
+// (including docs/reference/components/*.md, one page per component),
 // docs/architecture/*.md, docs/guide/*.md, docs/gtkx-rc4-notes.md,
 // docs/getting-started.md,
 // docs/research/navigation-extensibility.md and

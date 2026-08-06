@@ -19,15 +19,12 @@ const OUTPUT = "packages/react-native-gtkx/src/mcp/data/generated.ts"
 
 // Keep in sync with the "Sources of truth" list at the top of
 // scripts/generate-mcp-data.mjs. docs/reference/ is a directory of pages
-// (any of which can gain or lose an export row), so it is matched by
-// prefix below rather than listed file by file.
+// (any of which can gain or lose an export row) — including the nested
+// docs/reference/components/ directory, one page per portable component —
+// so it is matched by prefix below rather than listed file by file.
 const REFERENCE_PREFIX = "docs/reference/"
 const INPUTS = [
   GENERATOR,
-  "docs/reference/components-core.md",
-  "docs/reference/components-inputs.md",
-  "docs/reference/components-lists.md",
-  "docs/reference/components-overlays.md",
   "docs/reference/apis.md",
   "docs/reference/styling.md",
   "docs/reference/globals.md",

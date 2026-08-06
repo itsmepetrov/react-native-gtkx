@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Docs coverage gate: every VALUE export of the public surface must be
-// mentioned somewhere in docs/reference/*.md. Type-only exports are exempt.
-import { readdirSync, readFileSync } from "node:fs"
+// mentioned somewhere in docs/reference/**/*.md. Type-only exports are
+// exempt.
+import { readdirSync, readFileSync, statSync } from "node:fs"
 import { join } from "node:path"
 
 const ROOT = join(import.meta.dirname, "..")
@@ -66,22 +67,43 @@ const extractValueExportNames = (source: string): string[] => {
 const index = readFileSync(INDEX, "utf8")
 const names = [...new Set(extractValueExportNames(index))].sort()
 
-// The Reference is a set of files now, not one — docs/reference/*.md,
-// concatenated. Every one of the portable exports above must show up
-// (backtick-quoted) SOMEWHERE in that set; which specific page carries it
-// does not matter to this gate, only that the surface is documented at all.
-const referenceFiles = readdirSync(REFERENCE_DIR).filter((file) =>
-  file.endsWith(".md"),
-)
+// The Reference is a set of files now, not one — docs/reference/**/*.md,
+// concatenated (recursively, so docs/reference/components/*.md — one page
+// per portable component — counts too). Every one of the portable exports
+// above must show up (backtick-quoted) SOMEWHERE in that set; which
+// specific page carries it does not matter to this gate, only that the
+// surface is documented at all.
+const walkMarkdownFiles = (dir: string): string[] =>
+  readdirSync(dir).flatMap((entry) => {
+    const path = join(dir, entry)
+    if (statSync(path).isDirectory()) {
+      return walkMarkdownFiles(path)
+    }
+    return entry.endsWith(".md") ? [path] : []
+  })
+
+const referenceFiles = walkMarkdownFiles(REFERENCE_DIR)
 if (referenceFiles.length === 0) {
   console.error(`No .md files found under ${REFERENCE_DIR}`)
   process.exit(1)
 }
-const doc = referenceFiles
-  .map((file) => readFileSync(join(REFERENCE_DIR, file), "utf8"))
-  .join("\n")
+const doc = referenceFiles.map((path) => readFileSync(path, "utf8")).join("\n")
 
-const missing = names.filter((name) => !doc.includes(`\`${name}\``))
+// A component/API page's own `#`/`##` title (e.g. `# ActivityIndicator`,
+// `## StyleSheet`) is as strong a documentation signal as a backtick-quoted
+// mention in prose — the per-component pages title themselves in plain
+// text, matching the approved Reference format, so a thin page whose name
+// otherwise never recurs in backticks anywhere else (ActivityIndicator,
+// StyleSheet, ...) still counts as documented.
+const headingNames = new Set(
+  [...doc.matchAll(/^#{1,3}\s+`?([A-Za-z_][A-Za-z0-9_]*)`?\s*$/gm)].map(
+    (m) => m[1],
+  ),
+)
+
+const missing = names.filter(
+  (name) => !doc.includes(`\`${name}\``) && !headingNames.has(name),
+)
 
 if (missing.length > 0) {
   console.error(
