@@ -17,16 +17,27 @@ no canvas, no bridge. Linux is a React Native out-of-tree platform here:<br/>
 
 Under the hood: [gtkx](https://github.com/gtkx-org/gtkx) (a React reconciler for GTK4, with an in-process FFI into libgtk) and [Yoga](https://yogalayout.dev) — the same flexbox engine React Native itself uses. Navigation runs on real Adwaita widgets: react-navigation's stack and drawer are backed by an actual `Adw.NavigationView`/`Adw.NavigationSplitView`, so the back button, the slide transition, Escape, the back gesture and the back-history menu are the platform's, not a JS re-implementation. Past the portable surface, `react-native-gtkx/gtk` and `/adw` hand you every GTK/Adwaita widget directly — including a navigation stack that needs no router at all.
 
-| ![Hacker News list — react-native-gtkx](docs/shots/hn-list.png) | ![story screen with comments](docs/shots/hn-story.png) |
-| :-------------------------------------------------------------: | :----------------------------------------------------: |
+<table align="center">
+  <tr>
+    <td><img src="docs/shots/hn-list.png" alt="Hacker News list — react-native-gtkx"/></td>
+    <td><img src="docs/shots/hn-story.png" alt="story screen with comments"/></td>
+  </tr>
+</table>
 
-_`examples/hn-app`, live in native GTK windows: a Hacker News reader on the standard React Native Metro toolchain. Tapping a card pushes a real `Adw.NavigationView` page — the back button, the slide and the preserved list position come from the platform, not from JS. The search field sits **inside** the HeaderBar (real RN content in native chrome) and queries the HN API; comments load as you scroll. The data layer is plain Node `fetch` — on this platform "native modules" are just Node._
+<p align="center"><i><code>examples/hn-app</code>, live in native GTK windows: a Hacker News reader on the standard React Native Metro toolchain. Tapping a card pushes a real <code>Adw.NavigationView</code> page — the back button, the slide and the preserved list position come from the platform, not from JS. The search field sits <b>inside</b> the HeaderBar (real RN content in native chrome) and queries the HN API; comments load as you scroll. The data layer is plain Node <code>fetch</code> — on this platform "native modules" are just Node.</i></p>
 
 And the portability proof — `examples/profile` renders ONE source file with both renderers, not a single `@gtkx/*` import in it:
 
-| react-native-gtkx (GTK4)                                            | react-native-web (browser)                                              |
-| ------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| <img src="docs/shots/profile.png" width="400" alt="profile — GTK"/> | <img src="docs/shots/profile-web.png" width="400" alt="profile — web"/> |
+<table align="center">
+  <tr>
+    <th>react-native-gtkx (GTK4)</th>
+    <th>react-native-web (browser)</th>
+  </tr>
+  <tr>
+    <td><img src="docs/shots/profile.png" width="400" alt="profile — GTK"/></td>
+    <td><img src="docs/shots/profile-web.png" width="400" alt="profile — web"/></td>
+  </tr>
+</table>
 
 ## Quickstart
 

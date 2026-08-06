@@ -61,3 +61,14 @@
     flex-direction: column;
   }
 }
+
+/* Screenshots inside doc pages: centered, with centered italic captions. */
+.markdown img {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.markdown p:has(> img) + p:has(> em:only-child) {
+  text-align: center;
+}
