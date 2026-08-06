@@ -1,0 +1,26 @@
+# Build-only check for the documentation site. Deploying it to GitHub Pages
+# on push to main is a separate, later step of the docs-site epic.
+name: Docs
+
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "website/**"
+      - ".github/workflows/docs.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      HUSKY: 0
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Build the website workspace
+        run: npm run build -w website
