@@ -27,8 +27,10 @@
 //      React Native content inside GTK slots) — not gated by anything, but
 //      small, stable, and the only place NavigationStack/SlotContent/
 //      IntrinsicContent are documented at all.
-//   4. Full sections (by ## / ### heading) of docs/getting-started.md,
-//      docs/gestures.md, docs/gtkx-rc4-notes.md,
+//   4. Full sections (by ## / ### heading) of docs/guide/*.md,
+//      docs/getting-started.md (a pointer stub since the docs-site Guide
+//      rewrite — kept in the list because it's still a valid, if now
+//      tiny, input), docs/gestures.md, docs/gtkx-rc4-notes.md,
 //      docs/research/navigation-extensibility.md and
 //      docs/api.md/docs/platform-layer.md themselves, plus a few
 //      individually-chunked table rows (component rows, API module rows,
@@ -58,6 +60,15 @@ const GETTING_STARTED_MD = join(ROOT, "docs/getting-started.md")
 const RC4_NOTES_MD = join(ROOT, "docs/gtkx-rc4-notes.md")
 const NAV_EXT_MD = join(ROOT, "docs/research/navigation-extensibility.md")
 const GESTURES_MD = join(ROOT, "docs/gestures.md")
+// The Guide (docs/guide/*.md) is where docs/getting-started.md's content
+// actually lives now — see that file's own header comment.
+const GUIDE_MD_FILES = [
+  "docs/guide/installation.md",
+  "docs/guide/first-app.md",
+  "docs/guide/toolchains.md",
+  "docs/guide/plain-gtk.md",
+  "docs/guide/packaging.md",
+].map((path) => join(ROOT, path))
 const CLASSIFICATION_JSON = join(
   ROOT,
   "scripts/widget-surface/classification.json",
@@ -272,6 +283,12 @@ const rc4NotesText = readFileSync(RC4_NOTES_MD, "utf8")
 const gettingStartedText = readFileSync(GETTING_STARTED_MD, "utf8")
 const navExtText = readFileSync(NAV_EXT_MD, "utf8")
 const gesturesText = readFileSync(GESTURES_MD, "utf8")
+const guideChunks = GUIDE_MD_FILES.flatMap((path) =>
+  parseSections(
+    readFileSync(path, "utf8"),
+    `docs/guide/${path.split("/").at(-1)}`,
+  ),
+)
 
 const workaroundsTable = parseTableAfterHeading(
   rc4NotesText,
@@ -308,6 +325,7 @@ const apiModuleRowChunks = portableApis.map((a) => ({
 const docChunks = [
   ...parseSections(apiMdText, "docs/api.md"),
   ...parseSections(platformMdText, "docs/platform-layer.md"),
+  ...guideChunks,
   ...parseSections(gettingStartedText, "docs/getting-started.md"),
   ...parseSections(rc4NotesText, "docs/gtkx-rc4-notes.md"),
   ...parseSections(navExtText, "docs/research/navigation-extensibility.md"),
@@ -323,8 +341,9 @@ const docChunks = [
 
 const HEADER = `// GENERATED FILE — do not edit by hand.
 // Produced by scripts/generate-mcp-data.mjs from docs/api.md,
-// docs/platform-layer.md, docs/gtkx-rc4-notes.md, docs/getting-started.md,
-// docs/gestures.md, docs/research/navigation-extensibility.md and
+// docs/platform-layer.md, docs/guide/*.md, docs/gtkx-rc4-notes.md,
+// docs/getting-started.md, docs/gestures.md,
+// docs/research/navigation-extensibility.md and
 // scripts/widget-surface/classification.json.
 //
 // Regenerate after touching any of those:

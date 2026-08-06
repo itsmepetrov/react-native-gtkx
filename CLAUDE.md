@@ -55,6 +55,7 @@ FFI) and Yoga (WASM) for layout. Linux is an RN out-of-tree platform here:
   platforms), playground, profile(+web). `template/` — Linux-first
   starter.
 - `docs/` — api.md (surface + differences, gated by docs:check),
-  getting-started, research/ (measured findings behind design decisions).
+  guide/ (install → first app → toolchains → plain GTK → packaging),
+  research/ (measured findings behind design decisions).
 - `spike/rn-platform` — the platform's living probe app (dev-mode
   regression scripts run against it).

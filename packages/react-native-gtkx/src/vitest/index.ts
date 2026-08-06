@@ -63,7 +63,7 @@ const SETUP_FILE = fileURLToPath(new URL("./setup.js", import.meta.url))
  * `test.projects` alongside a portable "unit" project.
  *
  * Requires a headless Wayland compositor on PATH (`sway` by default —
- * `apt install sway xwayland dbus`, see docs/getting-started.md) and
+ * `apt install sway xwayland dbus`, see docs/guide/toolchains.md) and
  * `gtkx codegen` to have already generated the project's `@gtkx/gi`
  * bindings — a bare `vitest run` does not trigger codegen itself, unlike
  * `gtkx dev`/`gtkx build`. A missing compositor or codegen store fails with

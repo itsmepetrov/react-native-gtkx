@@ -2,7 +2,7 @@
 // generated data in ./data/generated.ts — no @gtkx/* import anywhere in
 // this module or its dependents, so this runs on any OS without GTK
 // installed (an agent reading a react-native-gtkx project on a Mac, for
-// instance). See docs/getting-started.md for how a consumer registers it.
+// instance). See docs/guide/toolchains.md for how a consumer registers it.
 import { createRequire } from "node:module"
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
@@ -129,7 +129,7 @@ const searchDocsTool = (): Tool =>
     name: "rn_gtkx_search_docs",
     title: "Search react-native-gtkx docs",
     description:
-      "Free-text search over the docs (getting-started, the platform layer, " +
+      "Free-text search over the docs (the guide, the platform layer, " +
       "gtkx rc.3 workarounds/quirks, navigation). The fallback tool: use it " +
       "for symptoms and known-issue questions that rn_gtkx_describe_component " +
       "cannot answer by name (workarounds are keyed by mechanism, not by " +

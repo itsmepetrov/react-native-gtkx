@@ -1,6 +1,7 @@
 // The gtkx native addon (@gtkx/native-<platform>-<libc>, a Rust/NAPI addon
-// loaded through dlopen — see docs/getting-started.md's "Shipping an app"
-// section for the full design reasoning) cannot be embedded as bundled JS:
+// loaded through dlopen — see docs/guide/packaging.md for the shipped
+// behavior, and this file's own comments below for the full design
+// reasoning) cannot be embedded as bundled JS:
 // a Node SEA is a V8 code cache blob, and dlopen needs a real file on a
 // real filesystem, not bytes inside the executable.
 //
