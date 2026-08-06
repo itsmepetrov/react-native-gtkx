@@ -23,7 +23,7 @@
 // `<Widget>` around `<AppNavigator />`. This platform's stack navigator
 // renders an `Adw.NavigationView`, a real GTK widget, and a GTK widget
 // nested inside React Native layout has to be given a box to live in — that
-// is what `Widget` is for (docs/platform-layer.md). Without it the
+// is what `Widget` is for (docs/architecture/layout-and-styling.md). Without it the
 // navigator is allocated nothing and the window is blank, with only
 // "Trying to snapshot AdwNavigationView without a current allocation" on
 // stderr to say so.

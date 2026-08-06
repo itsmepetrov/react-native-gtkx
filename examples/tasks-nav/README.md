@@ -51,8 +51,8 @@ Every one of the three gaps `examples/tasks-app`'s README named, closed on
   header" below for why it used to be somewhere much worse.
 - **Native collapse**: `collapseWidth={500}` — below 500sp the split view
   collapses to one column through a native `Adw.Breakpoint`, not a
-  `useWindowDimensions` conditional (see `docs/platform-layer.md`, "Two
-  ways to react to size"). Selecting a row while collapsed reveals content;
+  `useWindowDimensions` conditional (see `docs/architecture/layout-and-styling.md`,
+  "Two ways to react to size"). Selecting a row while collapsed reveals content;
   the native back button that appears returns to the sidebar.
 - **A content header that changes with selection**: one screen component
   (`src/screens/content-screen.tsx`) renders THREE different header shapes
@@ -96,7 +96,7 @@ That combination did not exist when this example first shipped: a
 attached to a React Native row at all, and the rows had to be
 `AdwActionRow`s. `Controllers` from `react-native-gtkx/gtk` is the door that
 closed it, and `react-native-gtkx/dnd` is written on top of it — see
-`docs/platform-layer.md` and
+`docs/architecture/integration.md` and
 `docs/research/react-native-first-showcase.md`.
 
 **The boxed list itself is an app component now.** `src/components/list.tsx`
@@ -368,7 +368,7 @@ afterwards.
 
    **Since fixed at the platform level, and every workaround it forced is
    gone.** `<WindowActions>`/`<ApplicationActions>`/`<WindowControllers>`
-   ([`react-native-gtkx/gtk`](../../docs/platform-layer.md#actions-and-shortcuts-declared-in-the-app-tree))
+   ([`react-native-gtkx/gtk`](../../docs/architecture/integration.md#actions-and-shortcuts-declared-in-the-tree))
    declare the same things from inside the app tree, so this example's store
    is an ordinary Context + `useReducer` again (`src/store.tsx`), its toast
    overlay is an ordinary context provider (`src/toast.tsx`) rather than a

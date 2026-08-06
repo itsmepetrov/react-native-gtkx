@@ -80,7 +80,7 @@ Both were evaluated and did not fit:
 The window (`src/components/window.tsx`) is instead built directly on
 `AdwNavigationSplitView`/`AdwNavigationPage`/`AdwActionRow` — the same
 primitives `react-native-gtkx/navigation`'s own adapters are built from
-(see `docs/platform-layer.md`, "Navigation without a router"). See
+(see `docs/architecture/integration.md`, "Navigation without a router"). See
 `docs/research/navigation-extensibility.md` for the broader "sidebar row
 rendering, collapsed mode and breakpoints" item this confirms.
 
@@ -116,7 +116,7 @@ Small, additive changes to `packages/react-native-gtkx`, each with tests:
   class) to add to the platform layer rather than carve out an ESLint
   exception for one example.
 
-See `docs/platform-layer.md` and the git history on `packages/react-native-gtkx`
+See `docs/architecture/overview.md` and the git history on `packages/react-native-gtkx`
 for the exact commits.
 
 ## What this could not do

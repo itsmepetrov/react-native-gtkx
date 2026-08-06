@@ -5,7 +5,7 @@
 // Both go through `Controllers` from react-native-gtkx/gtk — the same public
 // door an app would use. Nothing here is reachable only from inside the
 // platform, which is the property `List`/`ListRow` already established
-// (docs/platform-layer.md).
+// (docs/architecture/overview.md).
 import { useRef, type ReactNode } from "react"
 import { Controllers } from "../gtk/controllers"
 import {

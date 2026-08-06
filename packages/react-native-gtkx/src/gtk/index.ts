@@ -15,7 +15,8 @@ export { Gdk, Gio, GLib, GObject, Gtk, Pango } from "../gtkx/bridge/index"
 // `Gtk.Application`/`Gtk.ApplicationWindow`), a text buffer and an
 // adjustment (the model objects `GtkTextView`/`GtkSpinRow`-style widgets
 // bind to), keyboard shortcuts, and the two drag-and-drop controllers. See
-// docs/platform-layer.md "Unwrapped by necessity".
+// docs/architecture/overview.md, "The widget surface: wrapped, raw, and
+// auxiliary".
 export {
   GMenu,
   GtkAdjustment,
@@ -54,7 +55,7 @@ export { Controllers, type ControllersProps } from "./controllers"
 // GSettings: reads and writes backed by a compiled `.gschema.xml` schema.
 // `useSetting`/`useBindSetting` come straight from @gtkx/react; loading a
 // `.gschema.xml` file into the `SettingsSchema` object they expect is a
-// build-time concern (see docs/platform-layer.md).
+// build-time concern (see docs/architecture/integration.md, "GSettings").
 export {
   useBindSetting,
   useSetting,
@@ -70,7 +71,7 @@ export {
 // surface, not just Gtk.Widget subclasses. `GObject` above is exported
 // mainly for `GObject.Value` — constructing a boxed value is required by
 // APIs like `Adw.Breakpoint.addSetter`, which reject a bare JS primitive
-// (see docs/platform-layer.md, "Two ways to react to size").
+// (see docs/architecture/layout-and-styling.md, "Two ways to react to size").
 export { css, cx, injectGlobal } from "../gtkx/bridge/index"
 
 // The window and application AppRegistry itself sits on: useParentWindow

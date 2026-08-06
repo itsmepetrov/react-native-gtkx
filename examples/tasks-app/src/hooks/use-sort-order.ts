@@ -1,6 +1,6 @@
 // Sort order backed by the GSettings enum key — ported from the gtkx
 // tutorial (examples/tutorial/src/hooks/use-sort-order.ts). useSetting
-// comes from react-native-gtkx/gtk (see docs/platform-layer.md#gsettings);
+// comes from react-native-gtkx/gtk (see docs/architecture/integration.md#gsettings);
 // the schema import resolves through the gtkx:settings vite plugin, which
 // ships inside @gtkx/cli and is active for free on the gtkx dev/build
 // toolchain this example uses.

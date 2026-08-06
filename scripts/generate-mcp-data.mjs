@@ -4,7 +4,7 @@
 //
 // Pure Node: no @gtkx/gi / @gtkx/jsx imports, so this runs on any OS
 // without the VM or the codegen store — unlike
-// scripts/generate-widget-surface.mjs, which classifies widgets against
+// scripts/generate-widget-surface.ts, which classifies widgets against
 // real GTK prototype chains and therefore must run on Linux. This script
 // only reads that classification's committed OUTPUT
 // (scripts/widget-surface/classification.json) plus a handful of markdown
@@ -13,26 +13,27 @@
 // Sources of truth, in order of trust:
 //   1. scripts/widget-surface/classification.json — generated on the VM,
 //      committed, always current with what react-native-gtkx/gtk and
-//      react-native-gtkx/adw actually export. docs/platform-layer.md's own
-//      prose widget list is NOT this: it names 10 widgets by hand where
-//      classification.json has 87 gtk + 46 adw — that list is illustrative,
-//      not exhaustive, and untouched by any doc-coverage gate.
+//      react-native-gtkx/adw actually export. docs/architecture/overview.md's
+//      own prose widget list is NOT this: it names a handful by hand where
+//      classification.json has 86 gtk + 46 adw wrapped — that list is
+//      illustrative, not exhaustive, and untouched by any doc-coverage gate.
 //   2. docs/api.md's Components and API modules tables — gated by
 //      `npm run docs:check` against every value export of
 //      packages/react-native-gtkx/src/index.ts, so these rows cannot omit a
 //      portable export, even though their prose content (the Supported/
 //      Differences columns) is hand-written and only as accurate as the
 //      person who last touched it.
-//   3. docs/platform-layer.md's two real tables (Declarative primitives;
-//      React Native content inside GTK slots) — not gated by anything, but
-//      small, stable, and the only place NavigationStack/SlotContent/
-//      IntrinsicContent are documented at all.
+//   3. Two real tables inside docs/architecture/ (Declarative primitives, in
+//      integration.md; React Native content inside GTK slots, in
+//      layout-and-styling.md) — not gated by anything, but small, stable,
+//      and the only place NavigationStack/SlotContent/IntrinsicContent are
+//      documented at all.
 //   4. Full sections (by ## / ### heading) of docs/guide/*.md,
 //      docs/getting-started.md (a pointer stub since the docs-site Guide
 //      rewrite — kept in the list because it's still a valid, if now
-//      tiny, input), docs/gestures.md, docs/gtkx-rc4-notes.md,
-//      docs/research/navigation-extensibility.md and
-//      docs/api.md/docs/platform-layer.md themselves, plus a few
+//      tiny, input), docs/gtkx-rc4-notes.md,
+//      docs/research/navigation-extensibility.md, docs/api.md and every
+//      docs/architecture/*.md page, plus a few
 //      individually-chunked table rows (component rows, API module rows,
 //      the gtkx-rc4-notes live-workaround rows) — a full-text search corpus
 //      for rn_gtkx_search_docs, the fallback tool for anything the
@@ -55,11 +56,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, "..")
 
 const API_MD = join(ROOT, "docs/api.md")
-const PLATFORM_MD = join(ROOT, "docs/platform-layer.md")
+const ARCH_OVERVIEW_MD = join(ROOT, "docs/architecture/overview.md")
+const ARCH_LAYOUT_MD = join(ROOT, "docs/architecture/layout-and-styling.md")
+const ARCH_INTEGRATION_MD = join(ROOT, "docs/architecture/integration.md")
+const ARCH_GESTURES_MD = join(ROOT, "docs/architecture/gestures.md")
 const GETTING_STARTED_MD = join(ROOT, "docs/getting-started.md")
 const RC4_NOTES_MD = join(ROOT, "docs/gtkx-rc4-notes.md")
 const NAV_EXT_MD = join(ROOT, "docs/research/navigation-extensibility.md")
-const GESTURES_MD = join(ROOT, "docs/gestures.md")
 // The Guide (docs/guide/*.md) is where docs/getting-started.md's content
 // actually lives now — see that file's own header comment.
 const GUIDE_MD_FILES = [
@@ -210,32 +213,33 @@ const portableApis = apiModulesTable.rows.map(
 )
 
 // ---------------------------------------------------------------------------
-// 2. Common subpath (docs/platform-layer.md) — the two real tables.
+// 2. Common subpath (docs/architecture/) — the two real tables.
 // ---------------------------------------------------------------------------
 
-const platformMdText = readFileSync(PLATFORM_MD, "utf8")
+const archIntegrationText = readFileSync(ARCH_INTEGRATION_MD, "utf8")
+const archLayoutText = readFileSync(ARCH_LAYOUT_MD, "utf8")
 
 const declarativeTable = parseTableAfterHeading(
-  platformMdText,
+  archIntegrationText,
   "### Declarative primitives",
-  "docs/platform-layer.md",
+  "docs/architecture/integration.md",
 )
 assertColumnCount(
   declarativeTable,
   2,
-  "docs/platform-layer.md",
+  "docs/architecture/integration.md",
   "### Declarative primitives",
 )
 
 const slotTable = parseTableAfterHeading(
-  platformMdText,
+  archLayoutText,
   "### React Native content inside GTK slots",
-  "docs/platform-layer.md",
+  "docs/architecture/layout-and-styling.md",
 )
 assertColumnCount(
   slotTable,
   3,
-  "docs/platform-layer.md",
+  "docs/architecture/layout-and-styling.md",
   "### React Native content inside GTK slots",
 )
 
@@ -255,7 +259,7 @@ const commonPrimitives = [
 // ---------------------------------------------------------------------------
 // 3. gtk/adw widget surface (scripts/widget-surface/classification.json) —
 //    the generated, always-current source; NOT the illustrative prose list
-//    in docs/platform-layer.md (see the file header comment above).
+//    in docs/architecture/overview.md (see the file header comment above).
 // ---------------------------------------------------------------------------
 
 const classification = JSON.parse(readFileSync(CLASSIFICATION_JSON, "utf8"))
@@ -282,7 +286,8 @@ const adwWidgets = widgetRecords(classification.adw, "react-native-gtkx/adw")
 const rc4NotesText = readFileSync(RC4_NOTES_MD, "utf8")
 const gettingStartedText = readFileSync(GETTING_STARTED_MD, "utf8")
 const navExtText = readFileSync(NAV_EXT_MD, "utf8")
-const gesturesText = readFileSync(GESTURES_MD, "utf8")
+const archOverviewText = readFileSync(ARCH_OVERVIEW_MD, "utf8")
+const archGesturesText = readFileSync(ARCH_GESTURES_MD, "utf8")
 const guideChunks = GUIDE_MD_FILES.flatMap((path) =>
   parseSections(
     readFileSync(path, "utf8"),
@@ -324,12 +329,14 @@ const apiModuleRowChunks = portableApis.map((a) => ({
 
 const docChunks = [
   ...parseSections(apiMdText, "docs/api.md"),
-  ...parseSections(platformMdText, "docs/platform-layer.md"),
+  ...parseSections(archOverviewText, "docs/architecture/overview.md"),
+  ...parseSections(archLayoutText, "docs/architecture/layout-and-styling.md"),
+  ...parseSections(archIntegrationText, "docs/architecture/integration.md"),
+  ...parseSections(archGesturesText, "docs/architecture/gestures.md"),
   ...guideChunks,
   ...parseSections(gettingStartedText, "docs/getting-started.md"),
   ...parseSections(rc4NotesText, "docs/gtkx-rc4-notes.md"),
   ...parseSections(navExtText, "docs/research/navigation-extensibility.md"),
-  ...parseSections(gesturesText, "docs/gestures.md"),
   ...workaroundChunks,
   ...componentRowChunks,
   ...apiModuleRowChunks,
@@ -341,8 +348,8 @@ const docChunks = [
 
 const HEADER = `// GENERATED FILE — do not edit by hand.
 // Produced by scripts/generate-mcp-data.mjs from docs/api.md,
-// docs/platform-layer.md, docs/guide/*.md, docs/gtkx-rc4-notes.md,
-// docs/getting-started.md, docs/gestures.md,
+// docs/architecture/*.md, docs/guide/*.md, docs/gtkx-rc4-notes.md,
+// docs/getting-started.md,
 // docs/research/navigation-extensibility.md and
 // scripts/widget-surface/classification.json.
 //

@@ -2,7 +2,7 @@
 // module scope — the caller injects the real Gtk/Adw namespaces (only
 // resolvable on Linux, inside the VM) and the parsed component name lists.
 //
-// Rules (see docs/platform-layer.md and .claude/epics/widget-surface for the
+// Rules (see docs/architecture/overview.md and .claude/epics/widget-surface for the
 // reasoning):
 //   1. include only if X.prototype instanceof Gtk.Widget (drops event
 //      controllers, adjustments, models, animations, cell renderers, ...);

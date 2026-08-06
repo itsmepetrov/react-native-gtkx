@@ -1,6 +1,7 @@
 // Adw.Breakpoint + Adw.BreakpointBin — the native size-threshold mechanism
 // createSidebarNavigator's collapseWidth is built on (see
-// docs/platform-layer.md, "Two ways to react to size"). This file proves the
+// docs/architecture/layout-and-styling.md, "Two ways to react to size").
+// This file proves the
 // primitive works BEFORE any navigator code depends on it:
 //
 // - Adw.Breakpoint is not a Gtk.Widget (verified, not assumed from the GIR

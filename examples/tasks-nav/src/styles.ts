@@ -1,7 +1,7 @@
 // Raw GTK CSS for the two things the style prop cannot express.
 // react-native-gtkx/gtk re-exports @gtkx/css's tagged template directly (see
-// docs/platform-layer.md), the same one the style prop's visual half uses
-// underneath — so this is the supported path, not an escape hatch.
+// docs/architecture/overview.md), the same one the style prop's visual half
+// uses underneath — so this is the supported path, not an escape hatch.
 import { css } from "react-native-gtkx/gtk"
 
 /** A list's color, as the round swatch the "New List" dialog offers. The

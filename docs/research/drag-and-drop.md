@@ -438,7 +438,7 @@ already know.
 
 `List`/`ListRow`/`ListSeparator` themselves left
 `react-native-gtkx/common` at the same time and for a separate reason — see
-[platform-layer.md](../platform-layer.md#listlistrowlistseparator-were-here-and-are-not-any-more).
+[architecture/overview.md](../architecture/overview.md#react-native-gtkxcommon-what-has-no-upstream-counterpart).
 
 ## Honest gaps for a ported app
 
