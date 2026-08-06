@@ -5,6 +5,8 @@
 The container. Implements React Native's layout, paint, clipping and
 hit-testing rules on a single GTK widget.
 
+![The gallery's Views section: backgroundColor in five formats, an opacity ladder, per-side borders and corner radii on a View.](../../shots/gallery/views.png)
+
 Supported props:
 
 - `style`, `onLayout`, `testID`, children.

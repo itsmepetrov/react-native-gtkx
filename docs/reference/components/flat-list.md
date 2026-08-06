@@ -2,6 +2,8 @@
 
 **Profile:** GTK · **Backed by:** a windowed core over `ScrollView`
 
+![The gallery's Lists section: a FlatList with a ListHeaderComponent, item separators and a SectionList with sticky section headers.](../../shots/gallery/lists.png)
+
 Supported props:
 
 - Virtualization (`estimatedItemSize` or `getItemLayout`, `windowSize`/

@@ -9,6 +9,8 @@ platform info, and the animation systems. Import all of these from
 `StyleProp<ViewStyle>`, written the way ordinary React Native code already
 writes it, compiles here unchanged.
 
+![The gallery's APIs section: Platform, useWindowDimensions, useColorScheme/AppState and Alert.alert's button variants.](../shots/gallery/apis.png)
+
 ## StyleSheet
 
 **Profile:** GTK
@@ -260,6 +262,8 @@ Differs from react-native:
 
 **Profile:** GTK
 
+![The gallery's Gestures section: a PanResponder-driven drag, and the inner/sibling responder-negotiation demo.](../shots/gallery/gestures.png)
+
 Supported: `create(config)` → `panHandlers` (spread onto a `View`), the
 full `gestureState` (`dx`/`dy`, `vx`/`vy`, `x0`/`y0`, `moveX`/`moveY`,
 `numberActiveTouches`) — react-native's own `PanResponder.js`, unmodified,
@@ -278,6 +282,10 @@ Differs from react-native:
 ## Animated
 
 **Profile:** GTK
+
+![The gallery's Animated section: Animated.timing with looping, Animated.spring overshoot, and Animated.event driving a scroll-linked header.](../shots/gallery/animated.png)
+
+![The gallery's Interpolate section: a multi-stop opacity range, a mirrored extrapolate-clamp bounce, and two interpolations of one Animated.Value.](../shots/gallery/interpolate.png)
 
 `Animated` — `Value`, `timing`, `spring`, `sequence`, `parallel`, `delay`,
 `loop`, `interpolate` (numbers and `deg`/`rad` strings, with

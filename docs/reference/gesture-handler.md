@@ -68,6 +68,8 @@ screen has it.
 
 ## GestureDetector
 
+![The gallery's Gesture detector section: Pan, Tap and LongPress recognizers configured with activateAfterLongPress, activeOffset/failOffset, hitSlop and numberOfTaps.](../shots/gallery/gesture-detector.png)
+
 `GestureDetector` renders exactly one child and adds no widget of its own. It
 reaches the child's underlying GTK widget through the same ref-forwarding
 seam `createAnimatedComponent` uses, and merges its recognizer's responder
@@ -267,6 +269,8 @@ and yields.
 
 ### Pinch and Rotation — the two that need a touchpad
 
+![The gallery's Pinch and rotation section: Gesture.Pinch() and Gesture.Rotation(), both driven by a touchpad.](../shots/gallery/gesture-pinch.png)
+
 Both are driven by a touchpad rather than by the pointer: a pinch is not a
 pointer event, it is a conclusion libinput draws from two fingers moving on a
 device it has classified as a touchpad, delivered as
@@ -456,6 +460,8 @@ A single `GestureDetector` may hold a composition. It mounts every recognizer
 the composition contains onto the one child, and still adds no widget.
 
 ## Cross-gesture relations
+
+![The gallery's Gesture relations section: Gesture.Native() over a ScrollView, simultaneousWithExternalGesture, and requireExternalGestureToFail.](../shots/gallery/gesture-relations.png)
 
 | Relation                                                                   | Means                                   |
 | -------------------------------------------------------------------------- | --------------------------------------- |

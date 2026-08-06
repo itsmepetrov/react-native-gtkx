@@ -2,6 +2,8 @@
 
 **Profile:** GTK · **Backed by:** built on `FlatList`
 
+![The gallery's Lists section: a FlatList with a ListHeaderComponent, item separators and a SectionList with sticky section headers.](../../shots/gallery/lists.png)
+
 Supported props: `sections`, `renderSectionHeader`, sticky section headers
 by default (`stickySectionHeadersEnabled`).
 

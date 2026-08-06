@@ -2,6 +2,8 @@
 
 **Profile:** GTK · **Backed by:** `GtkLabel` (Pango)
 
+![The gallery's Text section: fontSize/fontWeight/fontStyle variants and textAlign (left/center/right/justify) on a Text label.](../../shots/gallery/text.png)
+
 Supported props: wrapping, `numberOfLines` (end ellipsis), `textAlign`,
 font styles, `onLayout`, `testID`, and a ref exposing the geometry methods
 (`TextHandle` — a label needs no wrapping `View` to be measurable).

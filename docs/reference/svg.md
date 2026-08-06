@@ -43,6 +43,8 @@ const Icon = () => (
 )
 ```
 
+![The gallery's Svg section: Path/Rect/Circle/Ellipse/Polygon shapes, Line/Polyline strokes, and a G transform group.](../shots/gallery/svg.png)
+
 ## Import and aliasing
 
 `react-native-gtkx/svg` re-exports its component set in `react-native-svg`'s

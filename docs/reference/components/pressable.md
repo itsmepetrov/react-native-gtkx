@@ -2,6 +2,8 @@
 
 **Profile:** GTK · **Backed by:** `View` + click/motion event controllers
 
+![The gallery's Buttons section: Pressable's pressed/hovered states, onLongPress, onHoverIn/Out and a disabled button.](../../shots/gallery/buttons.png)
+
 Supported props:
 
 - `onPress(In/Out)`, `onLongPress` (`delayLongPress`), `onHoverIn` /

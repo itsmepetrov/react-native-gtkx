@@ -24,6 +24,8 @@ A property's status is one of:
 
 ## Layout (routed to Yoga)
 
+![The gallery's Layout section: flexDirection, justifyContent and alignItems arranging boxes under Yoga.](../shots/gallery/layout.png)
+
 `alignContent`, `alignItems`, `alignSelf`, `aspectRatio`, `bottom`,
 `columnGap`, `direction`, `display`, `flex`, `flexBasis`, `flexDirection`,
 `flexGrow`, `flexShrink`, `flexWrap`, `gap`, `height`, `justifyContent`,
@@ -33,6 +35,8 @@ A property's status is one of:
 `paddingHorizontal`, `paddingLeft`, `paddingRight`, `paddingTop`,
 `paddingVertical`, `position`, `right`, `rowGap`, `top`, `width` — all
 **supported**, with behavior defined by the layout engine itself.
+
+![The gallery's Clipping section: overflow: "hidden" cutting a View to its rounded shape, with hit-testing stopping at the same clip.](../shots/gallery/clipping.png)
 
 `overflow` is the one key that does not stop at Yoga: Yoga needs it while
 measuring (a scroll node's main axis is unconstrained), and the widget needs

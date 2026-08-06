@@ -60,6 +60,8 @@ same instance, not a second implementation.
 
 ## Shared values and animations
 
+![The gallery's Reanimated values section: a shared value dragged and sprung back, with the render counters proving zero React renders per frame.](../shots/gallery/reanimated.png)
+
 `useSharedValue`, `makeMutable`, `isSharedValue` and `cancelAnimation` are
 fully implemented. A shared value doubles as one of the platform's own
 animated nodes, so it can be handed straight to a `View`'s style, in addition
@@ -88,6 +90,8 @@ animated-node signature, `(callback) => id`. Both call sites are real in
 practice, and supporting only one would fail the other silently.
 
 ### `with*()` animations
+
+![The gallery's Reanimated motion section: the five animation functions (withTiming/withSpring/withSequence/withRepeat/withDelay) and seven easing curves compared side by side.](../shots/gallery/reanimated-motion.png)
 
 `withTiming`, `withSpring`, `withSequence`, `withRepeat` and `withDelay` are
 fully implemented for numeric values, on upstream's own defaults (timing:
@@ -169,6 +173,8 @@ tracking is dynamic, so a mapper subscribes to what it actually reads rather
 than to what it was told to expect.
 
 ## `useAnimatedStyle` and `useAnimatedProps`
+
+![The gallery's Reanimated limits section: a driven width next to a refused one, showing exactly where useAnimatedStyle stops driving a layout property at frame rate.](../shots/gallery/reanimated-limits.png)
 
 What this platform can write to a mounted widget without a React render is a
 fixed set of properties — the honest boundary of the surface, not a
@@ -584,6 +590,8 @@ Reanimated itself. They are kept callable so startup code that calls them
 does not fail on a line that already did nothing upstream.
 
 ## Layout animations
+
+![The gallery's Layout animations section: FadeIn/FadeOut/LinearTransition reordering rows, and the layout-animation preset catalogue.](../shots/gallery/reanimated-layout.png)
 
 `entering`, `exiting` and `layout` props work on every animated component —
 `Animated.View`, `Animated.Text`, `Animated.Image`, `Animated.ScrollView`,

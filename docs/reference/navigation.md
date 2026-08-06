@@ -50,6 +50,12 @@ navigator logs a one-time development warning naming the fix.
 
 ## Stack navigator
 
+![The gallery's Adwaita stack section: a real Adw.NavigationView push, with a native header-bar back button — the same primitive react-native-gtkx/navigation's stack navigator builds on.](../shots/gallery/adwaita-stack.png)
+
+_This demo bypasses react-navigation entirely (its own `useState` router); it
+only proves the underlying native primitive the stack navigator above is
+built on._
+
 `createStackNavigator()` returns a `Navigator`/`Screen` pair used the same
 way as `@react-navigation/native-stack`'s:
 
@@ -353,6 +359,14 @@ no lever for it; a different height or density means climbing to
 `sidebarRow` or `sidebarContent`.
 
 ### Grouping rows
+
+![The gallery sidebar, light theme: a "React Native" section header above Views, Text, Layout, Clipping and the rest, then a "gtkx" header above Widget hosting and Adwaita stack.](../shots/gallery/sidebar-groups-light.png)
+
+![The same sidebar in the dark theme, with the headers equally legible.](../shots/gallery/sidebar-groups-dark.png)
+
+_The gallery's own screenshots elsewhere on this site are all native
+GNOME/Adwaita chrome in the dark theme — this pair is the one deliberate
+light/dark comparison._
 
 Consecutive screens sharing a `group` value get one Adwaita section header
 above the first of them. The header is a decoration owned by the row below
