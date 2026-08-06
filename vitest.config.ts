@@ -16,11 +16,16 @@ export default defineConfig(async () => ({
           name: "unit",
           // Unit tests live anywhere: packages and examples share the
           // tests/unit layout and the same cross-platform project.
+          // scripts/**/*.test.ts is the exception: repo tooling (the
+          // docs-site badge derivation, scripts/adw-profile/*) tests itself
+          // next to its own implementation rather than under a tests/unit
+          // tree, since it isn't part of any package or example.
           include: [
             "packages/*/tests/unit/**/*.test.ts",
             "packages/*/tests/unit/**/*.test.tsx",
             "examples/*/tests/unit/**/*.test.ts",
             "examples/*/tests/unit/**/*.test.tsx",
+            "scripts/**/*.test.ts",
           ],
         },
       },

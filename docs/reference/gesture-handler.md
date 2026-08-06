@@ -1,3 +1,7 @@
+---
+profile: gtk
+---
+
 # Gesture Handler
 
 `react-native-gtkx/gesture-handler` reimplements `react-native-gesture-handler`

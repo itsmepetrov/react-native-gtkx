@@ -1,6 +1,6 @@
 # ScrollView
 
-**Backed by:** `GtkScrolledWindow`
+**Profile:** GTK · **Backed by:** `GtkScrolledWindow`
 
 Supported props:
 

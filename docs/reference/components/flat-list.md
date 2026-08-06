@@ -1,6 +1,6 @@
 # FlatList
 
-**Backed by:** a windowed core over `ScrollView`
+**Profile:** GTK · **Backed by:** a windowed core over `ScrollView`
 
 Supported props:
 

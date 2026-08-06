@@ -1,6 +1,6 @@
 # TouchableHighlight
 
-**Backed by:** built on `Pressable`
+**Profile:** GTK · **Backed by:** built on `Pressable`
 
 Supported props: `underlayColor` (default `black`, as in RN),
 `activeOpacity`, `onShowUnderlay` / `onHideUnderlay`.

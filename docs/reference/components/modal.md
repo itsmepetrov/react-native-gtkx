@@ -1,6 +1,6 @@
 # Modal
 
-**Backed by:** a modal `GtkWindow` (a portal)
+**Profile:** GTK · **Backed by:** a modal `GtkWindow` (a portal)
 
 Supported props: `visible`, `onRequestClose` (Escape or the window's close
 button), `title`, `width`/`height`; independently resizable, with relayout.

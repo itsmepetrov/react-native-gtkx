@@ -1,5 +1,5 @@
 # TouchableOpacity
 
-**Backed by:** built on `Pressable`
+**Profile:** GTK · **Backed by:** built on `Pressable`
 
 Supported props: `activeOpacity`.

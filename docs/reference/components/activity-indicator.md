@@ -1,6 +1,6 @@
 # ActivityIndicator
 
-**Backed by:** `GtkSpinner`
+**Profile:** GTK · **Backed by:** `GtkSpinner`
 
 Supported props: `animating`, `size` (`small` / `large` / a number).
 

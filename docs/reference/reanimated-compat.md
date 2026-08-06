@@ -1,3 +1,7 @@
+---
+profile: gtk
+---
+
 # `react-native-reanimated` and `react-native-worklets`
 
 Two package names resolve into this same corner of the platform.

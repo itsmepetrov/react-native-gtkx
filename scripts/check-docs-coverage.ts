@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 // Docs coverage gate: every VALUE export of the public surface must be
 // mentioned somewhere in docs/reference/**/*.md. Type-only exports are
-// exempt.
+// exempt. Also enforces the code-derived GTK/Adw capability matrix
+// (docs-site epic task 005): every component/API page and subpath page
+// must declare the profile the code actually proves — see
+// scripts/adw-profile/enforce.ts.
 import { readdirSync, readFileSync, statSync } from "node:fs"
 import { join } from "node:path"
+import { checkAdwProfiles } from "./adw-profile/enforce.ts"
 
 const ROOT = join(import.meta.dirname, "..")
 const INDEX = join(ROOT, "packages/react-native-gtkx/src/index.ts")
@@ -116,4 +120,21 @@ if (missing.length > 0) {
 }
 console.log(
   `docs coverage OK: ${names.length} public exports documented across ${referenceFiles.length} reference pages`,
+)
+
+// The capability matrix: missing profile, wrong profile, or a
+// probe-guarded entry with no plain-GTK fallback sentence.
+const profileMismatches = checkAdwProfiles()
+if (profileMismatches.length > 0) {
+  console.error(
+    "GTK/Adw profile mismatches (docs-site task 005 — the declared profile " +
+      "must match what the code proves; see scripts/adw-profile/derive.ts):",
+  )
+  for (const mismatch of profileMismatches) {
+    console.error(`  - [${mismatch.kind}] ${mismatch.message}`)
+  }
+  process.exit(1)
+}
+console.log(
+  "GTK/Adw profile check OK: every surface matches the derived matrix",
 )

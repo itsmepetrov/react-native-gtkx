@@ -1,6 +1,6 @@
 # SectionList
 
-**Backed by:** built on `FlatList`
+**Profile:** GTK · **Backed by:** built on `FlatList`
 
 Supported props: `sections`, `renderSectionHeader`, sticky section headers
 by default (`stickySectionHeadersEnabled`).

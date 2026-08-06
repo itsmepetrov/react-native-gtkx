@@ -11,10 +11,14 @@ writes it, compiles here unchanged.
 
 ## StyleSheet
 
+**Profile:** GTK
+
 Supported: `create`, `flatten`, `compose`, `absoluteFill`/
 `absoluteFillObject`, `hairlineWidth`.
 
 ## PlatformColor
+
+**Profile:** GTK
 
 Supported: Adwaita theme variables — `PlatformColor("accent-bg-color")`
 resolves to `var(--accent-bg-color)`; `@name` reaches a legacy named GTK
@@ -25,6 +29,8 @@ Differs from react-native:
 - The names are Adwaita's own, not iOS's or Android's.
 
 ## AppRegistry
+
+**Profile:** Adw (fallback: `chrome: "content"` falls back to the same `GtkApplicationWindow` `chrome: "system"` always uses)
 
 Supported: `registerComponent`, `runApplication(appKey, { title, width,
 height, initialProps, chrome, actionAccels, breakpoints })`, `getAppKeys`.
@@ -50,6 +56,8 @@ Differs from react-native:
 
 ## Platform
 
+**Profile:** GTK
+
 Supported: `OS: "linux"`, `Version` (the GTK version), `select`
 (`linux` → `native` → `default`), `isTV`, `isTesting`.
 
@@ -61,6 +69,8 @@ Differs from react-native:
 
 ## Dimensions
 
+**Profile:** GTK
+
 Supported: `get("window"/"screen")`, `addEventListener("change")`.
 
 Differs from react-native:
@@ -71,9 +81,13 @@ Differs from react-native:
 
 ## useWindowDimensions
 
+**Profile:** GTK
+
 Supported: reactive main-window dimensions.
 
 ## Appearance
+
+**Profile:** Adw (fallback: sourced from the `org.freedesktop.appearance` desktop portal, then `Gtk.Settings:gtk-application-prefer-dark-theme`)
 
 Supported: `getColorScheme`, `setColorScheme`, `addChangeListener`. Backed
 by `AdwStyleManager`; on the plain-GTK profile (no `"Adw-1"`), it is
@@ -92,9 +106,13 @@ Differs from react-native:
 
 ## useColorScheme
 
+**Profile:** Adw (fallback: same as `Appearance`, which this wraps)
+
 Supported: reactive theme.
 
 ## AppState
+
+**Profile:** GTK
 
 Supported: `currentState` (`active`/`background`), `addEventListener`.
 
@@ -103,6 +121,8 @@ Differs from react-native:
 - Driven by the window's own active/inactive state.
 
 ## Alert
+
+**Profile:** Adw (fallback: `Gtk.AlertDialog`, GTK ≥ 4.10 — loses destructive/preferred button styling, keeps default/cancel mapping)
 
 Supported: `alert(title, message, buttons, options)`, backed by
 `Adw.AlertDialog` (or `Gtk.AlertDialog`, GTK ≥ 4.10, on the plain-GTK
@@ -125,6 +145,8 @@ for how a plain-GTK app is configured.
 
 ## Linking
 
+**Profile:** GTK
+
 Supported: `openURL`, `canOpenURL` (`http`/`https`/`mailto`/`file`),
 `getInitialURL` (always `null`), `addEventListener("url")`.
 
@@ -135,6 +157,8 @@ Differs from react-native:
   are accepted but never fire.
 
 ## InteractionManager
+
+**Profile:** GTK
 
 Supported: `runAfterInteractions(task?)` (cancellable, then-able),
 `createInteractionHandle`/`clearInteractionHandle`, `addListener`.
@@ -147,6 +171,8 @@ Differs from react-native:
 
 ## DevSettings
 
+**Profile:** GTK
+
 Supported: `addMenuItem(title, handler)` (entries in the Dev Menu —
 Ctrl+Shift+D in `run-linux --dev`), `reload(reason?)`.
 
@@ -155,6 +181,8 @@ Differs from react-native:
 - Silent no-ops in release builds, as in RN.
 
 ## I18nManager
+
+**Profile:** GTK
 
 Supported: `isRTL` (a live read of the locale's text direction),
 `doLeftAndRightSwapInRTL`, `getConstants`.
@@ -166,6 +194,8 @@ Differs from react-native:
 
 ## BackHandler
 
+**Profile:** GTK
+
 Supported: `addEventListener("hardwareBackPress")`, `exitApp`.
 
 Differs from react-native:
@@ -174,6 +204,8 @@ Differs from react-native:
   but nothing fires them yet.
 
 ## findNodeHandle
+
+**Profile:** GTK
 
 Supported: a stable integer per mounted widget, resolvable back to it;
 accepted by `measureLayout` as its first argument, alongside a handle
@@ -193,6 +225,8 @@ Differs from react-native:
 
 ## Keyboard
 
+**Profile:** GTK
+
 Supported: `addListener` (honored, never fires), `removeAllListeners`,
 `dismiss`, `isVisible` (always `false`), `metrics` (always `undefined`),
 `scheduleLayoutAnimation`.
@@ -209,6 +243,8 @@ Differs from react-native:
 
 ## LogBox
 
+**Profile:** GTK
+
 Supported: `ignoreLogs`, `ignoreAllLogs`, `install`, `uninstall` —
 accepted and ignored.
 
@@ -221,6 +257,8 @@ Differs from react-native:
   calling it.
 
 ## PanResponder
+
+**Profile:** GTK
 
 Supported: `create(config)` → `panHandlers` (spread onto a `View`), the
 full `gestureState` (`dx`/`dy`, `vx`/`vy`, `x0`/`y0`, `moveX`/`moveY`,
@@ -238,6 +276,8 @@ Differs from react-native:
   `onPanResponderTerminate` (see [View](components/view.md)).
 
 ## Animated
+
+**Profile:** GTK
 
 `Animated` — `Value`, `timing`, `spring`, `sequence`, `parallel`, `delay`,
 `loop`, `interpolate` (numbers and `deg`/`rad` strings, with
@@ -270,10 +310,14 @@ widening of RN's own traversal, which throws one level above a missing leaf.
 
 ## Easing
 
+**Profile:** GTK
+
 Supported: `linear`, `ease`, `quad`, `cubic`, `in`, `out`, `inOut`,
 `bezier`.
 
 ## version
+
+**Profile:** GTK
 
 Supported: the package version.
 

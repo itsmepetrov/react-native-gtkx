@@ -1,6 +1,6 @@
 # Pressable
 
-**Backed by:** `View` + click/motion event controllers
+**Profile:** GTK · **Backed by:** `View` + click/motion event controllers
 
 Supported props:
 
