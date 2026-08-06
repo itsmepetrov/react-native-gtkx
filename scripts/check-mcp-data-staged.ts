@@ -18,10 +18,25 @@ const GENERATOR = "scripts/generate-mcp-data.mjs"
 const OUTPUT = "packages/react-native-gtkx/src/mcp/data/generated.ts"
 
 // Keep in sync with the "Sources of truth" list at the top of
-// scripts/generate-mcp-data.mjs.
+// scripts/generate-mcp-data.mjs. docs/reference/ is a directory of pages
+// (any of which can gain or lose an export row), so it is matched by
+// prefix below rather than listed file by file.
+const REFERENCE_PREFIX = "docs/reference/"
 const INPUTS = [
   GENERATOR,
-  "docs/api.md",
+  "docs/reference/components-core.md",
+  "docs/reference/components-inputs.md",
+  "docs/reference/components-lists.md",
+  "docs/reference/components-overlays.md",
+  "docs/reference/apis.md",
+  "docs/reference/styling.md",
+  "docs/reference/globals.md",
+  "docs/reference/aliases.md",
+  "docs/reference/navigation.md",
+  "docs/reference/svg.md",
+  "docs/reference/dnd.md",
+  "docs/reference/gesture-handler.md",
+  "docs/reference/reanimated-compat.md",
   "docs/guide/installation.md",
   "docs/guide/first-app.md",
   "docs/guide/toolchains.md",
@@ -49,7 +64,9 @@ const stagedFiles = git([
   .split("\n")
   .filter(Boolean)
 
-const touchesInput = stagedFiles.some((file) => INPUTS.includes(file))
+const touchesInput = stagedFiles.some(
+  (file) => INPUTS.includes(file) || file.startsWith(REFERENCE_PREFIX),
+)
 if (!touchesInput) {
   process.exit(0)
 }

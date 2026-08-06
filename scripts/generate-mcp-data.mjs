@@ -17,28 +17,29 @@
 //      own prose widget list is NOT this: it names a handful by hand where
 //      classification.json has 86 gtk + 46 adw wrapped — that list is
 //      illustrative, not exhaustive, and untouched by any doc-coverage gate.
-//   2. docs/api.md's Components and API modules tables — gated by
-//      `npm run docs:check` against every value export of
-//      packages/react-native-gtkx/src/index.ts, so these rows cannot omit a
-//      portable export, even though their prose content (the Supported/
-//      Differences columns) is hand-written and only as accurate as the
-//      person who last touched it.
+//   2. docs/reference/'s Components tables (components-core.md,
+//      components-inputs.md, components-lists.md, components-overlays.md)
+//      and API modules table (apis.md) — gated by `npm run docs:check`
+//      against every value export of packages/react-native-gtkx/src/index.ts,
+//      so these rows cannot omit a portable export, even though their prose
+//      content (the Supported/Differences columns) is hand-written and only
+//      as accurate as the person who last touched it.
 //   3. Two real tables inside docs/architecture/ (Declarative primitives, in
 //      integration.md; React Native content inside GTK slots, in
 //      layout-and-styling.md) — not gated by anything, but small, stable,
 //      and the only place NavigationStack/SlotContent/IntrinsicContent are
 //      documented at all.
-//   4. Full sections (by ## / ### heading) of docs/guide/*.md,
-//      docs/getting-started.md (a pointer stub since the docs-site Guide
-//      rewrite — kept in the list because it's still a valid, if now
-//      tiny, input), docs/gtkx-rc4-notes.md,
-//      docs/research/navigation-extensibility.md, docs/api.md and every
+//   4. Full sections (by ## / ### heading) of every docs/reference/*.md
+//      page, docs/guide/*.md, docs/getting-started.md (a pointer stub since
+//      the docs-site Guide rewrite — kept in the list because it's still a
+//      valid, if now tiny, input), docs/gtkx-rc4-notes.md,
+//      docs/research/navigation-extensibility.md and every
 //      docs/architecture/*.md page, plus a few
 //      individually-chunked table rows (component rows, API module rows,
 //      the gtkx-rc4-notes live-workaround rows) — a full-text search corpus
 //      for rn_gtkx_search_docs, the fallback tool for anything the
 //      structured records above do not cover (e.g. "what's known-broken",
-//      which has no stable per-component key — RC2-WORKAROUND rows are
+//      which has no stable per-component key — RC4-WORKAROUND rows are
 //      named by mechanism, not by widget).
 //
 // Regenerate after touching any of the docs above or after
@@ -47,7 +48,13 @@
 // Check that the committed file is still in sync (no write, just a diff):
 //   node scripts/generate-mcp-data.mjs --check
 import { execFileSync } from "node:child_process"
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -55,7 +62,14 @@ import { fileURLToPath } from "node:url"
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, "..")
 
-const API_MD = join(ROOT, "docs/api.md")
+const REFERENCE_DIR = join(ROOT, "docs/reference")
+const COMPONENT_FILES = [
+  "components-core.md",
+  "components-inputs.md",
+  "components-lists.md",
+  "components-overlays.md",
+]
+const API_MODULES_FILE = "apis.md"
 const ARCH_OVERVIEW_MD = join(ROOT, "docs/architecture/overview.md")
 const ARCH_LAYOUT_MD = join(ROOT, "docs/architecture/layout-and-styling.md")
 const ARCH_INTEGRATION_MD = join(ROOT, "docs/architecture/integration.md")
@@ -174,34 +188,70 @@ const parseSections = (text, doc) => {
 }
 
 // ---------------------------------------------------------------------------
-// 1. Portable surface (docs/api.md) — Components + API modules tables.
+// 1. Portable surface (docs/reference/) — Components tables (one per
+//    components-*.md page, merged) + the API modules table (apis.md).
 // ---------------------------------------------------------------------------
 
-const apiMdText = readFileSync(API_MD, "utf8")
-
-const componentsTable = parseTableAfterHeading(
-  apiMdText,
-  "## Components",
-  "docs/api.md",
+const referenceFileNames = readdirSync(REFERENCE_DIR)
+  .filter((file) => file.endsWith(".md"))
+  .sort()
+const referenceTexts = new Map(
+  referenceFileNames.map((file) => [
+    file,
+    readFileSync(join(REFERENCE_DIR, file), "utf8"),
+  ]),
 )
-assertColumnCount(componentsTable, 4, "docs/api.md", "## Components")
 
-const portableComponents = componentsTable.rows.map(
-  ([name, gtkImplementation, supported, differences]) => ({
-    name: stripBacktickSpan(name),
-    subpath: "react-native",
+// Components carry their source file (docs/reference/<file>) alongside the
+// parsed fields — PortableRecord itself has no `doc` field (kept identical
+// to what packages/react-native-gtkx/src/mcp/resolve.ts already expects),
+// but the per-row search-corpus chunks below need to point at the right
+// page now that the components are split across four of them.
+const portableComponentRows = COMPONENT_FILES.flatMap((file) => {
+  const docLabel = `docs/reference/${file}`
+  const text = referenceTexts.get(file)
+  if (text === undefined) {
+    throw new Error(
+      `${docLabel}: expected file not found under ${REFERENCE_DIR}`,
+    )
+  }
+  const table = parseTableAfterHeading(text, "## Reference", docLabel)
+  assertColumnCount(table, 4, docLabel, "## Reference")
+  return table.rows.map(
+    ([name, gtkImplementation, supported, differences]) => ({
+      name: stripBacktickSpan(name),
+      subpath: "react-native",
+      gtkImplementation,
+      supported,
+      differences,
+      doc: docLabel,
+    }),
+  )
+})
+
+const portableComponents = portableComponentRows.map(
+  ({ name, subpath, gtkImplementation, supported, differences }) => ({
+    name,
+    subpath,
     gtkImplementation,
     supported,
     differences,
   }),
 )
 
+const apiModulesDocLabel = `docs/reference/${API_MODULES_FILE}`
+const apiModulesText = referenceTexts.get(API_MODULES_FILE)
+if (apiModulesText === undefined) {
+  throw new Error(
+    `${apiModulesDocLabel}: expected file not found under ${REFERENCE_DIR}`,
+  )
+}
 const apiModulesTable = parseTableAfterHeading(
-  apiMdText,
+  apiModulesText,
   "## API modules",
-  "docs/api.md",
+  apiModulesDocLabel,
 )
-assertColumnCount(apiModulesTable, 3, "docs/api.md", "## API modules")
+assertColumnCount(apiModulesTable, 3, apiModulesDocLabel, "## API modules")
 
 const portableApis = apiModulesTable.rows.map(
   ([name, supported, differences]) => ({
@@ -315,20 +365,24 @@ const workaroundChunks = workaroundsTable.rows.map(
   }),
 )
 
-const componentRowChunks = portableComponents.map((c) => ({
-  doc: "docs/api.md",
+const componentRowChunks = portableComponentRows.map((c) => ({
+  doc: c.doc,
   heading: c.name,
   text: `${c.name} — GTK implementation: ${c.gtkImplementation}. Supported: ${c.supported}. Differences from RN: ${c.differences}`,
 }))
 
 const apiModuleRowChunks = portableApis.map((a) => ({
-  doc: "docs/api.md",
+  doc: apiModulesDocLabel,
   heading: a.name,
   text: `${a.name} — Supported: ${a.supported}. Differences: ${a.differences}`,
 }))
 
+const referenceSectionChunks = referenceFileNames.flatMap((file) =>
+  parseSections(referenceTexts.get(file), `docs/reference/${file}`),
+)
+
 const docChunks = [
-  ...parseSections(apiMdText, "docs/api.md"),
+  ...referenceSectionChunks,
   ...parseSections(archOverviewText, "docs/architecture/overview.md"),
   ...parseSections(archLayoutText, "docs/architecture/layout-and-styling.md"),
   ...parseSections(archIntegrationText, "docs/architecture/integration.md"),
@@ -347,7 +401,7 @@ const docChunks = [
 // ---------------------------------------------------------------------------
 
 const HEADER = `// GENERATED FILE — do not edit by hand.
-// Produced by scripts/generate-mcp-data.mjs from docs/api.md,
+// Produced by scripts/generate-mcp-data.mjs from docs/reference/*.md,
 // docs/architecture/*.md, docs/guide/*.md, docs/gtkx-rc4-notes.md,
 // docs/getting-started.md,
 // docs/research/navigation-extensibility.md and

@@ -3,8 +3,8 @@ import type { SidebarsConfig } from "@docusaurus/plugin-content-docs"
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 // The Guide category is the install → run → ship arc, in reading order.
-// "api" is the last flat pre-restructure page; task 2 turns it into the
-// Reference category.
+// The category order is the reading order: Guide (install → run → ship),
+// Reference (the react-native surface), Architecture (how it works).
 const sidebars: SidebarsConfig = {
   docsSidebar: [
     {
@@ -18,7 +18,25 @@ const sidebars: SidebarsConfig = {
         "guide/packaging",
       ],
     },
-    "api",
+    {
+      type: "category",
+      label: "Reference",
+      items: [
+        "reference/components-core",
+        "reference/components-inputs",
+        "reference/components-lists",
+        "reference/components-overlays",
+        "reference/apis",
+        "reference/styling",
+        "reference/globals",
+        "reference/aliases",
+        "reference/navigation",
+        "reference/svg",
+        "reference/dnd",
+        "reference/gesture-handler",
+        "reference/reanimated-compat",
+      ],
+    },
     {
       type: "category",
       label: "Architecture",

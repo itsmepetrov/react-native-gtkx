@@ -179,7 +179,7 @@ export const adwAvailable = (): boolean =>
 
 const NOT_AVAILABLE =
   ' requires "Adw-1" in this app\'s gtkx.config.ts `libraries` — see ' +
-  "docs/api.md (the plain-GTK profile) for what needs Adw unconditionally " +
+  "docs/guide/plain-gtk.md for what needs Adw unconditionally " +
   "and what falls back without it."
 
 /** The repo's loud named throw for a feature that reached for Adw and found
