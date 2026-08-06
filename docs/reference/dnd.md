@@ -64,7 +64,8 @@ surface — that would have been Adwaita's list appearance written in React
 Native, an app's own concern, with its own id-keyed reorder bundled in. An
 app that wants id-keyed reordering combines `Droppable` and `Draggable` per
 row instead, as above. See
-[platform-layer.md](../platform-layer.md#listlistrowlistseparator-were-here-and-are-not-any-more).
+[Overview](../architecture/overview.md#react-native-gtkxcommon-what-has-no-upstream-counterpart)
+for what `react-native-gtkx/common` does and does not carry.
 
 ## The exported surface
 
@@ -99,7 +100,7 @@ row instead, as above. See
   `findItemIdAtIndex`** — The grid utilities, same reasoning: plain
   functions, not worklets. `getGridCellFromCoordinates` floors onto the
   cell whose top-left corner is at or before the point, exactly matching
-  upstream's own behaviour.
+  upstream's own behavior.
 - **`SharedValueLike<T>`** — What `SharedValue<T>` degrades to: `{ value:
 T }`, without the worklet crossing. Reads and writes work; they just do
   not animate.
@@ -142,7 +143,7 @@ card would render at 800×600 under a new parent's own size negotiation, and
 an unmount mid-drag would strand the widget outside the tree React still
 owns. The overlay copy takes no input (`can-target: false`); neither
 hit-testing nor the responder path changes, both still resolve against the
-original widget unchanged. See [gestures.md](../gestures.md) for the
+original widget unchanged. See [Gestures](../architecture/gestures.md) for the
 responder path itself.
 
 Zero React renders happen per frame: positioning the overlay copy is two
@@ -218,17 +219,17 @@ above already watches every motion event with.
 
 Differs from react-native-reanimated-dnd: this mirror resolves which slot
 the item has landed on by rounding that tracked position rather than
-flooring it — the dragged item's centre against a slot's centre, not its
+flooring it — the dragged item's center against a slot's center, not its
 top-left corner against the slot's origin — symmetrically in both
 directions. Measured with a real pointer, a 100px row or cell needs about
-50–60px of travel either way — away from index 0 or toward it, a centre grab
+50–60px of travel either way — away from index 0 or toward it, a center grab
 or an edge grab — before the crossing resolves.
 
 The real, unaliased `react-native-reanimated-dnd` package's own arithmetic
 floors the dragged rect onto a slot boundary from its top-left corner
-instead: crossing a neighbour toward index 0 takes about one pixel of
-travel there, crossing one away from it takes the neighbour's entire size in
-that axis. That asymmetry is upstream's own behaviour, reproduced unchanged
+instead: crossing a neighbor toward index 0 takes about one pixel of
+travel there, crossing one away from it takes the neighbor's entire size in
+that axis. That asymmetry is upstream's own behavior, reproduced unchanged
 when an app opts out of the mirror and runs the real package — not a
 compat-surface distortion this platform introduces.
 

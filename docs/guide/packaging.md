@@ -134,5 +134,5 @@ Depends: nodejs (>= 24), libgtk-4-1 (>= 4.20), libadwaita-1-0 (>= 1.8), gir1.2-g
 
 Package a [plain-GTK](plain-gtk.md) app the same way and drop
 `libadwaita-1-0`/`gir1.2-adw-1` from that line — every example this
-project ships today uses the Adwaita profile, so its own release
+project ships today uses the Adw profile, so its own release
 pipeline always declares both.

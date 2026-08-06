@@ -36,6 +36,6 @@ Differs from react-native:
 `Pressable` (and the `Touchable*` components built on it, below) spread
 `PanResponder`'s `panHandlers` and participate in the same gesture responder
 system `View` implements — see [View](view.md) for the shared negotiation,
-termination and `hitSlop` rules, and [Gestures](../../gestures.md) for the
+termination and `hitSlop` rules, and [Gestures](../../architecture/gestures.md) for the
 full model. `PanResponder` itself, and the `Animated` API these components
 commonly drive, are documented in [APIs](../apis.md).

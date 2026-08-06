@@ -22,7 +22,7 @@ Supported props:
   `onStartShouldSetResponder(Capture)`, `onMoveShouldSetResponder(Capture)`,
   `onResponderGrant/Start/Move/End/Release/Terminate`,
   `onTouchStart/Move/End/Cancel` plus `Capture`; `PanResponder`'s
-  `panHandlers` spread here too. See [Gestures](../../gestures.md).
+  `panHandlers` spread here too. See [Gestures](../../architecture/gestures.md).
 
 Differs from react-native:
 

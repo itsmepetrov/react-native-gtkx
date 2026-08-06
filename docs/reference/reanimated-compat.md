@@ -37,7 +37,7 @@ which are ported here rather than imported.
 The Babel plugin is neither required nor assumed. Its output is an ordinary
 lexical closure carrying metadata properties and no injected runtime import,
 so `'worklet'` is an inert directive — a worklet is directly callable whether
-or not the plugin has run. This platform never runs Babel itself (the Vite
+or not the plugin has run. This platform never runs Babel itself (the vite
 path bundles with rolldown; the Metro path uses the app's own stock preset),
 so an app that also ships to iOS or Android keeps the plugin for those
 builds without conflict.
@@ -76,7 +76,7 @@ sharedValue.set(x) // also takes an updater: count.set((c) => c + 1)
 
 Both are real and both work; `.get()`/`.set()` is the pair upstream added for
 exactly one situation this platform inherits. The React Compiler — on by
-default on the Vite path (see
+default on the vite path (see
 [the Guide's toolchains page](../guide/toolchains.md#the-react-compiler-vite-path-only)) —
 treats anything a hook returns as frozen, so `react-hooks/immutability`
 reports every assignment to `.value`, including ones inside a callback or
@@ -591,7 +591,7 @@ does not fail on a line that already did nothing upstream.
 
 ## Layout animations
 
-![The gallery's Layout animations section: FadeIn/FadeOut/LinearTransition reordering rows, and the layout-animation preset catalogue.](../shots/gallery/reanimated-layout.png)
+![The gallery's Layout animations section: FadeIn/FadeOut/LinearTransition reordering rows, and the layout-animation preset catalog.](../shots/gallery/reanimated-layout.png)
 
 `entering`, `exiting` and `layout` props work on every animated component —
 `Animated.View`, `Animated.Text`, `Animated.Image`, `Animated.ScrollView`,
@@ -679,7 +679,7 @@ it and adds no widget. `enableLayoutAnimations` warns and does nothing,
 matching upstream exactly, where it is deprecated and its allow-list is
 gone.
 
-### The preset catalogue
+### The preset catalog
 
 60 of upstream's 76 layout-animation presets are implemented, on upstream's
 own parameters, sharing one builder class over a parameter table. (`FadeIn`
@@ -777,7 +777,7 @@ with the bundler's own "no export named X".
   `rotateY`); this platform folds every transform into one 2D affine
   matrix, which has no third axis. `LightSpeed*` needs `skewX`, which is
   left out of the platform's whole transform surface on purpose, not only
-  from this catalogue.
+  from this catalog.
 - **Shared element transitions** — `SharedTransition`,
   `SharedTransitionBoundary`. Needs a `sharedTransitionTag` prop, an
   overlay layer above the navigation stack, and a retention primitive
@@ -835,7 +835,7 @@ out of `react-native-worklets` at module scope, in five of its hooks
 (`useDraggable`, `useDroppable`, `useSortable`, `useHorizontalSortable`,
 `useGridSortable`), with no `try { require } catch` guarding any of them —
 so an unaliased package name fails the whole module at import time rather
-than at the point a function is called. Both the Vite and Metro presets
+than at the point a function is called. Both the vite and Metro presets
 alias `react-native-worklets` onto `react-native-gtkx/worklets`, so an app
 keeps its source unchanged.
 

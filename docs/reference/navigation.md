@@ -129,7 +129,7 @@ Differs from react-navigation: a full custom header replacement
 (`@react-navigation/native-stack`'s `header` option) is not implemented —
 `headerLeft`, `headerRight` and `headerButtons` compose within the
 standard header bar instead. Deep-link `url` events never fire on
-desktop; see [`apis.md`](./apis.md) for `Linking`.
+desktop; see [APIs](apis.md#linking) for `Linking`.
 
 ### Transition events
 
