@@ -1,6 +1,6 @@
 # StatusBar
 
-**Backed by:** renders nothing
+**Profile:** GTK · **Backed by:** renders nothing
 
 Differs from react-native:
 

@@ -1,6 +1,6 @@
 # Root
 
-**Backed by:** an internal layout root
+**Profile:** GTK · **Backed by:** an internal layout root
 
 Supported props: `width`, `height`.
 

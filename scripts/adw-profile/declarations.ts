@@ -3,15 +3,22 @@
 // structure (docs-site epic task 005 — see .claude/epics/docs-site/
 // 005-notes.md for why this shape and not a table column):
 //
-// - Per-entry (component/API pages): a `**Profile:** ...` line somewhere
-//   under the entry's own heading (before the next heading at the SAME OR
-//   HIGHER level), one of:
+// - Per-entry (component/API pages): a `**Profile:** ...` fact, one of:
 //     **Profile:** GTK
 //     **Profile:** Adw
 //     **Profile:** Adw (fallback: <one line>)
-//   The third form is required for a probe-guarded entry — the checker
-//   fails a plain "Adw" there, since a reader has no way to tell "richer
-//   under Adw, still works" from "absent without it" without the sentence.
+//   somewhere under the entry's own heading (before the next heading at
+//   the SAME OR HIGHER level). Two real shapes both parse: a standalone
+//   line (apis.md's `##` sections), or the SAME marker prefixing another
+//   fact line — docs/reference/components/*.md's one-component-per-page
+//   shape combines it onto the existing `**Backed by:**` line
+//   (`**Profile:** GTK · **Backed by:** \`GtkBox\` ...`) rather than
+//   adding a second line to a page that is otherwise three lines long.
+//   Either way, only the GTK/Adw/fallback part is read; whatever follows
+//   (` · **Backed by:** ...` or nothing) is not this parser's concern.
+//   The fallback form is required for a probe-guarded entry — a plain
+//   "Adw" fails, since a reader has no way to tell "richer under Adw,
+//   still works" from "absent without it" without the sentence.
 // - Page-level (subpath modules — navigation.md, svg.md, dnd.md,
 //   gesture-handler.md, reanimated-compat.md): YAML frontmatter,
 //   `profile: gtk` or `profile: adw` (no fallback text — a whole page's
@@ -31,15 +38,21 @@ export type DeclaredEntryProfile = {
   line: number
 }
 
-const HEADING_RE = /^(#{2,6})\s+(.*)$/
+// #{1,6}: component pages name the entry in the page's own H1 (one
+// component per page); apis.md's entries are `##` sections on one shared
+// page. Both are "the entry's own heading" for this parser's purposes.
+const HEADING_RE = /^(#{1,6})\s+(.*)$/
 // A heading's own text is usually backtick-quoted (`` ## `Alert` ``) —
 // strip backticks/whitespace so the heading text matches the plain export
 // name derive.ts uses.
 const cleanHeadingText = (raw: string): string =>
   raw.trim().replace(/`/g, "").trim()
 
+// Anchored at the start (the marker always leads its line) but NOT at the
+// end: components/*.md's combined shape has `· **Backed by:** ...` after
+// it, which this parser deliberately ignores rather than requires absent.
 const PROFILE_LINE_RE =
-  /^\*\*Profile:\*\*\s+(GTK|Adw)(?:\s*\(fallback:\s*(.+?)\s*\))?\s*$/
+  /^\*\*Profile:\*\*\s+(GTK|Adw)(?:\s*\(fallback:\s*(.+?)\s*\))?\s*(?:·.*)?$/
 
 // Every `**Profile:** ...` line in `markdown`, keyed by the text of the
 // nearest heading ABOVE it (at any level — grouped pages nest an entry's

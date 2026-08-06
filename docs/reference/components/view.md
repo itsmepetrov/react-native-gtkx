@@ -1,6 +1,6 @@
 # View
 
-**Backed by:** `GtkBox` (a custom paintable box)
+**Profile:** GTK · **Backed by:** `GtkBox` (a custom paintable box)
 
 The container. Implements React Native's layout, paint, clipping and
 hit-testing rules on a single GTK widget.

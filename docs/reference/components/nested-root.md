@@ -1,6 +1,6 @@
 # NestedRoot
 
-**Backed by:** an internal layout root
+**Profile:** GTK · **Backed by:** an internal layout root
 
 Differs from react-native:
 

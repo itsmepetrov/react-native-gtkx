@@ -1,3 +1,7 @@
+---
+profile: gtk
+---
+
 # Svg (`react-native-gtkx/svg`)
 
 Vector graphics built from React state, in the shape of

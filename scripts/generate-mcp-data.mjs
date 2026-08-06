@@ -186,6 +186,13 @@ const assertColumnCount = (table, expected, docLabel, headingText) => {
   }
 }
 
+// docs-site task 005's own `**Profile:** GTK|Adw[(fallback: ...)]` fact
+// line (apis.md's `##` sections carry it standalone) — internal
+// docs-authoring markup, not page content; excluded from both the search
+// corpus below and parseApiSection's fields so it never leaks into a
+// generated record.
+const PROFILE_LINE_RE = /^\*\*Profile:\*\*/
+
 /** Splits a doc into sections by ## / ### headings, heading text included. */
 const parseSections = (text, doc) => {
   const lines = text.split("\n")
@@ -199,6 +206,9 @@ const parseSections = (text, doc) => {
       }
       current = { doc, heading: m[2].trim(), text: "" }
     } else if (current) {
+      if (PROFILE_LINE_RE.test(line.trim())) {
+        continue
+      }
       current.text += line + "\n"
     }
   }
@@ -280,6 +290,12 @@ const DIFFERS_LABEL_RE = /^Differs from react-native:/
  * understands) → supported/differences, defaulting each to "—" when the
  * page has no such block at all (an honest thin page — SafeAreaView,
  * StatusBar, TouchableOpacity, ...).
+ *
+ * docs-site task 005's `**Profile:** GTK|Adw[(fallback: ...)] · ` prefix
+ * (added ahead of "**Backed by:**" rather than as its own line, since a
+ * component page is otherwise three lines long) is stripped from
+ * gtkImplementation — internal docs-authoring markup, not a fact about the
+ * widget, so it must not leak into a generated record.
  */
 const parseComponentPage = (text, docLabel) => {
   const lines = text.split("\n")
@@ -290,12 +306,12 @@ const parseComponentPage = (text, docLabel) => {
   }
   const name = lines[h1Index].replace(/^# /, "").trim()
 
-  const backedByIndex = lines.findIndex((l) => /^\*\*Backed by:\*\*/.test(l))
+  const backedByIndex = lines.findIndex((l) => /\*\*Backed by:\*\*/.test(l))
   if (backedByIndex === -1) {
     throw new Error(`${docLabel}: no "**Backed by:**" line found`)
   }
   const gtkImplementation = lines[backedByIndex]
-    .replace(/^\*\*Backed by:\*\*\s*/, "")
+    .replace(/^.*\*\*Backed by:\*\*\s*/, "")
     .trim()
 
   const supportedIndex = lines.findIndex((l) => SUPPORTED_LABEL_RE.test(l))
@@ -327,9 +343,15 @@ const parseComponentPage = (text, docLabel) => {
  * section, if it has none) doubles as `supported`, which is not a loss of
  * information: the full write-up is strictly more informative than the
  * table row it replaces.
+ *
+ * Every section here carries its own docs-site task 005 `**Profile:**
+ * ...` line, standalone, right after the heading — stripped up front so it
+ * never becomes part of `supported` for a section with no "Supported:"
+ * label (Animated), the one shape where it would otherwise be swept into
+ * the "everything before Differs" fallback below.
  */
 const parseApiSection = (heading, text, docLabel) => {
-  const lines = text.split("\n")
+  const lines = text.split("\n").filter((l) => !PROFILE_LINE_RE.test(l.trim()))
   const differsIndex = lines.findIndex((l) => DIFFERS_LABEL_RE.test(l))
   const supportedIndex = lines.findIndex((l) => SUPPORTED_LABEL_RE.test(l))
 

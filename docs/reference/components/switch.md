@@ -1,6 +1,6 @@
 # Switch
 
-**Backed by:** `GtkSwitch`
+**Profile:** GTK · **Backed by:** `GtkSwitch`
 
 Supported props: `value` / `onValueChange`, `disabled`.
 

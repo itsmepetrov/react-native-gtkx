@@ -1,6 +1,6 @@
 # TouchableWithoutFeedback
 
-**Backed by:** built on `Pressable`
+**Profile:** GTK · **Backed by:** built on `Pressable`
 
 Supported props: the same press/hover/focus props as `Pressable`, with no
 visual reaction.

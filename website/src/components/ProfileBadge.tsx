@@ -9,8 +9,12 @@ export type ProfileBadgeProps = {
 }
 
 // Compact GTK/Adw label. Deliberately dumb — it renders whatever `profile`
-// it is given; the derivation from `docs/reference/**` frontmatter and the
-// docs:check enforcement land in a later docs-site task.
+// it is given; the code-derived value (scripts/adw-profile/derive.ts) and
+// docs:check enforcement (scripts/adw-profile/enforce.ts) live in the
+// derivation, not here. Rendered above the page by the swizzled
+// DocItem/Content wrapper (website/src/theme/DocItem/Content/index.tsx)
+// for a subpath page's `profile:` frontmatter — see docs-site epic task
+// 005.
 const LABEL: Record<Profile, string> = {
   gtk: "GTK",
   adw: "Adw",

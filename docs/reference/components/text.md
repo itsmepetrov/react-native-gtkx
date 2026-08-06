@@ -1,6 +1,6 @@
 # Text
 
-**Backed by:** `GtkLabel` (Pango)
+**Profile:** GTK · **Backed by:** `GtkLabel` (Pango)
 
 Supported props: wrapping, `numberOfLines` (end ellipsis), `textAlign`,
 font styles, `onLayout`, `testID`, and a ref exposing the geometry methods

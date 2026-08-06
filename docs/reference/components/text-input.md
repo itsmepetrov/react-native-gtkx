@@ -1,6 +1,6 @@
 # TextInput
 
-**Backed by:** `GtkEntry` (single line) / `GtkTextView` (multiline)
+**Profile:** GTK · **Backed by:** `GtkEntry` (single line) / `GtkTextView` (multiline)
 
 Supported props:
 

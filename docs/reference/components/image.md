@@ -1,6 +1,6 @@
 # Image
 
-**Backed by:** `GtkPicture`
+**Profile:** GTK · **Backed by:** `GtkPicture`
 
 Supported props:
 

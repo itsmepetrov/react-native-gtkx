@@ -1,6 +1,6 @@
 # VirtualizedList
 
-**Backed by:** the same windowed core
+**Profile:** GTK · **Backed by:** the same windowed core
 
 Supported props: RN's opaque data-source shape over the same windowed core
 `FlatList` sits on — `data` is read only through `getItemCount(data)` and

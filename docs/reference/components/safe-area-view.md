@@ -1,6 +1,6 @@
 # SafeAreaView
 
-**Backed by:** = `View`
+**Profile:** GTK · **Backed by:** = `View`
 
 Renders exactly as `View`.
 
