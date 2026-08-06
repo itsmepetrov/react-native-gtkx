@@ -2,6 +2,8 @@
 
 **Profile:** GTK · **Backed by:** `GtkEntry` (single line) / `GtkTextView` (multiline)
 
+![The gallery's Inputs section: a controlled TextInput, secureTextEntry, and keyboardType hints (numeric, email-address, url, phone-pad).](../../shots/gallery/inputs.png)
+
 Supported props:
 
 - Controlled and uncontrolled use (`value` / `defaultValue`), `onChangeText`,

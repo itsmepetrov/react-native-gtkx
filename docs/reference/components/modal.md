@@ -2,6 +2,8 @@
 
 **Profile:** GTK · **Backed by:** a modal `GtkWindow` (a portal)
 
+![The gallery's Modal section: a basic Modal and one opened at a custom window size.](../../shots/gallery/modal.png)
+
 Supported props: `visible`, `onRequestClose` (Escape or the window's close
 button), `title`, `width`/`height`; independently resizable, with relayout.
 

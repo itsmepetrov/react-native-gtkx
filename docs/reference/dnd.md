@@ -24,6 +24,8 @@ because upstream's quick start puts it at the root — is covered too:
 implements that root faithfully and makes every other RNGH export throw
 where it is used.
 
+![The gallery's Drag and drop section: Draggable cards over Droppable zones, a drag escaping an overflow: hidden ancestor, and a Sortable list.](../shots/gallery/dnd.png)
+
 ## Why a mirror, not the library
 
 `react-native-reanimated-dnd` cannot run on this platform as published.

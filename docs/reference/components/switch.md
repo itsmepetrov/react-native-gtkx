@@ -2,6 +2,8 @@
 
 **Profile:** GTK · **Backed by:** `GtkSwitch`
 
+![The gallery's Toggles section: a controlled Switch and ActivityIndicator in three sizes.](../../shots/gallery/toggles.png)
+
 Supported props: `value` / `onValueChange`, `disabled`.
 
 Differs from react-native:

@@ -38,6 +38,8 @@ API in [APIs](../apis.md#animated), since both come from the same import.
 A few rules apply across every component in this section rather than to one
 of them:
 
+![The gallery's Transforms section: a translated box painting over a neighbor without moving it, plus rotate/scale composed left to right.](../../shots/gallery/transforms.png)
+
 - **`zIndex` orders paint and picking, per sibling group.** GTK4 has no
   z-order property, so the container widget provides it: children are
   allocated in their Yoga order and painted (snapshotted) in `zIndex` order,

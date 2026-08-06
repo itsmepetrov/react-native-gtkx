@@ -2,6 +2,8 @@
 
 **Profile:** GTK · **Backed by:** `GtkPicture`
 
+![The gallery's Media section: an Image's resizeMode (cover/contain/stretch/center), a local-file onLoad, and a remote http(s) source with its onError fallback.](../../shots/gallery/media.png)
+
 Supported props:
 
 - `source={{ uri }}` or a string — local paths, `file://` and `http(s)`
