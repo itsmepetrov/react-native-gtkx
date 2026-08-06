@@ -97,6 +97,7 @@ const ARCH_OVERVIEW_MD = join(ROOT, "docs/architecture/overview.md")
 const ARCH_LAYOUT_MD = join(ROOT, "docs/architecture/layout-and-styling.md")
 const ARCH_INTEGRATION_MD = join(ROOT, "docs/architecture/integration.md")
 const ARCH_GESTURES_MD = join(ROOT, "docs/architecture/gestures.md")
+const ARCH_GLOSSARY_MD = join(ROOT, "docs/architecture/glossary.md")
 const GETTING_STARTED_MD = join(ROOT, "docs/getting-started.md")
 const RC4_NOTES_MD = join(ROOT, "docs/gtkx-rc4-notes.md")
 const NAV_EXT_MD = join(ROOT, "docs/research/navigation-extensibility.md")
@@ -530,6 +531,7 @@ const gettingStartedText = readFileSync(GETTING_STARTED_MD, "utf8")
 const navExtText = readFileSync(NAV_EXT_MD, "utf8")
 const archOverviewText = readFileSync(ARCH_OVERVIEW_MD, "utf8")
 const archGesturesText = readFileSync(ARCH_GESTURES_MD, "utf8")
+const archGlossaryText = readFileSync(ARCH_GLOSSARY_MD, "utf8")
 const guideChunks = GUIDE_MD_FILES.flatMap((path) =>
   parseSections(
     readFileSync(path, "utf8"),
@@ -587,6 +589,7 @@ const docChunks = [
   ...parseSections(archLayoutText, "docs/architecture/layout-and-styling.md"),
   ...parseSections(archIntegrationText, "docs/architecture/integration.md"),
   ...parseSections(archGesturesText, "docs/architecture/gestures.md"),
+  ...parseSections(archGlossaryText, "docs/architecture/glossary.md"),
   ...guideChunks,
   ...parseSections(gettingStartedText, "docs/getting-started.md"),
   ...parseSections(rc4NotesText, "docs/gtkx-rc4-notes.md"),

@@ -24,7 +24,7 @@ _From `examples/gallery`: a real `Adw.NavigationView` stack, a GTK widget's cont
 
 ## Quickstart
 
-```sh
+```bash
 npx degit itsmepetrov/react-native-gtkx/template my-app && cd my-app
 npm install && npm run dev   # a window, with Fast Refresh
 ```
@@ -38,7 +38,7 @@ The full docs, including screenshots per component and a searchable reference, a
 - [Guide](docs/guide) — [installation](docs/guide/installation.md), [your first app](docs/guide/first-app.md), [Metro vs. vite toolchains](docs/guide/toolchains.md), the [plain-GTK profile](docs/guide/plain-gtk.md), [packaging](docs/guide/packaging.md) (debs, standalone).
 - [Reference](docs/reference) — every component and API, each with its GTK/Adw badge and its differences from React Native.
 - [Architecture](docs/architecture) — [overview](docs/architecture/overview.md) (the reconciler-to-gtkx path, the widget surface), [layout and styling](docs/architecture/layout-and-styling.md) (the Yoga shadow tree, the style split), [gestures](docs/architecture/gestures.md), and [window/navigation/settings integration](docs/architecture/integration.md).
-- [What we need from gtkx](docs/upstream-gtkx.md) — the standing upstream agenda.
+- [gtkx upstream agenda](docs/upstream-gtkx.md) — the standing agenda for gtkx itself.
 - [CONTRIBUTING](CONTRIBUTING.md) — developing the library from macOS, via a Linux VM.
 
 ## Requirements

@@ -84,7 +84,7 @@ Most of that surface is **wrapped**: it keeps every prop gtkx binds and gains
 />
 ```
 
-The entry flexes, the button takes its own width and colour — the layout half
+The entry flexes, the button takes its own width and color — the layout half
 of the style drives Yoga, the visual half becomes a GTK CSS class **on the
 widget itself**, so the button really is blue rather than a blue box sitting
 behind one.
@@ -148,8 +148,8 @@ Nothing in this subpath carries an `Adw`/`Gtk` prefix, because none of it is
 a binding — it's the plumbing between the two worlds:
 
 - **`Icon`** — a _named_ icon resolved against the desktop icon theme at
-  paint time, not a bundled asset like RN's `Image`. It recolours itself
-  with the label colour and follows the user's theme, which nothing in
+  paint time, not a bundled asset like RN's `Image`. It recolors itself
+  with the label color and follows the user's theme, which nothing in
   `Image`'s contract can express, behind the same shape RN apps already use
   (`<Icon name size />`).
 - **`SlotContent` / `IntrinsicContent`** — the boundary that lets React

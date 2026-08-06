@@ -53,7 +53,8 @@ Differs from react-native:
   development warning names the mismatch once per run.
 - `applicationActions`/`windowActions`/`windowControllers` are superseded
   by the declarative `<ApplicationActions>`/`<WindowActions>`/
-  `<WindowControllers>` components documented with the platform layer; they
+  `<WindowControllers>` components documented in [Window, navigation, and
+  settings](../architecture/integration.md#actions-and-shortcuts-declared-in-the-tree); they
   still work unchanged.
 
 ## Platform

@@ -67,7 +67,7 @@ part of the app being ported.
 The root component. It is a Yoga leaf, sized entirely by style/flex — like
 `Image`, never by measuring the widget, so nothing here is intrinsic-sized.
 
-| Prop                  | Behaviour                                                                                                       |
+| Prop                  | Behavior                                                                                                        |
 | --------------------- | --------------------------------------------------------------------------------------------------------------- |
 | `width` / `height`    | Convenience props layered onto `style`, sizing the leaf.                                                        |
 | `style`               | The general sizing/layout escape hatch, same as any other view.                                                 |
@@ -98,7 +98,7 @@ call.
 
 Every shape accepts the same paint props:
 
-| Prop                                        | Behaviour                                                                                                                                                                      |
+| Prop                                        | Behavior                                                                                                                                                                       |
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `fill` / `stroke`                           | A static CSS color — hex, `rgb()`, `hsl()`, a named color, `transparent`, `none`, or `"url(#id)"` referencing a gradient. Defaults match SVG: `fill="black"`, `stroke="none"`. |
 | `fillRule`                                  | `nonzero` \| `evenodd`.                                                                                                                                                        |

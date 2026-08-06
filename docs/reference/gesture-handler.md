@@ -7,14 +7,14 @@ profile: gtk
 `react-native-gtkx/gesture-handler` reimplements `react-native-gesture-handler`
 3.x's semantics on top of this platform's own gesture responder system. It is
 not a port: nothing from RNGH's `src/` is vendored, adapted or transcribed —
-upstream's implementation is used as a blueprint for behaviour, and the
-behaviour is rebuilt on GTK4 event controllers. Both the Metro and vite
+upstream's implementation is used as a blueprint for behavior, and the
+behavior is rebuilt on GTK4 event controllers. Both the Metro and vite
 presets alias the `react-native-gesture-handler` package name onto this
 subpath, so an app that already imports from that name changes nothing in its
 source to run here.
 
 For the responder system this subpath is built on — `PanResponder`, `View`'s
-touch props, `Pressable` — see [the Gestures guide](../gestures.md).
+touch props, `Pressable` — see [Gestures](../architecture/gestures.md).
 
 ```tsx
 import { Gesture, GestureDetector } from "react-native-gesture-handler"
@@ -260,9 +260,9 @@ and yields.
 
 | Option                                               | Effect                                                                                                                                                                                                                                                        |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| activation                                           | `BEGAN` on press, `ACTIVE` once the pointer has travelled 15px — where a native scrollable would have started scrolling. A lift before that fails rather than ends.                                                                                           |
+| activation                                           | `BEGAN` on press, `ACTIVE` once the pointer has traveled 15px — where a native scrollable would have started scrolling. A lift before that fails rather than ends.                                                                                            |
 | `shouldActivateOnStart`                              | Takes the gesture on the press itself — the shape for a native view that is a button rather than a scrollable.                                                                                                                                                |
-| `disallowInterruption`, `yieldsToContinuousGestures` | Recorded on the config, for the relation registry to read; neither changes behaviour by itself.                                                                                                                                                               |
+| `disallowInterruption`, `yieldsToContinuousGestures` | Recorded on the config, for the relation registry to read; neither changes behavior by itself.                                                                                                                                                                |
 | `shouldCancelWhenOutside`                            | On by default.                                                                                                                                                                                                                                                |
 | the callbacks                                        | All present; `Native` is continuous, so it reports `onUpdate`/`onChange` travel like `Pan`. They arrive from the touch props (which fire regardless of responder status) rather than from the responder move event, since `Native` never holds the responder. |
 | a sequence taken away mid-drag                       | Reported as a cancellation — see [the ancestor-steals-the-sequence note](#gesturedetector) above.                                                                                                                                                             |
@@ -317,7 +317,7 @@ zero builder methods over their common base.
 | `event.velocity`                                   | Per second — scale-per-second for `Pinch`, radians-per-second for `Rotation`. See the deviation note below.                                   |
 | activation                                         | `Rotation` at 5° of accumulated rotation (upstream's own threshold). `Pinch` at 5% of accumulated scale change.                               |
 | `shouldCancelWhenOutside`                          | Off by default — a pinch is not addressed to a point the way a tap is, so a focal point drifting off the view mid-gesture does not cancel it. |
-| the `onTouches*` callbacks                         | Accepted, and never fire — there is no touch sequence behind a touchpad gesture, matching upstream's own behaviour on a trackpad.             |
+| the `onTouches*` callbacks                         | Accepted, and never fire — there is no touch sequence behind a touchpad gesture, matching upstream's own behavior on a trackpad.              |
 | pinch-specific / rotation-specific config          | None, upstream included.                                                                                                                      |
 
 Differs from `react-native-gesture-handler`, in two places, both named
@@ -411,7 +411,7 @@ A hover never takes the responder — there is no press to start an interaction
 with, so there is no session to claim. That means a hover cannot exclude a
 press by itself, and mutual exclusion is still the default: a hover crossing
 in while a `Pan` on another view is still `BEGAN` cancels that pan, matching
-upstream's own behaviour. Declaring `simultaneousWithExternalGesture` (or
+upstream's own behavior. Declaring `simultaneousWithExternalGesture` (or
 composing with `Gesture.Simultaneous()`) between a hover and anything sharing
 its screen avoids that, the same way upstream's own `Pressable` sets
 `manualActivation` on its internal hover recognizer to stop it blocking a
@@ -420,7 +420,7 @@ native gesture.
 ### ForceTouch
 
 Upstream does not implement `ForceTouch` off iOS at all, so there is no web
-behaviour to match — the semantics below come from its documented contract.
+behavior to match — the semantics below come from its documented contract.
 
 | Option                 | Effect                                                                                                                                            |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -435,7 +435,7 @@ hook tree has nine directories and no `forceTouch`, so `Gesture.ForceTouch()`
 is the whole API upstream offers for it, and the whole API offered here.
 
 It is driven by `GtkGestureStylus`, whose pressure axis arrives already
-normalised to `[0, 1]` — upstream's documented range, so nothing is rescaled.
+normalized to `[0, 1]` — upstream's documented range, so nothing is rescaled.
 The controller is stylus-only by default, so **a mouse produces no events for
 it at all**: that is deliberate, and it is what keeps a `ForceTouch` from
 activating at pressure 0 on a machine with no drawing tablet. Verifying the
@@ -665,7 +665,7 @@ Each is 3.x's escape hatch back to its 2.x implementation of a component whose
 3.x spelling either already works here under its modern name, or is refused
 above with its own reason. Where the modern name works, the legacy alias
 would carry a promise this platform cannot keep — "this behaves like 2.x
-did" — since 2.x's own behaviour was never implemented here to differ from.
+did" — since 2.x's own behavior was never implemented here to differ from.
 Where the modern name is refused, the alias inherits that refusal.
 `LegacyDrawerLayoutAndroid` is refused twice over: React Native itself does
 not ship `DrawerLayoutAndroid` off Android, and `@react-navigation/drawer`

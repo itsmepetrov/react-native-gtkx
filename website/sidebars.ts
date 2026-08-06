@@ -21,6 +21,13 @@ const sidebars: SidebarsConfig = {
     {
       type: "category",
       label: "Reference",
+      link: {
+        type: "generated-index",
+        slug: "/reference",
+        title: "Reference",
+        description:
+          "Every component and API this platform exports, each with its GTK/Adw profile and its differences from React Native.",
+      },
       items: [
         {
           type: "category",
@@ -72,6 +79,7 @@ const sidebars: SidebarsConfig = {
         "architecture/layout-and-styling",
         "architecture/integration",
         "architecture/gestures",
+        "architecture/glossary",
       ],
     },
   ],
