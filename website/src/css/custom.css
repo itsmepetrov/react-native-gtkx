@@ -29,3 +29,35 @@
   --ifm-color-primary-lightest: #ffb3b3;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
 }
+
+/* Landing-page screenshot framing. The shots are all captured in light
+   GNOME, so on their own they read as stray rectangles on a dark page —
+   a border, radius and shadow (keyed off theme variables so both modes
+   look intentional) turn them into a "device" the light chrome belongs
+   in. Shared by the hero visual and the feature rows, hence global
+   rather than duplicated per CSS module. */
+.shot-frame {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="dark"] .shot-frame {
+  border-color: var(--ifm-color-emphasis-200);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.6);
+}
+
+.shot-pair {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+@media screen and (max-width: 550px) {
+  .shot-pair {
+    flex-direction: column;
+  }
+}
