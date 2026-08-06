@@ -24,7 +24,7 @@ _From `examples/gallery`: a real `Adw.NavigationView` stack, a GTK widget's cont
 
 ## Quickstart
 
-```sh
+```bash
 npx degit itsmepetrov/react-native-gtkx/template my-app && cd my-app
 npm install && npm run dev   # a window, with Fast Refresh
 ```
@@ -33,12 +33,12 @@ Adding Linux to an app that already ships iOS/Android is `npm install react-nati
 
 ## Documentation
 
-The full docs, including screenshots per component and a searchable reference, are in this repo's `docs/` tree:
+The full docs, including screenshots per component and a searchable reference, are published at [itsmepetrov.github.io/react-native-gtkx](https://itsmepetrov.github.io/react-native-gtkx/):
 
-- [Guide](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/guide) — [installation](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/guide/installation.md), [your first app](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/guide/first-app.md), [Metro vs. vite toolchains](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/guide/toolchains.md), the [plain-GTK profile](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/guide/plain-gtk.md), [packaging](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/guide/packaging.md) (debs, standalone).
-- [Reference](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/reference) — every component and API, each with its GTK/Adw badge and its differences from React Native.
-- [Architecture](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/architecture) — [overview](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/architecture/overview.md) (the reconciler-to-gtkx path, the widget surface), [layout and styling](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/architecture/layout-and-styling.md) (the Yoga shadow tree, the style split), [gestures](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/architecture/gestures.md), and [window/navigation/settings integration](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/architecture/integration.md).
-- [What we need from gtkx](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/upstream-gtkx.md) — the standing upstream agenda.
+- [Guide](https://itsmepetrov.github.io/react-native-gtkx/docs/guide/installation) — [installation](https://itsmepetrov.github.io/react-native-gtkx/docs/guide/installation), [your first app](https://itsmepetrov.github.io/react-native-gtkx/docs/guide/first-app), [Metro vs. vite toolchains](https://itsmepetrov.github.io/react-native-gtkx/docs/guide/toolchains), the [plain-GTK profile](https://itsmepetrov.github.io/react-native-gtkx/docs/guide/plain-gtk), [packaging](https://itsmepetrov.github.io/react-native-gtkx/docs/guide/packaging) (debs, standalone).
+- [Reference](https://itsmepetrov.github.io/react-native-gtkx/docs/reference) — every component and API, each with its GTK/Adw badge and its differences from React Native.
+- [Architecture](https://itsmepetrov.github.io/react-native-gtkx/docs/architecture/overview) — [overview](https://itsmepetrov.github.io/react-native-gtkx/docs/architecture/overview) (the reconciler-to-gtkx path, the widget surface), [layout and styling](https://itsmepetrov.github.io/react-native-gtkx/docs/architecture/layout-and-styling) (the Yoga shadow tree, the style split), [gestures](https://itsmepetrov.github.io/react-native-gtkx/docs/architecture/gestures), and [window/navigation/settings integration](https://itsmepetrov.github.io/react-native-gtkx/docs/architecture/integration).
+- [gtkx upstream agenda](https://github.com/itsmepetrov/react-native-gtkx/blob/main/docs/upstream-gtkx.md) — the standing agenda for gtkx itself.
 - [CONTRIBUTING](https://github.com/itsmepetrov/react-native-gtkx/blob/main/CONTRIBUTING.md) — developing the library from macOS, via a Linux VM.
 
 ## Requirements

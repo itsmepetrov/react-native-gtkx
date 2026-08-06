@@ -117,6 +117,15 @@ That's the whole integration — see [Your first app](first-app.md) for
 running it. `examples/rn-app` in the repository is a complete cli-init
 app with all three platforms wired this way.
 
+A stock `@react-native-community/cli init` project's `App.tsx` renders
+`<NewAppScreen>` from `@react-native/new-app-screen`, which reaches into
+`react-native/Libraries/Core/Devtools/openURLInBrowser` — a deep import
+outside the supported `react-native` surface (see [Typed
+code](#typed-code) below). Metro cannot resolve it for `--platform
+linux`, so a fresh cli-init project fails to bundle until `App.tsx` is
+replaced with your own component — [Your first app](first-app.md#hello-gnome)
+has a minimal one to start from.
+
 ## Typed code
 
 Add an `env.d.ts` with `import "react-native-gtkx/types"` — it augments

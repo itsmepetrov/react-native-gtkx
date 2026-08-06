@@ -21,9 +21,8 @@ const config: Config = {
   organizationName: "itsmepetrov",
   projectName: "react-native-gtkx",
 
-  // Flips to "throw" once the content restructure (tasks 2-4) lands and the
-  // link graph is stable — see epic docs-site task 008.
-  onBrokenLinks: "warn",
+  onBrokenLinks: "throw",
+  onBrokenAnchors: "throw",
   trailingSlash: false,
 
   // The repo's docs/ tree is hand-written GitHub-flavored markdown, not MDX —
@@ -58,6 +57,11 @@ const config: Config = {
             "research/**",
             "gtkx-rc4-notes.md",
             "upstream-gtkx.md",
+            // Unfiled draft proposals for gtkx itself — not this platform's
+            // documentation, and not ready for an audience (found leaking
+            // into the sitemap/search index while hardening the site for
+            // launch, task 008).
+            "upstream/**",
             // Screenshots referenced by the repo README, not doc pages;
             // static image wiring for published pages lands in task 006.
             "shots/**",
@@ -103,7 +107,7 @@ const config: Config = {
           title: "Docs",
           items: [
             { label: "Guide", to: "/docs/guide/installation" },
-            { label: "API Reference", to: "/docs/api" },
+            { label: "Reference", to: "/docs/reference" },
           ],
         },
         {
