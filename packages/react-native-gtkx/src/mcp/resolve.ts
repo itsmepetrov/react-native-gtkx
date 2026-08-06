@@ -163,7 +163,7 @@ const resolveComponent = (query: string): ResolveResult => {
 }
 
 /** Formats a resolved entity into the plain object the tool returns as
- * JSON text — one shape per kind, matching what docs/api.md and
+ * JSON text — one shape per kind, matching what docs/reference/ and
  * docs/architecture/ actually document for it. */
 const formatEntity = (entity: Entity): Record<string, unknown> => {
   switch (entity.kind) {

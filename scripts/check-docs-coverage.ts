@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // Docs coverage gate: every VALUE export of the public surface must be
-// mentioned in docs/api.md. Type-only exports are exempt.
-import { readFileSync } from "node:fs"
+// mentioned somewhere in docs/reference/*.md. Type-only exports are exempt.
+import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 
 const ROOT = join(import.meta.dirname, "..")
 const INDEX = join(ROOT, "packages/react-native-gtkx/src/index.ts")
-const DOC = join(ROOT, "docs/api.md")
+const REFERENCE_DIR = join(ROOT, "docs/reference")
 
 // Value exports: entries of `export { ... }` blocks (single- or multi-line,
 // skipping `type` entries and whole `export type { ... }` blocks, honoring
@@ -66,14 +66,32 @@ const extractValueExportNames = (source: string): string[] => {
 const index = readFileSync(INDEX, "utf8")
 const names = [...new Set(extractValueExportNames(index))].sort()
 
-const doc = readFileSync(DOC, "utf8")
+// The Reference is a set of files now, not one — docs/reference/*.md,
+// concatenated. Every one of the portable exports above must show up
+// (backtick-quoted) SOMEWHERE in that set; which specific page carries it
+// does not matter to this gate, only that the surface is documented at all.
+const referenceFiles = readdirSync(REFERENCE_DIR).filter((file) =>
+  file.endsWith(".md"),
+)
+if (referenceFiles.length === 0) {
+  console.error(`No .md files found under ${REFERENCE_DIR}`)
+  process.exit(1)
+}
+const doc = referenceFiles
+  .map((file) => readFileSync(join(REFERENCE_DIR, file), "utf8"))
+  .join("\n")
+
 const missing = names.filter((name) => !doc.includes(`\`${name}\``))
 
 if (missing.length > 0) {
-  console.error("Undocumented public exports (add them to docs/api.md):")
+  console.error(
+    "Undocumented public exports (add them to a docs/reference/*.md page):",
+  )
   for (const name of missing) {
     console.error(`  - ${name}`)
   }
   process.exit(1)
 }
-console.log(`docs coverage OK: ${names.length} public exports documented`)
+console.log(
+  `docs coverage OK: ${names.length} public exports documented across ${referenceFiles.length} reference pages`,
+)
