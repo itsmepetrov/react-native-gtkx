@@ -4,7 +4,7 @@ import { App } from "./app"
 AppRegistry.registerComponent("tasks-nav", () => App)
 
 // chrome: "content" — the sidebar navigator's own HeaderBars become the
-// window chrome (see docs/api.md and docs/platform-layer.md); the default
+// window chrome (see docs/api.md and docs/architecture/integration.md); the default
 // "system" chrome would double up a titlebar on top of them.
 //
 // The actions and the global shortcut controller are NOT here. They are

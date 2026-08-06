@@ -7,7 +7,7 @@ AppRegistry.registerComponent("tasks-app", () => App)
 
 // chrome: "content" — the window's own HeaderBars (inside the sidebar and
 // content panes) become the titlebar; see docs/api.md and
-// docs/platform-layer.md.
+// docs/architecture/integration.md.
 //
 // The actions and the shortcut controller are NOT here: they are declared
 // inside the app tree (src/components/window-chrome.tsx), where they can

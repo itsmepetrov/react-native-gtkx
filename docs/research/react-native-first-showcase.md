@@ -222,7 +222,7 @@ metrics measured below — which move when libadwaita moves. They now live in
 `examples/tasks-nav/src/components/list.tsx`, to copy; the gallery's "Adwaita stack" section
 uses a `GtkListBox` with `.boxed-list` and `AdwActionRow`s, which is what that
 example is for. See
-[platform-layer.md](../platform-layer.md#listlistrowlistseparator-were-here-and-are-not-any-more).
+[architecture/overview.md](../architecture/overview.md#react-native-gtkxcommon-what-has-no-upstream-counterpart).
 
 **What this document measured is unaffected, and is still platform surface:**
 `boxShadow`, `outline*` and `textDecorationLine`. Those three style props are
@@ -269,13 +269,13 @@ It is closed by `Controllers` from `react-native-gtkx/gtk` — the
 `WindowControllers` idea one level down: declare in the app tree, attach to
 the enclosing view's widget. A prop on `View` was rejected for being
 invisible off Linux; the reasoning is in
-[platform-layer.md](../platform-layer.md#controllers--a-gtk-event-controller-on-a-react-native-component).
+[architecture/integration.md](../architecture/integration.md#controllers-a-gtk-event-controller-on-a-react-native-component).
 `List`'s `onReorder` and `ListRow`'s `reorderId` packaged it at the time,
 written on top of it. Both are gone now — `examples/tasks-nav` uses
 [`react-native-gtkx/dnd`](../api.md#drag-and-drop-react-native-gtkxdnd)
 directly, so there is one drag-and-drop API rather than two, and `List`
 itself is an app component in that example rather than platform surface
-(see [platform-layer.md](../platform-layer.md#listlistrowlistseparator-were-here-and-are-not-any-more)).
+(see [architecture/overview.md](../architecture/overview.md#react-native-gtkxcommon-what-has-no-upstream-counterpart)).
 What this section measured is unaffected: the blocker was that a `Pressable`
 had no widget to hold a controller, and `Controllers` is still the answer.
 

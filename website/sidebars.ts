@@ -3,9 +3,8 @@ import type { SidebarsConfig } from "@docusaurus/plugin-content-docs"
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 // The Guide category is the install → run → ship arc, in reading order.
-// "api", "platform-layer" and "gestures" are still the flat pre-restructure
-// pages; tasks 2 and 4 turn them into the Reference and Architecture
-// categories.
+// "api" is the last flat pre-restructure page; task 2 turns it into the
+// Reference category.
 const sidebars: SidebarsConfig = {
   docsSidebar: [
     {
@@ -20,8 +19,16 @@ const sidebars: SidebarsConfig = {
       ],
     },
     "api",
-    "platform-layer",
-    "gestures",
+    {
+      type: "category",
+      label: "Architecture",
+      items: [
+        "architecture/overview",
+        "architecture/layout-and-styling",
+        "architecture/integration",
+        "architecture/gestures",
+      ],
+    },
   ],
 }
 

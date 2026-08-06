@@ -1,7 +1,8 @@
 // The HeaderBar overflow menu — ported from the gtkx tutorial
 // (examples/tutorial/src/components/main-menu.tsx). GMenu/GSimpleAction
 // have no react-native-gtkx wrapper of their own (they are not widgets —
-// see docs/platform-layer.md "Auxiliary objects, not widgets at all"), so
+// see docs/architecture/overview.md, "The widget surface: wrapped, raw,
+// and auxiliary"), so
 // this is exactly what the platform layer looks like once you are past
 // what RN or a router can model: raw action names, routed through the
 // win./app. actions wired up in src/index.tsx.

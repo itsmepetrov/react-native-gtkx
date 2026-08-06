@@ -1118,7 +1118,8 @@ describe("the two libraries this slice exists to unblock", () => {
   // react-native-drawer-layout 4.2.9's `src/views/Drawer.native.tsx` and
   // react-native-reanimated-dnd 2.0.0's `lib/hooks/useDraggable.js`. What is
   // asserted is that the CHAIN builds and DRIVES, which is the acceptance
-  // criterion; what else each package needs is recorded in docs/gestures.md.
+  // criterion; what else each package needs is recorded in
+  // docs/architecture/gestures.md.
   const SWIPE_MIN_OFFSET = 5
 
   it("builds and drives react-native-drawer-layout's pan", () => {

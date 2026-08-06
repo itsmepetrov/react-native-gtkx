@@ -38,7 +38,7 @@ The consequence that matters: **the ceiling of react-navigation's model is
 now only in the adapter, never in the primitive.** A GTK capability with no
 counterpart in React Native does not have to be squeezed into someone
 else's abstraction — it lives in the primitive layer and is reachable
-directly. See [../platform-layer.md](../platform-layer.md).
+directly. See [../architecture/overview.md](../architecture/overview.md).
 
 ## 2. What an app can reach today
 
@@ -140,8 +140,9 @@ closing exactly what the tasks-app port above found still narrow:**
   same widget tasks-app's own hand-rolled sidebar used) and an opt-in
   `collapseWidth` prop, driving collapse through the navigator itself via
   a native `Adw.Breakpoint` — not a `useWindowDimensions` conditional; see
-  [../platform-layer.md](../platform-layer.md), "Two ways to react to
-  size", for the mechanism and why no `useBreakpoint` hook exists.
+  [../architecture/layout-and-styling.md](../architecture/layout-and-styling.md),
+  "Two ways to react to size", for the mechanism and why no `useBreakpoint`
+  hook exists.
 - _One static content header shared by the whole navigator_ — the same
   port's other finding: a filter toggle group vs. a back button,
   depending on selection, did not fit one static header. The

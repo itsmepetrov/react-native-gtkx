@@ -52,8 +52,9 @@ export { Adw } from "../gtkx/bridge/adw-namespace"
 // (the `breakpoints` prop of AdwApplicationWindow/AdwBreakpointBin/AdwDialog
 // takes one of these as a child) and the two leaf elements a
 // AdwShortcutsDialog's AdwShortcutsSection is built from. See
-// docs/platform-layer.md "Unwrapped by necessity" and "Two ways to react
-// to size" — createSidebarNavigator's own collapse
+// docs/architecture/overview.md, "The widget surface: wrapped, raw, and
+// auxiliary", and docs/architecture/layout-and-styling.md, "Two ways to
+// react to size" — createSidebarNavigator's own collapse
 // (src/navigation/sidebar.tsx) pairs AdwBreakpoint with AdwBreakpointBin
 // (a real widget, wrapped above) to scope a breakpoint to a subtree.
 const { AdwBreakpoint, AdwShortcutsItem, AdwShortcutsSection, AdwToggle } =
