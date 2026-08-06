@@ -13,6 +13,9 @@ export default typescriptEslint.config(
       "**/out-tsc/**",
       "**/node_modules/**",
       "spike/shots/**",
+      // Docusaurus build output and its local cache — generated, not source.
+      "website/build/**",
+      "website/.docusaurus/**",
     ],
   },
   {

@@ -1,0 +1,20 @@
+.badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--ifm-badge-border-radius, 0.25rem);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+
+.gtk {
+  color: #fff;
+  background-color: #4a90d2;
+}
+
+.adw {
+  color: #fff;
+  background-color: var(--ifm-color-primary);
+}
