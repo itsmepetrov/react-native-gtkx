@@ -227,7 +227,7 @@ const zOrderedParents = new WeakSet<Gtk.Widget>()
  * answer the occlusion question. Restored the moment nothing is raised there,
  * because it is not free of consequence: `pointerEvents: "box-none"` on a View
  * whose only child is a `Text` would otherwise fall through to whatever is
- * behind it. Documented in docs/reference/components-core.md.
+ * behind it. Documented in docs/reference/components/index.md.
  */
 const paintOnlyLeaves = new WeakSet<Gtk.Widget>()
 

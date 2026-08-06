@@ -74,15 +74,31 @@ const App = () => (
 
 ### Screen options
 
-| Option           | Type              | Default     | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| ---------------- | ----------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `title`          | `string`          | route name  | Header bar title.                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `headerShown`    | `boolean`         | `true`      | Shows the header bar for this screen.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `headerButtons`  | `HeaderButton[]`  | —           | Native buttons packed at the end of the header bar, after `headerRight`. Each button is `{ id, icon, tooltip, onPress }`; `icon` is an Adwaita symbolic icon name.                                                                                                                                                                                                                                                                                                     |
-| `headerLeft`     | `() => ReactNode` | —           | Content packed at the start of the header bar, in an intrinsic-size layout root — the content's own Yoga size is the slot size.                                                                                                                                                                                                                                                                                                                                        |
-| `headerRight`    | `() => ReactNode` | —           | Content packed at the end of the header bar, before `headerButtons`.                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `gestureEnabled` | `boolean`         | `true`      | `false` disables the native back button, Escape and the back gesture for this screen. Programmatic `goBack` still works; this is also the mechanism behind `usePreventRemove` — a prevented route reports the same disabled state, so no native pop can race react-navigation state, and the route pops once the app lifts the guard.                                                                                                                                  |
-| `animation`      | `string`          | `"default"` | Differs from react-navigation: GTK has exactly one transition style, so this collapses to a boolean. `"none"` turns transitions off; any other value — including native-stack's own style names such as `"slide_from_bottom"` or `"fade"` — turns transitions on and plays the standard Adwaita transition instead of the one requested. A non-`"none"`/`"default"` value still animates (it is not silently treated as `"none"`) and logs a development warning once. |
+- **`title`** (`string`, default: route name) — Header bar title.
+- **`headerShown`** (`boolean`, default `true`) — Shows the header bar for
+  this screen.
+- **`headerButtons`** (`HeaderButton[]`) — Native buttons packed at the end
+  of the header bar, after `headerRight`. Each button is `{ id, icon,
+tooltip, onPress }`; `icon` is an Adwaita symbolic icon name.
+- **`headerLeft`** (`() => ReactNode`) — Content packed at the start of the
+  header bar, in an intrinsic-size layout root — the content's own Yoga
+  size is the slot size.
+- **`headerRight`** (`() => ReactNode`) — Content packed at the end of the
+  header bar, before `headerButtons`.
+- **`gestureEnabled`** (`boolean`, default `true`) — `false` disables the
+  native back button, Escape and the back gesture for this screen.
+  Programmatic `goBack` still works; this is also the mechanism behind
+  `usePreventRemove` — a prevented route reports the same disabled state,
+  so no native pop can race react-navigation state, and the route pops
+  once the app lifts the guard.
+- **`animation`** (`string`, default `"default"`) — Differs from
+  react-navigation: GTK has exactly one transition style, so this
+  collapses to a boolean. `"none"` turns transitions off; any other value
+  — including native-stack's own style names such as
+  `"slide_from_bottom"` or `"fade"` — turns transitions on and plays the
+  standard Adwaita transition instead of the one requested. A
+  non-`"none"`/`"default"` value still animates (it is not silently
+  treated as `"none"`) and logs a development warning once.
 
 `animation` is a property of the whole view, not a per-page one, so there
 is no per-screen granularity: the value used is read from whichever screen
@@ -110,10 +126,18 @@ desktop; see [`apis.md`](./apis.md) for `Linking`.
 The stack navigator emits two events on a screen's `navigation` object,
 matching `@react-navigation/stack` and `@react-navigation/native-stack`:
 
-| Event             | Payload                          | Fires when                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ----------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `transitionStart` | `{ data: { closing: boolean } }` | A push/pop/replace transition starts, once per involved route (not once per gesture or tap). `closing` is `false` for the route becoming visible, `true` for the route leaving the visible stack.                                                                                                                                                                                                                                                                                                                 |
-| `transitionEnd`   | `{ data: { closing: boolean } }` | The transition settles. Tied to `AdwNavigationPage`'s own `shown`/`hidden` signals: it fires on `shown` for the entering screen and on `hidden` for the leaving screen. `transitionDuration` (default 400 ms) is a fallback only, used when a page's own signal never arrives — a signal-less environment, or an intermediate screen skipped entirely by a multi-hop pop. When transitions are not animated, the real signals still fire immediately, so `transitionEnd` is never delayed by the fallback window. |
+- **`transitionStart`** (`{ data: { closing: boolean } }`) — Fires when a
+  push/pop/replace transition starts, once per involved route (not once
+  per gesture or tap). `closing` is `false` for the route becoming
+  visible, `true` for the route leaving the visible stack.
+- **`transitionEnd`** (`{ data: { closing: boolean } }`) — Fires when the
+  transition settles. Tied to `AdwNavigationPage`'s own `shown`/`hidden`
+  signals: it fires on `shown` for the entering screen and on `hidden` for
+  the leaving screen. `transitionDuration` (default 400 ms) is a fallback
+  only, used when a page's own signal never arrives — a signal-less
+  environment, or an intermediate screen skipped entirely by a multi-hop
+  pop. When transitions are not animated, the real signals still fire
+  immediately, so `transitionEnd` is never delayed by the fallback window.
 
 A screen that stays mounted without actually entering or leaving the
 visible stack — the screen underneath a push, for example — receives
@@ -158,15 +182,32 @@ const App = () => (
 
 ### Navigator props
 
-| Prop                                       | Type                                        | Default       | Notes                                                                                                                                                                                                                                                                                                                                                                                      |
-| ------------------------------------------ | ------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `sidebarTitle`                             | `string`                                    | `"Sidebar"`   | Title of the sidebar pane's header bar.                                                                                                                                                                                                                                                                                                                                                    |
-| `headerButtons`                            | `HeaderButton[]`                            | —             | Buttons packed at the end of the content header bar; a screen's own `headerButtons` option overrides this entirely for that screen.                                                                                                                                                                                                                                                        |
-| `sidebarHeaderLeft` / `sidebarHeaderRight` | `() => ReactNode`                           | —             | Content packed at the start/end of the sidebar pane's own header bar — distinct from the content header's `headerLeft`/`headerRight`, which are per-screen options, because one sidebar pane is shared by every screen. Mounted through the same intrinsic content root as the content header, so it lays out as a horizontal, content-hugging cluster flush with natively packed buttons. |
-| `sidebarHeaderTitle`                       | `() => ReactNode`                           | —             | Replaces the sidebar header bar's title widget (a search entry, a switcher). Left unset, `sidebarTitle` renders as a plain label.                                                                                                                                                                                                                                                          |
-| `collapseWidth`                            | `number` (sp)                               | unset         | Width below which the split view collapses to the sidebar or the content pane alone, through a native `Adw.Breakpoint`. Unset by default: no breakpoint is mounted at all, so an app that never sets this sees no behavior change.                                                                                                                                                         |
-| `minWidth` / `minHeight`                   | `number` (px)                               | `360` / `294` | The narrowest size the sidebar navigator's UI supports, applied to the breakpoint container `collapseWidth` mounts. Ignored when `collapseWidth` is unset, since no container exists then. The default is GNOME's own adaptive floor.                                                                                                                                                      |
-| `sidebarContent`                           | `(props: SidebarContentProps) => ReactNode` | —             | Replaces the entire sidebar pane body.                                                                                                                                                                                                                                                                                                                                                     |
+- **`sidebarTitle`** (`string`, default `"Sidebar"`) — Title of the
+  sidebar pane's header bar.
+- **`headerButtons`** (`HeaderButton[]`) — Buttons packed at the end of the
+  content header bar; a screen's own `headerButtons` option overrides this
+  entirely for that screen.
+- **`sidebarHeaderLeft` / `sidebarHeaderRight`** (`() => ReactNode`) —
+  Content packed at the start/end of the sidebar pane's own header bar —
+  distinct from the content header's `headerLeft`/`headerRight`, which are
+  per-screen options, because one sidebar pane is shared by every screen.
+  Mounted through the same intrinsic content root as the content header,
+  so it lays out as a horizontal, content-hugging cluster flush with
+  natively packed buttons.
+- **`sidebarHeaderTitle`** (`() => ReactNode`) — Replaces the sidebar
+  header bar's title widget (a search entry, a switcher). Left unset,
+  `sidebarTitle` renders as a plain label.
+- **`collapseWidth`** (`number`, sp; unset by default) — Width below which
+  the split view collapses to the sidebar or the content pane alone,
+  through a native `Adw.Breakpoint`. Unset by default: no breakpoint is
+  mounted at all, so an app that never sets this sees no behavior change.
+- **`minWidth` / `minHeight`** (`number`, px; default `360` / `294`) — The
+  narrowest size the sidebar navigator's UI supports, applied to the
+  breakpoint container `collapseWidth` mounts. Ignored when
+  `collapseWidth` is unset, since no container exists then. The default is
+  GNOME's own adaptive floor.
+- **`sidebarContent`** (`(props: SidebarContentProps) => ReactNode`) —
+  Replaces the entire sidebar pane body.
 
 `collapseWidth` is not driven by React state or `useWindowDimensions`: the
 property flip happens inside GTK's own allocation pass, at no cost of a
@@ -188,18 +229,41 @@ between 180 and 280 px regardless of `collapseWidth`.
 
 ### Screen options
 
-| Option                       | Type                         | Default          | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| ---------------------------- | ---------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `title`                      | `string`                     | route name       | Sidebar row and content header bar title.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `icon`                       | `string`                     | —                | Adwaita symbolic icon name for the row's prefix. Ignored when `color` is also set — a row shows a colored dot or an icon, never both.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `color`                      | `string`                     | —                | CSS color for a colored-dot prefix, replacing `icon`. `color` wins when both are set.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `count`                      | `number`                     | —                | Badge shown as the row's suffix. Hidden when `0` or unset.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `headerLeft` / `headerRight` | `() => ReactNode`            | —                | Content header bar start/end, per screen — a filter toggle group for a list, a back button plus star/trash for an open item.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `headerTitle`                | `() => ReactNode`            | —                | Replaces the content header bar's title widget for this screen. Left unset, the header bar shows the page's own title automatically.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `headerButtons`              | `HeaderButton[]`             | —                | Overrides the navigator-level `headerButtons` prop for this screen.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `contentLayout`              | `"react-native" \| "widget"` | `"react-native"` | What the screen's body is. `"react-native"` mounts it in a Yoga layout root that fills the pane, so `<View style={{ flex: 1 }}>` behaves the way it does anywhere else. `"widget"` packs the body into the page directly, with no layout root in between, for a screen whose body is a GTK widget tree — GTK's own sizing (`vexpand`, a list's natural height) then applies normally. Under the default, a widget tree collapses instead, and quietly: every widget becomes a single Yoga leaf measured for its own natural size, so the container renders its first child, drops the rest, and reports the roughly 1 px it can shrink to, with no error anywhere. Mixing is per screen, not per subtree — a `"widget"` screen that wants React Native content somewhere inside it wraps that part in `SlotContent` itself. |
-| `sidebarRow`                 | `() => ReactNode`            | —                | Draws the row directly instead of letting `title`/`icon`/`color`/`count` compose one. See [Building sidebar rows](#building-sidebar-rows) below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `group`                      | `string`                     | —                | Section this row belongs to. See [Grouping rows](#grouping-rows) below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+- **`title`** (`string`, default: route name) — Sidebar row and content
+  header bar title.
+- **`icon`** (`string`) — Adwaita symbolic icon name for the row's prefix.
+  Ignored when `color` is also set — a row shows a colored dot or an icon,
+  never both.
+- **`color`** (`string`) — CSS color for a colored-dot prefix, replacing
+  `icon`. `color` wins when both are set.
+- **`count`** (`number`) — Badge shown as the row's suffix. Hidden when
+  `0` or unset.
+- **`headerLeft` / `headerRight`** (`() => ReactNode`) — Content header bar
+  start/end, per screen — a filter toggle group for a list, a back button
+  plus star/trash for an open item.
+- **`headerTitle`** (`() => ReactNode`) — Replaces the content header
+  bar's title widget for this screen. Left unset, the header bar shows the
+  page's own title automatically.
+- **`headerButtons`** (`HeaderButton[]`) — Overrides the navigator-level
+  `headerButtons` prop for this screen.
+- **`contentLayout`** (`"react-native" | "widget"`, default
+  `"react-native"`) — What the screen's body is. `"react-native"` mounts
+  it in a Yoga layout root that fills the pane, so `<View style={{ flex:
+1 }}>` behaves the way it does anywhere else. `"widget"` packs the body
+  into the page directly, with no layout root in between, for a screen
+  whose body is a GTK widget tree — GTK's own sizing (`vexpand`, a list's
+  natural height) then applies normally. Under the default, a widget tree
+  collapses instead, and quietly: every widget becomes a single Yoga leaf
+  measured for its own natural size, so the container renders its first
+  child, drops the rest, and reports the roughly 1 px it can shrink to,
+  with no error anywhere. Mixing is per screen, not per subtree — a
+  `"widget"` screen that wants React Native content somewhere inside it
+  wraps that part in `SlotContent` itself.
+- **`sidebarRow`** (`() => ReactNode`) — Draws the row directly instead of
+  letting `title`/`icon`/`color`/`count` compose one. See
+  [Building sidebar rows](#building-sidebar-rows) below.
+- **`group`** (`string`) — Section this row belongs to. See
+  [Grouping rows](#grouping-rows) below.
 
 A screen changes its own header shape from inside itself by calling
 `navigation.setOptions({ headerLeft, headerRight, headerTitle })` in an
@@ -313,9 +377,9 @@ on.
 
 ### Sidebar transition events
 
-| Event          | Payload               | Fires when                                                                                                                                 |
-| -------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `sidebarShown` | `{ data: undefined }` | The split view's own back affordance (back button, Escape, back gesture) hides the content pane while collapsed, returning to the sidebar. |
+- **`sidebarShown`** (`{ data: undefined }`) — Fires when the split
+  view's own back affordance (back button, Escape, back gesture) hides the
+  content pane while collapsed, returning to the sidebar.
 
 Differs from react-navigation: this is the one case where a native,
 user-driven interaction does get an event. Unlike a stack pop, nothing is

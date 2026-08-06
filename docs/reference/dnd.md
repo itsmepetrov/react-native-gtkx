@@ -62,17 +62,41 @@ row instead, as above. See
 
 ## The exported surface
 
-| Export                                                                                                                                                                                                  | Notes                                                                                                                                                                                                                                                                                                  |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `DropProvider`                                                                                                                                                                                          | Scopes a set of draggables and droppables. Renders a `View` — upstream renders a fragment — because `onDragging` needs a widget to attach to. Its `ref` gives `getDroppedItems()` and `requestPositionUpdate()`.                                                                                       |
-| `Draggable`, `DraggableHandle`, `useDraggable`                                                                                                                                                          | The drag source. With a handle, the `GtkDragSource` attaches to the handle's widget only, so the rest of the item stays pressable.                                                                                                                                                                     |
-| `Droppable`, `useDroppable`                                                                                                                                                                             | The drop target. `capacity` is enforced in GDK's `::accept`, so a full zone shows the no-drop cursor.                                                                                                                                                                                                  |
-| `Sortable`, `SortableItem`, `useSortable`, `useSortableList`, `useHorizontalSortable`, `useHorizontalSortableList`                                                                                      | Drag-to-reorder, vertical by default or horizontal (`direction="horizontal"`). The component owns the order — upstream's own contract — read the settled one from `onDrop`'s `allPositions`.                                                                                                           |
-| `SortableGrid`, `SortableGridItem`, `useGridSortable`, `useGridSortableList`                                                                                                                            | The 2-D sibling: cells reorder the same way, in a real Yoga `flexWrap` grid rather than upstream's absolutely-positioned cells. There is no list-level `onMove`/`onDragStart`/`onDrop`/`onDragging` here, matching upstream's own `SortableGridProps` — wire those on each `SortableGridItem` instead. |
-| `DraggableState`, `ScrollDirection`, `SortableDirection`, `HorizontalScrollDirection`, `GridOrientation`, `GridStrategy`, `GridScrollDirection`                                                         | The enums, unchanged from upstream.                                                                                                                                                                                                                                                                    |
-| `clamp`, `listToObject`, `objectMove`                                                                                                                                                                   | The list-order utilities, as plain functions rather than worklets.                                                                                                                                                                                                                                     |
-| `calculateGridPosition`, `calculateIndexFromRowColumn`, `listToGridObject`, `getGridCellFromCoordinates`, `reorderGridInsert`, `reorderGridSwap`, `calculateGridContentDimensions`, `findItemIdAtIndex` | The grid utilities, same reasoning: plain functions, not worklets. `getGridCellFromCoordinates` floors onto the cell whose top-left corner is at or before the point, exactly matching upstream's own behaviour.                                                                                       |
-| `SharedValueLike<T>`                                                                                                                                                                                    | What `SharedValue<T>` degrades to: `{ value: T }`, without the worklet crossing. Reads and writes work; they just do not animate.                                                                                                                                                                      |
+- **`DropProvider`** — Scopes a set of draggables and droppables. Renders
+  a `View` — upstream renders a fragment — because `onDragging` needs a
+  widget to attach to. Its `ref` gives `getDroppedItems()` and
+  `requestPositionUpdate()`.
+- **`Draggable`, `DraggableHandle`, `useDraggable`** — The drag source.
+  With a handle, the `GtkDragSource` attaches to the handle's widget only,
+  so the rest of the item stays pressable.
+- **`Droppable`, `useDroppable`** — The drop target. `capacity` is
+  enforced in GDK's `::accept`, so a full zone shows the no-drop cursor.
+- **`Sortable`, `SortableItem`, `useSortable`, `useSortableList`,
+  `useHorizontalSortable`, `useHorizontalSortableList`** — Drag-to-reorder,
+  vertical by default or horizontal (`direction="horizontal"`). The
+  component owns the order — upstream's own contract — read the settled
+  one from `onDrop`'s `allPositions`.
+- **`SortableGrid`, `SortableGridItem`, `useGridSortable`,
+  `useGridSortableList`** — The 2-D sibling: cells reorder the same way, in
+  a real Yoga `flexWrap` grid rather than upstream's absolutely-positioned
+  cells. There is no list-level `onMove`/`onDragStart`/`onDrop`/
+  `onDragging` here, matching upstream's own `SortableGridProps` — wire
+  those on each `SortableGridItem` instead.
+- **`DraggableState`, `ScrollDirection`, `SortableDirection`,
+  `HorizontalScrollDirection`, `GridOrientation`, `GridStrategy`,
+  `GridScrollDirection`** — The enums, unchanged from upstream.
+- **`clamp`, `listToObject`, `objectMove`** — The list-order utilities, as
+  plain functions rather than worklets.
+- **`calculateGridPosition`, `calculateIndexFromRowColumn`,
+  `listToGridObject`, `getGridCellFromCoordinates`, `reorderGridInsert`,
+  `reorderGridSwap`, `calculateGridContentDimensions`,
+  `findItemIdAtIndex`** — The grid utilities, same reasoning: plain
+  functions, not worklets. `getGridCellFromCoordinates` floors onto the
+  cell whose top-left corner is at or before the point, exactly matching
+  upstream's own behaviour.
+- **`SharedValueLike<T>`** — What `SharedValue<T>` degrades to: `{ value:
+T }`, without the worklet crossing. Reads and writes work; they just do
+  not animate.
 
 Deliberately not re-exported: `setPosition`, `setAutoScroll`,
 `setGridPosition`, `setGridAutoScroll`. Upstream exports these as worklet
@@ -121,20 +145,63 @@ about 1.76 µs median.
 
 ### Prop-by-prop
 
-| Prop                                                                                                            | Behaviour here                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `preDragDelay`                                                                                                  | Accepted, ignored. GDK's `gtk-dnd-drag-threshold` already separates a tap from a drag.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `collisionAlgorithm`                                                                                            | Accepted, ignored. GDK hit-tests the pointer directly; `"center"` is the closest of the three algorithms to that.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `requestPositionUpdate()`                                                                                       | A no-op. Nothing caches a slot rectangle, because GDK re-hit-tests every motion event.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `onLayoutUpdateComplete`                                                                                        | Accepted, ignored — there is no layout pass to complete.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `itemHeight`, `estimatedItemHeight`, `enableDynamicHeights`, `useFlatList`, `containerHeight`, `containerWidth` | Accepted, ignored. Yoga lays rows out at their natural height, and the mirror's own `ScrollView` measures its own viewport for autoscroll rather than trusting a hint.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `dragAxis`, `dragBoundsRef`, `animationFunction`                                                                | **Unsupported.** All three describe where the dragged view goes, and it never goes anywhere here. Kept in the type so a file shared with iOS and Android still compiles.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `dropAlignment`, `dropOffset`                                                                                   | **Unsupported**, same reason.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `positions`, `lowerBound`/`leftBound`, `autoScrollDirection`/`autoScrollHorizontalDirection`, `itemHeights`     | Real `{ value }` boxes (`SharedValueLike`), not `SharedValue`. Forwarding them with `{...rest}` works, reads work; `autoScrollDirection`/`autoScrollHorizontalDirection` are genuinely written by the built-in autoscroll (below), the rest do not animate.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `SortableDirection.Horizontal`, `useHorizontalSortable`, `useHorizontalSortableList`                            | Implemented. Reorder-by-crossing does not care which axis a list scrolls along — the tracked position reads whichever coordinate the axis cares about — so this is `Sortable`/`useSortable`'s own machinery with a horizontal `ScrollView` and `leftBound`/`autoScrollHorizontalDirection` plumbing, not a second implementation. `gap`/`paddingHorizontal` are real Yoga layout on the content container, not hints.                                                                                                                                                                                                                                                                                                                                 |
-| `SortableGrid`, `SortableGridItem`, `useGridSortable`, `useGridSortableList`                                    | Implemented. The grid is a real Yoga `flexWrap` layout — fixed-size cells, a fixed cross-axis dimension (`columns`/`rows` × `itemWidth`/`itemHeight`) — rather than upstream's absolutely-positioned cells at a `useAnimatedStyle`-computed `top`/`left`; the same row/column arithmetic (`calculateGridPosition`) places them, a different engine paints it. `getGridCellFromCoordinates` floors onto the cell whose top-left corner is at or before a point, exactly matching upstream. `SortableGridItem`'s `isBeingRemoved` removal animation is accepted and ignored, same reason as `animationFunction` above. `scrollEnabled` is accepted and ignored too — this platform's `ScrollView` has no prop to disable input the way upstream's does. |
-| Autoscroll near a container edge during a drag                                                                  | Implemented for `Sortable` and `SortableGrid`: a `GtkDropControllerMotion` on the list's own viewport reports how close the drag sits to an edge, and a `Gtk.Widget` tick callback nudges the real `GtkAdjustment` toward it for as long as it stays there — an imperative per-frame write, no React render either way. One difference from upstream: the scroll runs at a constant speed while the edge band is occupied, rather than easing into a 1500ms glide, because there is no timing engine here to ease with. Not wired into the standalone `useSortableList`/`useHorizontalSortableList`/`useGridSortableList` hooks, which build no `ScrollView` of their own to drive.                                                                   |
-| Sortable list height                                                                                            | Rows are in flow layout, so the list is as tall as its rows, not `itemsCount × itemHeight`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+- **`preDragDelay`** — Accepted, ignored. GDK's `gtk-dnd-drag-threshold`
+  already separates a tap from a drag.
+- **`collisionAlgorithm`** — Accepted, ignored. GDK hit-tests the pointer
+  directly; `"center"` is the closest of the three algorithms to that.
+- **`requestPositionUpdate()`** — A no-op. Nothing caches a slot
+  rectangle, because GDK re-hit-tests every motion event.
+- **`onLayoutUpdateComplete`** — Accepted, ignored — there is no layout
+  pass to complete.
+- **`itemHeight`, `estimatedItemHeight`, `enableDynamicHeights`,
+  `useFlatList`, `containerHeight`, `containerWidth`** — Accepted, ignored.
+  Yoga lays rows out at their natural height, and the mirror's own
+  `ScrollView` measures its own viewport for autoscroll rather than
+  trusting a hint.
+- **`dragAxis`, `dragBoundsRef`, `animationFunction`** — **Unsupported.**
+  All three describe where the dragged view goes, and it never goes
+  anywhere here. Kept in the type so a file shared with iOS and Android
+  still compiles.
+- **`dropAlignment`, `dropOffset`** — **Unsupported**, same reason.
+- **`positions`, `lowerBound`/`leftBound`,
+  `autoScrollDirection`/`autoScrollHorizontalDirection`, `itemHeights`** —
+  Real `{ value }` boxes (`SharedValueLike`), not `SharedValue`.
+  Forwarding them with `{...rest}` works, reads work;
+  `autoScrollDirection`/`autoScrollHorizontalDirection` are genuinely
+  written by the built-in autoscroll (below), the rest do not animate.
+- **`SortableDirection.Horizontal`, `useHorizontalSortable`,
+  `useHorizontalSortableList`** — Implemented. Reorder-by-crossing does
+  not care which axis a list scrolls along — the tracked position reads
+  whichever coordinate the axis cares about — so this is
+  `Sortable`/`useSortable`'s own machinery with a horizontal `ScrollView`
+  and `leftBound`/`autoScrollHorizontalDirection` plumbing, not a second
+  implementation. `gap`/`paddingHorizontal` are real Yoga layout on the
+  content container, not hints.
+- **`SortableGrid`, `SortableGridItem`, `useGridSortable`,
+  `useGridSortableList`** — Implemented. The grid is a real Yoga
+  `flexWrap` layout — fixed-size cells, a fixed cross-axis dimension
+  (`columns`/`rows` × `itemWidth`/`itemHeight`) — rather than upstream's
+  absolutely-positioned cells at a `useAnimatedStyle`-computed `top`/
+  `left`; the same row/column arithmetic (`calculateGridPosition`) places
+  them, a different engine paints it. `getGridCellFromCoordinates` floors
+  onto the cell whose top-left corner is at or before a point, exactly
+  matching upstream. `SortableGridItem`'s `isBeingRemoved` removal
+  animation is accepted and ignored, same reason as `animationFunction`
+  above. `scrollEnabled` is accepted and ignored too — this platform's
+  `ScrollView` has no prop to disable input the way upstream's does.
+- **Autoscroll near a container edge during a drag** — Implemented for
+  `Sortable` and `SortableGrid`: a `GtkDropControllerMotion` on the list's
+  own viewport reports how close the drag sits to an edge, and a
+  `Gtk.Widget` tick callback nudges the real `GtkAdjustment` toward it for
+  as long as it stays there — an imperative per-frame write, no React
+  render either way. One difference from upstream: the scroll runs at a
+  constant speed while the edge band is occupied, rather than easing into
+  a 1500ms glide, because there is no timing engine here to ease with. Not
+  wired into the standalone
+  `useSortableList`/`useHorizontalSortableList`/`useGridSortableList`
+  hooks, which build no `ScrollView` of their own to drive.
+- **Sortable list height** — Rows are in flow layout, so the list is as
+  tall as its rows, not `itemsCount × itemHeight`.
 
 ## Reorder feel: how a crossing resolves
 

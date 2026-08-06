@@ -22,10 +22,37 @@ const sidebars: SidebarsConfig = {
       type: "category",
       label: "Reference",
       items: [
-        "reference/components-core",
-        "reference/components-inputs",
-        "reference/components-lists",
-        "reference/components-overlays",
+        {
+          type: "category",
+          label: "Components",
+          items: [
+            "reference/components/index",
+            // core
+            "reference/components/view",
+            "reference/components/text",
+            "reference/components/image",
+            "reference/components/safe-area-view",
+            "reference/components/status-bar",
+            "reference/components/activity-indicator",
+            "reference/components/root",
+            "reference/components/nested-root",
+            "reference/components/intrinsic-root",
+            // inputs
+            "reference/components/text-input",
+            "reference/components/switch",
+            "reference/components/pressable",
+            "reference/components/touchable-opacity",
+            "reference/components/touchable-highlight",
+            "reference/components/touchable-without-feedback",
+            // lists
+            "reference/components/scroll-view",
+            "reference/components/flat-list",
+            "reference/components/section-list",
+            "reference/components/virtualized-list",
+            // overlays
+            "reference/components/modal",
+          ],
+        },
         "reference/apis",
         "reference/styling",
         "reference/globals",
