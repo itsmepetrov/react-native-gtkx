@@ -33,11 +33,11 @@ Adding Linux to an app that already ships iOS/Android is `npm install react-nati
 
 ## Documentation
 
-The full docs, including screenshots per component and a searchable reference, are in this repo's `docs/` tree:
+The full docs, including screenshots per component and a searchable reference, are published at [itsmepetrov.github.io/react-native-gtkx](https://itsmepetrov.github.io/react-native-gtkx/) (source in this repo's `docs/` tree):
 
-- [Guide](docs/guide) — [installation](docs/guide/installation.md), [your first app](docs/guide/first-app.md), [Metro vs. vite toolchains](docs/guide/toolchains.md), the [plain-GTK profile](docs/guide/plain-gtk.md), [packaging](docs/guide/packaging.md) (debs, standalone).
-- [Reference](docs/reference) — every component and API, each with its GTK/Adw badge and its differences from React Native.
-- [Architecture](docs/architecture) — [overview](docs/architecture/overview.md) (the reconciler-to-gtkx path, the widget surface), [layout and styling](docs/architecture/layout-and-styling.md) (the Yoga shadow tree, the style split), [gestures](docs/architecture/gestures.md), and [window/navigation/settings integration](docs/architecture/integration.md).
+- [Guide](https://itsmepetrov.github.io/react-native-gtkx/docs/guide/installation) — [installation](https://itsmepetrov.github.io/react-native-gtkx/docs/guide/installation), [your first app](https://itsmepetrov.github.io/react-native-gtkx/docs/guide/first-app), [Metro vs. vite toolchains](https://itsmepetrov.github.io/react-native-gtkx/docs/guide/toolchains), the [plain-GTK profile](https://itsmepetrov.github.io/react-native-gtkx/docs/guide/plain-gtk), [packaging](https://itsmepetrov.github.io/react-native-gtkx/docs/guide/packaging) (debs, standalone).
+- [Reference](https://itsmepetrov.github.io/react-native-gtkx/docs/reference) — every component and API, each with its GTK/Adw badge and its differences from React Native.
+- [Architecture](https://itsmepetrov.github.io/react-native-gtkx/docs/architecture/overview) — [overview](https://itsmepetrov.github.io/react-native-gtkx/docs/architecture/overview) (the reconciler-to-gtkx path, the widget surface), [layout and styling](https://itsmepetrov.github.io/react-native-gtkx/docs/architecture/layout-and-styling) (the Yoga shadow tree, the style split), [gestures](https://itsmepetrov.github.io/react-native-gtkx/docs/architecture/gestures), and [window/navigation/settings integration](https://itsmepetrov.github.io/react-native-gtkx/docs/architecture/integration).
 - [gtkx upstream agenda](docs/upstream-gtkx.md) — the standing agenda for gtkx itself.
 - [CONTRIBUTING](CONTRIBUTING.md) — developing the library from macOS, via a Linux VM.
 

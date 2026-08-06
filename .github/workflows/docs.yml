@@ -1,5 +1,6 @@
-# Build-only check for the documentation site. Deploying it to GitHub Pages
-# on push to main is a separate, later step of the docs-site epic.
+# Builds the documentation site on every PR that touches it, and deploys
+# the same build to GitHub Pages on push to main. No gh-pages branch: the
+# deploy job hands the build straight to actions/deploy-pages.
 name: Docs
 
 on:
@@ -8,6 +9,21 @@ on:
       - "docs/**"
       - "website/**"
       - ".github/workflows/docs.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "website/**"
+      - ".github/workflows/docs.yml"
+
+permissions:
+  contents: read
+
+# Only one Pages deployment at a time; a new push supersedes an in-flight
+# one rather than queuing behind it.
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -24,3 +40,25 @@ jobs:
         run: npm ci
       - name: Build the website workspace
         run: npm run build -w website
+      # Only the actual push-to-main deploy needs the built site as an
+      # artifact — PR builds are a check, nothing downstream consumes them.
+      - name: Upload Pages artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/build
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
