@@ -82,3 +82,18 @@
 .markdown p:has(> img) + p:has(> em:only-child) {
   text-align: center;
 }
+
+/* Two footer columns spread across the full container by default, pinning
+   "Docs" to the left edge with an empty right third. Group them centered. */
+.footer .row.footer__links,
+.footer__links .row {
+  justify-content: center;
+  column-gap: 20rem;
+  row-gap: 1.5rem;
+}
+
+.footer__links .col {
+  flex: 0 0 auto;
+  width: auto;
+  max-width: none;
+}
