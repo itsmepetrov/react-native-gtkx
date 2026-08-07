@@ -33,7 +33,7 @@ function HomepageHeader() {
           <p className="hero__subtitle">{siteConfig.tagline}</p>
           <div className={styles.buttons}>
             <Link
-              className="button button--primary button--lg"
+              className="button button--secondary button--lg"
               to="/docs/guide/installation"
             >
               Get Started
@@ -57,12 +57,10 @@ function HomepageHeroVisual() {
       <div className={clsx("container", styles.heroVisualContainer)}>
         <div className="shot-pair">
           <img
-            className="shot-frame"
             src={hnList}
             alt="Hacker News list screen, react-native-gtkx, a native GTK4 window with a search field inside the header bar"
           />
           <img
-            className="shot-frame"
             src={hnStory}
             alt="Hacker News story screen with comments, pushed with a real Adw.NavigationView transition"
           />
