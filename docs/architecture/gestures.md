@@ -95,15 +95,17 @@ escape hatch, and the import says so:
 ```tsx
 import { Controllers, GtkDragSource } from "react-native-gtkx/gtk"
 
-;<Pressable onPress={open}>
-  <Controllers>
-    <GtkDragSource
-      actions={Gdk.DragAction.MOVE}
-      onPrepare={prepare}
-    />
-  </Controllers>
-  <Text>{task.title}</Text>
-</Pressable>
+const row = (
+  <Pressable onPress={open}>
+    <Controllers>
+      <GtkDragSource
+        actions={Gdk.DragAction.MOVE}
+        onPrepare={prepare}
+      />
+    </Controllers>
+    <Text>{task.title}</Text>
+  </Pressable>
+)
 ```
 
 See [Window, navigation, and settings](integration) for `Controllers` in
