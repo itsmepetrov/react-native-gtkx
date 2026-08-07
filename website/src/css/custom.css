@@ -59,10 +59,11 @@
 /* Flex children refuse to shrink below their natural width by default
    (min-width: auto) — a full-resolution screenshot would overflow the
    container to the right. */
-.shot-pair .shot-frame {
+.shot-pair > img {
   flex: 1 1 0;
   min-width: 0;
   width: auto;
+  height: auto;
 }
 
 @media screen and (max-width: 550px) {
