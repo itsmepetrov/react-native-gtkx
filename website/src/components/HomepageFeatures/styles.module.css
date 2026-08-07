@@ -1,6 +1,54 @@
 .features {
+  padding: 1rem 0 3rem;
+  width: 100%;
+}
+
+.featureRow {
   display: flex;
   align-items: center;
-  padding: 2rem 0;
-  width: 100%;
+  gap: 3rem;
+  padding: 2.5rem 0;
+  border-top: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.featureRow.reverse {
+  flex-direction: row-reverse;
+}
+
+.featureText,
+.featureVisual {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+@media screen and (max-width: 900px) {
+  .featureRow,
+  .featureRow.reverse {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+}
+
+.codeCard {
+  margin: 1rem 0 0;
+  padding: 0.9rem 1.1rem;
+  border-radius: 8px;
+  background-color: var(--ifm-color-emphasis-100);
+  border: 1px solid var(--ifm-color-emphasis-300);
+  overflow-x: auto;
+}
+
+.codeCard code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 1rem;
+}
+
+.callout {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 2.5rem 0 1rem;
+  text-align: center;
+  border-top: 1px solid var(--ifm-color-emphasis-200);
 }

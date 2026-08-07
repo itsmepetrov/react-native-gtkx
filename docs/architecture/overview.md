@@ -184,7 +184,7 @@ reorder prop.
 and the types:
 
 ```tsx
-;<GtkScrolledWindow hscrollbarPolicy={Gtk.PolicyType.NEVER} />
+const scroller = <GtkScrolledWindow hscrollbarPolicy={Gtk.PolicyType.NEVER} />
 const viewRef = useRef<Adw.NavigationView | null>(null)
 ```
 

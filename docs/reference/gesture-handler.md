@@ -34,9 +34,11 @@ const pan = Gesture.Pan()
     offset.value = start.value + event.translationY
   })
 
-;<GestureDetector gesture={pan}>
-  <Animated.View style={[styles.card, animatedStyle]} />
-</GestureDetector>
+const card = (
+  <GestureDetector gesture={pan}>
+    <Animated.View style={[styles.card, animatedStyle]} />
+  </GestureDetector>
+)
 ```
 
 Ten recognizers exist, in two spellings each (nine of them also have a hook;
@@ -298,9 +300,11 @@ const rotation = Gesture.Rotation().onUpdate((event) => {
   angle.value = event.rotation // radians since the start, positive clockwise
 })
 
-;<GestureDetector gesture={Gesture.Simultaneous(pinch, rotation)}>
-  <Animated.View style={animatedStyle} />
-</GestureDetector>
+const zoomable = (
+  <GestureDetector gesture={Gesture.Simultaneous(pinch, rotation)}>
+    <Animated.View style={animatedStyle} />
+  </GestureDetector>
+)
 ```
 
 Neither recognizer has any configuration of its own beyond what every kind

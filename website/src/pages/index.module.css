@@ -4,7 +4,7 @@
  */
 
 .heroBanner {
-  padding: 4rem 0;
+  padding: 3rem 0 2rem;
   text-align: center;
   position: relative;
   overflow: hidden;
@@ -12,12 +12,42 @@
 
 @media screen and (max-width: 996px) {
   .heroBanner {
-    padding: 2rem;
+    padding: 2rem 1rem 1.5rem;
   }
+}
+
+/* Constrains the hero text column so lines stay readable at wide widths. */
+.heroContent {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.heroIcon {
+  margin-bottom: 1rem;
 }
 
 .buttons {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* The hero screenshot pair sits right under the hero text — the strongest
+   shots (a real app, not a placeholder) doing the convincing the tagline
+   alone can't. */
+.heroVisual {
+  padding: 0 0 3rem;
+}
+
+.heroVisualContainer {
+  max-width: 900px;
+}
+
+.heroVisualCaption {
+  margin-top: 1.25rem;
+  text-align: center;
+  font-size: 0.95rem;
+  color: var(--ifm-color-emphasis-700);
 }
