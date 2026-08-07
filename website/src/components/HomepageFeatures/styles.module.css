@@ -1,41 +1,22 @@
 .features {
-  padding: 1rem 0 3rem;
+  padding: 1.5rem 0 3rem;
   width: 100%;
-}
-
-.featureRow {
-  display: flex;
-  align-items: center;
-  gap: 3rem;
-  padding: 2.5rem 0;
   border-top: 1px solid var(--ifm-color-emphasis-200);
 }
 
-.featureRow.reverse {
-  flex-direction: row-reverse;
-}
-
-.featureText,
-.featureVisual {
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-@media screen and (max-width: 900px) {
-  .featureRow,
-  .featureRow.reverse {
-    flex-direction: column;
-    gap: 1.5rem;
-  }
+.feature {
+  padding: 1rem 0.5rem;
+  text-align: center;
 }
 
 .codeCard {
-  margin: 1rem 0 0;
+  margin: 1rem auto 0;
   padding: 0.9rem 1.1rem;
   border-radius: 8px;
   background-color: var(--ifm-color-emphasis-100);
   border: 1px solid var(--ifm-color-emphasis-300);
   overflow-x: auto;
+  max-width: 20rem;
 }
 
 .codeCard code {
