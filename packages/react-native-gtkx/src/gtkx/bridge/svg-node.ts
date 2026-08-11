@@ -10,12 +10,14 @@
 // state cannot live on `this` — same reasoning as hooksByManager in
 // layout-manager.ts).
 //
-// `Gtk.Widget.snapshot()` is a real, working vfunc in gtkx's codegen
+// `Gtk.Widget`'s snapshot slot is a real, working vfunc in gtkx's codegen
 // (node_modules/@gtkx/gi/gtk/gtk.js, registerWrapperClass(Widget, ...) lists
-// it with byteOffset 320) even though it is missing from the shipped
-// `gtk.d.ts` — the type generator drops it, the codegen that actually wires
-// vfuncs does not. Verified by reading the generated registry before writing
-// any of this; see epic.md.
+// it, keyed `vfuncSnapshot` since gtkx 1.0 — see the override below for why
+// the method name matters). On rc.4 it was missing from the shipped
+// `gtk.d.ts` even though the registry always had it (the type generator
+// dropped it, the codegen that actually wires vfuncs did not); 1.0 ships the
+// type too. Verified by reading the generated registry before writing any of
+// this; see epic.md.
 import * as Gdk from "@gtkx/gi/gdk"
 import * as Graphene from "@gtkx/gi/graphene"
 import * as Gsk from "@gtkx/gi/gsk"
@@ -479,11 +481,16 @@ const ensureRegistered = (): new () => Gtk.Widget => {
   // style, no content) and their own snapshot() no-ops for anything that
   // is not the mounted <Svg> root (see below), so nothing is ever
   // double-painted through GTK's normal child-snapshot path.
+  // gtkx 1.0 renamed Widget's vtable override slot from `snapshot` to
+  // `vfuncSnapshot` (verified against node_modules/@gtkx/gi/gtk/gtk.d.ts and
+  // gtk.js's registerWrapperClass(Widget, ...) registry — see
+  // layout-manager.ts's RnGtkxLayout for the full mechanism writeup: a plain
+  // `snapshot` override here would silently never reach the vtable).
   class RnGtkxSvgNode extends Gtk.Box {
     // Only ever invoked by GTK on the mounted <Svg> root (nothing calls
     // snapshotChild() on the inert descendant instances). Defensive no-op
     // otherwise, so a stray direct call never throws.
-    snapshot(snapshot: Gtk.Snapshot): void {
+    override vfuncSnapshot(snapshot: Gtk.Snapshot): void {
       const descriptor = nodeDescriptors.get(this)
       if (!descriptor || descriptor.kind !== "svg") {
         return

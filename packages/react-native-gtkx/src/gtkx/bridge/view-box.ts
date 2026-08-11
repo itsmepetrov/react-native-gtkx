@@ -426,8 +426,19 @@ export const getViewBoxComponent = (): ViewBoxComponent => {
     return component
   }
 
+  // gtkx 1.0 renamed Widget's vtable override slots to `vfunc`-prefixed
+  // methods (vfuncContains/vfuncSnapshot below — was contains/snapshot on
+  // rc.4, verified against node_modules/@gtkx/gi/gtk/gtk.d.ts and gtk.js's
+  // registerWrapperClass(Widget, ...) registry). registerClass() discovers
+  // overrides by exact method-name match, so the old names would silently
+  // stop being wired into the vtable rather than erroring — see
+  // layout-manager.ts's RnGtkxLayout for the full mechanism writeup (that
+  // one was the blank-content-pane root cause; this class's contains/
+  // snapshot were the same latent break, just not the one that broke
+  // rendering outright since GtkBox's own default snapshot still walks
+  // children in order).
   class RnGtkxViewBox extends Gtk.Box {
-    override contains(x: number, y: number): boolean {
+    override vfuncContains(x: number, y: number): boolean {
       if (passthrough.has(this)) {
         return false
       }
@@ -454,14 +465,12 @@ export const getViewBoxComponent = (): ViewBoxComponent => {
 
     // GTK's own container snapshot is `gtk_widget_real_snapshot`, which walks
     // first-to-last calling gtk_widget_snapshot_child — the loop below with
-    // nothing in front of it. There is no way to chain up to it from here
-    // (gtkx installs the vfunc but exposes no parent-class call, and
-    // gtk_widget_snapshot() is not public C API either), so the fast path
-    // reproduces it rather than delegating to it.
-    //
-    // No `override`: `snapshot` is a real vfunc in gtkx's codegen but is
-    // missing from the shipped gtk.d.ts (same as in svg-node.ts).
-    snapshot(snapshot: Gtk.Snapshot): void {
+    // nothing in front of it reproduces that rather than delegating to it.
+    // (1.0's gtk.d.ts now types a chain-up path, `super.vfuncSnapshot()`,
+    // which would reach GtkBox's own default — untested here and out of
+    // this fix's scope; the manual loop below is unchanged and still
+    // correct, just renamed to the 1.0 vfunc slot.)
+    override vfuncSnapshot(snapshot: Gtk.Snapshot): void {
       if (raisedCount !== 0) {
         const order = paintOrderFor(this)
         if (order !== null) {

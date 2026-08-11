@@ -35,8 +35,21 @@ const ensureRegistered = (): new () => Gtk.LayoutManager => {
     return RnGtkxLayoutClass
   }
 
+  // gtkx 1.0 renamed every vtable override slot to a `vfunc`-prefixed method
+  // (vfuncMeasure/vfuncAllocate/vfuncGetRequestMode here — was measure/
+  // allocate/getRequestMode on rc.4). This is not a workaround to tag: it is
+  // the sanctioned 1.0 spelling, verified against
+  // node_modules/@gtkx/gi/gtk/gtk.js's registerWrapperClass(LayoutManager,
+  // ...) registry and gtk.d.ts. Left as a signpost because the failure mode
+  // is silent and easy to reintroduce: registerClass() discovers overrides by
+  // exact method-name match against that registry
+  // (@gtkx/runtime/register-class.js discoverClassVfuncs) — a name that
+  // doesn't match is neither wired nor rejected, it just never reaches the
+  // vtable. That silent drop was the blank-content-pane root cause: with
+  // allocate() never called, every View's children went unallocated while
+  // native chrome (not driven by this layout manager) rendered fine.
   class RnGtkxLayout extends Gtk.LayoutManager {
-    override measure(
+    override vfuncMeasure(
       _widget: Gtk.Widget,
       orientation: Gtk.Orientation,
       forSize: number,
@@ -52,9 +65,9 @@ const ensureRegistered = (): new () => Gtk.LayoutManager => {
       return [size, size, -1, -1]
     }
 
-    // Trailing vfunc params (baseline; widget) are dropped — JS tolerates the
-    // arity mismatch and the linter rejects unused trailing args.
-    override allocate(
+    // Trailing vfunc params (baseline) are dropped — JS tolerates the arity
+    // mismatch and the linter rejects unused trailing args.
+    override vfuncAllocate(
       _widget: Gtk.Widget,
       width: number,
       height: number,
@@ -62,7 +75,7 @@ const ensureRegistered = (): new () => Gtk.LayoutManager => {
       hooksByManager.get(this)?.allocate(width, height)
     }
 
-    override getRequestMode(): Gtk.SizeRequestMode {
+    override vfuncGetRequestMode(): Gtk.SizeRequestMode {
       return Gtk.SizeRequestMode.CONSTANT_SIZE
     }
   }
