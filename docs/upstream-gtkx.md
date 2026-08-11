@@ -36,7 +36,7 @@ by an async fetch comes up blank.
   reproduces the underlying `useEffectEvent` defect directly (wrapping the
   subscriber in `memo` is what triggers it, not an async parent update).
 - Our workaround: `src/gtkx/bridge/use-signal.ts`, tagged
-  `RC4-WORKAROUND(use-signal-stale-handler)` — latest handler in a ref
+  `1.0-WORKAROUND(use-signal-stale-handler)` — latest handler in a ref
   refreshed by an insertion effect, stable wrapper handed to gtkx.
 - Status: **we offered the fix (gtkx-org/gtkx#469) and it was closed
   unmerged, deliberately** — @eugeniodepalo would "rather take the version
@@ -47,13 +47,14 @@ by an async fetch comes up blank.
   pin an exact React prerelease peer — so our ref wrapper stays until a
   stable React 19.3 ships. Note the hazard is wider than `useSignal`: any
   future hook built on `useEffectEvent` inherits it until then.
-- Re-checked on rc.4, because the condition names a React version and a
-  release could satisfy it by bumping one: `@gtkx/react@1.0.0-rc.4` still
-  peers `react: ^19.2` and depends on `react-reconciler: ^0.33.0`, React's
-  own `latest` is 19.2.8, and rc.4's `useSignal` still routes through
-  `useEffectEvent` (it renamed the options `after`/`immediate` →
-  `isAfter`/`isImmediate` and nothing else). The `it.fails` guard still
-  fails.
+- Re-checked on rc.4, then again on the stable 1.0.0 release, because the
+  condition names a React version and a release could satisfy it by bumping
+  one: `@gtkx/react@1.0.0` still peers `react: ^19.2` and depends on
+  `react-reconciler: ^0.33.0` (both unchanged since rc.4), React's own
+  `latest` is still 19.2.8, and `useSignal` still routes through
+  `useEffectEvent`. The `it.fails` guard
+  (`tests/gtk/bridge/use-signal-upstream.gtk.test.tsx`) still fails on 1.0,
+  targeted-run confirmed.
 - Nothing for gtkx to do here. Kept in this file so the next release does
   not re-open the question.
 
@@ -109,7 +110,7 @@ unwind.
   that one file's fork died mid-run): runs 30903167960 and 30904467362.
   Reproduced locally at will once the trigger was known — see "our bug".
 - **This is the same subsystem as the `runtime-dedupe` workaround above**
-  (`docs/gtkx-rc4-notes.md`): that row is a SIGABRT from calling
+  (`docs/gtkx-1.0-notes.md`): that row is a SIGABRT from calling
   `log_set_writer_func` twice; this is a SIGABRT from a panic inside the
   function it installs. Different call sites, same conclusion — the
   writer-func integration is not yet hardened against being wrong in an
@@ -133,6 +134,34 @@ unwind.
   needs whatever inside `writer_trampoline` panics, which we have not
   isolated) — the backtrace and the reproduction path above are what we
   have to open an issue with.
+- **Re-checked against 1.0.0, both by reading gtkx's own source and by
+  probing.** `packages/native/src/host/log_writer.rs` and
+  `packages/native/src/host/error_reporter.rs` (fetched from
+  `gtkx-org/gtkx` at both the `v1.0.0-rc.4` and `v1.0.0` tags) are
+  byte-for-byte identical between the two — nothing here changed. gtkx's
+  own `packages/native/src/host/panic_handler.rs` already exists on both
+  tags (also unchanged) with exactly the general-purpose helper this ask
+  is asking for, `guard_ffi_boundary(context, body)` — a thin
+  `catch_unwind` wrapper that reports the panic through
+  `error_reporter::report_str` instead of letting it reach the FFI
+  boundary — and it is already used at four other native callback sites
+  (`node_env.rs`, `value/wrapper.rs`'s wrapper cleanup, `ffi/closure.rs`'s
+  callback destroy notify, `api/register_class.rs`'s instance init). It is
+  NOT used around `write_log`, the GLib log-writer closure `log_writer.rs`
+  installs — so the ask can now be phrased more precisely: apply the SAME
+  existing pattern to the log writer, rather than inventing a new one.
+  Two fresh probes against 1.0.0, neither of which crashed: a bare script
+  issuing 5,000 back-to-back invalid `Gtk.Adjustment.configure()` calls
+  (the exact original trigger, ~3× the original burst's 1,699), and the
+  same call issued from inside a real `GtkWidget.addTickCallback` running
+  under the real `@gtkx/vitest` forks pool — the same infrastructure the
+  original CI crashes ran under. Given the source is unchanged, this is
+  recorded as inconclusive rather than a close: either the real trigger
+  needs conditions neither probe reproduced (parallel test-file forks,
+  timing, allocator state), or it was already this rare on rc.4 and the
+  two 2026-08-04 CI sightings were unlucky. The ask stands, updated with
+  the precise fix (reuse `guard_ffi_boundary`) and the two 1.0 probes as
+  evidence it has not gone away by chance.
 
 ## API asks
 
@@ -171,6 +200,30 @@ undocumented as an embedding surface.
   not the GObject class hierarchy — there is no `peek_parent` anywhere in the
   runtime.
 
+- **1.0 looks like a candidate answer to both halves of this ask — recorded
+  here, not built, per the `gtkx-1-0-migration` epic's scope (adopting it is
+  a follow-up).** `registerClass`'s own generated `.d.ts` (`@gtkx/runtime`)
+  now documents explicitly that "a slot is filled from the `vfunc`-prefixed
+  methods on the class's prototype chain" — the first half of the ask,
+  formally acknowledged rather than just empirically true. The second half —
+  a parent-class chain-up — is also there: every generated `vfunc*` method
+  on a wrapper class (`@gtkx/gi/gtk`'s `gtk.d.ts`/`gtk.js`, confirmed by
+  reading both directly on the installed 1.0.0 package) is `protected` and
+  documented "Override it on a class passed to `registerClass` and chain up
+  with `super.vfuncX()`", and the base implementation is not a stub: e.g.
+  `Gtk.Widget.prototype.vfuncSnapshot` calls into the real native default
+  (`gtk_widget_real_snapshot`) through the same vtable-dispatch machinery
+  `registerClass` itself uses — so `super.vfuncSnapshot()` from an
+  overriding subclass reaches it. If this holds up under actual use, it
+  removes exactly the residual this ask's own zIndex measurement above
+  found: a container could chain up for every un-raised child instead of
+  reproducing `gtk_widget_real_snapshot` from JS, which is the whole of
+  what is left after the sibling-array fix already landed. Not verified
+  end-to-end here (no code written against it) — the epic's task 002 audits
+  workarounds and upstream asks, not new integrations; the follow-up that
+  would actually wire this into `layout-manager.ts` and re-measure the
+  zIndex table is out of scope.
+
 ### 4. Config registration for embedders — **it has now broken us three releases running**
 
 Our runner hosts execute a plain Node bundle, so they synthesize the
@@ -208,6 +261,19 @@ we own.
   the sole owner of config" (gtkx-org/gtkx#474) moved in the opposite
   direction: it is exactly the case an embedder that is not the CLI has no
   seat at.
+- **Re-checked against 1.0.0: it did not break us a fourth release
+  running.** `createConfigLoader`'s `{ load, resolve }` shape (installed
+  1.0.0 `@gtkx/config/dist/loader.d.ts`) and the element config's
+  `isLazy`/`omittedProps` keys and `signals`/`constructProps`/
+  `constructOnlyProps`/`defaultProps` metadata names are all unchanged from
+  rc.4 — confirmed by `rm -rf node_modules/.gtkx && npm run codegen` plus
+  the gallery/hn-app headless launch proofs (`gtkx-1-0-migration` epic, task
+  001), not by any gate we own. The underlying ask is still unmet, though:
+  `/internal` is still the only route to `createConfigLoader` (still no
+  `registerConfig` export anywhere in `@gtkx/config`'s public entry), and
+  `renderConfigModule` lives in `@gtkx/config/dist/virtual.d.ts`, which
+  is not reachable through the public entry point OR `/internal` — an even
+  narrower fourth path than either.
 
 ### 5. Keep the settings types importable from where the hooks are
 
@@ -229,38 +295,14 @@ to import from `/internal` and inherit that subpath's no-promises status.
 - Ask: re-export the three from `@gtkx/react`. This looks like a slip in the
   `/** @public */` annotation pass rc.4 did across the entry points rather
   than a decision — the hooks kept their annotations and their types did not.
-
-### 6. Set the Wayland `app_id` from `applicationId`
-
-`gtkx.config.ts` makes an app declare `applicationId`, validated against
-`g_application_id_is_valid`, and it becomes the GApplication id. Nothing
-gives it to the compositor: GTK4 takes the xdg-shell `app_id` from
-`g_get_prgname()`, and no part of gtkx sets that. Every app built on this
-platform therefore arrives at the compositor under GTK's fallback.
-
-Measured on rc.4, headless sway, `examples/rn-app` whose config says
-`applicationId: "dev.rngtkx.example"` — sway's own IPC reports:
-
-```json
-{ "app_id": "GTK Application", "name": "RN gtkx Example", "shell": "xdg_shell" }
-```
-
-`"GTK Application"` is not a namespace, it is a literal shared by every gtkx
-app on the machine. The consequences are all the things a compositor keys off
-app_id and nothing else: a `for_window [app_id="dev.rngtkx.example"]` rule
-matches nothing, window rules written for one app hit all of them, the
-`.desktop` file cannot be associated with the window (so no icon in the
-taskbar and no correct name in the switcher), and session restore cannot tell
-two gtkx apps apart. Found while wiring up the compositor-side proofs for
-our PR #88.
-
-- Ask: call `g_set_prgname(applicationId)` (or `GLib.setPrgname`) during
-  bootstrap, where `applicationId` is already in hand — `@gtkx/react`'s
-  application component reads it from `virtual:gtkx-config` today. On GNOME
-  the same value should also match the `.desktop` file's basename for the
-  icon to resolve, which apps can already arrange.
-- Happy to send the patch; it is a one-line bootstrap change plus a test that
-  reads the app_id back through a compositor.
+- Re-checked against 1.0.0: still true. Installed `@gtkx/react@1.0.0`'s
+  `dist/index.d.ts` exports exactly `useApplication`, `useBindSetting`,
+  `useParentWindow`, `useProperty`, `useSetting`, `useSignal`,
+  `RootElement`/`rootElement`, `createPortal`/`createRoot`/`quit`/`Root`,
+  `AccessibleProps`, `RefProp` — no `SettingsSchema`, `SettingsSchemaKeys`
+  or `SettingValue`. `dist/internal.d.ts` still re-exports all three from
+  `./utils/settings.js`, so the bridge's `/internal` re-export stays needed
+  unchanged.
 
 ### 7. Let `GtkScrolledWindow` report the phases of the controller it owns
 
@@ -288,6 +330,10 @@ contract pays it forever.
 - This one is arguably a GTK ask rather than a gtkx ask, and we would take
   either answer: a gtkx-side wrapper over what GTK exposes today would help
   even if the underlying signals never appear.
+- Re-checked against 1.0.0: unchanged. `GtkScrolledWindow`'s own generated
+  `.d.ts` gains no new signals; `Gtk.EventControllerScroll` still only has
+  `scroll-begin`/`scroll-end`, the same two generic signals it always had —
+  nothing named after RN's four phases.
 
 ### 8. Keep the user-event signal table extensible and documented
 
@@ -301,6 +347,10 @@ by reading `@gtkx/config/dist/user-event-signals.js` and a release note.
 
 - Ask: document the table and the extension point; it is exactly what a
   library embedding gtkx must reason about.
+- Re-checked against 1.0.0: unchanged. Installed
+  `@gtkx/config/src/user-event-signals.ts` still ships
+  `DEFAULT_USER_EVENT_SIGNALS` as a bare object literal with no doc comment
+  above it and no mention of the table in `@gtkx/config`'s README.
 
 ### 9. `userEvent` cannot produce a real `GdkEvent` — and the missing piece is already in the box
 
@@ -352,12 +402,21 @@ implementing it upstream:
   the virtual pointer that is already created, with the widget-to-output
   coordinate mapping handled inside. We are happy to contribute the
   implementation.
+- Re-checked against 1.0.0: unchanged. Installed
+  `@gtkx/vitest/src/virtual-seat.ts` still only implements `wl_seat`/the
+  virtual keyboard and pointer managers' `create_device` request — no
+  `motion_absolute`,
+  `button` or `frame` opcode anywhere in the file, so the device the seat
+  creates is never actually driven. `@gtkx/testing/src/user-event/` is
+  still built entirely on emitting `GtkGesture` signals directly
+  (`gesture.ts`, `dispatch.ts`, `controller.ts`); no `real`-flavored entry
+  point exists anywhere in its module list.
 
 ## Workaround receipts (things we would like to delete)
 
 Kept only until upstream changes; each has a row in
-`docs/gtkx-rc4-notes.md` with its tag. All four were re-checked against
-rc.4 on the real runtime and all four survived — the notes file has the
+`docs/gtkx-1.0-notes.md` with its tag. All four were re-checked against
+1.0.0 on the real runtime and all four survived — the notes file has the
 receipts.
 
 | Workaround                                    | Why it exists                                                                                           |
@@ -370,7 +429,7 @@ receipts.
 A guard against the double-init class of problems (an idempotent runtime
 init, or a clear error naming the duplicate) would let us drop the dedupe
 list, which today has to be repeated by every consumer of our vite preset.
-The current failure is still a bare abort with no attribution — on rc.4,
+The current failure is still a bare abort with no attribution — on 1.0.0,
 two distinct `@gtkx/native` addon copies in one process give
 `GLib-ERROR: g_log_set_writer_func() called multiple times` and SIGABRT,
 which names the symbol but not the package that brought the second copy.
@@ -383,8 +442,11 @@ with.** `createPortal(children, container)` reaches a container's default
 slot; every named slot an object exposes declaratively (a window's
 `Gio.ActionMap`, a widget's `controllers`, an `AdwApplicationWindow`'s
 `breakpoints`) is reached only through the internal `"gtkx:prop"` element,
-which rc.4 exports from neither `@gtkx/react` nor `/internal` — and whose
-deep module path the `exports` map now refuses outright, so restating the
+which 1.0 exports from neither `@gtkx/react` nor `/internal` (1.0's
+`/internal` now re-exports `createElementComponent`, the function that
+BUILDS an intrinsic element by GType name, but not the `Prop` literal
+itself — a different export from the same source file) — and whose deep
+module path the `exports` map still refuses outright, so restating the
 string literal is the only route left. `createSlotPortal` confines that to
 one line (`src/gtkx/bridge/slot-portal.ts`), and `WindowActions`,
 `ApplicationActions` and `WindowControllers` are all built on it.
@@ -396,8 +458,8 @@ one line (`src/gtkx/bridge/slot-portal.ts`), and `WindowActions`,
 
 `renderHook` is a two-line fix on gtkx's side — `render` already creates and
 presents a harness window whenever no container is given, and `renderHook`
-passes `container: new Gtk.Box()` unconditionally. rc.4's `render-hook.js` is
-byte-identical to rc.3's, which was byte-identical to rc.2's, and
+passes `container: new Gtk.Box()` unconditionally. 1.0's `render-hook.js` is
+byte-identical to rc.4's, which was byte-identical to rc.3's and rc.2's, and
 `RenderHookOptions` still carries only `wrapper` and `initialProps`. Letting
 it take the same `container`/window choice `render` takes would retire our
 `renderHookWithWindow` entirely.
@@ -431,6 +493,19 @@ it take the same `container`/window choice `render` takes would retire our
   `new Graphene.Rect({ origin, size })` both construct now, verified on our
   own VM against rc.3, which let us delete two workarounds and turn SVG
   gradients from a documented degradation into a working feature.
+- **The Wayland `app_id` is no longer the shared `"GTK Application"`
+  literal** — closed on 1.0.0, but by a different mechanism than we asked
+  for. We asked for an explicit `g_set_prgname(applicationId)` bootstrap
+  call with the FULL `applicationId`; grepping the installed 1.0.0
+  `@gtkx/react` `dist/` for "prgname" finds nothing. What actually closed
+  it is a side effect of the `gtk-application-argv` breaking change
+  (`docs/gtkx-1.0-notes.md`): `@gtkx/react`'s application bootstrap now
+  builds `runApplication`'s command line as
+  `[applicationId.split(".").at(-1), ...process.argv.slice(2)]`, and
+  GLib's own `g_application_run()` sets `prgname` from `argv[0]`'s
+  basename whenever it was not already set ([documented GLib
+  behavior](https://docs.gtk.org/gio/method.Application.run.html)); GTK4
+  then reads that same `prgname` as the xdg-shell `app_id`. Measured on rc.4, headless sway, `examples/rn-app` with `applicationId: "dev.rngtkx.example"`, sway reported `{"app_id": "GTK Application"}`. Measured on 1.0.0, `examples/gallery` with `applicationId: "dev.rngtkx.gallery"`, sway now reports `{"app_id": "gallery"}` — no longer shared, now app-specific and stable, which answers the practical complaint (`for_window` rules, taskbar/switcher identity, session restore). **Residual gap against the literal ask**: the app_id is the LAST dot-segment of `applicationId`, not the fully-qualified id, so a `for_window [app_id="dev.rngtkx.gallery"]` rule (the full id) still matches nothing — only `[app_id="gallery"]` does — and two apps whose `applicationId`s differ only in their leading segments would still collide. Not worth a workaround: the shared-literal problem is gone, and the residual is a narrower, less likely collision than the one that motivated the ask.
 
 ## What we are happy to give back
 
@@ -441,8 +516,8 @@ it take the same `container`/window choice `render` takes would retire our
   headless Wayland on every commit, plus perf probes that measure
   reconciler-adjacent costs (allocation passes per second, per-frame
   mount bursts, per-child snapshot and per-event scroll overhead). We can
-  report regressions early if that is useful — and we do run each RC against
-  the full suite the week it ships.
+  report regressions early if that is useful — and we do run each release
+  against the full suite the week it ships.
 - Fixes: two of the three bugs we filed against rc.2 we also closed
   ourselves (#470, #473). We are happy to keep doing that — the `app_id`
   patch in ask 3c in particular is one we would rather send than file.

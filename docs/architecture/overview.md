@@ -230,8 +230,8 @@ not a fork.
 Measured numbers behind these decisions (the Yoga/GTK feasibility spike,
 frame-budget studies, the navigation research) live in `docs/research/` —
 repo-only working notes, not published here. The standing gtkx upstream
-agenda is `docs/upstream-gtkx.md`, and every RC-stage workaround the bridge
-carries is cataloged in `docs/gtkx-rc4-notes.md`.
+agenda is `docs/upstream-gtkx.md`, and every workaround the bridge carries
+is cataloged in `docs/gtkx-1.0-notes.md`.
 
 ## Related
 

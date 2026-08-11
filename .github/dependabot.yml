@@ -89,8 +89,9 @@ updates:
           - patch
 
     ignore:
-      # gtkx is pinned to an exact rc on purpose — upgrades are a deliberate,
-      # reviewed exercise against docs/gtkx-rc4-notes.md, not a version bump.
+      # gtkx is pinned to an exact version on purpose — upgrades are a
+      # deliberate, reviewed exercise against docs/gtkx-1.0-notes.md, not a
+      # version bump.
       # This is the one blanket ignore here; see the header for what that costs.
       - dependency-name: "@gtkx/*"
 

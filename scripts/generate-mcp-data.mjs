@@ -34,14 +34,14 @@
 //      page (apis.md's own `##` entries are picked up this way too),
 //      docs/guide/*.md, docs/getting-started.md (a pointer stub since
 //      the docs-site Guide rewrite — kept in the list because it's still a
-//      valid, if now tiny, input), docs/gtkx-rc4-notes.md,
+//      valid, if now tiny, input), docs/gtkx-1.0-notes.md,
 //      docs/research/navigation-extensibility.md and every
 //      docs/architecture/*.md page, plus a few
 //      individually-chunked entries (one per component page, the
-//      gtkx-rc4-notes live-workaround rows) — a full-text search corpus
+//      gtkx-1.0-notes live-workaround rows) — a full-text search corpus
 //      for rn_gtkx_search_docs, the fallback tool for anything the
 //      structured records above do not cover (e.g. "what's known-broken",
-//      which has no stable per-component key — RC4-WORKAROUND rows are
+//      which has no stable per-component key — 1.0-WORKAROUND rows are
 //      named by mechanism, not by widget).
 //
 // Regenerate after touching any of the docs above or after
@@ -99,7 +99,7 @@ const ARCH_INTEGRATION_MD = join(ROOT, "docs/architecture/integration.md")
 const ARCH_GESTURES_MD = join(ROOT, "docs/architecture/gestures.md")
 const ARCH_GLOSSARY_MD = join(ROOT, "docs/architecture/glossary.md")
 const GETTING_STARTED_MD = join(ROOT, "docs/getting-started.md")
-const RC4_NOTES_MD = join(ROOT, "docs/gtkx-rc4-notes.md")
+const GTKX_NOTES_MD = join(ROOT, "docs/gtkx-1.0-notes.md")
 const NAV_EXT_MD = join(ROOT, "docs/research/navigation-extensibility.md")
 // The Guide (docs/guide/*.md) is where docs/getting-started.md's content
 // actually lives now — see that file's own header comment.
@@ -526,7 +526,7 @@ const adwWidgets = widgetRecords(classification.adw, "react-native-gtkx/adw")
 //    ranks even when it is a single row inside a large table.
 // ---------------------------------------------------------------------------
 
-const rc4NotesText = readFileSync(RC4_NOTES_MD, "utf8")
+const gtkxNotesText = readFileSync(GTKX_NOTES_MD, "utf8")
 const gettingStartedText = readFileSync(GETTING_STARTED_MD, "utf8")
 const navExtText = readFileSync(NAV_EXT_MD, "utf8")
 const archOverviewText = readFileSync(ARCH_OVERVIEW_MD, "utf8")
@@ -540,21 +540,21 @@ const guideChunks = GUIDE_MD_FILES.flatMap((path) =>
 )
 
 const workaroundsTable = parseTableAfterHeading(
-  rc4NotesText,
+  gtkxNotesText,
   "## Live workarounds",
-  "docs/gtkx-rc4-notes.md",
+  "docs/gtkx-1.0-notes.md",
 )
 assertColumnCount(
   workaroundsTable,
   4,
-  "docs/gtkx-rc4-notes.md",
+  "docs/gtkx-1.0-notes.md",
   "## Live workarounds",
 )
 
 const workaroundChunks = workaroundsTable.rows.map(
   ([name, whatGtkxDoes, ourWorkaround, removalCondition]) => ({
-    doc: "docs/gtkx-rc4-notes.md",
-    heading: `RC4-WORKAROUND(${stripBacktickSpan(name)})`,
+    doc: "docs/gtkx-1.0-notes.md",
+    heading: `1.0-WORKAROUND(${stripBacktickSpan(name)})`,
     text: `${whatGtkxDoes} — our workaround: ${ourWorkaround} — removed when: ${removalCondition}`,
   }),
 )
@@ -592,7 +592,7 @@ const docChunks = [
   ...parseSections(archGlossaryText, "docs/architecture/glossary.md"),
   ...guideChunks,
   ...parseSections(gettingStartedText, "docs/getting-started.md"),
-  ...parseSections(rc4NotesText, "docs/gtkx-rc4-notes.md"),
+  ...parseSections(gtkxNotesText, "docs/gtkx-1.0-notes.md"),
   ...parseSections(navExtText, "docs/research/navigation-extensibility.md"),
   ...workaroundChunks,
   ...componentRowChunks,
@@ -605,7 +605,7 @@ const docChunks = [
 const HEADER = `// GENERATED FILE — do not edit by hand.
 // Produced by scripts/generate-mcp-data.mjs from docs/reference/*.md
 // (including docs/reference/components/*.md, one page per component),
-// docs/architecture/*.md, docs/guide/*.md, docs/gtkx-rc4-notes.md,
+// docs/architecture/*.md, docs/guide/*.md, docs/gtkx-1.0-notes.md,
 // docs/getting-started.md,
 // docs/research/navigation-extensibility.md and
 // scripts/widget-surface/classification.json.

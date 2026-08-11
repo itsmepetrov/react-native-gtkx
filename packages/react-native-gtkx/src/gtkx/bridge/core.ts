@@ -8,7 +8,7 @@
 // still reaches for them, behind a probe (adwAvailable()); its absence
 // surfaces as a named throw, not a build failure.
 //
-// Caveats baked into this surface (catalogued in docs/gtkx-rc4-notes.md):
+// Caveats baked into this surface (catalogued in docs/gtkx-1.0-notes.md):
 // - 64-bit FFI values arrive as BigInt → normalize with toNumber() at this boundary
 
 // import-then-export (not `export * as`): the latter is the one syntax the
