@@ -44,52 +44,54 @@ export const NewListDialog = () => {
         }
         showDialog("none")
       }}
-      // `extraChild`, NOT children. An AdwAlertDialog composes its own
-      // layout — heading, body, response buttons — into `Adw.Dialog:child`,
-      // which is what plain children bind to, so passing children REPLACES
-      // that whole layout with them: the dialog came up as a bare entry and
-      // six swatches, with no "New List" heading and no Cancel/Add buttons
-      // at all. `extra-child` is libadwaita's own slot for exactly this,
-      // and it slots between the body and the responses. Found live — a
-      // headless test would have had to assert on the heading to catch it.
-      extraChild={
+      // `children`, which for AdwAlertDialog specifically binds to
+      // libadwaita's `extra-child` slot (between the body and the response
+      // buttons), NOT `Adw.Dialog:child` the way it does for every other Adw
+      // dialog type. gtkx 1.0 renamed the prop that carried this from
+      // `extraChild` to plain `children` — the AdwAlertDialog element's own
+      // behavior registry now claims the default slot and routes it to
+      // `setExtraChild()` (node_modules/@gtkx/react/dist/adw/
+      // element-behaviors.js's alertDialogExtraChild), rather than a bare
+      // `Adw.Dialog:child` REPLACING the dialog's heading/body/responses the
+      // way it would on any other dialog. Found live — a headless test would
+      // have had to assert on the heading to catch it.
+    >
+      <GtkBox
+        orientation={Gtk.Orientation.VERTICAL}
+        spacing={16}
+        marginTop={8}
+      >
+        <GtkEntry
+          placeholderText="List name"
+          // Enter in the field is the same as pressing Add — the dialog's
+          // `defaultResponse`.
+          activatesDefault
+          onChanged={(self) => setName(self.text)}
+        />
         <GtkBox
-          orientation={Gtk.Orientation.VERTICAL}
-          spacing={16}
-          marginTop={8}
+          spacing={6}
+          halign={Gtk.Align.CENTER}
         >
-          <GtkEntry
-            placeholderText="List name"
-            // Enter in the field is the same as pressing Add — the dialog's
-            // `defaultResponse`.
-            activatesDefault
-            onChanged={(self) => setName(self.text)}
-          />
-          <GtkBox
-            spacing={6}
-            halign={Gtk.Align.CENTER}
-          >
-            {LIST_COLOR_PALETTE.map((swatch, index) => (
-              <GtkToggleButton
-                key={swatch}
-                ref={index === 0 ? setFirstSwatch : undefined}
-                group={index === 0 ? undefined : firstSwatch}
-                active={color === swatch}
-                cssClasses={["flat"]}
-                accessibleLabel={`Color ${swatch}`}
-                onClicked={() => setColor(swatch)}
-              >
-                <GtkBox
-                  widthRequest={22}
-                  heightRequest={22}
-                  cssClasses={[listDot(swatch)]}
-                  accessibleRole={Gtk.AccessibleRole.PRESENTATION}
-                />
-              </GtkToggleButton>
-            ))}
-          </GtkBox>
+          {LIST_COLOR_PALETTE.map((swatch, index) => (
+            <GtkToggleButton
+              key={swatch}
+              ref={index === 0 ? setFirstSwatch : undefined}
+              group={index === 0 ? undefined : firstSwatch}
+              active={color === swatch}
+              cssClasses={["flat"]}
+              accessibleLabel={`Color ${swatch}`}
+              onClicked={() => setColor(swatch)}
+            >
+              <GtkBox
+                widthRequest={22}
+                heightRequest={22}
+                cssClasses={[listDot(swatch)]}
+                accessibleRole={Gtk.AccessibleRole.PRESENTATION}
+              />
+            </GtkToggleButton>
+          ))}
         </GtkBox>
-      }
-    />
+      </GtkBox>
+    </AdwAlertDialog>
   )
 }
