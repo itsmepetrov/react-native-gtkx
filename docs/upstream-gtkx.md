@@ -412,6 +412,32 @@ implementing it upstream:
   (`gesture.ts`, `dispatch.ts`, `controller.ts`); no `real`-flavored entry
   point exists anywhere in its module list.
 
+### 10. `createDialogComponent` pins one store's `Adw.Dialog` in its returned props type
+
+The shared factory behind the five generated Adw dialog JSX wrappers types
+its returned component as `(props: PresentedProps<Adw.Dialog>) => ReactNode`,
+with `Adw.Dialog` resolved against whatever `@gtkx/gi` store `@gtkx/react`
+itself sees. In an npm workspace that is the hoisted root store — so every
+workspace app with its own freshly-generated store fails `gtkx codegen`
+typechecking with a ref-covariance error per dialog type (reproduced on two
+of our examples with a bare `npx gtkx codegen`; the runtime is fully
+duck-typed and unaffected). One-line fix that keeps typing intact — make
+the factory generic with a default, so each generated store instantiates
+the parameter with its own props type:
+
+```ts
+declare const createDialogComponent: <P = DialogComponentProps>(
+  Component: ElementType,
+) => (props: P) => ReactNode
+```
+
+We carry exactly this as a `patch-package` patch
+(`1.0-WORKAROUND(dialog-component-ref-widen)`) and would delete it the day
+this ships. Worth knowing while fixing: the installed `dist/adw/dialog.d.ts`
+differs between Linux and macOS installs of the same published version —
+the store-bound `PresentedProps` shape appears on Linux only, which is also
+why our patch is platform-gated.
+
 ## Workaround receipts (things we would like to delete)
 
 Kept only until upstream changes; each has a row in
