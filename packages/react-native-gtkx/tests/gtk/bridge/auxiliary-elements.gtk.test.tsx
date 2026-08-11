@@ -25,6 +25,7 @@ import {
   GSimpleAction,
   Gtk,
   GtkAdjustment,
+  GtkApplication,
   GtkApplicationWindow,
   GtkBox,
   GtkDragSource,
@@ -38,22 +39,30 @@ import {
   rootElement,
 } from "../../../src/gtkx/bridge/index"
 
+// gtkx 1.0's GtkApplicationWindow portals onto its owning Gtk.Application
+// (createApplicationWindowComponent's container function is useApplication
+// itself, thrown if there is none) rather than an implicit default — a real
+// GtkApplicationWindow always needed one to construct against, 1.0 just
+// stopped finding it silently. So every render below needs a live
+// <GtkApplication> ancestor now, unlike rc.4.
 it("activates a GSimpleAction registered through a widget's actions prop", async () => {
   const windowRef = createRef<Gtk.ApplicationWindow | null>()
   let activated = 0
 
   await render(
-    <GtkApplicationWindow
-      ref={windowRef}
-      actions={
-        <GSimpleAction
-          name="ping"
-          onActivate={() => {
-            activated += 1
-          }}
-        />
-      }
-    />,
+    <GtkApplication>
+      <GtkApplicationWindow
+        ref={windowRef}
+        actions={
+          <GSimpleAction
+            name="ping"
+            onActivate={() => {
+              activated += 1
+            }}
+          />
+        }
+      />
+    </GtkApplication>,
     { container: rootElement },
   )
 
@@ -99,32 +108,34 @@ it("mounts an AdwBreakpoint through a bin's breakpoints prop without crashing", 
   const binRef = createRef<AdwNs.BreakpointBin | null>()
 
   await render(
-    <GtkApplicationWindow
-      ref={windowRef}
-      defaultWidth={500}
-      defaultHeight={400}
-    >
-      {/* AdwBreakpoint is not a regular child — it goes through the bin's
-          own `breakpoints` prop, exactly like AdwApplicationWindow's. */}
-      <AdwBreakpointBin
-        ref={binRef}
-        vexpand
-        // Required by Adwaita whenever a breakpoint is attached — see
-        // sidebar.tsx's own AdwBreakpointBin usage: this bin's size in the
-        // test is unrelated to the value, only the "does not have a minimum
-        // size" warning cares that it's set, and 1 (not 0) is what actually
-        // reaches GTK through the current @gtkx property diffing.
-        widthRequest={1}
-        heightRequest={1}
-        breakpoints={
-          <AdwBreakpoint
-            condition={Adw.BreakpointCondition.parse("max-width: 350px")}
-            onApply={() => {}}
-            onUnapply={() => {}}
-          />
-        }
-      />
-    </GtkApplicationWindow>,
+    <GtkApplication>
+      <GtkApplicationWindow
+        ref={windowRef}
+        defaultWidth={500}
+        defaultHeight={400}
+      >
+        {/* AdwBreakpoint is not a regular child — it goes through the bin's
+            own `breakpoints` prop, exactly like AdwApplicationWindow's. */}
+        <AdwBreakpointBin
+          ref={binRef}
+          vexpand
+          // Required by Adwaita whenever a breakpoint is attached — see
+          // sidebar.tsx's own AdwBreakpointBin usage: this bin's size in the
+          // test is unrelated to the value, only the "does not have a minimum
+          // size" warning cares that it's set, and 1 (not 0) is what actually
+          // reaches GTK through the current @gtkx property diffing.
+          widthRequest={1}
+          heightRequest={1}
+          breakpoints={
+            <AdwBreakpoint
+              condition={Adw.BreakpointCondition.parse("max-width: 350px")}
+              onApply={() => {}}
+              onUnapply={() => {}}
+            />
+          }
+        />
+      </GtkApplicationWindow>
+    </GtkApplication>,
     { container: rootElement },
   )
 
