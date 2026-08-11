@@ -22,7 +22,10 @@ const findListBoxAbove = (
   widget: GtkNs.Widget | null,
 ): GtkNs.ListBox | null => {
   for (let node = widget; node; node = node.getParent()) {
-    if (typeof (node as Partial<GtkNs.ListBox>).getRowAtIndex === "function") {
+    if (
+      typeof (node as unknown as Partial<GtkNs.ListBox>).getRowAtIndex ===
+      "function"
+    ) {
       return node as GtkNs.ListBox
     }
   }

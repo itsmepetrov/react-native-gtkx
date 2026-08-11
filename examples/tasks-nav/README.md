@@ -409,13 +409,16 @@ so anything that could be done with a key was):
 **Found live, fixed:** the New List dialog first came up as a bare entry
 and six swatches — **no heading and no Cancel/Add buttons at all**.
 `AdwAlertDialog` composes its own layout (heading, body, responses) into
-`Adw.Dialog:child`, which is what plain JSX children bind to, so passing
-children REPLACES that whole layout. libadwaita's own slot for extra
-content is `extra-child`, exposed by the bindings as `extraChild`. Not a
-platform gap — the right prop already existed — but the failure is silent
-and total. `examples/tasks-app`'s copy of this dialog had the identical
-defect, never having been opened on screen in any verification pass; fixed
-there too.
+`Adw.Dialog:child`, which is what plain JSX children bind to on most Adw
+dialogs, so passing children REPLACES that whole layout. libadwaita's own
+slot for extra content is `extra-child`. Not a platform gap — the right
+slot already existed — but the failure is silent and total.
+`examples/tasks-app`'s copy of this dialog had the identical defect, never
+having been opened on screen in any verification pass; fixed there too.
+(gtkx 1.0 later renamed the bindings' prop for this slot from `extraChild`
+to plain `children` — `AdwAlertDialog` is now the one dialog type where
+`children` binds to `extra-child` instead of `Adw.Dialog:child` — both
+examples' dialogs were updated to match.)
 
 **Not verified live:** clicking **Add** to actually create a list.
 Another session's app on the shared VM reclaimed pointer focus on every

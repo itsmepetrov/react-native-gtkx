@@ -24,7 +24,10 @@ const findNavigationView = (
   if (!widget) {
     return null
   }
-  if (typeof (widget as Partial<Adw.NavigationView>).pushByTag === "function") {
+  if (
+    typeof (widget as unknown as Partial<Adw.NavigationView>).pushByTag ===
+    "function"
+  ) {
     return widget as Adw.NavigationView
   }
   for (

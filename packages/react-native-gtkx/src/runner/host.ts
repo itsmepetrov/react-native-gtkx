@@ -145,6 +145,21 @@ try {
   fail(`bundle not found at ${bundlePath} — run react-native run-linux.`)
   throw new Error("unreachable")
 }
+// 1.0-WORKAROUND(gtk-application-argv): @gtkx/react's <GtkApplication>
+// now builds the GApplication's own command line from
+// `process.argv.slice(2)` (components/application.js, `runApplication`'s
+// new argv parameter) and hands anything left over to GLib's local
+// command-line handling, which treats stray positionals as files to
+// open. This process's OWN positional argv[2] is our bundle path, not a
+// user-facing argument — left in place it reaches GApplication as a
+// "file" no app declares G_APPLICATION_HANDLES_OPEN for
+// ("GLib-GIO-CRITICAL: This application can not open files"), and the
+// window never activates. Truncate before the bundle (which mounts
+// <GtkApplication> from an effect, so this always runs first) sees it.
+// Removal condition: @gtkx/react exposes a way to pass runApplication's
+// argv explicitly (an `argv` prop on <GtkApplication>, or an
+// options object) instead of always reading process.argv itself.
+process.argv.length = 2
 // The entry calls AppRegistry.runApplication itself (the react-native-web
 // pattern); the GLib main loop keeps the process alive afterwards.
 vm.runInThisContext(source, { filename: bundlePath })

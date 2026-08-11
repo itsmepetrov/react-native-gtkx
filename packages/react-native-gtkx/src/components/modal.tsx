@@ -1,10 +1,5 @@
 import { type ReactNode } from "react"
-import {
-  createPortal,
-  GtkWindow,
-  useApplication,
-  useParentWindow,
-} from "../gtkx/bridge/index"
+import { GtkWindow } from "../gtkx/bridge/index"
 import { Root } from "./root"
 
 export type ModalProps = {
@@ -20,9 +15,19 @@ export type ModalProps = {
   children?: ReactNode
 }
 
-// RN Modal → a modal GtkWindow portaled onto the application, transient for
-// the window that rendered it. Visibility is fully controlled by the prop:
-// the close request is reported and swallowed.
+// RN Modal → a GtkWindow with a regular RN tree inside. Through gtkx 1.0
+// this used to wrap the window in our own `createPortal(..., application)`
+// and pass an explicit `transientFor` read via `useParentWindow()`. Neither
+// is needed any more: gtkx 1.0's own GtkWindow JSX component is
+// createWindowComponent(createElementComponent("GtkWindow"))
+// (node_modules/.gtkx/jsx/gtk/gtk.js), which already composes
+// createPortaledComponent (self-portals to @gtkx/react's rootElement,
+// unconditionally, regardless of where it is rendered in the tree) and
+// withDefaultTransientFor (defaults transientFor from ParentWindowContext —
+// the exact context useParentWindow() read — whenever the prop is left
+// undefined). Removing our own portal/transientFor was probed both ways
+// (gallery's Modal section, before/after: same position, same blocked
+// parent, same close/reopen behavior) before landing — see 003-notes.md.
 export const Modal = ({
   visible = false,
   onRequestClose,
@@ -31,18 +36,14 @@ export const Modal = ({
   height = 400,
   children,
 }: ModalProps) => {
-  const application = useApplication()
-  const parentWindow = useParentWindow()
-
   if (!visible) {
     return null
   }
 
-  return createPortal(
+  return (
     <GtkWindow
       title={title}
       modal
-      transientFor={parentWindow ?? undefined}
       defaultWidth={width}
       defaultHeight={height}
       onCloseRequest={() => {
@@ -57,7 +58,6 @@ export const Modal = ({
       >
         {children}
       </Root>
-    </GtkWindow>,
-    application,
+    </GtkWindow>
   )
 }

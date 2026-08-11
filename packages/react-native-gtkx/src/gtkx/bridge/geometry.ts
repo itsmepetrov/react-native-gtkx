@@ -21,7 +21,7 @@ export type Point = { x: number; y: number }
 // Graphene.Point's constructor takes plain scalars, so it never hit the
 // nested-boxed-struct crash Graphene.Rect's did (the retired
 // graphene-rect-nested-boxed-props workaround, fixed upstream in rc.3 by our
-// gtkx-org/gtkx#473 — see "Fixed in rc.3" in docs/gtkx-rc4-notes.md).
+// gtkx-org/gtkx#473 — see "Fixed in rc.3" in docs/gtkx-1.0-notes.md).
 // alloc+init stays because it is the cheaper of the two here, not because
 // the constructor is unsafe.
 const point = (x: number, y: number): Graphene.Point =>
