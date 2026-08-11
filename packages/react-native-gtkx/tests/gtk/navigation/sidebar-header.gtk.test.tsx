@@ -24,7 +24,10 @@ const findListBox = (widget: GtkNs.Widget | null): GtkNs.ListBox | null => {
   if (!widget) {
     return null
   }
-  if (typeof (widget as Partial<GtkNs.ListBox>).getRowAtIndex === "function") {
+  if (
+    typeof (widget as unknown as Partial<GtkNs.ListBox>).getRowAtIndex ===
+    "function"
+  ) {
     return widget as GtkNs.ListBox
   }
   for (

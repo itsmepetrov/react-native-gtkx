@@ -1,0 +1,45 @@
+# 1.0-WORKAROUND(dialog-component-ref-widen)
+#
+# @gtkx/react's shared `createDialogComponent` factory (used by the
+# generated AdwAboutDialog/AdwAlertDialog/AdwDialog/AdwPreferencesDialog/
+# AdwShortcutsDialog JSX wrappers) types its returned component's props as
+# `PresentedProps<Adw.Dialog>`, where `Adw.Dialog` resolves against
+# WHATEVER `@gtkx/gi` store `@gtkx/react` itself sees — in an npm
+# workspace that is wherever `@gtkx/react` is hoisted (the workspace
+# root), not the per-app `@gtkx/gi` store `gtkx codegen`/`gtkx build`
+# freshly generates for each example. Every app whose own store differs
+# from the root's (i.e. every app except the root package itself) fails
+# `gtkx build`/`gtkx codegen` with "Type checking the generated @gtkx/jsx
+# store found 5 error(s)" — a ref-covariance mismatch between the shared
+# factory's `Adw.Dialog` and each app's own locally-generated
+# `AboutDialog`/`AlertDialog`/`Dialog`/`PreferencesDialog`/`ShortcutsDialog`.
+# Reproduced identically for examples/gallery and examples/profile via a
+# bare `npx gtkx codegen` (no build step needed). dialog.js's runtime
+# implementation is fully duck-typed (`dialog.forceClose()`/
+# `dialog.present()`), so this is a `.d.ts`-only defect — widening the
+# returned component's props to `any` costs nothing at runtime and
+# resolves every one of the 5 diagnostics (they are one bug, not five;
+# the plain-name ones just didn't need TS to print the disambiguating
+# store paths).
+#
+# Filed upstream: docs/upstream-gtkx.md (see the gtkx-1-0-migration epic's
+# 001-notes.md for the full writeup pending the docs/upstream-gtkx.md
+# rewrite in task 002).
+#
+# Removal condition: @gtkx/react's createDialogComponent stops hardcoding
+# a single `@gtkx/gi` store's Dialog type (generic over the component's
+# own props, or typed loosely enough to survive multiple per-app stores).
+diff --git a/node_modules/@gtkx/react/dist/adw/dialog.d.ts b/node_modules/@gtkx/react/dist/adw/dialog.d.ts
+index bbb1c97..005c54c 100644
+--- a/node_modules/@gtkx/react/dist/adw/dialog.d.ts
++++ b/node_modules/@gtkx/react/dist/adw/dialog.d.ts
+@@ -2,7 +2,7 @@ import type * as Adw from "@gtkx/gi/adw";
+ import { type ElementType, type ReactNode } from "react";
+ import { type PresentedProps } from "../hooks/use-presented-instance.js";
+ type DialogComponentProps = PresentedProps<Adw.Dialog>;
+-declare const createDialogComponent: (Component: ElementType) => ((props: DialogComponentProps) => ReactNode);
++declare const createDialogComponent: (Component: ElementType) => ((props: any) => ReactNode);
+ /** @internal */
+ export { createDialogComponent };
+ //# sourceMappingURL=dialog.d.ts.map
+\ No newline at end of file

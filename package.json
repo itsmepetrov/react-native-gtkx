@@ -23,7 +23,8 @@
     "build:dist": "npm run build:dist -w react-native-gtkx",
     "watch:dist": "npm run watch:dist -w react-native-gtkx",
     "check:package": "npm run build:dist && node scripts/check-package.ts",
-    "prepare": "husky"
+    "prepare": "husky",
+    "postinstall": "patch-package"
   },
   "lint-staged": {
     "*.{js,mjs,cjs,ts,tsx}": [
@@ -35,7 +36,7 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
     "@eslint/js": "^10.0.0",
-    "@gtkx/vitest": "1.0.0-rc.4",
+    "@gtkx/vitest": "1.0.0",
     "@ianvs/prettier-plugin-sort-imports": "^4.7.1",
     "@napi-rs/canvas": "^1.0.3",
     "@react-navigation/native": "8.0.0-alpha.40",
@@ -50,6 +51,7 @@
     "husky": "^9.1.7",
     "jiti": "^2.7.0",
     "lint-staged": "^17.3.0",
+    "patch-package": "8.0.1",
     "prettier": "^3.9.6",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.66.0",

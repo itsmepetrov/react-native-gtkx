@@ -14,8 +14,8 @@
     "react-native-gtkx": "file:../../packages/react-native-gtkx"
   },
   "devDependencies": {
-    "@gtkx/cli": "1.0.0-rc.4",
-    "@gtkx/config": "1.0.0-rc.4",
+    "@gtkx/cli": "1.0.0",
+    "@gtkx/config": "1.0.0",
     "vite": "^8.1.4"
   }
 }
