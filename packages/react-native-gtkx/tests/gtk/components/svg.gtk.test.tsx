@@ -1,6 +1,7 @@
 // Strategy (see epic.md task 004): no pixel readback. Mount through the real
-// reconciler, then call the root widget's own snapshot() method directly
-// against a fresh Gtk.Snapshot.new() — deterministic, no frame-clock wait —
+// reconciler, then call the root widget's own vfuncSnapshot() method
+// directly against a fresh Gtk.Snapshot.new() — deterministic, no
+// frame-clock wait —
 // and spy on the Gsk append/push/save/transform calls it makes. This
 // exercises the actual bridge draw path (svg-node.ts), not just descriptor
 // storage.
@@ -29,18 +30,23 @@ import {
 } from "../../../src/gtkx/bridge/index"
 import { Animated, Root } from "../../../src/index"
 
+// gtkx 1.0 renamed the vtable override slot from `snapshot` to
+// `vfuncSnapshot` (see gtkx/bridge/svg-node.ts) and dropped the plain-named
+// public wrapper entirely — `vfuncSnapshot` is the only way to invoke it,
+// `protected` in the .d.ts only (TS-only, still a real callable method at
+// runtime, which is what the cast below reaches past).
 type WidgetWithSnapshot = Gtk.Widget & {
-  snapshot(snapshot: Gtk.Snapshot): void
+  vfuncSnapshot(snapshot: Gtk.Snapshot): void
 }
 
 const getWidget = (testID: string): Gtk.Widget =>
   screen.getByName(testID) as unknown as Gtk.Widget
 
-// Renders the root's real snapshot() vfunc method against a fresh
+// Renders the root's real vfuncSnapshot() vtable method against a fresh
 // Gtk.Snapshot, so tests can assert on the exact Gsk calls it makes.
 const paint = (widget: Gtk.Widget): Gtk.Snapshot => {
   const snapshot = Gtk.Snapshot.new()
-  ;(widget as WidgetWithSnapshot).snapshot(snapshot)
+  ;(widget as WidgetWithSnapshot).vfuncSnapshot(snapshot)
   return snapshot
 }
 
@@ -77,7 +83,7 @@ describe("<Svg> rendering", () => {
     const snapshot = paint(widget)
     const appendFill = vi.spyOn(snapshot, "appendFill")
     // Re-run with the spy attached — snapshot() reads live state each call.
-    ;(widget as WidgetWithSnapshot).snapshot(snapshot)
+    ;(widget as WidgetWithSnapshot).vfuncSnapshot(snapshot)
 
     expect(appendFill).toHaveBeenCalledTimes(1)
     const [path, fillRule, color] = appendFill.mock.calls[0]!
@@ -112,7 +118,7 @@ describe("<Svg> rendering", () => {
     const snapshot = paint(widget)
     const appendFill = vi.spyOn(snapshot, "appendFill")
     const appendStroke = vi.spyOn(snapshot, "appendStroke")
-    ;(widget as WidgetWithSnapshot).snapshot(snapshot)
+    ;(widget as WidgetWithSnapshot).vfuncSnapshot(snapshot)
     expect(appendFill).not.toHaveBeenCalled()
     expect(appendStroke).not.toHaveBeenCalled()
   })
@@ -204,7 +210,7 @@ describe("<Svg> rendering", () => {
     const restore = vi.spyOn(snapshot, "restore")
     const translate = vi.spyOn(snapshot, "translate")
     const rotate = vi.spyOn(snapshot, "rotate")
-    ;(widget as WidgetWithSnapshot).snapshot(snapshot)
+    ;(widget as WidgetWithSnapshot).vfuncSnapshot(snapshot)
 
     // At least the root's own save/restore plus <G>'s.
     expect(save.mock.calls.length).toBeGreaterThanOrEqual(2)
@@ -240,7 +246,7 @@ describe("<Svg> rendering", () => {
     const snapshot = paint(widget)
     const scale = vi.spyOn(snapshot, "scale")
     const translate = vi.spyOn(snapshot, "translate")
-    ;(widget as WidgetWithSnapshot).snapshot(snapshot)
+    ;(widget as WidgetWithSnapshot).vfuncSnapshot(snapshot)
 
     // 200x200 viewport, 100x100 viewBox: uniform scale 2, no slack on
     // either axis (square in, square out) — translate stays (0, 0).
@@ -301,7 +307,7 @@ describe("<Svg> rendering", () => {
     const appendLinearGradient = vi.spyOn(snapshot, "appendLinearGradient")
     const pop = vi.spyOn(snapshot, "pop")
     expect(() =>
-      (widget as WidgetWithSnapshot).snapshot(snapshot),
+      (widget as WidgetWithSnapshot).vfuncSnapshot(snapshot),
     ).not.toThrow()
 
     // A gradient fill is the gradient node, not a flat appendFill.
@@ -355,7 +361,7 @@ describe("<Svg> rendering", () => {
     const snapshot = paint(widget)
     const appendFill = vi.spyOn(snapshot, "appendFill")
     expect(() =>
-      (widget as WidgetWithSnapshot).snapshot(snapshot),
+      (widget as WidgetWithSnapshot).vfuncSnapshot(snapshot),
     ).not.toThrow()
     expect(appendFill).not.toHaveBeenCalled()
   })
@@ -397,7 +403,7 @@ describe("<Svg> rendering", () => {
     const snapshot = paint(widget)
     const appendRadialGradient = vi.spyOn(snapshot, "appendRadialGradient")
     expect(() =>
-      (widget as WidgetWithSnapshot).snapshot(snapshot),
+      (widget as WidgetWithSnapshot).vfuncSnapshot(snapshot),
     ).not.toThrow()
     expect(appendRadialGradient).toHaveBeenCalledTimes(1)
 
