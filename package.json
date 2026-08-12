@@ -23,8 +23,7 @@
     "build:dist": "npm run build:dist -w react-native-gtkx",
     "watch:dist": "npm run watch:dist -w react-native-gtkx",
     "check:package": "npm run build:dist && node scripts/check-package.ts",
-    "prepare": "husky",
-    "postinstall": "node scripts/apply-patches.ts"
+    "prepare": "husky"
   },
   "lint-staged": {
     "*.{js,mjs,cjs,ts,tsx}": [
@@ -51,7 +50,6 @@
     "husky": "^9.1.7",
     "jiti": "^2.7.0",
     "lint-staged": "^17.3.0",
-    "patch-package": "8.0.1",
     "prettier": "^3.9.6",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.66.0",

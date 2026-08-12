@@ -431,9 +431,9 @@ declare const createDialogComponent: <P = DialogComponentProps>(
 ) => (props: P) => ReactNode
 ```
 
-We carry exactly this as a `patch-package` patch
-(`1.0-WORKAROUND(dialog-component-ref-widen)`) and would delete it the day
-this ships. Worth knowing while fixing: the installed `dist/adw/dialog.d.ts`
+We sidestep this in our own workspace by setting `codegen: false` in every
+example (sharing the root-generated store), so we carry no patch — but any
+workspace user generating per-app stores hits it on their first codegen. Worth knowing while fixing: the installed `dist/adw/dialog.d.ts`
 differs between Linux and macOS installs of the same published version —
 the store-bound `PresentedProps` shape appears on Linux only, which is also
 why our patch is platform-gated.
