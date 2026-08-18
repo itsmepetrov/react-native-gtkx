@@ -41,5 +41,10 @@ export default defineConfig({
       bugtracker: "https://github.com/itsmepetrov/react-native-gtkx/issues",
     },
     icons: "icon.svg",
+    // The gallery-flatpak CI job runs flatpak-builder inside a plain Docker
+    // container (no --device /dev/fuse), where flatpak-builder's default
+    // rofiles-fuse optimization cannot spawn ("fuse: device /dev/fuse not
+    // found") — gtkx deploy's own error names this exact fix.
+    flatpak: { shouldUseRofilesFuse: false },
   },
 })
