@@ -8,12 +8,16 @@ on:
     paths:
       - "docs/**"
       - "website/**"
+      - "package-lock.json"
+      - "package.json"
       - ".github/workflows/docs.yml"
   push:
     branches: [main]
     paths:
       - "docs/**"
       - "website/**"
+      - "package-lock.json"
+      - "package.json"
       - ".github/workflows/docs.yml"
 
 permissions:
