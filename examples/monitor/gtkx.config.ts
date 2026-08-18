@@ -11,8 +11,8 @@ export default defineConfig({
     targets: ["deb", "rpm", "appimage"],
     version: process.env.GTKX_DEPLOY_VERSION,
     // Otherwise derived from package.json's "name" (monitor-example) — this
-    // matches the namespacing build-deb.ts used, so install commands and
-    // any existing references to the package name keep working.
+    // matches the namespacing the retired build-deb.ts used, so install
+    // commands and any existing references to the package name keep working.
     binaryName: "react-native-gtkx-monitor",
     name: "System Monitor",
     summary: "Live CPU, memory, uptime and load averages, one file deep",

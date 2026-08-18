@@ -12,13 +12,12 @@ export default defineConfig({
     // (--target flatpak) as a build-only artifact, not attached to a
     // release, so it stays out of the default target list here.
     targets: ["deb", "rpm", "appimage"],
-    // No per-release tag at config-eval time yet (release.yml still calls
-    // build-deb.ts) — falls back to package.json's version. The release
-    // switchover (epic task 003) sets this from the git tag.
+    // release.yml exports this from the git tag (GTKX_DEPLOY_VERSION); a
+    // local `gtkx deploy` falls back to package.json's version.
     version: process.env.GTKX_DEPLOY_VERSION,
     // Otherwise derived from package.json's "name" (gallery-example) — this
-    // matches the namespacing build-deb.ts used, so install commands and
-    // any existing references to the package name keep working.
+    // matches the namespacing the retired build-deb.ts used, so install
+    // commands and any existing references to the package name keep working.
     binaryName: "react-native-gtkx-gallery",
     name: "RN Gallery",
     summary: "Every capability of react-native-gtkx, one app you can poke at",

@@ -11,8 +11,9 @@ export default defineConfig({
     targets: ["deb", "rpm", "appimage"],
     version: process.env.GTKX_DEPLOY_VERSION,
     // Otherwise derived from package.json's "name" (tasks-app-example) —
-    // this matches the namespacing build-deb.ts used, so install commands
-    // and any existing references to the package name keep working.
+    // this matches the namespacing the retired build-deb.ts used, so
+    // install commands and any existing references to the package name
+    // keep working.
     binaryName: "react-native-gtkx-tasks-app",
     name: "Tasks",
     summary: "A GNOME-style task manager with smart views and reminders",

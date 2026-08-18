@@ -1,18 +1,227 @@
-# Tag push (v*) → .deb packages of the example apps for amd64 + arm64, plus a
-# zstd-compressed single executable of the Metro-path app, attached to a GitHub
-# Release. Runs in the same ubuntu:26.04 container as CI (codegen needs GTK dev
-# + introspection packages).
+# Tag push (v*) → deb+rpm+AppImage packages of the example apps for amd64 +
+# arm64 (built by `npx react-native deploy-linux`, this project's own
+# packaging command — see packages/react-native-gtkx/src/runner/index.ts),
+# the gallery's flatpak as a build-only artifact, and a zstd-compressed
+# single executable of the Metro-path app, all attached to a GitHub Release
+# except the flatpak (deliberately not shipped as a release asset — see the
+# gallery-flatpak job). Runs in the same ubuntu:26.04 container as CI
+# (codegen needs GTK dev + introspection packages).
+#
+# Also runnable by hand (workflow_dispatch) with dry_run: true (the default)
+# — every job below runs exactly as it would for a real tag and uploads its
+# artifacts to the workflow run, but the final `release` job skips creating
+# an actual GitHub Release. That's how this pipeline gets tested without
+# tagging: `gh workflow run release.yml --ref <branch>`.
 name: Release
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build everything and upload as workflow artifacts, but skip creating a GitHub Release"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
 
 jobs:
-  debs:
+  # Resolves once, shared by every other job: the version string every
+  # `gtkx.config.ts` in examples/ reads through GTKX_DEPLOY_VERSION (see
+  # the 5 example configs — `version: process.env.GTKX_DEPLOY_VERSION`),
+  # and whether this run should publish a GitHub Release at the end.
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.compute.outputs.version }}
+      dry_run: ${{ steps.compute.outputs.dry_run }}
+    steps:
+      - name: Compute the deploy version and dry-run flag
+        id: compute
+        env:
+          DRY_RUN_INPUT: ${{ inputs.dry_run }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # No tag to read a version from — a stable, obviously-fake
+            # version that still satisfies gtkx deploy's own version
+            # grammar (upstream part must be digits/dots; anything after
+            # the first "-" is a free-form prerelease tag), unique per run
+            # so repeat dispatches don't collide on identical filenames.
+            echo "version=0.0.0-dryrun.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+            echo "dry_run=${DRY_RUN_INPUT}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            echo "dry_run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # 5 apps × {deb, rpm, appimage} × {amd64, arm64}, one `deploy-linux`
+  # invocation per (app, arch) building all three formats together — the
+  # same combined-invocation shape 001/002 measured as far cheaper than
+  # three separate ones (one vite/Metro build, one bundled-Node download,
+  # all three packagers in a single run). `deploy-linux` dogfoods our own
+  # command on both toolchains: gallery/monitor/tasks-app/tasks-nav are
+  # vite-path (deploy-linux proxies straight to `gtkx deploy`), hn-app is
+  # Metro (deploy-linux builds + stages first) — same command line either
+  # way, the tool tells the two apart itself.
+  deploy:
+    needs: meta
+    strategy:
+      fail-fast: false
+      matrix:
+        # `app` and `arch` are both real dimensions here (10 combinations,
+        # the full cross product) — `include` below only ADDS `runner` to
+        # each one by matching on `arch`, it does not introduce more
+        # combinations. An `include` list with `runner`/`arch` and no
+        # `app` (the shape the single-dimension `sea` job below uses)
+        # would NOT cross with `app` the way this needs.
+        app: [gallery, monitor, tasks-app, tasks-nav, hn-app]
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    container: ubuntu:26.04
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      HUSKY: 0
+      GTKX_DEPLOY_VERSION: ${{ needs.meta.outputs.version }}
+    steps:
+      - name: System dependencies
+        # Beyond the GTK/codegen toolchain: desktop-file-utils (validates
+        # the .desktop) and appstream (validates the AppStream metainfo)
+        # gate every target; tar/file/binutils are what nfpm/appimagetool
+        # need to unpack their own vendored downloads and shrink the
+        # bundled Node (binutils is optional — a missing `strip` only
+        # warns, per gtkx deploy's own tool report). None of this needs
+        # dpkg-deb/rpmbuild/appimagetool themselves: gtkx deploy vendors
+        # its own packagers (nfpm, appimagetool), SHA-pinned, downloaded
+        # and cached under ~/.cache/gtkx on first use.
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            libgtk-4-dev libadwaita-1-dev gobject-introspection \
+            libgirepository1.0-dev build-essential pkg-config python3 \
+            curl ca-certificates git tar file binutils \
+            desktop-file-utils appstream
+      - name: Node 24
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
+          apt-get install -y nodejs
+      - uses: actions/checkout@v7
+      - name: Resolve the pinned gtkx version (cache key)
+        id: gtkx-version
+        run: |
+          echo "version=$(node -p "require('./packages/react-native-gtkx/package.json').dependencies['@gtkx/cli']")" >> "$GITHUB_OUTPUT"
+      - name: Cache gtkx deploy's vendored tools (nfpm, appimagetool, bundled Node)
+        # ~40-100 MiB of downloads (Node alone is ~97 MiB) that gtkx deploy
+        # would otherwise re-fetch on every matrix leg. amd64 and arm64
+        # download different binaries, so the arch is part of the key —
+        # each of the 5 app legs for a given arch shares one cache entry.
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/gtkx
+          key: gtkx-deploy-tools-${{ matrix.arch }}-${{ steps.gtkx-version.outputs.version }}
+          restore-keys: |
+            gtkx-deploy-tools-${{ matrix.arch }}-
+      - name: Install and codegen
+        run: |
+          npm install
+          npm run codegen
+      - name: Build react-native-gtkx
+        run: npm run build:dist
+      - name: Deploy (deb + rpm + AppImage)
+        working-directory: examples/${{ matrix.app }}
+        run: npx react-native deploy-linux --target deb,rpm,appimage
+      - name: List built packages
+        working-directory: examples/${{ matrix.app }}
+        run: ls -la build/out/
+      # Final artifacts land under <app>/build/out/ — the sibling
+      # metadata/runtime/stage/overlay/targets directories are gtkx
+      # deploy's own scratch space, not worth uploading.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: deploy-${{ matrix.app }}-${{ matrix.arch }}
+          path: examples/${{ matrix.app }}/build/out/*
+
+  # The gallery's flatpak — a separate job because the dependency (flatpak
+  # + flatpak-builder + the GNOME Platform/Sdk runtime from Flathub) is
+  # much heavier than deb/rpm/AppImage and, per the PRD's artifact
+  # decision, it is a build-only artifact: proven end to end (001-notes:
+  # installs and runs), but not attached to the release the way the other
+  # formats are — so this job uploads a workflow artifact and nothing more
+  # (the `release` job below never downloads it).
+  gallery-flatpak:
+    needs: meta
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      HUSKY: 0
+      GTKX_DEPLOY_VERSION: ${{ needs.meta.outputs.version }}
+    steps:
+      - name: System dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            libgtk-4-dev libadwaita-1-dev gobject-introspection \
+            libgirepository1.0-dev build-essential pkg-config python3 \
+            curl ca-certificates git tar file binutils \
+            desktop-file-utils appstream flatpak flatpak-builder
+      - name: Node 24
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
+          apt-get install -y nodejs
+      - uses: actions/checkout@v7
+      - name: Resolve the pinned gtkx version (cache key)
+        id: gtkx-version
+        run: |
+          echo "version=$(node -p "require('./packages/react-native-gtkx/package.json').dependencies['@gtkx/cli']")" >> "$GITHUB_OUTPUT"
+      - name: Cache gtkx deploy's vendored tools
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/gtkx
+          key: gtkx-deploy-tools-amd64-${{ steps.gtkx-version.outputs.version }}
+          restore-keys: |
+            gtkx-deploy-tools-amd64-
+      - name: Cache the GNOME Platform/Sdk flatpak runtime
+        # The expensive part: a multi-hundred-MB, network-bound Flathub
+        # pull (001-notes measured several minutes uncached). Keyed on the
+        # runtime version pin (org.gnome.Platform//50 / org.gnome.Sdk//50,
+        # gtkx's own DEFAULT_RUNTIME_VERSION) so a future bump invalidates
+        # it instead of silently reusing a stale runtime.
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/flatpak
+          key: flatpak-gnome-runtime-50
+      - name: Flathub remote + GNOME Platform/Sdk runtime
+        run: |
+          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive flathub org.gnome.Platform//50 org.gnome.Sdk//50
+      - name: Install and codegen
+        run: |
+          npm install
+          npm run codegen
+      - name: Build react-native-gtkx
+        run: npm run build:dist
+      - name: Deploy (flatpak)
+        working-directory: examples/gallery
+        run: npx react-native deploy-linux --target flatpak
+      - uses: actions/upload-artifact@v7
+        with:
+          name: gallery-flatpak
+          path: examples/gallery/build/out/*.flatpak
+
+  # Untouched from before the deploy-linux switchover: hn-app's --sea
+  # build (a single dependency-free executable, a different niche than
+  # the .deb/.rpm/.AppImage/.flatpak above — no packaging, nothing to
+  # install). Its own job now rather than folded into the deploy matrix,
+  # since that matrix is per-app and this is hn-app-only.
+  sea:
+    needs: meta
     strategy:
       matrix:
         include:
@@ -42,84 +251,50 @@ jobs:
         run: |
           npm install
           npm run codegen
-      - name: Build example apps
-        run: |
-          npm run build:dist
-          (cd examples/monitor && npm run build)
-          (cd examples/gallery && npm run build)
-          (cd examples/tasks-app && npm run build)
-          # The same app on the navigator, so a release ships both shapes:
-          # tasks-app builds its window by hand, tasks-nav gets it from
-          # createSidebarNavigator (see examples/tasks-nav/README.md).
-          (cd examples/tasks-nav && npm run build)
-          # Metro path. --standalone, not the app's own `npm run build`: the
-          # plain build-linux artifact (dist/main.jsbundle) is not
-          # self-contained, and packaging it means shipping a runtime
-          # node_modules — which measured 10,515 files and 206 MiB installed
-          # in v0.2.0-alpha.1, for a 369 KB bundle. --standalone is the same
-          # app as one 6.9 MB .cjs on a system node. The app keeps the cheap
-          # plain build as its default; the release wants the shippable one.
-          (cd examples/hn-app && npx react-native build-linux --standalone)
-      - name: Build debs
-        run: |
-          # --artifact is declared, not detected: --standalone writes BOTH
-          # dist/main.jsbundle and dist/hn-app.cjs, so no filename probe can
-          # tell the script which one it was asked to package.
-          VERSION="${GITHUB_REF_NAME#v}"
-          node scripts/build-deb.ts monitor "System Monitor" "$VERSION" debs --artifact vite
-          node scripts/build-deb.ts gallery "RN Gallery" "$VERSION" debs --artifact vite
-          node scripts/build-deb.ts tasks-app "Tasks" "$VERSION" debs --artifact vite
-          node scripts/build-deb.ts tasks-nav "Tasks (nav)" "$VERSION" debs --artifact vite
-          node scripts/build-deb.ts hn-app "Hacker News" "$VERSION" debs --artifact standalone
-          ls -la debs/
+      - name: Build react-native-gtkx
+        run: npm run build:dist
       - name: Build the single executable (hn-app)
+        # --sea re-bundles with Metro and drops its own scratch files
+        # (sea-bundle.cjs, sea-prep.blob) into dist/ — an EXTRA artifact,
+        # never a replacement for the .deb/.rpm/.AppImage above. This is
+        # the one file to hand someone with no Node at all: build-linux
+        # --sea wraps the app in a copy of the Node binary. Metro-path
+        # only (docs/guide/packaging.md explains why the vite path
+        # cannot do this).
+        run: (cd examples/hn-app && npx react-native build-linux --sea)
+      - name: Compress
         run: |
-          # An EXTRA artifact, never a replacement for the .deb: the debs above
-          # are how you install these apps. This is the one file to hand
-          # someone who has no Node at all — build-linux --sea wraps the app in
-          # a copy of the Node binary. Metro-path only (docs/guide/packaging.md
-          # explains why the vite path cannot do this), so hn-app is the whole
-          # list.
-          #
-          # Still runs after the debs: --sea re-bundles with Metro and drops
-          # its own scratch files (sea-bundle.cjs, sea-prep.blob) into the
-          # same dist/ the deb step reads from. It no longer overwrites that
-          # step's input — dist/hn-app.cjs is not a name --sea writes — but
-          # keeping the order means the debs never wait on the slowest step.
-          (cd examples/hn-app && npx react-native build-linux --sea)
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${{ needs.meta.outputs.version }}"
           mkdir -p sea
-          # 104 MiB -> 29 MiB. Uploading it uncompressed is not defensible for
-          # a download this size; zstd carries the executable bit through, so
-          # `zstd -d` is the entire install step.
+          # 104 MiB -> 29 MiB. Uploading it uncompressed is not defensible
+          # for a download this size; zstd carries the executable bit
+          # through, so `zstd -d` is the entire install step.
           zstd -19 -T0 \
             -o "sea/react-native-gtkx-hn-app_${VERSION}_${{ matrix.arch }}.zst" \
             examples/hn-app/dist/hn-app
           ls -la sea/
       - uses: actions/upload-artifact@v7
         with:
-          name: debs-${{ matrix.arch }}
-          path: debs/*.deb
-      - uses: actions/upload-artifact@v7
-        with:
           name: sea-${{ matrix.arch }}
           path: sea/*.zst
 
   release:
-    needs: debs
+    needs: [meta, deploy, sea]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v8
         with:
           path: assets
           merge-multiple: true
+      - name: List downloaded assets
+        run: ls -la assets/
       - name: Create GitHub Release
+        if: needs.meta.outputs.dry_run != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          ls -la assets/
           gh release create "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --title "$GITHUB_REF_NAME" \
             --generate-notes \
-            assets/*.deb assets/*.zst
+            assets/*.deb assets/*.rpm assets/*.AppImage assets/*.zst

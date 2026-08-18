@@ -16,8 +16,8 @@ export default defineConfig({
     targets: ["deb", "rpm", "appimage"],
     version: process.env.GTKX_DEPLOY_VERSION,
     // Otherwise derived from package.json's "name" (hn-app) — set
-    // explicitly anyway, matching the namespacing build-deb.ts used for
-    // the other four apps' packages.
+    // explicitly anyway, matching the namespacing the retired build-deb.ts
+    // used for the other four apps' packages.
     binaryName: "react-native-gtkx-hn-app",
     name: "Hacker News",
     summary: "A two-screen Hacker News reader for the Linux desktop",
