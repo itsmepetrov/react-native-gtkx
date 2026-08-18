@@ -13,7 +13,7 @@
     "@react-navigation/native": "8.0.0-alpha.40",
     "react": "^19.2.0",
     "react-native-drawer-layout": "4.2.9",
-    "react-native-gtkx": "0.4.0-alpha.3",
+    "react-native-gtkx": "0.4.0",
     "react-native-reanimated-dnd": "2.0.0",
     "react-native-sortables": "1.10.0"
   },
