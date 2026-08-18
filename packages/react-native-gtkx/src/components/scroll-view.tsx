@@ -548,11 +548,34 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
     // and by all four phases — RN hands the same `ScrollEvent` to every one
     // of them, and reading it twice would be two sets of FFI calls for one
     // truth. Null when there is nothing honest to report yet (no widget, or
-    // a content size the engine has not committed).
+    // a rect the engine has not committed).
+    //
+    // `layoutMeasurement` (RN's viewport size) reads the ENGINE's own
+    // `outerNode` rect rather than `hadjustment`/`vadjustment.getPageSize()`
+    // — same fix shape as `syncAdjustmentRange` above, and for the same
+    // underlying reason. GTK only learns a `GtkScrolledWindow`'s real page
+    // size on its own next native allocate (queued a frame away), while this
+    // component's layout engine commits `outerNode`'s rect the microtask
+    // after `render()`. Nothing keeps the two adjustments' page-size in sync
+    // with that engine rect except `scrollTo`/`scrollToEnd` — and only for
+    // the axis they were actually called with (`syncAdjustmentRange` above).
+    // A plain `onScroll` with no imperative scroll on that axis (this
+    // vertical-only test's horizontal reading, an app that never calls
+    // `scrollTo({ x })`) had nothing forcing `hadjustment` to catch up, so
+    // its page-size stayed whatever GTK's own allocate cycle had gotten to
+    // by read time — 0 until the first real width allocation landed. That
+    // race is invisible on a quiet machine (GTK's allocate reliably beats
+    // the `waitFor` settle a test uses before scrolling) and CI-load-timing
+    // dependent everywhere else, which is exactly the flake this reads:
+    // component-gaps/scroll-width-zero-flake.md. `getPageSize()` and this
+    // rect are the same quantity once GTK settles (already the assumption
+    // `syncAdjustmentRange`'s `pageSize` argument relies on); the engine
+    // rect is simply the one of the two that is never stale.
     const readScrollEvent = (): ScrollEvent | null => {
       const widget = outerRef.current
       const contentRect = contentNode.getRect()
-      if (!widget || !contentRect) {
+      const viewportRect = outerNode.getRect()
+      if (!widget || !contentRect || !viewportRect) {
         return null
       }
       const hadjustment = widget.getHadjustment()
@@ -565,8 +588,8 @@ export const ScrollView = forwardRef<ScrollViewHandle, ScrollViewProps>(
           },
           contentSize: { width: contentRect.width, height: contentRect.height },
           layoutMeasurement: {
-            width: hadjustment?.getPageSize() ?? 0,
-            height: vadjustment?.getPageSize() ?? 0,
+            width: viewportRect.width,
+            height: viewportRect.height,
           },
         },
       }

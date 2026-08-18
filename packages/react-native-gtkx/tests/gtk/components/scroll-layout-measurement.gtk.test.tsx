@@ -74,6 +74,17 @@ it("onScroll reports the viewport size alongside offset and content size", async
 // the test above relies on reproduces the drop deterministically (no timing
 // hack needed): the engine's rects are already correct at that point, the
 // adjustment's are not.
+//
+// Also covers component-gaps/scroll-width-zero-flake.md, deterministically:
+// `scrollTo({ y })` only ever syncs the VERTICAL adjustment's range from the
+// engine before setting the value (`syncAdjustmentRange` in
+// scroll-view.tsx), so on this same freshly-mounted render the horizontal
+// adjustment's page-size is left exactly as stale as `hadjustment` was
+// above — 0, because GTK's own native allocate for that axis has not run
+// yet. On a quiet machine that native allocate reliably beats the `waitFor`
+// cushion the FIRST test above uses, which is why the flake needed CI load
+// to show up there; skipping the cushion here reproduces the same read with
+// no load and no timing hack, exactly like the drop above.
 it("onScroll still fires when scrollTo runs before GTK's own layout catches up", async () => {
   const onScroll = vi.fn()
   const listRef = createRef<ScrollViewHandle>()
@@ -110,5 +121,7 @@ it("onScroll still fires when scrollTo runs before GTK's own layout catches up",
   })
 
   expect(onScroll).toHaveBeenCalled()
-  expect(onScroll.mock.calls.at(-1)![0].nativeEvent.contentOffset.y).toBe(80)
+  const { nativeEvent } = onScroll.mock.calls.at(-1)![0]
+  expect(nativeEvent.contentOffset.y).toBe(80)
+  expect(nativeEvent.layoutMeasurement.width).toBeGreaterThan(0)
 })
