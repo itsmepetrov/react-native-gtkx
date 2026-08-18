@@ -48,8 +48,8 @@
 // import.meta.url no longer points at a file with real siblings on disk.
 import { mkdirSync, readdirSync, readFileSync } from "node:fs"
 import { createRequire } from "node:module"
-import { dirname, join } from "node:path"
-import { rolldown } from "rolldown"
+import { dirname, join, relative } from "node:path"
+import { rolldown, type RolldownOutput } from "rolldown"
 import { HOST_MODULE_EXTERNALS } from "../metro/index.js"
 import {
   buildGtkxConfigModule,
@@ -116,6 +116,99 @@ export const resolveNativeAddon = (appRoot: string): NativeAddonAsset => {
   return { path: first, key: NATIVE_ASSET_KEY }
 }
 
+/** One entry of the "which real npm package does this bundled code come
+ * from" manifest — see {@link collectBundledPackages}. */
+export type BundledPackageRecord = {
+  name: string
+  version: string | null
+  /** Relative to whatever directory the manifest itself is written into. */
+  dir: string
+}
+
+/** The exact filename `gtkx deploy`'s third-party-notices step reads —
+ * @gtkx/cli's own `gtkx:bundled-packages` vite plugin writes it as a build
+ * artifact of `gtkx build`, but is not part of @gtkx/cli's public API, so
+ * the name is duplicated here rather than imported (see
+ * @gtkx/cli/src/vite-plugins/bundled-packages.ts and
+ * src/deploy/notices/packages.ts for the two ends this mirrors). */
+export const BUNDLED_PACKAGES_FILENAME = "gtkx-packages.json"
+
+const stripQuery = (id: string): string => id.split("?")[0] ?? id
+
+const packageIdentity = (
+  dir: string,
+): { name: string; version: string | null } | null => {
+  try {
+    const parsed: unknown = JSON.parse(
+      readFileSync(join(dir, "package.json"), "utf8"),
+    )
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
+      return null
+    }
+    const { name, version } = parsed as { name?: unknown; version?: unknown }
+    if (typeof name !== "string") {
+      return null
+    }
+    return { name, version: typeof version === "string" ? version : null }
+  } catch {
+    return null
+  }
+}
+
+/** Walks up from `dir` until a package.json with a usable "name" turns up —
+ * the same walk-to-nearest-manifest approach @gtkx/cli's vite plugin uses,
+ * so a module two directories deep inside a package (e.g. a package's own
+ * dist/esm/foo.js) still resolves to that package's own root. */
+const packageContaining = (dir: string): BundledPackageRecord | null => {
+  const identity = packageIdentity(dir)
+  if (identity !== null) {
+    return { ...identity, dir }
+  }
+  const parent = dirname(dir)
+  return parent === dir ? null : packageContaining(parent)
+}
+
+const packageForModule = (id: string): BundledPackageRecord | null => {
+  const path = stripQuery(id)
+  return path.startsWith("/") ? packageContaining(dirname(path)) : null
+}
+
+/**
+ * Mirrors @gtkx/cli's own `gtkx:bundled-packages` vite plugin: for every
+ * real module id rolldown pulled into the bundle, records which real npm
+ * package it came from (name/version, deduped, plus the package's real
+ * directory so `gtkx deploy`'s third-party-notices step can still read its
+ * LICENSE/copyright text later — same as it does for a vite build). `gtkx
+ * deploy --skip-build` requires this file to exist under `dist/` regardless
+ * of toolchain (its own build-skip check runs after this one), so the
+ * Metro deploy path needs a real, non-empty answer here, not a stub.
+ */
+export const collectBundledPackages = (
+  moduleIds: string[],
+  distDir: string,
+): BundledPackageRecord[] => {
+  const found = moduleIds
+    .map((id) => packageForModule(id))
+    .filter((entry): entry is BundledPackageRecord => entry !== null)
+  const unique = new Map<string, BundledPackageRecord>()
+  for (const entry of found) {
+    unique.set(`${entry.name}@${entry.version ?? ""}`, entry)
+  }
+  return [...unique.values()]
+    .map((entry) => ({ ...entry, dir: relative(distDir, entry.dir) }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/** Renders {@link collectBundledPackages}' output in the exact shape
+ * @gtkx/cli's notice-reading side parses (`{ packages: [...] }`). */
+export const renderBundledPackagesManifest = (
+  packages: BundledPackageRecord[],
+): string => `${JSON.stringify({ packages }, null, 4)}\n`
+
 /**
  * Builds the synthetic SEA entry source: every HOST_MODULE_EXTERNALS name
  * loaded through a dynamic `import()` (mirroring runner/host.ts's own
@@ -180,11 +273,14 @@ export const buildEntrySource = (jsbundlePath: string): string => {
  * HOST_MODULE_EXTERNALS and gtkx.config.ts's resolved values all inlined,
  * and the native addon import redirected to the SEA-asset extraction
  * shim. Returns the native addon that must be embedded as a SEA asset
- * under {@link NativeAddonAsset.key} for the result to run.
+ * under {@link NativeAddonAsset.key} for the result to run, plus the real
+ * module ids rolldown pulled into the bundle — {@link collectBundledPackages}
+ * turns those into the third-party-notices manifest a deploy needs (the
+ * ordinary --sea/--standalone paths ignore this half of the result).
  */
 export const bundleMetroSea = async (
   options: MetroSeaBundleOptions,
-): Promise<NativeAddonAsset> => {
+): Promise<{ nativeAddon: NativeAddonAsset; moduleIds: string[] }> => {
   const { appRoot, jsbundlePath, outFile } = options
   const nativeAddonSource = options.nativeAddonSource ?? "sea-asset"
   const configModuleSource = await buildGtkxConfigModule(appRoot)
@@ -223,8 +319,9 @@ export const bundleMetroSea = async (
       virtualConfigModulePlugin(configModuleSource, appRoot),
     ],
   })
+  let output: RolldownOutput
   try {
-    await bundle.write({
+    output = await bundle.write({
       file: outFile,
       format: "cjs",
       minify: true,
@@ -237,5 +334,9 @@ export const bundleMetroSea = async (
     await bundle.close()
   }
 
-  return nativeAddon
+  const moduleIds = output.output.flatMap((chunk) =>
+    chunk.type === "chunk" ? chunk.moduleIds : [],
+  )
+
+  return { nativeAddon, moduleIds }
 }
