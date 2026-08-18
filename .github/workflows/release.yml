@@ -121,7 +121,7 @@ jobs:
         # would otherwise re-fetch on every matrix leg. amd64 and arm64
         # download different binaries, so the arch is part of the key —
         # each of the 5 app legs for a given arch shares one cache entry.
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/gtkx
           key: gtkx-deploy-tools-${{ matrix.arch }}-${{ steps.gtkx-version.outputs.version }}
@@ -189,7 +189,7 @@ jobs:
         run: |
           echo "version=$(node -p "require('./packages/react-native-gtkx/package.json').dependencies['@gtkx/cli']")" >> "$GITHUB_OUTPUT"
       - name: Cache gtkx deploy's vendored tools
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/gtkx
           key: gtkx-deploy-tools-amd64-${{ steps.gtkx-version.outputs.version }}
@@ -201,7 +201,7 @@ jobs:
         # runtime version pin (org.gnome.Platform//50 / org.gnome.Sdk//50,
         # gtkx's own DEFAULT_RUNTIME_VERSION) so a future bump invalidates
         # it instead of silently reusing a stale runtime.
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.local/share/flatpak
           key: flatpak-gnome-runtime-50
