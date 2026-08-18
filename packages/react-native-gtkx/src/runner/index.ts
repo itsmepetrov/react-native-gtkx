@@ -9,7 +9,7 @@
 // Like the hosts, this module must stay runnable under bare Node:
 // builtins and bare specifiers only.
 import { spawn, spawnSync, type ChildProcess } from "node:child_process"
-import { mkdirSync } from "node:fs"
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { basename, dirname, extname, join } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -29,9 +29,21 @@ type BuildLinuxArgs = {
   sea?: boolean
   seaOutput?: string
 }
+type DeployLinuxArgs = {
+  entryFile: string
+  target?: string
+  out?: string
+  printManifests?: boolean
+  skipBuild?: boolean
+}
 
 /** Exit code host-dev.ts uses to request a supervisor restart. */
 const FULL_REFRESH_EXIT_CODE = 65
+
+const fail = (message: string): never => {
+  console.error(`[react-native-gtkx] ${message}`)
+  process.exit(1)
+}
 
 const run = (command: string, args: string[], cwd: string): number => {
   const result = spawnSync(command, args, { cwd, stdio: "inherit" })
@@ -351,6 +363,222 @@ const buildLinux = async (
   )
 }
 
+// `deploy-linux`: `npx gtkx deploy` packages a project's `dist/` into
+// .deb/.rpm/.AppImage/.flatpak, but it is vite-shaped by construction — its
+// payload stager (@gtkx/cli's stagePayload) unconditionally requires
+// `dist/bundle.mjs` and copies the rest of `dist/` verbatim, `--skip-build`
+// included. A Metro app never produces that file (Metro externalizes
+// @gtkx/*/react/yoga-layout instead of inlining them — see ../metro's
+// HOST_MODULE_EXTERNALS), so `gtkx deploy` cannot package one on its own.
+// This command is the bridge: on the vite path it is a thin proxy (the app
+// already looks exactly like what `gtkx deploy` expects); on the Metro path
+// it builds a real Metro release, reshapes that build into the same
+// dist/bundle.mjs shape a vite build would have produced, and only then
+// calls into `gtkx deploy --skip-build`.
+//
+// Registered the same way as run-linux/build-linux (react-native.config.js),
+// so the RN CLI exposes it to every app that depends on react-native-gtkx —
+// regardless of which toolchain that particular app actually builds with:
+// `npx react-native config` from a vite-path example already lists
+// run-linux/build-linux today (confirmed against examples/monitor, which has
+// no `react-native` dependency of its own — the command surface comes along
+// because react-native-gtkx is a dependency, and this workspace happens to
+// hoist `react-native` where every example's own `npx` lookup can still find
+// it). So this command has to tell the two toolchains apart itself; neither
+// run-linux nor build-linux do that today (they are Metro-only by
+// construction), so there is no existing helper to reuse — see
+// isViteProject below for the detection this command invents.
+
+/** Every extension `gtkx.config.ts` is allowed to use (c12's own candidate
+ * list, mirrored rather than imported since @gtkx/config does not export
+ * it) — used only for the friendlier "you're missing one" error below;
+ * @gtkx/config's own loader remains the actual authority. */
+const GTKX_CONFIG_CANDIDATES = ["ts", "js", "mjs", "cjs", "mts", "cts"].map(
+  (extension) => `gtkx.config.${extension}`,
+)
+
+const hasGtkxConfig = (root: string): boolean =>
+  GTKX_CONFIG_CANDIDATES.some((name) => existsSync(join(root, name)))
+
+/** Vite's own convention for "this directory is a vite project" — every
+ * vite-path example in this repo (gallery, monitor, tasks-app, tasks-nav)
+ * has exactly one of these at its root, and no Metro app does (hn-app and
+ * rn-app have `metro.config.js` and a root `index.js` instead). Exported so
+ * the detection itself is unit-testable without spawning anything. */
+export const VITE_CONFIG_CANDIDATES = [
+  "vite.config.ts",
+  "vite.config.js",
+  "vite.config.mjs",
+  "vite.config.mts",
+]
+
+export const isViteProject = (root: string): boolean =>
+  VITE_CONFIG_CANDIDATES.some((name) => existsSync(join(root, name)))
+
+/** `--target`/`--out`/`--print-manifests` — passed through unchanged to
+ * `gtkx deploy` on both paths. `--skip-build` is handled separately by each
+ * path below: it means something different on each (see deployLinuxMetro). */
+const commonDeployArgs = (args: DeployLinuxArgs): string[] => {
+  const passthrough: string[] = []
+  if (args.target !== undefined) {
+    passthrough.push("--target", args.target)
+  }
+  if (args.out !== undefined) {
+    passthrough.push("--out", args.out)
+  }
+  if (args.printManifests) {
+    passthrough.push("--print-manifests")
+  }
+  return passthrough
+}
+
+const runGtkxDeploy = (root: string, args: string[]): number => {
+  const appRequire = createRequire(join(root, "package.json"))
+  return run(
+    process.execPath,
+    [binOf(appRequire, "@gtkx/cli", "gtkx"), "deploy", ...args],
+    root,
+  )
+}
+
+// The vite path IS what `gtkx deploy` already expects — no build of ours to
+// run, no staging to do. A missing gtkx.config.ts or `deploy` block surfaces
+// through gtkx's own error (stdio is inherited below), which already names
+// exactly what to add and where (a ready-to-paste `deploy` block derived
+// from package.json for the latter).
+const deployLinuxVite = (config: CliConfig, args: DeployLinuxArgs): void => {
+  const gtkxArgs = [
+    ...commonDeployArgs(args),
+    ...(args.skipBuild ? ["--skip-build"] : []),
+  ]
+  process.exit(runGtkxDeploy(config.root, gtkxArgs))
+}
+
+const DEPLOY_SCRATCH_BUNDLE = "deploy.jsbundle"
+
+/**
+ * Reshapes a Metro build into the one file `gtkx deploy --skip-build`
+ * actually checks for (`dist/bundle.mjs`) plus whatever it needs beside it,
+ * by reusing --standalone's own bundler rather than inventing a second one:
+ * bundleStandalone already produces a single self-contained CJS file with
+ * the whole HOST_MODULE_EXTERNALS closure AND the native addon (as a
+ * base64 literal, extracted to a per-user cache on first run) inlined — see
+ * ../sea/native-shim.ts. That statically satisfies everything a vite build's
+ * dist/bundle.mjs would otherwise need a separate dist/gtkx.node for.
+ *
+ * The one thing it is NOT is an ES module — rolldown emits it as CJS (see
+ * ../sea/bundle.ts's header for why: a Node SEA's main script is forced to
+ * CJS, and --standalone shares that bundler). `dist/bundle.mjs` cannot just
+ * be that file under a different name: Node parses a `.mjs` file as ESM
+ * unconditionally, and `module.exports = …`/bare `require(…)` are
+ * ReferenceErrors there. So this writes the real artifact under its own
+ * name and a two-line ESM shim at dist/bundle.mjs that hands off to it via
+ * `createRequire` — synchronous, so no top-level await, and it resolves
+ * "./<name>.cjs" from its OWN location (import.meta.url), which is exactly
+ * where stagePayload copies it (both files land in the same directory,
+ * `lib/<binaryName>/`), regardless of the installed package's cwd.
+ */
+const stageMetroDeployDist = async (
+  root: string,
+  entryFile: string,
+): Promise<string> => {
+  const scratchDir = join(root, "node_modules", ".react-native-gtkx")
+  mkdirSync(scratchDir, { recursive: true })
+  const jsbundlePath = join(scratchDir, DEPLOY_SCRATCH_BUNDLE)
+  bundle(root, entryFile, jsbundlePath)
+
+  const distDir = join(root, "dist")
+  // Cleared, not merged into: gtkx deploy stages every file it finds under
+  // dist/ (barring an icons/ dir and its own build metadata), so a stale
+  // main.jsbundle or a previous run's artifacts left over from a plain
+  // `build-linux` would otherwise ship inside the package too.
+  rmSync(distDir, { recursive: true, force: true })
+  mkdirSync(distDir, { recursive: true })
+
+  const name = appBinaryName(root)
+  const standaloneOutput = join(distDir, `${name}.cjs`)
+  const { bundleStandalone } = await import("../sea/assemble.js")
+  await bundleStandalone({
+    appRoot: root,
+    jsbundlePath,
+    outFile: standaloneOutput,
+    // gtkx deploy's third-party-notices step reads dist/gtkx-packages.json
+    // unconditionally (--skip-build included) — see bundleStandalone's own
+    // comment for why this is the one flag deploy-linux passes that
+    // build-linux --standalone never does.
+    shouldWritePackageManifest: true,
+  })
+
+  writeFileSync(
+    join(distDir, "bundle.mjs"),
+    [
+      "// Generated by `react-native deploy-linux` — do not edit by hand.",
+      "// gtkx deploy's payload stager only recognizes a vite-shaped",
+      `// dist/bundle.mjs; this hands off to the real Metro-built artifact`,
+      `// next to it (${name}.cjs, which inlines the whole runtime closure`,
+      "// and the native addon — see stageMetroDeployDist in",
+      "// react-native-gtkx/runner for the full explanation).",
+      'import { createRequire } from "node:module"',
+      "",
+      `createRequire(import.meta.url)(${JSON.stringify(`./${name}.cjs`)})`,
+      "",
+    ].join("\n"),
+  )
+  console.warn(`[react-native-gtkx] staged a vite-shaped dist/ at ${distDir}`)
+  return distDir
+}
+
+const deployLinuxMetro = async (
+  config: CliConfig,
+  args: DeployLinuxArgs,
+): Promise<void> => {
+  const root = config.root
+  if (!hasGtkxConfig(root)) {
+    fail(
+      `no gtkx.config.ts found at ${root} — deploy-linux needs one on the ` +
+        "Metro path too (the same file the codegen store already " +
+        "requires), exporting a `deploy` block from defineConfig(). See " +
+        "docs/guide/packaging.md.",
+    )
+  }
+
+  const distBundle = join(root, "dist", "bundle.mjs")
+  if (args.skipBuild) {
+    if (!existsSync(distBundle)) {
+      fail(
+        `--skip-build was given but ${distBundle} does not exist yet — ` +
+          "run deploy-linux without --skip-build at least once first.",
+      )
+    }
+    console.warn(
+      "[react-native-gtkx] --skip-build: reusing the already-staged dist/",
+    )
+  } else {
+    await ensureCodegenStore(root)
+    await stageMetroDeployDist(root, args.entryFile)
+  }
+
+  // gtkx deploy's own entry resolution runs unconditionally (even with
+  // --skip-build), and its default (src/index.{tsx,jsx,ts,js}) is the vite
+  // convention, not Metro's — pass the Metro entry file through explicitly
+  // so it resolves, even though the value itself goes unused once staging
+  // is skipped.
+  const gtkxArgs = ["--skip-build", ...commonDeployArgs(args), args.entryFile]
+  process.exit(runGtkxDeploy(root, gtkxArgs))
+}
+
+const deployLinux = async (
+  _argv: string[],
+  config: CliConfig,
+  args: DeployLinuxArgs,
+): Promise<void> => {
+  if (isViteProject(config.root)) {
+    deployLinuxVite(config, args)
+    return
+  }
+  await deployLinuxMetro(config, args)
+}
+
 /** Commands contributed to the RN CLI by the package's react-native.config.js. */
 export const commands = [
   {
@@ -420,5 +648,38 @@ export const commands = [
       },
     ],
     func: buildLinux,
+  },
+  {
+    name: "deploy-linux",
+    description:
+      "Package the app for distribution (.deb/.rpm/.AppImage/.flatpak) — vite path proxies `gtkx deploy`, Metro path builds and stages first",
+    options: [
+      {
+        name: "--entry-file <path>",
+        description: "Path to the app entry file (Metro path only)",
+        default: "index.js",
+      },
+      {
+        name: "--target <formats>",
+        description:
+          "Comma-separated package formats to build (deb, rpm, appimage, flatpak)",
+      },
+      {
+        name: "--out <path>",
+        description:
+          "Output directory relative to the project root (default: build)",
+      },
+      {
+        name: "--print-manifests",
+        description:
+          "Write the generated desktop-entry/AppStream metadata, then stop without packaging",
+      },
+      {
+        name: "--skip-build",
+        description:
+          "Package the already-staged dist/ instead of rebuilding (vite: passed through to `gtkx deploy`; Metro: also skips this command's own staging)",
+      },
+    ],
+    func: deployLinux,
   },
 ]

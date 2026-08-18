@@ -22,7 +22,12 @@ import {
   writeFileSync,
 } from "node:fs"
 import { dirname, join } from "node:path"
-import { bundleMetroSea } from "./bundle.js"
+import {
+  BUNDLED_PACKAGES_FILENAME,
+  bundleMetroSea,
+  collectBundledPackages,
+  renderBundledPackagesManifest,
+} from "./bundle.js"
 
 /** The fuse postject looks for inside the node binary to place the blob. */
 const SENTINEL_FUSE = "NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2"
@@ -91,21 +96,38 @@ const stripSymbols = (file: string): void => {
  * system `node`. Everything the SEA is except the embedded Node runtime —
  * so ~120 MB smaller, at the cost of a `nodejs` dependency to declare.
  * Returns its size in bytes.
+ *
+ * `shouldWritePackageManifest` is for deploy-linux's own Metro-path staging
+ * (../runner/index.ts): `gtkx deploy` requires a `gtkx-packages.json` inside
+ * `dist/` before it will package anything, vite-built or not (its
+ * third-party-notices step reads it unconditionally, --skip-build included)
+ * — writing it here, from the real module graph this bundling step just
+ * produced, is cheap and accurate; an ordinary `build-linux --standalone`
+ * has no use for it, so it stays off by default.
  */
 export const bundleStandalone = async (options: {
   appRoot: string
   jsbundlePath: string
   outFile: string
+  shouldWritePackageManifest?: boolean
 }): Promise<number> => {
   const { appRoot, jsbundlePath, outFile } = options
   mkdirSync(dirname(outFile), { recursive: true })
   console.warn("[react-native-gtkx] bundling a standalone script…")
-  await bundleMetroSea({
+  const { moduleIds } = await bundleMetroSea({
     appRoot,
     jsbundlePath,
     outFile,
     nativeAddonSource: "inline",
   })
+  if (options.shouldWritePackageManifest) {
+    const distDir = dirname(outFile)
+    const packages = collectBundledPackages(moduleIds, distDir)
+    writeFileSync(
+      join(distDir, BUNDLED_PACKAGES_FILENAME),
+      renderBundledPackagesManifest(packages),
+    )
+  }
   return statSync(outFile).size
 }
 
@@ -124,7 +146,7 @@ export const assembleSea = async (
 
   console.warn("[react-native-gtkx] bundling for a single executable…")
   const bundlePath = join(workDir, "sea-bundle.cjs")
-  const nativeAddon = await bundleMetroSea({
+  const { nativeAddon } = await bundleMetroSea({
     appRoot,
     jsbundlePath,
     outFile: bundlePath,

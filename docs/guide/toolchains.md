@@ -39,9 +39,9 @@ where the bundle and its assets don't sit side by side. `gtkx codegen`
 
 ## The Metro path
 
-`run-linux` and `build-linux` are contributed to the React Native CLI by
-`react-native-gtkx`'s own `react-native.config.js` — no separate install,
-they come with the package.
+`run-linux`, `build-linux` and `deploy-linux` are contributed to the React
+Native CLI by `react-native-gtkx`'s own `react-native.config.js` — no
+separate install, they come with the package.
 
 ```bash
 npx react-native run-linux [--entry-file <path>] [--bundle-output <path>]
@@ -49,6 +49,9 @@ npx react-native run-linux [--entry-file <path>] [--bundle-output <path>]
 
 npx react-native build-linux [--entry-file <path>] [--bundle-output <path>]
                               [--standalone] [--sea] [--sea-output <path>]
+
+npx react-native deploy-linux [--entry-file <path>] [--target <formats>]
+                               [--out <path>] [--print-manifests] [--skip-build]
 ```
 
 `run-linux` bundles with Metro and opens the window; `--dev` starts (or
@@ -56,6 +59,10 @@ reuses) the Metro dev server on `--port` (default `8081`) instead, for
 Fast Refresh. `build-linux` bundles for distribution and stops short of
 running it — see [Packaging](packaging.md) for `--standalone`/`--sea`,
 the two flags that turn the Metro bundle into something shippable.
+`deploy-linux` goes one step further and builds an installable `.deb`/
+`.rpm`/`.AppImage` from that same Metro build — also covered on the
+[Packaging](packaging.md) page, which is where its vite-path counterpart
+lives too (the same command name works for either toolchain).
 
 ## The React Compiler (vite path only)
 
