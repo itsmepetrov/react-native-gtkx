@@ -232,8 +232,18 @@ it("carries a drag from a GtkDragSource to a GtkDropTarget", async () => {
   const targetRef = createRef<Gtk.Box | null>()
   let dropped: string | null = null
 
+  // Both boxes need one shared toplevel, not two — a bare `render()` with no
+  // `container` gives the tree a single harness *window*, whose "children"
+  // slot calls the real GTK `setChild()` (one child only, exactly like every
+  // other test in this file that renders a single root). Two top-level
+  // React siblings under that slot attach one after the other; the second
+  // `setChild()` call replaces the first, so the earlier sibling ends up
+  // parentless — `sourceRef.current!.getRoot()` is `null` before this
+  // wrapper existed, and `dragAndDrop` throws "not inside a toplevel"
+  // reaching for it. A `GtkBox` is a real multi-child container, so it
+  // holds both without evicting either.
   await render(
-    <>
+    <GtkBox>
       <GtkBox
         ref={sourceRef}
         widthRequest={40}
@@ -266,7 +276,7 @@ it("carries a drag from a GtkDragSource to a GtkDropTarget", async () => {
           />
         }
       />
-    </>,
+    </GtkBox>,
   )
 
   await userEvent.dragAndDrop(sourceRef.current!, targetRef.current!, "payload")

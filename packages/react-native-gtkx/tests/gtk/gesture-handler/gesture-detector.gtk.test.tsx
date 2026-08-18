@@ -195,19 +195,38 @@ it("adds no widget to the tree", async () => {
   const withDetector = createRef<ViewHandle>()
   const pan = Gesture.Pan()
 
-  await mount(
-    <View style={{ padding: 10 }}>
-      <GestureDetector gesture={pan}>
-        <View
-          ref={withDetector}
-          style={{ width: 100, height: 100 }}
-        >
-          <Text>wrapped</Text>
+  // Not `mount()`: this test never touches a pointer, so it does not need
+  // `mount()`'s `fullscreenWindow()` call — and on this single-output
+  // headless sway compositor, fullscreening the FIRST window is fatal to
+  // the SECOND render() below. A fullscreened toplevel claims the whole
+  // (only) output; the compositor never hands the second, plainly-mapped
+  // window its own activation to hand back (confirmed: it does not resolve
+  // even given a 30s window, well past the default 5s
+  // windowActivationTimeout — not a marginal race, a standing exclusive
+  // claim). Rendering plainly here, the same way the comparison tree below
+  // already does, sidesteps the conflict entirely.
+  await act(async () => {
+    await render(
+      <Root
+        width={700}
+        height={500}
+      >
+        <View style={{ padding: 10 }}>
+          <GestureDetector gesture={pan}>
+            <View
+              ref={withDetector}
+              style={{ width: 100, height: 100 }}
+            >
+              <Text>wrapped</Text>
+            </View>
+          </GestureDetector>
         </View>
-      </GestureDetector>
-    </View>,
-    "wrapped",
-  )
+      </Root>,
+    )
+  })
+  await waitFor(() => {
+    expect(screen.getByText("wrapped")).toBeTruthy()
+  })
 
   // The depth from the wrapped view up to the Root must be the same as it
   // would be without the detector. Counting widgets is the only check that

@@ -485,6 +485,25 @@ takes would retire our `renderHookWithWindow` entirely.
   ruled out — the literal ask still stands as a hardening measure, but the
   specific crash class we filed against is gone, confirmed by two fresh
   stress probes exceeding the original repro's scale with zero failures.
+  **Organic evidence, from the `gtkx-1-2-migration` epic's own task 003
+  full-suite run** (not a synthetic probe): two of our own GTK tests
+  (`tests/gtk/gesture-handler/touchpad-gestures.gtk.test.tsx`,
+  `tests/gtk/platform/widget-surface.gtk.test.tsx`) already, deliberately,
+  provoke upstream GTK/libadwaita criticals we've long known are harmless —
+  under 1.0 those were mere G_LOG lines; under 1.2.1's criticals-as-
+  exceptions change the same 56 calls across one full suite run surfaced as
+  56 real `uncaughtException`s, caught by vitest's own handler and reported
+  as a run-failing "Unhandled Errors" bucket even though every named
+  assertion still passed. Not a new ask (both underlying criticals are
+  pre-existing, understood, upstream-caused, and already documented at
+  their call sites) and not a reopening of this ask (still closed, via the
+  `raise_fatal` handle-scope fix above) — just a data point that the
+  residual's blast radius is not only synthetic: an ordinary test suite
+  written before 1.2.1 already exercised it, 56 times, in ONE run. Fixed on
+  our side with `tests/gtk/support/expected-critical.ts` (registers a
+  second, temporary `uncaughtException` listener for the span of an action
+  known to provoke one of these — vitest's own listener steps back the
+  moment a second one exists).
 - **`gtkx codegen` reports "up to date" when the store is missing**
   (gtkx-org/gtkx#468) — **fixed by our PR #470**, shipped in rc.3: the
   freshness check verifies both stores' manifests and self-links rather
