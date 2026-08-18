@@ -135,7 +135,7 @@
     "@gtkx/testing": "1.2.2",
     "@gtkx/vitest": "1.2.2",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "rolldown": "^1.1.5",
+    "rolldown": "^1.2.3",
     "yoga-layout": "^3.2.1",
     "zod": "^4.4.3"
   },
