@@ -44,7 +44,7 @@ const INPUTS = [
   "docs/architecture/integration.md",
   "docs/architecture/gestures.md",
   "docs/getting-started.md",
-  "docs/gtkx-1.0-notes.md",
+  "docs/gtkx-1.2-notes.md",
   "docs/research/navigation-extensibility.md",
   "scripts/widget-surface/classification.json",
 ]

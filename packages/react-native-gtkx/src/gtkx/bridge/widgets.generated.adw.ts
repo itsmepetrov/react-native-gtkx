@@ -10,7 +10,7 @@
 // is fine; gtkx/bridge/adw.ts (the seam app-registry.tsx/host.gtkx.ts use)
 // reaches @gtkx/jsx/adw through require() instead, never through this file,
 // so it stays reachable even when Adw was never generated. See
-// .claude/epics/adw-optional/001.md and docs/gtkx-1.0-notes.md for why
+// .claude/epics/adw-optional/001.md and docs/gtkx-1.2-notes.md for why
 // @gtkx/jsx/adw cannot live in widgets.generated.ts alongside the GTK half.
 
 export {

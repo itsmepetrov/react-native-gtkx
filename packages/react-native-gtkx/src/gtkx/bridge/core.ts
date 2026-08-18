@@ -8,7 +8,7 @@
 // still reaches for them, behind a probe (adwAvailable()); its absence
 // surfaces as a named throw, not a build failure.
 //
-// Caveats baked into this surface (catalogued in docs/gtkx-1.0-notes.md):
+// Caveats baked into this surface (catalogued in docs/gtkx-1.2-notes.md):
 // - 64-bit FFI values arrive as BigInt → normalize with toNumber() at this boundary
 
 // import-then-export (not `export * as`): the latter is the one syntax the
@@ -72,6 +72,7 @@ export {
   useParentWindow,
   useProperty,
   useSetting,
+  useSignal,
   type Root,
   type RootElement,
 } from "@gtkx/react"
@@ -87,10 +88,6 @@ export type {
   SettingsSchemaKeys,
   SettingValue,
 } from "@gtkx/react/internal"
-
-// useSignal comes from ./use-signal, not @gtkx/react — see the workaround note
-// there (rc.3 delivers a stale handler).
-export { useSignal } from "./use-signal"
 
 export { css, cx, injectGlobal } from "@gtkx/css"
 

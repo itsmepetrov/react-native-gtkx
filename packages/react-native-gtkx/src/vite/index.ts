@@ -163,7 +163,7 @@ export const resolvePlatformSpecifier = (
 // runtime-only check (a bare specifier assembled from string parts, so
 // Rollup's build-time graph walk never reaches it) is invisible to the
 // STATIC machinery every other gtkx import gets for free: `resolve.dedupe`
-// (1.0-WORKAROUND(runtime-dedupe) above) and `gtkx build`'s own asset
+// (1.2-WORKAROUND(runtime-dedupe) above) and `gtkx build`'s own asset
 // pipeline for the native addon (`@gtkx/cli`'s `gtkx:native` plugin, which
 // rewrites every STATICALLY reachable `@gtkx/native` import onto the single
 // `dist/gtkx.node` it emits) both only ever see specifiers Rollup's graph
@@ -350,7 +350,7 @@ export const reactNativeGtkx = (
         ],
       },
       resolve: {
-        // 1.0-WORKAROUND(runtime-dedupe): see docs/gtkx-1.0-notes.md
+        // 1.2-WORKAROUND(runtime-dedupe): see docs/gtkx-1.2-notes.md
         // The gtkx runtime and react are single-instance hosts: when the app
         // and react-native-gtkx resolve them from different node_modules
         // (file:-installed package, nested installs), two bundled copies

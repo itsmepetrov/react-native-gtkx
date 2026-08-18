@@ -13,155 +13,10 @@ would like. Open items first, then the receipts for what has closed.
 
 ## Open bugs
 
-### 1. `useEffectEvent` never refreshes inside `forwardRef`/`memo` (`case 11`/`case 15` fall through)
-
-**Not a gtkx bug, and upstream has ruled on it — we carry the workaround
-until React ships.** `react-reconciler@0.33.0` refreshes `useEffectEvent`
-in `commitBeforeMutationEffects` only for `case 0` (FunctionComponent) —
-`case 11` (ForwardRef) and `case 15` (SimpleMemoComponent) fall through
-unrefreshed, so any `useEffectEvent` inside a `memo` or `forwardRef`
-component is pinned to its mount closure permanently. It has nothing to do
-with `useSignal`: plain `useEffectEvent` called only from inside an Effect
-fails identically. It reproduced for us because our `ScrollView` is
-`forwardRef<ScrollViewHandle, ScrollViewProps>` (`scroll-view.tsx:136`)
-with the `useSignal` calls inside it — tree depth was coincidental, not
-the trigger (diagnosed by @eugeniodepalo, gtkx-org/gtkx#467).
-
-Impact for us: a frozen scroll handler windows a virtualized list against
-a stale `count = 0`, so the first scroll unmounts every row — any list fed
-by an async fetch comes up blank.
-
-- Repro: `packages/react-native-gtkx/tests/gtk/components/list-late-data.gtk.test.tsx`
-  (fails without our wrapper); `tests/gtk/bridge/use-signal-upstream.gtk.test.tsx`
-  reproduces the underlying `useEffectEvent` defect directly (wrapping the
-  subscriber in `memo` is what triggers it, not an async parent update).
-- Our workaround: `src/gtkx/bridge/use-signal.ts`, tagged
-  `1.0-WORKAROUND(use-signal-stale-handler)` — latest handler in a ref
-  refreshed by an insertion effect, stable wrapper handed to gtkx.
-- Status: **we offered the fix (gtkx-org/gtkx#469) and it was closed
-  unmerged, deliberately** — @eugeniodepalo would "rather take the version
-  bump than carry a workaround I'd revert", since React fixed the refresh
-  on the 19.3 line for all fiber tags (it moved into
-  `commitMutationEffectsOnFiber` under `case 0: case 11: case 14: case 15:`,
-  ahead of child traversal). There is no stable gtkx `0.34.x` — the canaries
-  pin an exact React prerelease peer — so our ref wrapper stays until a
-  stable React 19.3 ships. Note the hazard is wider than `useSignal`: any
-  future hook built on `useEffectEvent` inherits it until then.
-- Re-checked on rc.4, then again on the stable 1.0.0 release, because the
-  condition names a React version and a release could satisfy it by bumping
-  one: `@gtkx/react@1.0.0` still peers `react: ^19.2` and depends on
-  `react-reconciler: ^0.33.0` (both unchanged since rc.4), React's own
-  `latest` is still 19.2.8, and `useSignal` still routes through
-  `useEffectEvent`. The `it.fails` guard
-  (`tests/gtk/bridge/use-signal-upstream.gtk.test.tsx`) still fails on 1.0,
-  targeted-run confirmed.
-- Nothing for gtkx to do here. Kept in this file so the next release does
-  not re-open the question.
-
-### 2. A panic inside the GLib log-writer trampoline aborts the whole process, not just the offending log call
-
-A burst of ordinary (non-fatal) `g_log()` traffic — many `Gtk-CRITICAL`
-warnings issued back-to-back, nothing a consuming app would consider
-fatal — can bring the entire embedding process down with `SIGABRT`,
-because the writer function gtkx installs via `log_set_writer_func` (the
-`glib` crate's own hook) panics while handling one of them, and that panic
-crosses a C→Rust callback boundary Rust's runtime has decided cannot
-unwind.
-
-- Repro: our own `tests/gtk/dnd/collision-thresholds.gtk.test.tsx`, run
-  under `@gtkx/vitest`'s `pool: "forks"` (one headless-compositor fork per
-  test file). One of our own components (see "our bug" below) was calling
-  `Gtk.Adjustment.configure()` with a `page_size` bigger than `upper` —
-  invalid per `gtk_adjustment_configure`'s own precondition. GTK's
-  `g_return_if_fail` rejects the call, logs a `Gtk-CRITICAL`, and — this is
-  the part that matters — leaves the adjustment'S properties UNCHANGED, so
-  a caller gating a retry on "did the properties already reach the target"
-  (ours did, inside a per-frame tick callback) reissues the exact same
-  invalid call on every animation frame for as long as the callback stays
-  active. In one 73-second run this produced 1,699 identical rejected
-  calls; somewhere inside that burst, the writer trampoline panics and
-  takes the whole Node process with it — full gdb backtrace on file, main
-  thread:
-  ```
-  #3  __GI_abort
-  #4  std::sys::pal::unix::abort_internal          (native.linux-arm64-gnu.node)
-  #5  std::process::abort                          (native.linux-arm64-gnu.node)
-  #6  std::panicking::panic_with_hook               (native.linux-arm64-gnu.node)
-  ...
-  #10 core::panicking::panic_nounwind_fmt           (native.linux-arm64-gnu.node)
-  #12 core::panicking::panic_cannot_unwind          (native.linux-arm64-gnu.node)
-  #13 glib::log::log_set_writer_func::writer_trampoline (native.linux-arm64-gnu.node)
-  #14 g_log_structured_array                        (libglib-2.0.so.0)
-  #15 g_log_default_handler                         (libglib-2.0.so.0)
-  #16 g_logv                                        (libglib-2.0.so.0)
-  #17 g_log                                         (libglib-2.0.so.0)
-  #18 ffi_call_SYSV                                 (native.linux-arm64-gnu.node)
-  ...
-  #23 v8impl::FunctionCallbackWrapper::Invoke
-  ```
-  `panic_cannot_unwind` is Rust's own "this panic tried to cross an
-  `extern "C"` frame, which is undefined behaviour, so abort instead of
-  unwind" path — the panic itself, not the log message, is what is
-  uncharacterized: we do not know what inside `writer_trampoline` panics
-  under this traffic, only that something does.
-- CI sightings this closed (both 2026-08-04, same signature — a green test
-  summary followed by `[vitest-pool]: Worker forks emitted error` /
-  `Worker exited unexpectedly`, the pool discovering only after the fact
-  that one file's fork died mid-run): runs 30903167960 and 30904467362.
-  Reproduced locally at will once the trigger was known — see "our bug".
-- **This is the same subsystem as the `runtime-dedupe` workaround above**
-  (`docs/gtkx-1.0-notes.md`): that row is a SIGABRT from calling
-  `log_set_writer_func` twice; this is a SIGABRT from a panic inside the
-  function it installs. Different call sites, same conclusion — the
-  writer-func integration is not yet hardened against being wrong in an
-  ordinary way.
-- Our bug, fixed here: `syncAdjustmentRange` in
-  `packages/react-native-gtkx/src/components/scroll-view.tsx` computed
-  `upper` as the content's own size, which can be smaller than the
-  viewport's (a short list in a tall `ScrollView` — routine, not an edge
-  case). Clamping `upper` to at least `page_size` (the standard "nothing to
-  scroll" `GtkAdjustment` range) makes every call valid and stops the
-  retry loop entirely, removing the one path we had into this. It does not
-  touch gtkx.
-- Ask: wrap `writer_trampoline`'s body in `std::panic::catch_unwind`,
-  returning `glib::LogWriterOutput::Unhandled` (or the crate's equivalent
-  "let GLib fall back to its own default handler") on a caught panic,
-  rather than letting the panic reach the FFI boundary at all. A bug in
-  formatting or forwarding one log line should cost that log line, not the
-  process embedding gtkx — the same principle the `runtime-dedupe` ask
-  above is already asking for at the registration site.
-- We do not have a minimal repro outside our own app (constructing one
-  needs whatever inside `writer_trampoline` panics, which we have not
-  isolated) — the backtrace and the reproduction path above are what we
-  have to open an issue with.
-- **Re-checked against 1.0.0, both by reading gtkx's own source and by
-  probing.** `packages/native/src/host/log_writer.rs` and
-  `packages/native/src/host/error_reporter.rs` (fetched from
-  `gtkx-org/gtkx` at both the `v1.0.0-rc.4` and `v1.0.0` tags) are
-  byte-for-byte identical between the two — nothing here changed. gtkx's
-  own `packages/native/src/host/panic_handler.rs` already exists on both
-  tags (also unchanged) with exactly the general-purpose helper this ask
-  is asking for, `guard_ffi_boundary(context, body)` — a thin
-  `catch_unwind` wrapper that reports the panic through
-  `error_reporter::report_str` instead of letting it reach the FFI
-  boundary — and it is already used at four other native callback sites
-  (`node_env.rs`, `value/wrapper.rs`'s wrapper cleanup, `ffi/closure.rs`'s
-  callback destroy notify, `api/register_class.rs`'s instance init). It is
-  NOT used around `write_log`, the GLib log-writer closure `log_writer.rs`
-  installs — so the ask can now be phrased more precisely: apply the SAME
-  existing pattern to the log writer, rather than inventing a new one.
-  Two fresh probes against 1.0.0, neither of which crashed: a bare script
-  issuing 5,000 back-to-back invalid `Gtk.Adjustment.configure()` calls
-  (the exact original trigger, ~3× the original burst's 1,699), and the
-  same call issued from inside a real `GtkWidget.addTickCallback` running
-  under the real `@gtkx/vitest` forks pool — the same infrastructure the
-  original CI crashes ran under. Given the source is unchanged, this is
-  recorded as inconclusive rather than a close: either the real trigger
-  needs conditions neither probe reproduced (parallel test-file forks,
-  timing, allocator state), or it was already this rare on rc.4 and the
-  two 2026-08-04 CI sightings were unlucky. The ask stands, updated with
-  the precise fix (reuse `guard_ffi_boundary`) and the two 1.0 probes as
-  evidence it has not gone away by chance.
+_(None open right now. Both bugs ever tracked here — the `useEffectEvent`
+stale-closure defect and the log-writer panic — closed against gtkx 1.2.x;
+see "## Closed" below for the receipts. Kept as a heading so the next one
+filed here has an obvious home.)_
 
 ## API asks
 
@@ -223,6 +78,14 @@ undocumented as an embedding surface.
   workarounds and upstream asks, not new integrations; the follow-up that
   would actually wire this into `layout-manager.ts` and re-measure the
   zIndex table is out of scope.
+- Re-checked against 1.2.2: unchanged. `Gtk.Widget.prototype.vfuncSnapshot`
+  and every other generated `vfunc*` method are still `protected` and
+  documented "chain up with `super.vfuncX()`" (installed `@gtkx/gi/gtk`
+  typings, read directly), and `@gtkx/utils`'s `getParentClass` still walks
+  the JS prototype chain (`Object.getPrototypeOf`), not the GObject class
+  hierarchy — no `peek_parent` anywhere in the runtime. The candidate answer
+  still stands, still not adopted into `layout-manager.ts` — out of this
+  epic's scope, same as the 1.0 audit.
 
 ### 4. Config registration for embedders — **it has now broken us three releases running**
 
@@ -274,6 +137,19 @@ we own.
   `renderConfigModule` lives in `@gtkx/config/dist/virtual.d.ts`, which
   is not reachable through the public entry point OR `/internal` — an even
   narrower fourth path than either.
+- **Re-checked against 1.2.2: it did not break us a fifth release running.**
+  `createConfigLoader`'s `{ load, resolve }`-shaped `ConfigLoader` (installed
+  1.2.2 `@gtkx/config/dist/loader.d.ts`) and the element config's
+  `isLazy`/`omittedProps` keys (installed `dist/config.d.ts`) are unchanged
+  from 1.0.0 — confirmed by reading the installed 1.2.2 source directly,
+  plus this task's own `rm -rf node_modules/.gtkx && npm run codegen` and
+  the gallery/hn-app headless launch proofs (`gtkx-1-2-migration` epic, task
+  001). The underlying ask is still unmet: `dist/index.d.ts` exports only
+  `Config`/`defineConfig`/`mergeConfig`/`ResolvedConfig`/`ConfigLoader`/
+  `LoadedConfig`/`loadConfig`; `createConfigLoader` is still only in
+  `dist/internal.d.ts` (still no `registerConfig` anywhere in either), and
+  `renderConfigModule` is still confined to `dist/virtual.d.ts`, reachable
+  through neither the public entry point nor `/internal`.
 
 ### 5. Keep the settings types importable from where the hooks are
 
@@ -303,6 +179,14 @@ to import from `/internal` and inherit that subpath's no-promises status.
   or `SettingValue`. `dist/internal.d.ts` still re-exports all three from
   `./utils/settings.js`, so the bridge's `/internal` re-export stays needed
   unchanged.
+- Re-checked against 1.2.2: still true, unchanged from 1.0.0. Installed
+  `@gtkx/react@1.2.2`'s `dist/index.d.ts` exports exactly `useApplication`,
+  `useBindSetting`, `useParentWindow`, `useProperty`, `useSetting`,
+  `useSignal`, `rootElement`, `createPortal`/`createRoot`/`quit` — still no
+  `SettingsSchema`, `SettingsSchemaKeys` or `SettingValue`; `dist/internal.d.ts`
+  still carries `export type { SettingsSchema, SettingsSchemaKeys,
+SettingValue } from "./utils/settings.js"`, so the bridge's `/internal`
+  re-export (`src/gtkx/bridge/core.ts`) stays needed, unchanged.
 
 ### 7. Let `GtkScrolledWindow` report the phases of the controller it owns
 
@@ -334,6 +218,10 @@ contract pays it forever.
   `.d.ts` gains no new signals; `Gtk.EventControllerScroll` still only has
   `scroll-begin`/`scroll-end`, the same two generic signals it always had —
   nothing named after RN's four phases.
+- Re-checked against 1.2.2: unchanged. `ScrolledWindowSignals` and
+  `EventControllerScrollSignals` in the installed `@gtkx/gi/gtk` `.d.ts` are
+  the same shape — `EventControllerScrollSignals` still only has
+  `decelerate`, `scroll`, `scroll-begin`, `scroll-end` and `notify::flags`.
 
 ### 8. Keep the user-event signal table extensible and documented
 
@@ -351,6 +239,11 @@ by reading `@gtkx/config/dist/user-event-signals.js` and a release note.
   `@gtkx/config/src/user-event-signals.ts` still ships
   `DEFAULT_USER_EVENT_SIGNALS` as a bare object literal with no doc comment
   above it and no mention of the table in `@gtkx/config`'s README.
+- Re-checked against 1.2.2: unchanged. Installed
+  `@gtkx/config/dist/user-event-signals.js` still ships
+  `DEFAULT_USER_EVENT_SIGNALS` as a bare object literal (same entries, e.g.
+  `GtkScrolledWindow: ["edge-reached"]`), no doc comment above it, no
+  mention of the table anywhere in `@gtkx/config`'s README.
 
 ### 9. `userEvent` cannot produce a real `GdkEvent` — and the missing piece is already in the box
 
@@ -411,6 +304,14 @@ implementing it upstream:
   still built entirely on emitting `GtkGesture` signals directly
   (`gesture.ts`, `dispatch.ts`, `controller.ts`); no `real`-flavored entry
   point exists anywhere in its module list.
+- Re-checked against 1.2.2: unchanged. Installed `@gtkx/vitest/src/virtual-seat.ts`
+  (214 lines) still only defines a `CREATE_DEVICE` opcode — no
+  `motion_absolute`, `button` or `frame` constant anywhere in the file.
+  `@gtkx/testing/src/user-event/` gained a `native-click.ts` module since
+  1.0, but it is unrelated to real input — it special-cases `GtkColumnView`/
+  `GtkListItem` factory-row and tab clicks via `activateAction`, not
+  `GdkEvent` delivery. `userEvent` is still built entirely on emitted
+  `GtkGesture` signals.
 
 ### 10. `createDialogComponent` pins one store's `Adw.Dialog` in its returned props type
 
@@ -438,27 +339,48 @@ differs between Linux and macOS installs of the same published version —
 the store-bound `PresentedProps` shape appears on Linux only, which is also
 why our patch is platform-gated.
 
+- **Re-checked against 1.2.2: unchanged, still open.** Read the installed
+  `@gtkx/react@1.2.2` `dist/adw/dialog.d.ts` directly (Linux, VM install):
+  `createDialogComponent` still types as
+  `(Component: ElementType) => ((props: DialogComponentProps) => ReactNode)`
+  with `DialogComponentProps = PresentedProps<Adw.Dialog>` and `Adw.Dialog`
+  imported from `@gtkx/gi/adw` — i.e. `@gtkx/react`'s own store, not a
+  generic parameter. The factory has not become generic or store-agnostic,
+  so the `codegen: false` shared-root-store shape our examples use stays
+  **required, not optional** — nothing to revert here. (Also worth
+  recording: this is the one ask this audit read installed source for
+  rather than reproducing the actual typecheck error, since the fix is
+  purely a type-level question the `.d.ts` answers directly and the
+  reproduction itself — a workspace app generating its own store — is
+  exactly the shape this repo's `codegen: false` setup exists to avoid
+  running into again.)
+
 ## Workaround receipts (things we would like to delete)
 
 Kept only until upstream changes; each has a row in
-`docs/gtkx-1.0-notes.md` with its tag. All four were re-checked against
-1.0.0 on the real runtime and all four survived — the notes file has the
-receipts.
+`docs/gtkx-1.2-notes.md` with its tag. All three were re-checked against
+1.2.2 on the real runtime and all three survived — the notes file has the
+receipts. (A fourth entry, the `use-signal` wrapper, was on this list
+through the 1.0 migration; gtkx 1.2.1 fixed the underlying defect directly
+and the wrapper is retired — see "## Closed" below.)
 
 | Workaround                                    | Why it exists                                                                                           |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `resolve.dedupe` over `@gtkx/*` in our preset | two copies of the runtime abort GLib (`g_log_set_writer_func` twice)                                    |
-| `use-signal` wrapper                          | see bug 1 — waiting on React, not on gtkx                                                               |
 | `createSlotPortal`'s `"gtkx:prop"` literal    | `createPortal` reaches only the default slot, and the prop element has no public export (see below)     |
 | `renderHook` window wrapper in tests          | `renderHook` mounts into a bare `Gtk.Box`, so window-dependent APIs (`Dimensions`) have nothing to read |
 
 A guard against the double-init class of problems (an idempotent runtime
 init, or a clear error naming the duplicate) would let us drop the dedupe
 list, which today has to be repeated by every consumer of our vite preset.
-The current failure is still a bare abort with no attribution — on 1.0.0,
-two distinct `@gtkx/native` addon copies in one process give
-`GLib-ERROR: g_log_set_writer_func() called multiple times` and SIGABRT,
-which names the symbol but not the package that brought the second copy.
+The current failure is still not idempotent and still does not name the
+duplicate package, but the SEVERITY changed since 1.0: on 1.2.2, two
+distinct `@gtkx/native` addon copies in one process give `GLib-ERROR:
+g_log_set_writer_func() called multiple times` as a catchable, named Node
+`uncaughtException` (exit code 1, no core file) rather than the bare
+SIGABRT/core-dump 1.0.0 produced for the identical scenario — see the
+log-writer-panic closure below for the mechanism, found while re-probing
+this exact row.
 Worth knowing if you go to reproduce it: Node caches a native addon by the
 `.node` file path, so duplicating the JS wrapper alone is not enough — the
 platform binding package has to be duplicated with it.
@@ -468,8 +390,8 @@ with.** `createPortal(children, container)` reaches a container's default
 slot; every named slot an object exposes declaratively (a window's
 `Gio.ActionMap`, a widget's `controllers`, an `AdwApplicationWindow`'s
 `breakpoints`) is reached only through the internal `"gtkx:prop"` element,
-which 1.0 exports from neither `@gtkx/react` nor `/internal` (1.0's
-`/internal` now re-exports `createElementComponent`, the function that
+which 1.2.2 still exports from neither `@gtkx/react` nor `/internal`
+(`/internal` re-exports `createElementComponent`, the function that
 BUILDS an intrinsic element by GType name, but not the `Prop` literal
 itself — a different export from the same source file) — and whose deep
 module path the `exports` map still refuses outright, so restating the
@@ -484,17 +406,85 @@ one line (`src/gtkx/bridge/slot-portal.ts`), and `WindowActions`,
 
 `renderHook` is a two-line fix on gtkx's side — `render` already creates and
 presents a harness window whenever no container is given, and `renderHook`
-passes `container: new Gtk.Box()` unconditionally. 1.0's `render-hook.js` is
-byte-identical to rc.4's, which was byte-identical to rc.3's and rc.2's, and
-`RenderHookOptions` still carries only `wrapper` and `initialProps`. Letting
-it take the same `container`/window choice `render` takes would retire our
-`renderHookWithWindow` entirely.
+passes `container: new Gtk.Box()` unconditionally. 1.2.2's `render-hook.tsx`
+still constructs `new Gtk.Box()` unconditionally, same as 1.0's, rc.4's,
+rc.3's and rc.2's, and `RenderHookOptions` still carries only `wrapper` and
+`initialProps`. Letting it take the same `container`/window choice `render`
+takes would retire our `renderHookWithWindow` entirely.
 
 ## Closed
 
-- **`useSignal` stale handler** (gtkx-org/gtkx#467) — diagnosed and closed;
-  the fix is React's, see bug 1 above. Our PR #469 closed unmerged by
-  design.
+- **`useEffectEvent` never refreshes inside `forwardRef`/`memo`, freezing
+  `useSignal` handlers** (gtkx-org/gtkx#467) — **fixed by gtkx itself in
+  1.2.1**, without waiting for React. Diagnosed by @eugeniodepalo:
+  `react-reconciler@0.33.0` only refreshes `useEffectEvent` in
+  `commitBeforeMutationEffects` for `case 0` (FunctionComponent) —
+  `case 11` (ForwardRef) and `case 15` (SimpleMemoComponent) fell through
+  unrefreshed, so any `useEffectEvent` inside a `memo`/`forwardRef`
+  component was pinned to its mount closure forever; our `ScrollView` is a
+  `forwardRef` with the `useSignal` calls inside it, so a fetch-fed
+  FlatList emptied itself on the first scroll. We offered the fix as PR
+  #469 and it was **closed unmerged on purpose** —
+  @eugeniodepalo: "closing this in favour of waiting for upstream… Since
+  React fixes this properly on 19.3 for all fiber tags, I'd rather take the
+  version bump than carry a workaround I'd revert" — and it was re-checked
+  and reconfirmed unfixed on rc.4 and 1.0.0 both, since the removal
+  condition names a React version a release could satisfy by bumping.
+  **1.2.1 fixed it directly instead.** Its own changelog bugfix entry:
+  "Fixed `useSignal` running the handler captured on the first render for
+  every emission inside a component wrapped in `memo` or `forwardRef`...
+  The hook built on React 19.2's `useEffectEvent`, which does not pick up
+  the updated function through those wrappers; the handler is now held in
+  a ref written from `useInsertionEffect`." Confirmed by reading the
+  installed 1.2.2 source: `hooks/use-signal.ts` no longer imports
+  `useEffectEvent` — it uses the package's own new `useLatestRef`
+  (`useRef` refreshed by `useInsertionEffect`), exactly the pattern our
+  bridge wrapper used to restore by hand; `react-reconciler` stayed at
+  `^0.33.0` and `react` stayed on `^19.2`, so this is gtkx's own fix, not a
+  React bump. Probed by flipping the `it.fails` guard
+  (`tests/gtk/bridge/use-signal-upstream.gtk.test.tsx`) into a plain `it`
+  on 1.2.2: passes. Our workaround (`src/gtkx/bridge/use-signal.ts`) is
+  deleted; the bridge re-exports gtkx's `useSignal` directly again. Full
+  receipts in `docs/gtkx-1.2-notes.md`'s "Fixed in 1.2.1" section.
+- **A panic inside the GLib log-writer trampoline could abort the whole
+  process over an ordinary burst of criticals** — **closed on 1.2.x, by a
+  different mechanism than we asked for.** We asked for
+  `writer_trampoline`'s body to be wrapped in `std::panic::catch_unwind`
+  (reusing the existing `guard_ffi_boundary` helper); that specific wrap
+  still has not been applied — `write_log` in
+  `packages/native/src/host/log_writer.rs` is byte-identical from rc.4
+  through 1.2.2 (diffed on GitHub across all four tags) and is still not
+  wrapped in `guard_ffi_boundary`. What changed instead, diffing
+  `packages/native/src/host/node_env.rs` between the `v1.0.0` and `v1.2.2`
+  tags: `raise_fatal` — the function `error_reporter::report_str` calls to
+  turn a GLib CRITICAL/ERROR into a Node exception, exactly the call the
+  original crash's backtrace passes through
+  (`writer_trampoline` → `write_log` → `report_str` → `raise_fatal`) — moved
+  out of `error_reporter.rs` and into `node_env.rs`, and now explicitly
+  opens and closes its own `napi_handle_scope` around the raw
+  `napi_fatal_exception` call (`sys::napi_open_handle_scope`/
+  `napi_close_handle_scope`), instead of going through napi-rs's
+  higher-level `Env::fatal_exception` convenience wrapper, which does not
+  guarantee an active handle scope. This is the one line that differs
+  between the two files at those tags. `panic_handler::install()` — new in
+  the 1.x line, confirmed absent from `runloop.rs` at `v1.0.0` and present
+  at `v1.2.2` — also now records a panic's source location for any
+  `guard_ffi_boundary`-wrapped call, so a caught panic's report reads
+  `panic at <boundary> (<file>:<line>:<column>): <payload>` (matches
+  1.2.1's own changelog bugfix entry for this). Reproduced the ORIGINAL
+  trigger fresh on 1.2.2, at greater scale than the original burst
+  (1,699 calls): a bare script issuing 5,000 back-to-back invalid
+  `Gtk.Adjustment.configure()` calls with an `uncaughtException` handler
+  installed, and a real `GtkWidget.addTickCallback`-driven burst of 2,000
+  identical calls under the actual `@gtkx/vitest` forks pool — the same
+  infrastructure the original 2026-08-04 CI crashes ran under. Both clean:
+  every call raised a catchable, named exception, zero crashes, zero core
+  files. **Residual**: `write_log` itself is still not wrapped in
+  `guard_ffi_boundary`, so a panic from a DIFFERENT source inside that
+  function (not an invalid handle-scope access) is not architecturally
+  ruled out — the literal ask still stands as a hardening measure, but the
+  specific crash class we filed against is gone, confirmed by two fresh
+  stress probes exceeding the original repro's scale with zero failures.
 - **`gtkx codegen` reports "up to date" when the store is missing**
   (gtkx-org/gtkx#468) — **fixed by our PR #470**, shipped in rc.3: the
   freshness check verifies both stores' manifests and self-links rather
@@ -525,7 +515,7 @@ it take the same `container`/window choice `render` takes would retire our
   call with the FULL `applicationId`; grepping the installed 1.0.0
   `@gtkx/react` `dist/` for "prgname" finds nothing. What actually closed
   it is a side effect of the `gtk-application-argv` breaking change
-  (`docs/gtkx-1.0-notes.md`): `@gtkx/react`'s application bootstrap now
+  (`docs/gtkx-1.2-notes.md`): `@gtkx/react`'s application bootstrap now
   builds `runApplication`'s command line as
   `[applicationId.split(".").at(-1), ...process.argv.slice(2)]`, and
   GLib's own `g_application_run()` sets `prgname` from `argv[0]`'s

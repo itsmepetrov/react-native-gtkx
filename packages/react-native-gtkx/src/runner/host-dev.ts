@@ -272,7 +272,7 @@ if (!response.ok) {
     `Metro returned ${response.status} for the dev bundle:\n${await response.text()}`,
   )
 }
-// 1.0-WORKAROUND(gtk-application-argv): same fix as host.ts — see that
+// 1.2-WORKAROUND(gtk-application-argv): same fix as host.ts — see that
 // file for the full explanation. Here argv[2] is the dev bundle URL, not
 // a file; strip it before the bundle mounts <GtkApplication> and its
 // effect reads process.argv.slice(2) as the GApplication command line.

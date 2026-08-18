@@ -41,7 +41,7 @@ import type {
 //   own widgets today — nothing in the bridge sets `use-underline`.
 export * from "@gtkx/testing"
 
-// 1.0-WORKAROUND(renderhook-no-window): see docs/gtkx-1.0-notes.md
+// 1.2-WORKAROUND(renderhook-no-window): see docs/gtkx-1.2-notes.md
 // @gtkx/testing's renderHook() always mounts its test component into a bare
 // Gtk.Box, so a hook that reads the active toplevel (useWindowDimensions,
 // anything through Gtk.Window.getToplevels()) has nothing to read. render()

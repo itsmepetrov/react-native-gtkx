@@ -27,7 +27,7 @@ libadwaita](../guide/plain-gtk.md#how-the-profile-is-detected).
 `src/gtkx/bridge/` — the one place in this package's source that imports
 `@gtkx/*` (eslint-enforced). gtkx is a young dependency, so its API drift
 is absorbed here instead of at every call site; each workaround this forces
-carries a `1.0-WORKAROUND` tag, cataloged in `docs/gtkx-1.0-notes.md`. See
+carries a `1.2-WORKAROUND` tag, cataloged in `docs/gtkx-1.2-notes.md`. See
 [Overview](overview).
 
 ## Profile
