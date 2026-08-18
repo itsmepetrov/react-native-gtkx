@@ -28,8 +28,8 @@ process.env.XDG_RUNTIME_DIR = `/run/user/${process.getuid?.() ?? 0}`
 
 const REPO_ROOT = join(import.meta.dirname, "../..")
 const PROBE = join(REPO_ROOT, "examples/perf-probe")
-if (!existsSync(join(PROBE, "dist/bundle.js"))) {
-  console.error(`missing ${PROBE}/dist/bundle.js — build the probe first`)
+if (!existsSync(join(PROBE, "dist/bundle.mjs"))) {
+  console.error(`missing ${PROBE}/dist/bundle.mjs — build the probe first`)
   process.exit(1)
 }
 
@@ -50,7 +50,7 @@ await run("systemd-run", [
   `--working-directory=${PROBE}`,
   "bash",
   "-c",
-  `node dist/bundle.js > ${log} 2>&1`,
+  `node dist/bundle.mjs > ${log} 2>&1`,
 ])
 
 if (maximize) {

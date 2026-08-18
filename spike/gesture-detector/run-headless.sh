@@ -40,7 +40,7 @@ run_probe() {
   (
     cd "$DIR" && GD_PROBE="$probe" WAYLAND_DISPLAY="$socket" \
       DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent \
-      node dist/bundle.js >"$OUT/$probe.log" 2>&1
+      node dist/bundle.mjs >"$OUT/$probe.log" 2>&1
   ) &
   local app=$!
   # Long enough for the whole scripted pointer session; the probe exits by

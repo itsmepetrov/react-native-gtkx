@@ -211,7 +211,7 @@ const SECTION_DEFS: Record<SectionId, SectionDef> = {
 }
 
 // The headless regression script opens the desired section without clicks:
-// GALLERY_SECTION=<id> node dist/bundle.js
+// GALLERY_SECTION=<id> node dist/bundle.mjs
 const envSection = process.env.GALLERY_SECTION
 const INITIAL_SECTION: SectionId = SECTION_IDS.includes(envSection as SectionId)
   ? (envSection as SectionId)

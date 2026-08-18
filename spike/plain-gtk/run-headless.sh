@@ -38,7 +38,7 @@ SOCKET=$(grep -o "wayland display '[^']*'" /tmp/sway-plain-gtk.log | cut -d"'" -
     DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent \
     PLAIN_GTK_AUTO_OPEN_MODAL=1 \
     PLAIN_GTK_AUTO_PROBE=1 \
-    node --enable-source-maps dist/bundle.js >"$OUT/probe.log" 2>&1
+    node --enable-source-maps dist/bundle.mjs >"$OUT/probe.log" 2>&1
 ) &
 APP=$!
 WAITED=0

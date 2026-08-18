@@ -101,7 +101,7 @@ it("emits change events when the compositor resizes the window", async () => {
 })
 
 it("useWindowDimensions tracks window resizes", async () => {
-  // 1.0-WORKAROUND(renderhook-no-window): see docs/gtkx-1.0-notes.md
+  // 1.2-WORKAROUND(renderhook-no-window): see docs/gtkx-1.2-notes.md
   // renderHook mounts into a windowless Gtk.Box container, so create a real
   // toplevel first — the host resolves it via Gtk.Window.getToplevels().
   const { container } = await render(<GtkLabel label="hook window" />)

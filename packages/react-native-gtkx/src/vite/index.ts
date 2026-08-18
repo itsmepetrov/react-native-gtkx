@@ -163,7 +163,7 @@ export const resolvePlatformSpecifier = (
 // runtime-only check (a bare specifier assembled from string parts, so
 // Rollup's build-time graph walk never reaches it) is invisible to the
 // STATIC machinery every other gtkx import gets for free: `resolve.dedupe`
-// (1.0-WORKAROUND(runtime-dedupe) above) and `gtkx build`'s own asset
+// (1.2-WORKAROUND(runtime-dedupe) above) and `gtkx build`'s own asset
 // pipeline for the native addon (`@gtkx/cli`'s `gtkx:native` plugin, which
 // rewrites every STATICALLY reachable `@gtkx/native` import onto the single
 // `dist/gtkx.node` it emits) both only ever see specifiers Rollup's graph
@@ -350,7 +350,7 @@ export const reactNativeGtkx = (
         ],
       },
       resolve: {
-        // 1.0-WORKAROUND(runtime-dedupe): see docs/gtkx-1.0-notes.md
+        // 1.2-WORKAROUND(runtime-dedupe): see docs/gtkx-1.2-notes.md
         // The gtkx runtime and react are single-instance hosts: when the app
         // and react-native-gtkx resolve them from different node_modules
         // (file:-installed package, nested installs), two bundled copies
@@ -381,7 +381,7 @@ export const reactNativeGtkx = (
             // `require("./gtkx.node")` — a path RELATIVE TO WHATEVER FILE
             // THE REWRITE LANDS IN, correct only when that file sits next to
             // the emitted `dist/gtkx.node` asset. The entry chunk is pinned
-            // there already (`entryFileNames: "bundle.js"`, set by
+            // there already (`entryFileNames: "bundle.mjs"`, set by
             // `@gtkx/cli`'s own builder); a chunk placed one level down in
             // `assets/` breaks the SAME relative path
             // ("Cannot find module './gtkx.node'" — reproduced building

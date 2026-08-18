@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "gtkx dev",
     "build": "gtkx build",
-    "start": "node dist/bundle.js",
+    "start": "node dist/bundle.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -18,7 +18,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
-    "@gtkx/cli": "1.0.0",
-    "@gtkx/config": "1.0.0"
+    "@gtkx/cli": "1.2.2",
+    "@gtkx/config": "1.2.2"
   }
 }

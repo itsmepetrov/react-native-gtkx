@@ -14,8 +14,8 @@
 // dependency — the same shape, reached from the two toolchains:
 //
 //   --artifact vite (examples/monitor, gallery, tasks-app, tasks-nav —
-//     `gtkx build`): dist/bundle.js + dist/gtkx.node, everything except the
-//     native addon inlined. Ships as-is under /opt; `node bundle.js` needs
+//     `gtkx build`): dist/bundle.mjs + dist/gtkx.node, everything except the
+//     native addon inlined. Ships as-is under /opt; `node bundle.mjs` needs
 //     nothing else.
 //
 //   --artifact standalone (examples/hn-app — `react-native build-linux
@@ -150,10 +150,10 @@ try {
   }
 
   if (artifact === "vite") {
-    stage("bundle.js")
+    stage("bundle.mjs")
     stage("gtkx.node")
     // tasks-app (and any future GSettings-using app) also emits a compiled
-    // schema; bundle.js's own banner points GSETTINGS_SCHEMA_DIR at its own
+    // schema; bundle.mjs's own banner points GSETTINGS_SCHEMA_DIR at its own
     // directory, so copying it alongside is the only thing needed.
     if (existsSync(join(DIST, "gschemas.compiled"))) {
       stage("gschemas.compiled")
@@ -161,7 +161,7 @@ try {
 
     writeFileSync(
       launcherPath,
-      `#!/bin/sh\nexec node "/opt/${PKG}/bundle.js" "$@"\n`,
+      `#!/bin/sh\nexec node "/opt/${PKG}/bundle.mjs" "$@"\n`,
     )
 
     descriptionBody = ` An application written against the React Native API and rendered as native

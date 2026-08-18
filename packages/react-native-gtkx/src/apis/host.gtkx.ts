@@ -167,8 +167,8 @@ const surfaceOf = (window: Gtk.Window): Gdk.Surface | null => {
 // relayout handler is connected first — our handler observes the updated
 // allocation. The module dedupes, so early/no-op emissions cost nothing.
 const watchWindow = (
-  windowSignals: readonly string[],
-  surfaceSignals: readonly string[],
+  windowSignals: readonly (keyof Gtk.WindowSignals)[],
+  surfaceSignals: readonly (keyof Gdk.SurfaceSignals)[],
   notify: () => void,
 ): SubscriptionHandle => {
   let window: Gtk.Window | null = null

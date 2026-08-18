@@ -37,8 +37,8 @@ npm run dev        # a window opens, Fast Refresh applies edits live
 Production build:
 
 ```bash
-npm run build       # single bundle: dist/bundle.js
-npm start            # node dist/bundle.js
+npm run build       # single bundle: dist/bundle.mjs
+npm start            # node dist/bundle.mjs
 ```
 
 Measured in a clean Ubuntu 26.04 container, system dependencies

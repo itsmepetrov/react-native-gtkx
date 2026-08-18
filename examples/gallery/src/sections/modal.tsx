@@ -2,7 +2,7 @@
 // regular RN tree with its own Root. Visibility is fully controlled by the
 // visible prop; the window close is intercepted and reported via
 // onRequestClose.
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native"
 import { Caption, DemoCard, palette, Section } from "../ui"
 
@@ -51,6 +51,33 @@ export const ModalSection = () => {
   const [basicVisible, setBasicVisible] = useState(false)
   const [sizedVisible, setSizedVisible] = useState(false)
   const [closeRequests, setCloseRequests] = useState(0)
+
+  // Headless-proof hook for the gtkx-1-2 criticals-throw probe (see
+  // .claude/epics/gtkx-1-2-migration/001-notes.md), same pattern as
+  // examples/hn-app's HN_APP_PROOF: GALLERY_MODAL_PROOF=1 drives the Basic
+  // Modal open and closed repeatedly with no input devices, so a headless
+  // launch can watch stderr for a GLib critical that 1.2.1's criticals-throw
+  // change would now raise as an uncaught exception instead of only logging.
+  const proofStarted = useRef(false)
+  useEffect(() => {
+    if (process.env.GALLERY_MODAL_PROOF !== "1" || proofStarted.current) {
+      return
+    }
+    proofStarted.current = true
+    const CYCLES = 6
+    let cycle = 0
+    const id = setInterval(() => {
+      cycle += 1
+      setBasicVisible((visible) => !visible)
+      // eslint-disable-next-line no-console -- deliberate script-facing output
+      console.log(`GALLERY_MODAL_PROOF cycle ${cycle}`)
+      if (cycle >= CYCLES) {
+        clearInterval(id)
+        // eslint-disable-next-line no-console -- deliberate script-facing output
+        console.log("GALLERY_MODAL_PROOF done")
+      }
+    }, 1200)
+  }, [])
 
   return (
     <Section

@@ -43,7 +43,7 @@ export type ReactNativeGtkxTestOptions = {
   /**
    * Run this project's test files serially. Default: false — window-resize
    * signal delivery races when several per-worker headless compositors run
-   * at once (see docs/gtkx-1.0-notes.md); the suite this recipe is proven
+   * at once (see docs/gtkx-1.2-notes.md); the suite this recipe is proven
    * on takes seconds, so serial execution is the cheap fix. Override once a
    * suite is large enough for parallelism to matter more than that race.
    */

@@ -107,7 +107,7 @@ if (!target) {
 // proven by both artifacts beats two, one of which is rarely exercised.
 const nativeModule = { exports: {} };
 process.dlopen(nativeModule, target);
-// The vite path's own build (dist/bundle.js, gtkx's CLI plugin) calls
+// The vite path's own build (dist/bundle.mjs, gtkx's CLI plugin) calls
 // this immediately after loading the addon, before anything else touches
 // it; @gtkx/runtime's compiled JS never calls it itself (confirmed by
 // inspecting its dist — it only re-exports a handful of low-level

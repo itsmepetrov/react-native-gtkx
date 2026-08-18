@@ -25,7 +25,7 @@ run_case() {
   ( cd "$DIR" && WAYLAND_DISPLAY="$SOCKET" \
       DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent \
       NAV_SPIKE_AUTO=1 NAV_SPIKE_W="$width" NAV_SPIKE_H="$height" \
-      node dist/bundle.js >"$OUT/$name.log" 2>&1 ) &
+      node dist/bundle.mjs >"$OUT/$name.log" 2>&1 ) &
   local APP=$!
   sleep 1.5
   WAYLAND_DISPLAY="$SOCKET" grim "$OUT/$name-1-home.png"

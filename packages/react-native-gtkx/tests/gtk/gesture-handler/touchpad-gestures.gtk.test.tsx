@@ -28,11 +28,19 @@
 // single controller on a shared ancestor would make both fire.
 //
 // EXPECT `Gdk-CRITICAL: gdk_event_get_event_type: assertion 'GDK_IS_EVENT
-// (event)' failed` in this file's output, once per emitted `begin`. It is
-// GtkGestureZoom's own `begin` handler recomputing its distance from
-// `gtk_gesture_get_last_event`, which is NULL because an emitted signal has no
-// GdkEvent behind it — and it is a precise statement of what this file cannot
-// cover, which is exactly why the probe exists.
+// (event)' failed`, once per emitted `begin`, `scale-changed` or
+// `angle-changed` — `detector-runtime.ts`'s `sample()` calls the
+// controller's `getBoundingBoxCenter()` on every one of those, not only
+// `begin`, and every one of them has no real GdkEvent behind it since
+// they're all synthetic. Every `fireEvent(...)` call below that can reach
+// `sample()` goes through `withExpectedCritical` (tests/gtk/support/
+// expected-critical.ts) for exactly this reason. It is GtkGestureZoom's own
+// recomputation from `gtk_gesture_get_last_event`, which is NULL for a
+// signal with no event behind it — and it is a precise statement of what
+// this file cannot cover, which is exactly why the probe exists. Under gtkx
+// 1.0 this was a log line; 1.2.1 turned GLib
+// criticals into uncaught exceptions (docs/gtkx-1.2-notes.md, ask #2), so
+// this one needs the explicit tolerance now, not just a comment.
 import { act, fireEvent, render, screen, waitFor } from "@gtkx/testing"
 import { createRef, type ReactNode } from "react"
 import { afterEach, expect, it, vi } from "vitest"
@@ -44,6 +52,7 @@ import {
 } from "../../../src/gesture-handler-compat/index"
 import { Gtk, type Gtk as GtkNs } from "../../../src/gtkx/bridge/index"
 import { Root, Text, View, type ViewHandle } from "../../../src/index"
+import { withExpectedCritical } from "../support/expected-critical"
 import {
   createVirtualPointer,
   VirtualPointerUnavailable,
@@ -166,15 +175,23 @@ const controllerOf = <T,>(
   return found[0]!
 }
 
-/** GTK's own signal sequence for one touchpad pinch. */
+/**
+ * GTK's own signal sequence for one touchpad pinch. `detector-runtime.ts`'s
+ * `sample()` calls `controller.getBoundingBoxCenter()` on EVERY signal this
+ * drives (`begin`, and each `scale-changed`) — not just `begin`, despite
+ * this file's header comment only naming that one — so the whole sequence,
+ * not just the first call, needs the critical tolerated.
+ */
 const pinchThrough = async (
   zoom: GtkNs.GestureZoom,
   scales: number[],
 ): Promise<void> => {
-  await fireEvent(zoom, "begin", null)
-  for (const scale of scales) {
-    await fireEvent(zoom, "scale-changed", scale)
-  }
+  await withExpectedCritical("GDK_IS_EVENT", async () => {
+    await fireEvent(zoom, "begin", null)
+    for (const scale of scales) {
+      await fireEvent(zoom, "scale-changed", scale)
+    }
+  })
   await fireEvent(zoom, "end", null)
 }
 
@@ -182,11 +199,15 @@ const rotateThrough = async (
   rotate: GtkNs.GestureRotate,
   angles: number[],
 ): Promise<void> => {
-  await fireEvent(rotate, "begin", null)
+  await withExpectedCritical("GDK_IS_EVENT", () =>
+    fireEvent(rotate, "begin", null),
+  )
   for (const angle of angles) {
     // GTK passes the absolute angle first and the delta SINCE RECOGNITION
     // second; the second is the one upstream calls `rotation`.
-    await fireEvent(rotate, "angle-changed", angle, angle)
+    await withExpectedCritical("GDK_IS_EVENT", () =>
+      fireEvent(rotate, "angle-changed", angle, angle),
+    )
   }
   await fireEvent(rotate, "end", null)
 }
@@ -350,12 +371,14 @@ it("runs a Simultaneous Pinch and Rotation on one view, both active", async () =
   const zoom = controllerOf(widget, Gtk.GestureZoom)
   const rotate = controllerOf(widget, Gtk.GestureRotate)
 
-  await fireEvent(zoom, "begin", null)
-  await fireEvent(rotate, "begin", null)
-  await fireEvent(zoom, "scale-changed", 1.5)
-  await fireEvent(rotate, "angle-changed", 0.5, 0.5)
-  await fireEvent(zoom, "scale-changed", 2)
-  await fireEvent(rotate, "angle-changed", 0.9, 0.9)
+  await withExpectedCritical("GDK_IS_EVENT", async () => {
+    await fireEvent(zoom, "begin", null)
+    await fireEvent(rotate, "begin", null)
+    await fireEvent(zoom, "scale-changed", 1.5)
+    await fireEvent(rotate, "angle-changed", 0.5, 0.5)
+    await fireEvent(zoom, "scale-changed", 2)
+    await fireEvent(rotate, "angle-changed", 0.9, 0.9)
+  })
   await fireEvent(zoom, "end", null)
   await fireEvent(rotate, "end", null)
 
@@ -396,10 +419,12 @@ it("cancels the loser when the two RACE, which is the default", async () => {
   const zoom = controllerOf(widget, Gtk.GestureZoom)
   const rotate = controllerOf(widget, Gtk.GestureRotate)
 
-  await fireEvent(zoom, "begin", null)
-  await fireEvent(rotate, "begin", null)
-  await fireEvent(zoom, "scale-changed", 1.5)
-  await fireEvent(rotate, "angle-changed", 0.5, 0.5)
+  await withExpectedCritical("GDK_IS_EVENT", async () => {
+    await fireEvent(zoom, "begin", null)
+    await fireEvent(rotate, "begin", null)
+    await fireEvent(zoom, "scale-changed", 1.5)
+    await fireEvent(rotate, "angle-changed", 0.5, 0.5)
+  })
 
   expect(pinchStart).toHaveBeenCalledTimes(1)
   expect(rotationStart).not.toHaveBeenCalled()

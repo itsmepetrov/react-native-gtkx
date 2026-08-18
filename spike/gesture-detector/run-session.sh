@@ -39,7 +39,7 @@ OUT=/tmp/gd-spike
 mkdir -p "$OUT"
 
 cd "$DIR"
-GD_PROBE=touchpad node dist/bundle.js >"$OUT/touchpad.log" 2>&1 || true
+GD_PROBE=touchpad node dist/bundle.mjs >"$OUT/touchpad.log" 2>&1 || true
 
 echo "=== touchpad ==="
 grep "\[gd-touchpad\]" "$OUT/touchpad.log" || echo "NO MARKERS — see $OUT/touchpad.log"

@@ -145,7 +145,7 @@ try {
   fail(`bundle not found at ${bundlePath} — run react-native run-linux.`)
   throw new Error("unreachable")
 }
-// 1.0-WORKAROUND(gtk-application-argv): @gtkx/react's <GtkApplication>
+// 1.2-WORKAROUND(gtk-application-argv): @gtkx/react's <GtkApplication>
 // now builds the GApplication's own command line from
 // `process.argv.slice(2)` (components/application.js, `runApplication`'s
 // new argv parameter) and hands anything left over to GLib's local

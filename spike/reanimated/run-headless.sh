@@ -23,7 +23,7 @@ SOCKET=$(grep -o "wayland display '[^']*'" /tmp/sway-rea-spike.log | cut -d"'" -
 
 ( cd "$DIR" && WAYLAND_DISPLAY="$SOCKET" \
     DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent \
-    node dist/bundle.js >"$OUT/probe.log" 2>&1 ) &
+    node dist/bundle.mjs >"$OUT/probe.log" 2>&1 ) &
 APP=$!
 sleep 1.4
 WAYLAND_DISPLAY="$SOCKET" grim "$OUT/1-before.png"

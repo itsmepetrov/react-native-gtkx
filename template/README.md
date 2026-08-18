@@ -19,8 +19,8 @@ npm run dev     # application window + Fast Refresh: edits to src/App.tsx show u
 Production build:
 
 ```bash
-npm run build   # single bundle: dist/bundle.js
-npm start       # node dist/bundle.js
+npm run build   # single bundle: dist/bundle.mjs
+npm start       # node dist/bundle.mjs
 ```
 
 > ⏱ "Install to window" measurement in a clean Ubuntu 26.04 container (system dependencies preinstalled): **63 seconds** (npm install + gtkx build + launch; measured 2026-07-29).
@@ -38,14 +38,14 @@ For extensionless imports the priority is `.linux.tsx` → `.linux.ts` → `.nat
 
 ## Packaging
 
-`npm run build` produces a single file, `dist/bundle.js` — the application runs on any Node ≥ 24. The simplest `.desktop` file:
+`npm run build` produces a single file, `dist/bundle.mjs` — the application runs on any Node ≥ 24. The simplest `.desktop` file:
 
 ```ini
 [Desktop Entry]
 Type=Application
 Name=Hello react-native-gtkx
-Exec=node /opt/hello-gtkx/bundle.js
+Exec=node /opt/hello-gtkx/bundle.mjs
 Categories=Utility;
 ```
 
-For background/service launch, a regular systemd user unit works (`ExecStart=node /opt/hello-gtkx/bundle.js`). Flatpak packaging is possible but out of scope for this template.
+For background/service launch, a regular systemd user unit works (`ExecStart=node /opt/hello-gtkx/bundle.mjs`). Flatpak packaging is possible but out of scope for this template.
