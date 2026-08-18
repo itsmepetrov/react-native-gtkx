@@ -157,7 +157,15 @@ jobs:
   gallery-flatpak:
     needs: meta
     runs-on: ubuntu-latest
-    container: ubuntu:26.04
+    # flatpak-builder sandboxes each module build with bubblewrap, which
+    # needs to create its own user namespace — Docker's default seccomp
+    # profile blocks that ("bwrap: No permissions to create a new
+    # namespace"), --disable-rofiles-fuse above only gets far enough to
+    # hit this second, separate container restriction. --privileged is
+    # the documented fix for bubblewrap/flatpak-builder under Docker.
+    container:
+      image: ubuntu:26.04
+      options: --privileged
     env:
       DEBIAN_FRONTEND: noninteractive
       HUSKY: 0
