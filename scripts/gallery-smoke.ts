@@ -49,7 +49,7 @@ const { proc: sway, socket } = await startHeadlessSway(
 
 try {
   const logFd = openSync(LOG, "w")
-  const app = spawn("node", ["dist/bundle.js"], {
+  const app = spawn("node", ["dist/bundle.mjs"], {
     cwd: APP,
     // Its own process group: SIGTERM on the group below reaches a child the
     // built bundle itself spawns too, not just this direct process — the

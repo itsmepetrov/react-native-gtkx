@@ -381,7 +381,7 @@ export const reactNativeGtkx = (
             // `require("./gtkx.node")` — a path RELATIVE TO WHATEVER FILE
             // THE REWRITE LANDS IN, correct only when that file sits next to
             // the emitted `dist/gtkx.node` asset. The entry chunk is pinned
-            // there already (`entryFileNames: "bundle.js"`, set by
+            // there already (`entryFileNames: "bundle.mjs"`, set by
             // `@gtkx/cli`'s own builder); a chunk placed one level down in
             // `assets/` breaks the SAME relative path
             // ("Cannot find module './gtkx.node'" — reproduced building

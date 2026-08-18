@@ -49,7 +49,7 @@ SOCKET=$(grep -o "wayland display '[^']*'" /tmp/sway-core-exports.log | cut -d"'
 (
   cd "$DIR" && CORE_EXPORTS_PROBE=1 WAYLAND_DISPLAY="$SOCKET" \
     DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent \
-    node --enable-source-maps dist/bundle.js >"$OUT/probe.log" 2>&1
+    node --enable-source-maps dist/bundle.mjs >"$OUT/probe.log" 2>&1
 ) &
 APP=$!
 WAITED=0

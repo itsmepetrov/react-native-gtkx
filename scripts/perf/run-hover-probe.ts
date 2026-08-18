@@ -45,7 +45,7 @@ const PROBE_DIR = join(import.meta.dirname, "../../examples/hover-probe")
 
 try {
   const logFd = openSync(log, "w")
-  const app = spawn("timeout", ["60", "node", "dist/bundle.js"], {
+  const app = spawn("timeout", ["60", "node", "dist/bundle.mjs"], {
     cwd: PROBE_DIR,
     env: {
       ...process.env,

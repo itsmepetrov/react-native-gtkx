@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "gtkx dev",
     "build": "gtkx build",
-    "start": "node dist/bundle.js"
+    "start": "node dist/bundle.mjs"
   },
   "dependencies": {
     "@gorhom/bottom-sheet": "5.2.14",
@@ -18,7 +18,7 @@
     "react-native-sortables": "1.10.0"
   },
   "devDependencies": {
-    "@gtkx/cli": "1.0.0",
-    "@gtkx/config": "1.0.0"
+    "@gtkx/cli": "1.2.2",
+    "@gtkx/config": "1.2.2"
   }
 }

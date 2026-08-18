@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "gtkx build",
-    "start": "node dist/bundle.js"
+    "start": "node dist/bundle.mjs"
   },
   "dependencies": {
     "@react-navigation/native": "^7.0.0",
@@ -13,8 +13,8 @@
     "react-native-gtkx": "file:../../packages/react-native-gtkx"
   },
   "devDependencies": {
-    "@gtkx/cli": "1.0.0",
-    "@gtkx/config": "1.0.0",
+    "@gtkx/cli": "1.2.2",
+    "@gtkx/config": "1.2.2",
     "vite": "^8.1.4"
   }
 }

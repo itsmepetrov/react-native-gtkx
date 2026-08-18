@@ -57,7 +57,7 @@ OUT=/tmp/gd-spike
 mkdir -p "$OUT"
 
 cd "$DIR"
-GD_PROBE=stylus node dist/bundle.js >"$OUT/stylus.log" 2>&1 || true
+GD_PROBE=stylus node dist/bundle.mjs >"$OUT/stylus.log" 2>&1 || true
 
 echo "=== stylus ==="
 grep "\[gd-stylus\]" "$OUT/stylus.log" || echo "NO MARKERS — see $OUT/stylus.log"

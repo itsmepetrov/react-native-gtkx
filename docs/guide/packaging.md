@@ -12,13 +12,13 @@ and a single downloadable executable.
 gtkx build
 ```
 
-produces `dist/bundle.js` — everything except the native GTK addon
+produces `dist/bundle.mjs` — everything except the native GTK addon
 inlined into one file — plus `dist/gtkx.node` (and
 `dist/gschemas.compiled` alongside it, if the app declares a GSettings
 schema; the bundle's own banner points `GSETTINGS_SCHEMA_DIR` at its own
 directory). That pair is the whole runtime: copy it anywhere with Node
 ≥ 24, GTK4 ≥ 4.20 and libadwaita ≥ 1.8 (or just GTK4, on the [plain-GTK
-profile](plain-gtk.md)) and `node bundle.js` runs it — no `node_modules`
+profile](plain-gtk.md)) and `node bundle.mjs` runs it — no `node_modules`
 involved.
 
 ## The Metro path: `build-linux`
@@ -86,7 +86,7 @@ The vite path has no `--sea` equivalent: its bundle loads the native
 addon through a dynamically obtained `require` a bundler can't intercept
 the way it intercepts a static import, and the bundle currently needs
 top-level await, which the single-file SEA format can't run. Ship a
-vite-path app as its `bundle.js`/`gtkx.node` pair, or as a `.deb`.
+vite-path app as its `bundle.mjs`/`gtkx.node` pair, or as a `.deb`.
 
 ### What `--sea`/`--standalone` need that a plain build doesn't
 
@@ -123,8 +123,8 @@ alongside them. The `.deb`s remain how these apps are installed; the
 loose executable is there for a machine with no Node to depend on at
 all — download it, `zstd -d` it, and run it.
 
-A `.deb` built this way stages either the vite pair (`bundle.js` +
-`gtkx.node`, launched with `exec node "/opt/<pkg>/bundle.js"`) or the
+A `.deb` built this way stages either the vite pair (`bundle.mjs` +
+`gtkx.node`, launched with `exec node "/opt/<pkg>/bundle.mjs"`) or the
 `--standalone` script (`exec node "/opt/<pkg>/<name>.cjs"`) under `/opt`,
 alongside a `.desktop` entry and an icon, and declares:
 

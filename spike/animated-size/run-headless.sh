@@ -37,7 +37,7 @@ SOCKET=$(grep -o "wayland display '[^']*'" /tmp/sway-as.log | cut -d"'" -f2 | he
 (
   cd "$DIR" && WAYLAND_DISPLAY="$SOCKET" \
     DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent \
-    node dist/bundle.js >"$OUT/probe.log" 2>&1
+    node dist/bundle.mjs >"$OUT/probe.log" 2>&1
 ) &
 APP=$!
 WAITED=0

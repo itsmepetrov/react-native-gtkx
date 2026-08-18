@@ -54,7 +54,7 @@ const HELPER_FROM_ROOT = join(
  *
  * A test running from source finds it next to this file, which is the whole of
  * it. A BUNDLED consumer does not: `spike/gesture-detector` builds this module
- * into `dist/bundle.js`, where `import.meta.dirname` is the bundle's directory
+ * into `dist/bundle.mjs`, where `import.meta.dirname` is the bundle's directory
  * and there is no sibling to find — the helper is a Python file, so no bundler
  * will ever carry it along. Walking up for the repo path covers that without
  * an environment variable nobody would remember to set.

@@ -43,7 +43,7 @@ const PROBE_DIR = join(import.meta.dirname, "../../examples/perf-probe")
 
 try {
   const logFd = openSync(log, "w")
-  const app = spawn("timeout", ["240", "node", "dist/bundle.js"], {
+  const app = spawn("timeout", ["240", "node", "dist/bundle.mjs"], {
     cwd: PROBE_DIR,
     env: {
       ...process.env,

@@ -35,7 +35,7 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
     "@eslint/js": "^10.0.0",
-    "@gtkx/vitest": "1.0.0",
+    "@gtkx/vitest": "1.2.2",
     "@ianvs/prettier-plugin-sort-imports": "^4.7.1",
     "@napi-rs/canvas": "^1.0.3",
     "@react-navigation/native": "8.0.0-alpha.40",

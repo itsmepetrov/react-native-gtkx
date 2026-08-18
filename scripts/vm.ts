@@ -55,7 +55,7 @@ if (command === "sync") {
     "systemctl --user stop rn-gtkx-app 2>/dev/null; " +
     "systemctl --user reset-failed rn-gtkx-app 2>/dev/null; " +
     "systemd-run --user --unit=rn-gtkx-app --setenv=WAYLAND_DISPLAY=wayland-0 " +
-    `--working-directory=$HOME/${VM_DIR}/${appDir} node dist/bundle.js ` +
+    `--working-directory=$HOME/${VM_DIR}/${appDir} node dist/bundle.mjs ` +
     "&& echo 'APP RUNNING (check the VM window)'"
   runInherit("ssh", [VM_HOST, remote])
 } else if (command === "app-stop") {

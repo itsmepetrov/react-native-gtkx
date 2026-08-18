@@ -54,7 +54,7 @@ const OWN_UNIT = "rn-gtkx-gallery-shot"
 // script, vm.ts app, the perf/hover probes), and Metro's run-linux.
 const CONFLICT_PROCESS_PATTERNS = [
   /gtkx-dev-runner\.js/,
-  /dist\/bundle\.js/,
+  /dist\/bundle\.mjs/,
   /react-native run-linux/,
 ]
 
@@ -233,8 +233,8 @@ if (await refuseIfBusy(new Set())) {
 console.log("session looks free")
 
 const GALLERY = join(import.meta.dirname, "../examples/gallery")
-if (!existsSync(join(GALLERY, "dist/bundle.js"))) {
-  console.error(`missing ${GALLERY}/dist/bundle.js — build the gallery first`)
+if (!existsSync(join(GALLERY, "dist/bundle.mjs"))) {
+  console.error(`missing ${GALLERY}/dist/bundle.mjs — build the gallery first`)
   process.exit(1)
 }
 
@@ -301,7 +301,7 @@ const shotSection = async (id: string, warmSeconds: number): Promise<void> => {
     `--setenv=GALLERY_SECTION=${id}`,
     `--working-directory=${GALLERY}`,
     "node",
-    "dist/bundle.js",
+    "dist/bundle.mjs",
   ])
   await sleep(warmSeconds * 1000)
 
