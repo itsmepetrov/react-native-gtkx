@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "react": "^19.2.0",
-    "react-native-gtkx": "0.4.0-alpha.3",
+    "react-native-gtkx": "0.4.0",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
