@@ -11,8 +11,9 @@ export default defineConfig({
     targets: ["deb", "rpm", "appimage"],
     version: process.env.GTKX_DEPLOY_VERSION,
     // Otherwise derived from package.json's "name" (tasks-nav-example) —
-    // this matches the namespacing build-deb.ts used, so install commands
-    // and any existing references to the package name keep working.
+    // this matches the namespacing the retired build-deb.ts used, so
+    // install commands and any existing references to the package name
+    // keep working.
     binaryName: "react-native-gtkx-tasks-nav",
     name: "Tasks (nav)",
     summary:
