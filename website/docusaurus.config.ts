@@ -55,7 +55,7 @@ const config: Config = {
           exclude: [
             // Repo-only working notes — never published (PRD "Out of Scope").
             "research/**",
-            "gtkx-1.0-notes.md",
+            "gtkx-1.2-notes.md",
             "upstream-gtkx.md",
             // Unfiled draft proposals for gtkx itself — not this platform's
             // documentation, and not ready for an audience (found leaking

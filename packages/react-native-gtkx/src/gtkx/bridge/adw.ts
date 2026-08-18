@@ -18,8 +18,8 @@
 // deliberately, unlike a runtime-assembled string. A hidden specifier is
 // invisible to Rollup's build graph, which sounds like the safer choice,
 // but it is ALSO invisible to everything that graph gives every OTHER gtkx
-// import for free: `resolve.dedupe` (1.0-WORKAROUND(runtime-dedupe) in
-// docs/gtkx-1.0-notes.md) and `gtkx build`'s own asset pipeline for the
+// import for free: `resolve.dedupe` (1.2-WORKAROUND(runtime-dedupe) in
+// docs/gtkx-1.2-notes.md) and `gtkx build`'s own asset pipeline for the
 // native addon (`@gtkx/cli`'s `gtkx:native` plugin, which rewrites every
 // STATICALLY reachable `@gtkx/native` import onto the single `dist/gtkx.node`
 // it emits) — a hidden specifier resolves a SECOND, independent copy from

@@ -14,12 +14,12 @@
 // in a named slot of a remote object, which is what `WindowActions` and
 // `WindowControllers` need: declare in the app tree, attach to the window.
 //
-// 1.0-WORKAROUND(prop-portal): the internal element's name is spelled out
+// 1.2-WORKAROUND(prop-portal): the internal element's name is spelled out
 // here because @gtkx/react exports it from neither its public entry point
 // nor its `/internal` subpath — only from a deep module path, which this
 // package does not reach into. The bridge is the one module allowed to know
 // a gtkx internal, so the knowledge is confined to this file: if the name
-// ever changes, exactly one line moves. See docs/gtkx-1.0-notes.md.
+// ever changes, exactly one line moves. See docs/gtkx-1.2-notes.md.
 import type * as GObject from "@gtkx/gi/gobject"
 import { createPortal } from "@gtkx/react"
 import { createElement, type FunctionComponent, type ReactNode } from "react"

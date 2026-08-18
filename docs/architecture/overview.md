@@ -231,7 +231,7 @@ Measured numbers behind these decisions (the Yoga/GTK feasibility spike,
 frame-budget studies, the navigation research) live in `docs/research/` —
 repo-only working notes, not published here. The standing gtkx upstream
 agenda is `docs/upstream-gtkx.md`, and every workaround the bridge carries
-is cataloged in `docs/gtkx-1.0-notes.md`.
+is cataloged in `docs/gtkx-1.2-notes.md`.
 
 ## Related
 

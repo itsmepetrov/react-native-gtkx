@@ -227,7 +227,7 @@ const emitBridgeWidgets = (): void => {
         "// is fine; gtkx/bridge/adw.ts (the seam app-registry.tsx/host.gtkx.ts use)\n" +
         "// reaches @gtkx/jsx/adw through require() instead, never through this file,\n" +
         "// so it stays reachable even when Adw was never generated. See\n" +
-        "// .claude/epics/adw-optional/001.md and docs/gtkx-1.0-notes.md for why\n" +
+        "// .claude/epics/adw-optional/001.md and docs/gtkx-1.2-notes.md for why\n" +
         "// @gtkx/jsx/adw cannot live in widgets.generated.ts alongside the GTK half.",
     ) +
     "\nexport {\n" +
