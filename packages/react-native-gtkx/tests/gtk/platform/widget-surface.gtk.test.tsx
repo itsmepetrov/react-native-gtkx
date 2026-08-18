@@ -30,6 +30,11 @@
 //   holding a Gtk.Box holding an Adw.ButtonContent, presented. In its
 //   documented position it is silent, through our surface too:
 //   <GtkButton><AdwButtonContent/></GtkButton> inside a <View> logs nothing.
+//   This one is a CRITICAL, not a warning — the wrap-box line above is a
+//   warning, and gtkx 1.2.1 only turned criticals/errors into uncaught
+//   exceptions (docs/gtkx-1.2-notes.md, ask #2), so only this one needed the
+//   `withExpectedCritical` wrap below (tests/gtk/support/expected-critical.ts)
+//   to stop being reported as an unhandled error.
 import { render } from "@gtkx/testing"
 import { type ComponentType } from "react"
 import { describe, expect, it } from "vitest"
@@ -40,6 +45,7 @@ import { GTK_WRAPPED_WIDGET_NAMES } from "../../../src/gtk/widgets.generated"
 import * as GtkWidgets from "../../../src/gtk/widgets.generated"
 import { Gtk } from "../../../src/gtkx/bridge/index"
 import { Root, View } from "../../../src/index"
+import { withExpectedCritical } from "../support/expected-critical"
 
 // Verified empirically (see .claude/epics/widget-surface/updates/ for the
 // run log): these throw or hang when mounted with zero configuration. Each
@@ -69,15 +75,23 @@ const runnable = [...gtkCases, ...adwCases].filter((c) => !(c.name in SKIP))
 
 describe("generated widget surface mounts inside RN layout", () => {
   it.each(runnable)("$name mounts inside a <View>", async ({ Component }) => {
-    await render(
-      <Root
-        width={200}
-        height={200}
-      >
-        <View style={{ padding: 8 }}>
-          <Component style={{ width: 48, height: 48 }} />
-        </View>
-      </Root>,
+    // See "TWO GTK LOG LINES" above: AdwButtonContent's mount provokes an
+    // upstream, harmless `GTK_IS_WIDGET` assertion pair. Every other case in
+    // this walk provokes nothing this fragment would match, so anything
+    // unexpected still re-throws for real.
+    await withExpectedCritical(
+      "assertion 'GTK_IS_WIDGET (widget)' failed",
+      () =>
+        render(
+          <Root
+            width={200}
+            height={200}
+          >
+            <View style={{ padding: 8 }}>
+              <Component style={{ width: 48, height: 48 }} />
+            </View>
+          </Root>,
+        ),
     )
   })
 })
