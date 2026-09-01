@@ -38,7 +38,7 @@
     "@gtkx/vitest": "1.2.2",
     "@ianvs/prettier-plugin-sort-imports": "^4.7.1",
     "@napi-rs/canvas": "^1.0.3",
-    "@react-navigation/native": "8.0.0-alpha.40",
+    "@react-navigation/native": "8.0.0-alpha.43",
     "@types/node": "^26.0.0",
     "@types/react": "^19.2.0",
     "eslint": "^10.0.0",
